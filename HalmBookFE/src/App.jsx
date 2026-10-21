@@ -16,8 +16,13 @@ import ProtectedRoute from './component/ProtectedRoute';
 import Hang from './component/user/HangTv';
 import TSCN from './component/user/TuSachCn';
 import LSGiaoDich from './component/user/LSGiaoDich';
-import UuDai from './component/user/UuDai';
+import Ptthanhtoan from './component/user/PtThanhToan';
 import UpLoad from './component/user/UpLoadFile';
+import UuDai from './component/user/UuDai';
+import VKT from './component/user/ViKT';
+import ThongBao from './component/user/ThongBao';
+
+
 
 function App() {
   return (
@@ -30,8 +35,13 @@ function App() {
         <Route path="/hang" element={<Hang />} />
         <Route path="/tusachcn" element={<TSCN />} />
         {/* <Route path="/lsgiaodich" element={<LSGiaoDich />} /> */}
-        {/* <Route path="/uudai" element={<UuDai />} /> */}
+        <Route path="/uudai" element={<UuDai />} />
         {/* <Route path="/upload" element={<UpLoad />} /> */}
+        {/* <Route path="/thanhtoan" element={<Ptthanhtoan />} /> */}
+        {/* <Route path="/vikhoaitay" element={<VKT/>} /> */}
+        <Route path="/thongbao" element={<ThongBao />} />
+
+
 
         {/* 2. KHU VỰC NGƯỜI DÙNG CƠ BẢN (Bắt buộc phải có Token) */}
         <Route element={<ProtectedRoute />}>
