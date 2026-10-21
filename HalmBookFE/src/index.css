@@ -1,0 +1,136 @@
+@import url("https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Quicksand:wght@500;600;700&display=swap");
+
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark, .dark *));
+
+:root {
+  --brand-primary: #a78bfa;
+  --brand-secondary: #fde047;
+  --brand-bg: #fefdf8;
+  --brand-black: #1a1a1a;
+  --page-scrollbar-track: #f7f4ee;
+  --page-scrollbar-thumb: #a85a5e;
+  --page-scrollbar-thumb-hover: #8e3038;
+}
+
+:root.dark {
+  color-scheme: dark;
+  --page-scrollbar-track: #111210;
+  --page-scrollbar-thumb: #8d7435;
+  --page-scrollbar-thumb-hover: #d4af37;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+html {
+  background-color: #fefdf8;
+  scrollbar-color: var(--page-scrollbar-thumb) var(--page-scrollbar-track);
+  scrollbar-width: thin;
+}
+
+html::-webkit-scrollbar {
+  width: 10px;
+}
+
+html::-webkit-scrollbar-track {
+  background: var(--page-scrollbar-track);
+}
+
+html::-webkit-scrollbar-thumb {
+  background: var(--page-scrollbar-thumb);
+  border: 2px solid var(--page-scrollbar-track);
+  border-radius: 999px;
+}
+
+html::-webkit-scrollbar-thumb:hover {
+  background: var(--page-scrollbar-thumb-hover);
+}
+
+body {
+  margin: 0;
+  background-color: #fefdf8;
+  color: #1a1a1a;
+  overflow-x: hidden;
+  font-family: "Quicksand", sans-serif;
+}
+
+body,
+body * {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea,
+[contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Màu custom cho Tailwind v4 */
+@theme {
+  --color-brand-primary: #a78bfa;
+  --color-brand-secondary: #fde047;
+  --color-brand-bg: #fefdf8;
+  --color-brand-black: #1a1a1a;
+
+  --font-heading: "Fredoka", sans-serif;
+  --font-body: "Quicksand", sans-serif;
+
+  --shadow-brutal: 4px 4px 0px 0px #1a1a1a;
+  --shadow-brutal-lg: 8px 8px 0px 0px #1a1a1a;
+  --shadow-brutal-sm: 2px 2px 0px 0px #1a1a1a;
+}
+
+.border-brutal {
+  border: 3px solid #1a1a1a;
+}
+
+.btn-brutal {
+  transition: all 0.1s ease-in-out;
+}
+
+.btn-brutal:hover {
+  transform: translateY(-2px);
+}
+
+.btn-brutal:active {
+  transform: translate(4px, 4px);
+  box-shadow: 0 0 0 0 #1a1a1a !important;
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0px) rotate(0deg);
+  }
+
+  50% {
+    transform: translateY(-15px) rotate(5deg);
+  }
+
+  100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: float 4s ease-in-out infinite 2s;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

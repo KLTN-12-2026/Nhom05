@@ -1,0 +1,137 @@
+/* =========================================
+   App.module.css
+   Bảo vệ mã CSS nội bộ, không rò rỉ ra ngoài
+========================================= */
+
+/* 1. WRAPPER CÁCH LY THAY THẾ THẺ BODY */
+.halmWrapper {
+    background-color: #fdfdfc;
+    color: #334155;
+    transition: background-color 0.4s ease, color 0.4s ease;
+    min-height: 100vh;
+    width: 100%;
+    position: relative;
+    overflow-x: hidden;
+}
+
+/* Áp dụng dark mode khi thẻ html bên ngoài có class .dark */
+:global(.dark) .halmWrapper {
+    background-color: #07070a; 
+    color: #cbd5e1;
+}
+
+/* 2. BẦU TRỜI SAO */
+.starryBg {
+    display: none;
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 1; overflow: hidden;
+    background: transparent;
+}
+
+:global(.dark) .starryBg {
+    display: block !important; 
+}
+
+.star {
+    position: absolute;
+    background-color: #ffffff !important; 
+    border-radius: 50%; 
+    opacity: 0;
+}
+
+@keyframes starTwinkle {
+    0% { opacity: 0.1; transform: scale(0.9); box-shadow: 0 0 1px 0 rgba(255,255,255,0.05); }
+    50% { opacity: 0.6; transform: scale(1.1); box-shadow: 0 0 4px 1px rgba(255,255,255,0.3); }
+    100% { opacity: 0.1; transform: scale(0.9); box-shadow: 0 0 1px 0 rgba(255,255,255,0.05); }
+}
+
+/* 3. HIỆU ỨNG TRƯỢT (REVEAL) */
+.reveal {
+    opacity: 0; transform: translateY(40px);
+    transition: all 0.8s cubic-bezier(0.5, 0, 0, 1);
+}
+
+.revealActive { 
+    opacity: 1; transform: translateY(0); 
+}
+
+/* 4. NAVBAR SCROLL EFFECT */
+.headerTransition {
+    transition: padding 0.4s ease-in-out, background-color 0.4s ease-in-out, box-shadow 0.4s ease-in-out;
+}
+
+.scrolledNavbar {
+    background-color: #000000 !important;
+    border-bottom-color: rgba(255,255,255,0.1) !important;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.3) !important;
+}
+
+.scrolledNavbar :global(.group):hover :global(.nav-text),
+.scrolledNavbar :global(.group):hover :global(.icon-text),
+.scrolledNavbar :global(.nav-text):hover,
+.scrolledNavbar button:hover :global(.nav-text) {
+    color: #ec4899 !important;
+}
+
+:global(.dark) .scrolledNavbar :global(.group):hover :global(.nav-text),
+:global(.dark) .scrolledNavbar :global(.group):hover :global(.icon-text),
+:global(.dark) .scrolledNavbar :global(.nav-text):hover,
+:global(.dark) .scrolledNavbar button:hover :global(.nav-text) {
+    color: #60a5fa !important;
+}
+
+/* 5. KHỐI ĐỐI TÁC (PUBLISHER BAR) */
+.publisherBar {
+    width: 100%; height: 180px; margin: 24px 0;
+    background: #ffffff; border-top: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9;
+    overflow: hidden; display: flex; align-items: center; position: relative;
+    -webkit-mask-image: linear-gradient(to right, rgba(0,0,0,0), rgba(0,0,0,1) 15%, rgba(0,0,0,1) 85%, rgba(0,0,0,0));
+    mask-image: linear-gradient(to right, rgba(0,0,0,0), rgba(0,0,0,1) 15%, rgba(0,0,0,1) 85%, rgba(0,0,0,0));
+}
+
+:global(.dark) .publisherBar { 
+    background: transparent; border-color: rgba(255, 255, 255, 0.05); 
+}
+
+.publisherTrack { 
+    display: flex; align-items: center; width: max-content; animation: publisherScroll 45s linear infinite; 
+}
+.publisherGroup { display: flex; align-items: center; flex-shrink: 0; }
+.publisherItem { width: 280px; height: 140px; margin: 0 40px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.publisherItem img { max-width: 240px; max-height: 120px; object-fit: contain; transition: transform 0.3s ease, filter 0.3s ease, opacity 0.3s ease; }
+:global(.dark) .publisherItem img { opacity: 0.9; }
+.publisherItem:hover img { transform: scale(1.15); }
+:global(.dark) .publisherItem:hover img { opacity: 1; }
+
+@keyframes publisherScroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.publisherBar:hover .publisherTrack { animation-play-state: paused; }
+
+/* 6. CHATBOT CUSTOM SCROLL & ANIMATION */
+.chatScroll::-webkit-scrollbar { width: 5px; }
+.chatScroll::-webkit-scrollbar-track { background: transparent; }
+.chatScroll::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 10px; }
+.chatScroll::-webkit-scrollbar-thumb:hover { background: #52525b; }
+
+@keyframes scaleUp { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
+.chatShow { display: flex !important; animation: scaleUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+
+/* 7. HIỆU ỨNG THẺ SÁCH (BOOK CARD) */
+.hideScrollbar::-webkit-scrollbar { display: none; }
+.hideScrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+.book3dCard { box-shadow: -2px 0 4px rgba(0,0,0,0.04), 4px 6px 12px rgba(0,0,0,0.08); }
+:global(.dark) .book3dCard { box-shadow: -2px 0 4px rgba(0,0,0,0.4), 4px 6px 12px rgba(0,0,0,0.6); border-color: rgba(255,255,255,0.05); }
+
+.book3dCard::before { 
+    content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 16px; 
+    background: linear-gradient(to right, rgba(0,0,0,0.35) 0%, rgba(255,255,255,0.15) 25%, rgba(0,0,0,0.05) 50%, transparent 100%); 
+    z-index: 5; pointer-events: none; 
+}
+
+.book3dCard:hover { box-shadow: -2px 0 4px rgba(0,0,0,0.04), 8px 15px 25px rgba(0,0,0,0.2); }
+:global(.dark) .book3dCard:hover { box-shadow: -2px 0 4px rgba(0,0,0,0.4), 8px 15px 25px rgba(0,0,0,0.8); }
+
+.bookCardItem { position: relative; }
+.bookCardItem:hover { z-index: 30; }
+.bookCardItem:hover > .book3dCard { transform: translateY(-8px); }
