@@ -79,6 +79,7 @@ public class SecurityConfig {
                         // 2. Các endpoint công khai không cần token
                         .requestMatchers("/api/auth/**", "/api/password/**").permitAll()
                         .requestMatchers("/api/chat").permitAll()
+                        .requestMatchers("/api/home/**").permitAll()
 
                         // 3. FIX: Dùng hasAnyAuthority hỗ trợ cả ROLE_ADMIN lẫn ADMIN để tránh xung đột tiền tố
                         .requestMatchers("/admin/**").hasAnyAuthority("ROLE_ADMIN", "ADMIN")

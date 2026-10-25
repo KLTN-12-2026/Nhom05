@@ -21,4 +21,13 @@ public class Cart_Item {
     @ManyToOne
     @JoinColumn(name = "book_id" , referencedColumnName = "book_id")
     private Book book;
+
+    @Column(name = "plan_key")
+    private String planKey;
+
+    @Column(name = "rental_days")
+    private Integer rentalDays;
+
+    @Column(name = "selected_price")
+    private Double selectedPrice;
 }

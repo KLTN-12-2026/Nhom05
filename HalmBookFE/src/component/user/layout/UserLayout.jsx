@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import logo from "../../../img/logo.png";
 import { clearAuthSession } from "../../../service/AuthToken";
+import axiosInstance from "../../../service/AxiosInstance";
 import { triggerAirplaneBannerAnimation } from "./helicopterAnimation";
 
 const SECTIONS = [
@@ -26,6 +27,7 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
     localStorage.getItem("halmbook_auto_chapter_scroll") !== "false"
   ));
   const [searchText, setSearchText] = useState("");
+  const [cartCount, setCartCount] = useState(0);
   const isHomePage = location.pathname === "/trangchu";
   const sectionHref = (id) => isHomePage ? `#${id}` : `/trangchu#${id}`;
 
@@ -45,6 +47,20 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
     handleScroll();
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    axiosInstance.get("/api/home/cart/items")
+      .then(({ data }) => {
+        if (isMounted && Array.isArray(data)) setCartCount(data.length);
+      })
+      .catch(() => {
+        if (isMounted) setCartCount(0);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [location.pathname]);
 
   useEffect(() => {
     const closeAccountMenu = (event) => {
@@ -413,9 +429,9 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
             <button type="button" onClick={() => onOpenChatbot?.("Tôi muốn chia sẻ hoặc tải sách lên HALM BOOK.")} className="home-header-control hidden h-11 w-14 items-center justify-center rounded-[18px] text-lg transition-all lg:inline-flex" title="Chia sẻ sách" aria-label="Chia sẻ sách">
               <i className="ph-bold ph-cloud-arrow-up"></i>
             </button>
-            <button type="button" onClick={() => onOpenChatbot?.("Tôi muốn xem giỏ hàng.")} className="home-header-control relative hidden h-11 w-11 items-center justify-center rounded-full text-xl transition-colors lg:inline-flex" title="Giỏ hàng" aria-label="Giỏ hàng">
+            <button type="button" onClick={() => navigate("/giohang")} className="home-header-control relative hidden h-11 w-11 items-center justify-center rounded-full text-xl transition-colors lg:inline-flex" title="Giỏ hàng" aria-label="Giỏ hàng">
               <i className="ph-bold ph-shopping-cart"></i>
-              <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#8B3038] px-1 text-[10px] font-bold leading-none text-white">1</span>
+              {cartCount > 0 && <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#8B3038] px-1 text-[10px] font-bold leading-none text-white">{cartCount}</span>}
             </button>
             <button id="theme-toggle" type="button" onClick={isHomePage ? undefined : toggleTheme} className="home-header-control hidden h-11 w-11 items-center justify-center rounded-full text-lg transition-colors lg:inline-flex" title="Đổi chế độ sáng/tối" aria-label="Đổi giao diện sáng/tối">
               <i id="theme-icon" className={`ph-bold ${isDark ? "ph-sun" : "ph-sun"} text-lg`}></i>
