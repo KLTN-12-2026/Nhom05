@@ -18,12 +18,10 @@ import TSCN from './component/user/TuSachCn';
 import LSGiaoDich from './component/user/LSGiaoDich';
 import Ptthanhtoan from './component/user/PtThanhToan';
 import UpLoad from './component/user/UpLoadFile';
-import UuDai from './component/user/UuDai';
-import VKT from './component/user/ViKT';
-import ThongBao from './component/user/ThongBao';
-
-
-
+import ThanhToan from './component/user/thanhtoan';
+import ChiTietSach from './component/user/ChiTietSach';
+import DocSach from './component/user/DocSach';
+import GioHang from './component/user/GioHang';
 function App() {
   return (
     <BrowserRouter>
@@ -34,12 +32,15 @@ function App() {
         <Route path="/quenmatkhau" element={<ForgotPassword />} />
         <Route path="/hang" element={<Hang />} />
         <Route path="/tusachcn" element={<TSCN />} />
+        <Route path="/docsach" element={<DocSach />} />
+        <Route path="/giohang" element={<GioHang />} />
+        
         {/* <Route path="/lsgiaodich" element={<LSGiaoDich />} /> */}
         <Route path="/uudai" element={<UuDai />} />
         {/* <Route path="/upload" element={<UpLoad />} /> */}
-        {/* <Route path="/thanhtoan" element={<Ptthanhtoan />} /> */}
-        {/* <Route path="/vikhoaitay" element={<VKT/>} /> */}
-        <Route path="/thongbao" element={<ThongBao />} />
+        <Route path="/thanhtoan" element={<ThanhToan/>}/>
+        <Route path="/chitietsach" element={<ChiTietSach />} />
+        <Route path="/chitietsach/:id" element={<ChiTietSach />} />
 
 
 
@@ -47,6 +48,8 @@ function App() {
         <Route element={<ProtectedRoute />}>
           <Route path="/trangchu" element={<TrangChu />} />
           <Route path="/canhan" element={<Profile />} />
+          <Route path="/chitietsach" element={<ChiTietSach />} />
+          <Route path="/chitietsach/:id" element={<ChiTietSach />} />
         </Route>
 
         {/* 3. KHU VỰC ADMIN (Bắt buộc phải có Token VÀ có quyền ADMIN) */}

@@ -875,27 +875,34 @@ const PAGE_SCRIPT = [
 
   "        // Render helper for book cards",
   "        function renderBookCard(book) {",
+  "            const bookId = book.id || book.book_id || '';",
+  "            const bookTitle = book.title || book.bookName || 'Tác phẩm';",
+  "            const bookCover = book.img || book.img_url || '/logo.png';",
+  "            const bookAuthor = book.author || 'HALM BOOK';",
+  "            const bookRating = book.rating || '5.0';",
+  "            const bookPrice = book.price ? (Number(book.price).toLocaleString('vi-VN') + ' đ') : '';",
   "            return `",
-  "                <div class=\"w-40 sm:w-48 lg:w-[210px] xl:w-[220px] shrink-0 snap-start p-3 rounded-xl bg-paper dark:bg-night-card border border-paper-border dark:border-night-border group flex flex-col justify-between hover:-translate-y-1.5 transition-all duration-300 shadow-sm\" data-book-id=\"${book.id}\">",
+  "                <div class=\"w-40 sm:w-48 lg:w-[210px] xl:w-[220px] shrink-0 snap-start p-3 rounded-xl bg-paper dark:bg-night-card border border-paper-border dark:border-night-border group flex flex-col justify-between hover:-translate-y-1.5 transition-all duration-300 shadow-sm\" data-book-id=\"${bookId}\">",
   "                    <div class=\"relative w-full aspect-[2/3] rounded-lg overflow-hidden bg-night-card shadow-md mb-3\">",
-  "                        <img src=\"${book.img}\" alt=\"${book.title}\" class=\"w-full h-full object-cover group-hover:scale-105 transition-transform duration-500\" loading=\"lazy\">",
+  "                        <img src=\"${bookCover}\" alt=\"${bookTitle}\" class=\"w-full h-full object-cover group-hover:scale-105 transition-transform duration-500\" loading=\"lazy\" onerror=\"this.onerror=null;this.src='/logo.png';\">",
   "                        <div class=\"font-metadata-spec absolute top-2 right-2 px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-sm text-[10px] text-gold font-bold flex items-center gap-0.5\">",
-  "                            <i class=\"ph-fill ph-star\"></i> ${book.rating}",
+  "                            <i class=\"ph-fill ph-star\"></i> ${bookRating}",
   "                        </div>",
   "                    </div>",
   "                    <div class=\"space-y-1\">",
-  "                        <h4 class=\"font-display font-bold text-sm text-ink dark:text-night-text line-clamp-1 group-hover:text-wine dark:group-hover:text-gold transition-colors\" title=\"${book.title}\">",
-  "                            ${book.title}",
+  "                        <h4 class=\"font-display font-bold text-sm text-ink dark:text-night-text line-clamp-1 group-hover:text-wine dark:group-hover:text-gold transition-colors\" title=\"${bookTitle}\">",
+  "                            ${bookTitle}",
   "                        </h4>",
   "                        <p class=\"font-metadata-spec text-xs text-ink-muted dark:text-night-muted line-clamp-1\">",
-  "                            ${book.author}",
+  "                            ${bookAuthor}",
   "                        </p>",
+  "                        ${bookPrice ? `<p class=\"font-metadata-spec text-[11px] font-bold text-wine dark:text-gold pt-0.5\">${bookPrice}</p>` : ''}",
   "                    </div>",
   "                    <div class=\"pt-3 mt-3 border-t border-paper-border/70 dark:border-night-border/70 flex items-center justify-between\">",
-  "                        <a href=\"../book-detail.html?id=${book.id}\" class=\"font-metadata-spec text-xs font-bold text-wine dark:text-gold hover:underline\">",
+  "                        <a href=\"/chitietsach/${bookId}\" class=\"font-metadata-spec text-xs font-bold text-wine dark:text-gold hover:underline\">",
   "                            Chi tiết",
   "                        </a>",
-  "                        <a href=\"../book-detail.html?id=${book.id}\" class=\"w-7 h-7 rounded-full bg-paper-200 dark:bg-night-border hover:bg-wine hover:text-white dark:hover:bg-gold dark:hover:text-ink flex items-center justify-center text-xs transition-colors\" title=\"Đọc sách\">",
+  "                        <a href=\"/chitietsach/${bookId}\" class=\"w-7 h-7 rounded-full bg-paper-200 dark:bg-night-border hover:bg-wine hover:text-white dark:hover:bg-gold dark:hover:text-ink flex items-center justify-center text-xs transition-colors\" title=\"Chi tiết sách\">",
   "                            <i class=\"ph-bold ph-book-open\"></i>",
   "                        </a>",
   "                    </div>",
@@ -999,29 +1006,29 @@ const PAGE_SCRIPT = [
   "            // 1. Render Catalog Shelves",
   "            const trendingContainer = document.getElementById('trending-shelf');",
   "            const trendingCatNav = document.getElementById('trending-cat-nav');",
-  "            const trendingShelfBooks = libraryCatalog.trending;",
   "            const trendingCatMatch = {",
   "                all: () => true,",
-  "                'van-hoc': (book) => /nhật ánh|hoa nở|bí mật rừng|chuyện tình/i.test(book.title + ' ' + book.author + ' ' + book.desc),",
-  "                'thieu-nhi': (book) => /dế mèn|hoàng tử|alice|tô hoài|carroll/i.test(book.title + ' ' + book.author),",
-  "                'ky-nang': (book) => /sống|cà phê|đắc nhân|đầu tư|carnegie|graham|tony/i.test(book.title + ' ' + book.author),",
-  "                'kinh-dien': (book) => /hoàng tử|alice|đắc nhân|epictetus|exupéry/i.test(book.title + ' ' + book.author)",
+  "                'van-hoc': (book) => book.category_id === 1 || /văn học|tiểu thuyết|truyện|nhật ánh|hoa nở|chuyện tình/i.test((book.title || '') + ' ' + (book.author || '') + ' ' + (book.desc || '')),",
+  "                'thieu-nhi': (book) => book.category_id === 2 || /thiếu nhi|tuổi thơ|dế mèn|hoàng tử|alice|cổ tích|tô hoài/i.test((book.title || '') + ' ' + (book.author || '')),",
+  "                'ky-nang': (book) => book.category_id === 3 || /kỹ năng|phát triển|sống|thói quen|đắc nhân|carnegie|tư duy/i.test((book.title || '') + ' ' + (book.author || '')),",
+  "                'kinh-dien': (book) => book.category_id === 1 || /kinh điển|hoàng tử|đắc nhân|epictetus|exupéry/i.test((book.title || '') + ' ' + (book.author || ''))",
   "            };",
   "            let isTrendingInitialRender = true;",
   "            function renderTrendingShelf(catKey) {",
-  "                if (!trendingContainer) return;",
-  "                const matcher = trendingCatMatch[catKey] || trendingCatMatch.all;",
-  "                const list = trendingShelfBooks.filter(matcher);",
-  "                const books = list.length ? list : trendingShelfBooks;",
-  "                trendingContainer.innerHTML = books.map(renderBookCard).join('') + (books.length ? renderDiscoveryCard('Toàn Bộ Sách Thịnh Hành', 'all', 'ph-fire') : '');",
+  "                const targetShelf = document.getElementById('trending-shelf');",
+  "                if (!targetShelf) return;",
+  "                const list = (libraryCatalog.trending || []).filter(trendingCatMatch[catKey] || trendingCatMatch.all);",
+  "                const books = list.length ? list : (libraryCatalog.trending || []);",
+  "                targetShelf.innerHTML = books.map(renderBookCard).join('') + (books.length ? renderDiscoveryCard('Toàn Bộ Sách Thịnh Hành', 'all', 'ph-fire') : '');",
   "                if (!isTrendingInitialRender && typeof gsap !== 'undefined') {",
-  "                    const cards = Array.from(trendingContainer.children).slice(0, 6);",
+  "                    const cards = Array.from(targetShelf.children).slice(0, 6);",
   "                    gsap.fromTo(cards,",
   "                        { y: 24, opacity: 0, scale: 0.95 },",
   "                        { y: 0, opacity: 1, scale: 1, stagger: 0.05, duration: 0.42, ease: 'power2.out', clearProps: 'transform' }",
   "                    );",
   "                }",
   "            }",
+  "            window.renderTrendingShelf = renderTrendingShelf;",
   "            renderTrendingShelf('all');",
   "            isTrendingInitialRender = false;",
   "            if (trendingCatNav) {",
@@ -1033,38 +1040,105 @@ const PAGE_SCRIPT = [
   "                    });",
   "                });",
   "            }",
-  "            const childrenContainer = document.getElementById('children-shelf');",
-  "            if (childrenContainer) {",
-  "                const books = libraryCatalog.children;",
-  "                childrenContainer.innerHTML = books.map(renderBookCard).join('') + (books.length ? renderDiscoveryCard('Kho Sách Thiếu Nhi', 'thieu-nhi', 'ph-balloon') : '');",
-  "            }",
-  "            const literatureContainer = document.getElementById('literature-shelf');",
-  "            if (literatureContainer) {",
-  "                const books = libraryCatalog.literature;",
-  "                literatureContainer.innerHTML = books.map(renderBookCard).join('') + (books.length ? renderDiscoveryCard('Kho Văn Học & Tiểu Thuyết', 'van-hoc', 'ph-feather') : '');",
-  "            }",
-  "            const selfgrowthShelf = document.getElementById('selfgrowth-shelf') || document.getElementById('selfgrowth-grid');",
-  "            if (selfgrowthShelf) {",
-  "                const books = libraryCatalog.selfgrowth;",
-  "                selfgrowthShelf.innerHTML = books.map(renderBookCard).join('') + (books.length ? renderDiscoveryCard('Kho Sách Kỹ Năng', 'phat-trien', 'ph-brain') : '');",
-  "            }",
-  "",
-  "            // Render 6 New Categories with Discovery Cards at the end",
-  "            const shelfMapping = [",
-  "                { id: 'science-shelf', books: libraryCatalog.science, name: 'Khoa Học & Vũ Trụ', key: 'khoa-hoc', icon: 'ph-planet' },",
-  "                { id: 'business-shelf', books: libraryCatalog.business, name: 'Kinh Tế & Khởi Nghiệp', key: 'kinh-doanh', icon: 'ph-briefcase' },",
-  "                { id: 'history-shelf', books: libraryCatalog.history, name: 'Lịch Sử & Văn Hóa', key: 'lich-su', icon: 'ph-hourglass-high' },",
-  "                { id: 'philosophy-shelf', books: libraryCatalog.philosophy, name: 'Tâm Lý & Triết Học', key: 'van-hoc', icon: 'ph-compass' },",
-  "                { id: 'artlifestyle-shelf', books: libraryCatalog.artlifestyle, name: 'Nghệ Thuật & Lối Sống', key: 'van-hoc', icon: 'ph-palette' },",
-  "                { id: 'biography-shelf', books: libraryCatalog.biography, name: 'Hồi Ký & Danh Nhân', key: 'van-hoc', icon: 'ph-user-focus' }",
-  "            ];",
-  "",
-  "            shelfMapping.forEach(item => {",
-  "                const el = document.getElementById(item.id);",
-  "                if (el && item.books.length) {",
-  "                    el.innerHTML = item.books.map(renderBookCard).join('') + renderDiscoveryCard(item.name, item.key, item.icon);",
+  "            function renderAllShelves() {",
+  "                if (typeof window.renderTrendingShelf === 'function') {",
+  "                    window.renderTrendingShelf('all');",
   "                }",
+  "                const childrenContainer = document.getElementById('children-shelf');",
+  "                if (childrenContainer && libraryCatalog.children && libraryCatalog.children.length) {",
+  "                    childrenContainer.innerHTML = libraryCatalog.children.map(renderBookCard).join('') + renderDiscoveryCard('Kho Sách Thiếu Nhi', 'thieu-nhi', 'ph-balloon');",
+  "                }",
+  "                const literatureContainer = document.getElementById('literature-shelf');",
+  "                if (literatureContainer && libraryCatalog.literature && libraryCatalog.literature.length) {",
+  "                    literatureContainer.innerHTML = libraryCatalog.literature.map(renderBookCard).join('') + renderDiscoveryCard('Kho Văn Học & Tiểu Thuyết', 'van-hoc', 'ph-feather');",
+  "                }",
+  "                const selfgrowthShelf = document.getElementById('selfgrowth-shelf') || document.getElementById('selfgrowth-grid');",
+  "                if (selfgrowthShelf && libraryCatalog.selfgrowth && libraryCatalog.selfgrowth.length) {",
+  "                    selfgrowthShelf.innerHTML = libraryCatalog.selfgrowth.map(renderBookCard).join('') + renderDiscoveryCard('Kho Sách Kỹ Năng', 'phat-trien', 'ph-brain');",
+  "                }",
+  "                const shelfList = [",
+  "                    { id: 'science-shelf', books: libraryCatalog.science, name: 'Khoa Học & Vũ Trụ', key: 'khoa-hoc', icon: 'ph-planet' },",
+  "                    { id: 'business-shelf', books: libraryCatalog.business, name: 'Kinh Tế & Khởi Nghiệp', key: 'kinh-doanh', icon: 'ph-briefcase' },",
+  "                    { id: 'history-shelf', books: libraryCatalog.history, name: 'Lịch Sử & Văn Hóa', key: 'lich-su', icon: 'ph-hourglass-high' },",
+  "                    { id: 'philosophy-shelf', books: libraryCatalog.philosophy, name: 'Tâm Lý & Triết Học', key: 'van-hoc', icon: 'ph-compass' },",
+  "                    { id: 'artlifestyle-shelf', books: libraryCatalog.artlifestyle, name: 'Nghệ Thuật & Lối Sống', key: 'van-hoc', icon: 'ph-palette' },",
+  "                    { id: 'biography-shelf', books: libraryCatalog.biography, name: 'Hồi Ký & Danh Nhân', key: 'van-hoc', icon: 'ph-user-focus' }",
+  "                ];",
+  "                shelfList.forEach(item => {",
+  "                    const el = document.getElementById(item.id);",
+  "                    if (el && item.books && item.books.length) {",
+  "                        el.innerHTML = item.books.map(renderBookCard).join('') + renderDiscoveryCard(item.name, item.key, item.icon);",
+  "                    }",
+  "                });",
+  "            }",
+  "            window.renderAllShelves = renderAllShelves;",
+  "            function categorizeAndPopulateShelves(booksList) {",
+  "                if (!Array.isArray(booksList) || !booksList.length) return;",
+  "                libraryCatalog.trending = [...booksList];",
+  "                libraryCatalog.children = [];",
+  "                libraryCatalog.literature = [];",
+  "                libraryCatalog.selfgrowth = [];",
+  "                libraryCatalog.science = [];",
+  "                libraryCatalog.business = [];",
+  "                libraryCatalog.history = [];",
+  "                libraryCatalog.philosophy = [];",
+  "                libraryCatalog.artlifestyle = [];",
+  "                libraryCatalog.biography = [];",
+  "                const matchKw = (b, regex) => {",
+  "                    const str = ((b.title || '') + ' ' + (b.author || '') + ' ' + (b.desc || '')).toLowerCase();",
+  "                    return regex.test(str);",
+  "                };",
+  "                booksList.forEach((book, idx) => {",
+  "                    let assigned = false;",
+  "                    const cId = book.category_id;",
+  "                    if (cId === 1 || matchKw(book, /văn học|tiểu thuyết|truyện|nhật ánh|hoa nở|chuyện tình/i)) {",
+  "                        libraryCatalog.literature.push(book); assigned = true;",
+  "                    }",
+  "                    if (cId === 2 || matchKw(book, /thiếu nhi|tuổi thơ|dế mèn|hoàng tử|alice|cổ tích|tô hoài/i)) {",
+  "                        libraryCatalog.children.push(book); assigned = true;",
+  "                    }",
+  "                    if (cId === 3 || matchKw(book, /kỹ năng|phát triển|sống|thói quen|đắc nhân|carnegie|tư duy/i)) {",
+  "                        libraryCatalog.selfgrowth.push(book); assigned = true;",
+  "                    }",
+  "                    if (cId === 4 || matchKw(book, /khoa học|vũ trụ|thiên văn|vật lý|công nghệ|toán/i)) {",
+  "                        libraryCatalog.science.push(book); assigned = true;",
+  "                    }",
+  "                    if (cId === 5 || matchKw(book, /kinh tế|kinh doanh|khởi nghiệp|tài chính|đầu tư|graham|tiền/i)) {",
+  "                        libraryCatalog.business.push(book); assigned = true;",
+  "                    }",
+  "                    if (cId === 6 || matchKw(book, /lịch sử|văn hóa|sử việt|chiến tranh|thế giới/i)) {",
+  "                        libraryCatalog.history.push(book); assigned = true;",
+  "                    }",
+  "                    if (cId === 7 || matchKw(book, /triết học|tâm lý|nhận thức|ý thức|epictetus/i)) {",
+  "                        libraryCatalog.philosophy.push(book); assigned = true;",
+  "                    }",
+  "                    if (cId === 8 || matchKw(book, /nghệ thuật|lối sống|hội họa|âm nhạc|nhiếp ảnh|thẩm mỹ/i)) {",
+  "                        libraryCatalog.artlifestyle.push(book); assigned = true;",
+  "                    }",
+  "                    if (cId === 9 || matchKw(book, /tiểu sử|hồi ký|danh nhân|tự truyện/i)) {",
+  "                        libraryCatalog.biography.push(book); assigned = true;",
+  "                    }",
+  "                    if (!assigned) {",
+  "                        const targetKeys = ['literature', 'children', 'selfgrowth', 'science', 'business', 'history', 'philosophy', 'artlifestyle', 'biography'];",
+  "                        libraryCatalog[targetKeys[idx % targetKeys.length]].push(book);",
+  "                    }",
+  "                });",
+  "                const shelfKeys = ['children', 'literature', 'selfgrowth', 'science', 'business', 'history', 'philosophy', 'artlifestyle', 'biography'];",
+  "                shelfKeys.forEach((key, i) => {",
+  "                    if (libraryCatalog[key].length === 0 && booksList.length > 0) {",
+  "                        libraryCatalog[key] = [booksList[i % booksList.length]];",
+  "                    }",
+  "                });",
+  "                renderAllShelves();",
+  "            }",
+  "            window.populateShelvesWithBooks = categorizeAndPopulateShelves;",
+  "            window.addEventListener('halm-books-loaded', function(e) {",
+  "                categorizeAndPopulateShelves(e.detail);",
   "            });",
+  "            if (window.__HALM_BOOKS__ && window.__HALM_BOOKS__.length) {",
+  "                categorizeAndPopulateShelves(window.__HALM_BOOKS__);",
+  "            }",
+  "            renderAllShelves();",
   "",
   "            // 2. Starry Sky for Dark Mode",
   "            const starryBg = document.getElementById('starry-background');",
@@ -1990,18 +2064,20 @@ const PAGE_SCRIPT = [
   "            const searchDropdown = document.getElementById('search-dropdown');",
   "",
   "            if (searchInput && searchDropdown) {",
-  "                const allBooks = [",
-  "                    ...libraryCatalog.trending,",
-  "                    ...libraryCatalog.children,",
-  "                    ...libraryCatalog.literature,",
-  "                    ...libraryCatalog.selfgrowth,",
-  "                    ...libraryCatalog.science,",
-  "                    ...libraryCatalog.business,",
-  "                    ...libraryCatalog.history,",
-  "                    ...libraryCatalog.philosophy,",
-  "                    ...libraryCatalog.artlifestyle,",
-  "                    ...libraryCatalog.biography",
-  "                ];",
+  "                const getAllBooksList = () => {",
+  "                    return [",
+  "                        ...(libraryCatalog.trending || []),",
+  "                        ...(libraryCatalog.children || []),",
+  "                        ...(libraryCatalog.literature || []),",
+  "                        ...(libraryCatalog.selfgrowth || []),",
+  "                        ...(libraryCatalog.science || []),",
+  "                        ...(libraryCatalog.business || []),",
+  "                        ...(libraryCatalog.history || []),",
+  "                        ...(libraryCatalog.philosophy || []),",
+  "                        ...(libraryCatalog.artlifestyle || []),",
+  "                        ...(libraryCatalog.biography || [])",
+  "                    ];",
+  "                };",
   "",
   "                searchInput.addEventListener('input', (e) => {",
   "                    const val = e.target.value.trim().toLowerCase();",
@@ -2012,11 +2088,11 @@ const PAGE_SCRIPT = [
   "                    }",
   "                    if (clearBtn) clearBtn.classList.remove('hidden');",
   "",
-  "                    const matches = allBooks.filter(b => b.title.toLowerCase().includes(val) || b.author.toLowerCase().includes(val)).slice(0, 5);",
+  "                    const matches = getAllBooksList().filter(b => (b.title || '').toLowerCase().includes(val) || (b.author || '').toLowerCase().includes(val)).slice(0, 5);",
   "                    if (matches.length > 0) {",
   "                        searchDropdown.innerHTML = matches.map(b => `",
-  "                            <a href=\"../book-detail.html?id=${b.id}\" class=\"flex items-center gap-3 p-2 rounded-lg hover:bg-paper-200 dark:hover:bg-night-card transition-colors\">",
-  "                                <img src=\"${b.img}\" class=\"w-8 h-12 object-cover rounded shrink-0\">",
+  "                            <a href=\"/chitietsach/${b.id}\" class=\"flex items-center gap-3 p-2 rounded-lg hover:bg-paper-200 dark:hover:bg-night-card transition-colors\">",
+  "                                <img src=\"${b.img || '/logo.png'}\" class=\"w-8 h-12 object-cover rounded shrink-0\" onerror=\"this.onerror=null;this.src='/logo.png';\">",
   "                                <div class=\"overflow-hidden\">",
   "                                    <div class=\"font-display text-xs font-bold text-ink dark:text-night-text truncate\">${b.title}</div>",
   "                                    <div class=\"font-metadata-spec text-[10px] text-ink-muted dark:text-night-muted truncate\">${b.author}</div>",
@@ -3056,8 +3132,102 @@ export default function Test() {
   const [inputText, setInputText] = useState("");
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [books, setBooks] = useState([]);
+  const [isBooksLoading, setIsBooksLoading] = useState(true);
+  const [booksError, setBooksError] = useState("");
+  const [pageNumber, setPageNumber] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
   const chatRequestRef = useRef(null);
   const chatRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const fetchBooks = async () => {
+      try {
+        setIsBooksLoading(true);
+        setBooksError("");
+
+        // Truyền pageNumber/page để BE lấy đúng dữ liệu theo trang
+        const response = await axiosInstance.get("/api/home/books", {
+          params: {
+            pageNumber: 0,
+            page: 0,
+            pageSize: 50,
+            size: 50,
+          },
+          signal: controller.signal,
+        });
+        const payload = response.data;
+
+        // Bóc tách dữ liệu mảng sách từ Spring Data Page (payload.content) hoặc mảng thông thường
+        const rawBooks = Array.isArray(payload)
+          ? payload
+          : Array.isArray(payload?.content)
+            ? payload.content
+            : Array.isArray(payload?.data)
+              ? payload.data
+              : Array.isArray(payload?.books)
+                ? payload.books
+                : [];
+
+        if (payload?.totalPages !== undefined) {
+          setTotalPages(payload.totalPages);
+        }
+        if (payload?.totalElements !== undefined) {
+          setTotalElements(payload.totalElements);
+        }
+
+        // Chuẩn hóa trường dữ liệu đồng bộ giữa BookDto (BE) và Template (FE)
+        const normalizedBooks = rawBooks.map((item, idx) => ({
+          ...item,
+          id: item.book_id || item.id || `book-${idx}`,
+          title: item.bookName || item.title || "Tác phẩm",
+          author: item.author || "HALM BOOK",
+          img: item.img_url || item.img || "/logo.png",
+          desc: item.description || item.desc || "",
+          price: item.rent_price !== undefined ? item.rent_price : (item.price || 0),
+          category_id: item.category_id,
+          rating: item.rating || "5.0",
+        }));
+
+        setBooks(normalizedBooks);
+
+        // Kích hoạt ngay hàm render đổ sách lên kệ nếu script DOM đã sẵn sàng
+        if (typeof window.populateShelvesWithBooks === "function") {
+          window.populateShelvesWithBooks(normalizedBooks);
+        }
+      } catch (error) {
+        if (controller.signal.aborted) return;
+
+        console.error("Lỗi lấy danh sách sách trang chủ:", error);
+        setBooksError(
+          error.response?.data?.message ||
+            error.message ||
+            "Không thể tải danh sách sách.",
+        );
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsBooksLoading(false);
+        }
+      }
+    };
+
+    fetchBooks();
+
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    window.__HALM_BOOKS__ = books;
+    window.dispatchEvent(new CustomEvent("halm-books-loaded", {
+      detail: books,
+    }));
+    if (typeof window.populateShelvesWithBooks === "function") {
+      window.populateShelvesWithBooks(books);
+    }
+  }, [books]);
 
   useEffect(() => () => {
     chatRequestIdRef.current += 1;
@@ -3168,6 +3338,16 @@ export default function Test() {
         {/* 1. PHẦN HEADER (THANH ĐIỀU HƯỚNG) - HALMBOOK EDITORIAL  */}
         {/* ======================================================= */}
         <main className="flex-grow pt-0">
+          {isBooksLoading && (
+            <div className="sr-only" role="status" aria-live="polite">
+              Đang tải danh sách sách...
+            </div>
+          )}
+          {booksError && (
+            <div className="sr-only" role="alert">
+              {booksError}
+            </div>
+          )}
 
           <section id="chapter-0-broadcast" className="chapter-ambient-wrapper ambient-glow-a bg-paper dark:bg-night-bg transition-colors">
             <div id="hero-broadcast" className="hero-broadcast pt-[76px]">

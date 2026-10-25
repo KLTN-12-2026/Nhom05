@@ -1,0 +1,134 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Open+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,600&family=Roboto:wght@300;400;500;700;900&display=swap');
+
+:root {
+  --font-display: 'Inter', sans-serif;
+  --font-ui: 'Inter', sans-serif;
+  --font-metadata: 'Roboto', sans-serif;
+  --font-editorial: 'Open Sans', sans-serif;
+
+  /* Color Palette - HALM BOOK */
+  --color-paper: #F7F4EE;
+  --color-paper-50: #FAF8F5;
+  --color-paper-100: #F5F2EB;
+  --color-paper-200: #EAE5D9;
+  --color-paper-surface: #FFFEFA;
+  --color-paper-border: #E3DDD0;
+
+  --color-ink: #1E1F1D;
+  --color-ink-muted: #66645E;
+  --color-ink-pure: #111210;
+
+  --color-wine: #8E3038;
+  --color-wine-light: #A83B46;
+  --color-wine-dark: #6F252C;
+
+  --color-gold: #B8860B;
+  --color-gold-light: #D4AF37;
+  --color-gold-dark: #8C6708;
+
+  --color-night-bg: #111210;
+  --color-night-surface: #181916;
+  --color-night-card: #20221E;
+  --color-night-border: #2C2E29;
+  --color-night-text: #EDE9DF;
+  --color-night-muted: #96938B;
+}
+
+/* Base Body Styles */
+.halm-container {
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Paper Grain */
+.paper-grain {
+  background-image: radial-gradient(rgba(30, 31, 29, 0.04) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+.dark .paper-grain {
+  background-image: radial-gradient(rgba(237, 233, 223, 0.04) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+/* Fonts */
+.font-display { font-family: var(--font-display); }
+.font-metadata-spec { font-family: var(--font-metadata); }
+.font-editorial-body { font-family: var(--font-editorial); line-height: 1.65; }
+
+/* Starry background */
+.star-particle {
+  position: absolute;
+  background-color: #fff;
+  border-radius: 50%;
+  pointer-events: none;
+}
+@keyframes starTwinkle {
+  0%, 100% { opacity: 0.2; transform: scale(0.8); }
+  50% { opacity: 0.95; transform: scale(1.3); }
+}
+
+/* Laser scan animation */
+@keyframes scanLaser {
+  0%, 100% { top: 6%; opacity: 0.25; }
+  50% { top: 92%; opacity: 1; }
+}
+.scan-laser-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #8E3038, transparent);
+  box-shadow: 0 0 10px #8E3038;
+  animation: scanLaser 2.4s ease-in-out infinite;
+  pointer-events: none;
+}
+.dark .scan-laser-line {
+  background: linear-gradient(90deg, transparent, #D4AF37, transparent);
+  box-shadow: 0 0 12px #D4AF37;
+}
+
+/* QR Scanner Box */
+.qr-scanner-box {
+  position: relative;
+  border-radius: 16px;
+  border: 2px dashed rgba(142, 48, 56, 0.4);
+  padding: 12px;
+  background: #FFFFFF;
+}
+.dark .qr-scanner-box {
+  border-color: rgba(212, 175, 55, 0.4);
+  background: #181916;
+}
+
+/* Scrolled Navbar */
+.navbar-scrolled {
+  background-color: rgba(247, 244, 238, 0.95) !important;
+  backdrop-filter: blur(16px);
+  border-color: rgba(227, 221, 208, 0.8) !important;
+  box-shadow: 0 4px 20px -4px rgba(0,0,0,0.06);
+}
+.dark .navbar-scrolled {
+  background-color: rgba(17, 18, 16, 0.95) !important;
+  border-color: rgba(44, 46, 41, 0.8) !important;
+  box-shadow: 0 4px 25px -4px rgba(0,0,0,0.5);
+}
+
+/* Potato badge */
+.potato-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: rgba(184, 134, 11, 0.12);
+  color: #B8860B;
+  border: 1px solid rgba(184, 134, 11, 0.28);
+  border-radius: 9999px;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-family: var(--font-metadata);
+}
+.dark .potato-badge {
+  background: rgba(212, 175, 55, 0.15);
+  color: #D4AF37;
+  border-color: rgba(212, 175, 55, 0.35);
+}
