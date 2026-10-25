@@ -16,7 +16,7 @@ import ProtectedRoute from './component/ProtectedRoute';
 import Hang from './component/user/HangTv';
 import TSCN from './component/user/TuSachCn';
 import LSGiaoDich from './component/user/LSGiaoDich';
-import UuDai from './component/user/UuDai';
+import Ptthanhtoan from './component/user/PtThanhToan';
 import UpLoad from './component/user/UpLoadFile';
 import ThanhToan from './component/user/thanhtoan';
 import ChiTietSach from './component/user/ChiTietSach';
@@ -36,7 +36,7 @@ function App() {
         <Route path="/giohang" element={<GioHang />} />
         
         {/* <Route path="/lsgiaodich" element={<LSGiaoDich />} /> */}
-        {/* <Route path="/uudai" element={<UuDai />} /> */}
+        <Route path="/uudai" element={<UuDai />} />
         {/* <Route path="/upload" element={<UpLoad />} /> */}
         <Route path="/thanhtoan" element={<ThanhToan/>}/>
         <Route path="/chitietsach" element={<ChiTietSach />} />
