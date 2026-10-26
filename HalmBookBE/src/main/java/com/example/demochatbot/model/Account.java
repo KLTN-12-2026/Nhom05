@@ -7,8 +7,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
-import java.util.Date;
-import java.util.List;
 
 @Data
 @AllArgsConstructor
@@ -24,10 +22,13 @@ public class Account {
     private String password;
     private String otpCode;
     private String provider;
-    private LocalDateTime otpExpiration ;
+    private LocalDateTime otpExpiration;
+
+    @Column(name = "status")
+    private String status = "ACTIVE";
 
     @OneToOne(mappedBy = "account" ,cascade = CascadeType.ALL)
-    private  Customer customer;
+    private Customer customer;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

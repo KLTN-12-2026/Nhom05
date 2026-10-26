@@ -18,7 +18,14 @@ public class Orders {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int orders_id;
     private double total_amount;
-    private LocalDateTime order_date;
+
+    @Column(name = "payment_currency")
+    private String paymentCurrency = "VND"; // 'VND' hoặc 'POTATO'
+
+    @Column(name = "order_type")
+    private String orderType = "RENT_BOOK"; // 'RENT_BOOK', 'TOPUP_POTATO', 'BUY_BOOK'
+
+    private LocalDateTime order_date = LocalDateTime.now();
     private String payment_status;
     private String payment_method;
     private String transaction_no;
@@ -34,6 +41,4 @@ public class Orders {
 
     @OneToMany(mappedBy = "orders")
     private List<Order_Item> order_items;
-
-
 }
