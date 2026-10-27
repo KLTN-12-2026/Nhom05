@@ -1,5 +1,6 @@
 import { ArrowLeft, Bookmark, BookOpen, Heart } from 'lucide-react-native';
 import { useAppNavigation, useAppThemeStyles } from './navigation';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 import {
   SafeAreaView,
@@ -33,7 +34,7 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
 
   return (
     <SafeAreaView style={themeStyles.safeArea}>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={isDarkMode ? '#101319' : '#fdfdfd'} />
+      <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'} />
 
       {/* Header Điều Hướng */}
       <View style={themeStyles.header}>

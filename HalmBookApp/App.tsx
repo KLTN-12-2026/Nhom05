@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurTargetView } from 'expo-blur';
-import { ComponentType, useEffect, useRef, useState } from 'react';
+import { ComponentRef, ComponentType, useEffect, useRef, useState } from 'react';
 import { Alert, BackHandler, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import ChatBotScreen, { ChatMessage } from './src/ux-ui/chatbot';
@@ -52,7 +52,7 @@ export default function App() {
   const [routes, setRoutes] = useState<ScreenRoute[]>([{ name: 'auth' }]);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [homeRefreshKey, setHomeRefreshKey] = useState(0);
-  const blurTargetRef = useRef<View | null>(null);
+  const blurTargetRef = useRef<ComponentRef<typeof View> | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',

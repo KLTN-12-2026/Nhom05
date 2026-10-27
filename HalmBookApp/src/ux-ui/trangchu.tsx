@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Dimensions, Platform, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, UIManager, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { useAppNavigation } from './navigation';
 
 const { width, height } = Dimensions.get('window');
@@ -265,7 +266,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
   return (
     <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: isDarkMode ? BRAND.black : '#fff' }]}>
       <Animated.View style={[styles.container, { backgroundColor: animatedBg }]}>
-      <StatusBar translucent={false} backgroundColor={isDarkMode ? '#1F2228' : '#5a8b82'} barStyle={isDarkMode ? "light-content" : "dark-content"} />
+      <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'} />
       
       {/* TRUNG TÂM HIỆU ỨNG DARK MODE */}
       <DarkModeBackgroundEffects visible={isDarkMode} />

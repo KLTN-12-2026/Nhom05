@@ -1,7 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { ComponentRef, useState, useRef } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Modal, Switch, Image, Platform, StatusBar, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppNavigation, useAppThemeStyles } from './navigation';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 
 export default function Toi() {
   const themeStyles = useAppThemeStyles(styles);
@@ -21,7 +22,7 @@ export default function Toi() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [newPwdError, setNewPwdError] = useState('');
   
-  const confirmPwdRef = useRef<TextInput>(null);
+  const confirmPwdRef = useRef<ComponentRef<typeof TextInput>>(null);
 
   const handleCheckOldPassword = () => {
     if (oldPassword === '123456') {
@@ -99,7 +100,7 @@ export default function Toi() {
 
   return (
     <View style={themeStyles.container}>
-      <StatusBar translucent backgroundColor="transparent" barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'} />
       
       <ScrollView showsVerticalScrollIndicator={false} style={themeStyles.mainScroll}>
         
@@ -420,7 +421,7 @@ export default function Toi() {
             <View style={themeStyles.aboutHeader}>
               <Text style={themeStyles.aboutLogoText}>HALM <Text style={{ color: '#9b51e0' }}>Book</Text></Text>
               <Text style={themeStyles.aboutVersion}>Phiên bản 1.0.0 (Cập nhật: 18/09/2026)</Text>
-              <Text style={themeStyles.aboutSlogan}>"Sách là ánh sáng, tri thức là sức mạnh"</Text>
+              <Text style={themeStyles.aboutSlogan}>&quot;Sách là ánh sáng, tri thức là sức mạnh&quot;</Text>
             </View>
 
             <View style={themeStyles.aboutInfoBox}>
