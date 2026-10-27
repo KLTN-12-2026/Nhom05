@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Dimensions, Modal, Platform, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppNavigation, useAppThemeStyles } from './navigation';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 
 const ICONS = {
   'filter-outline': '☷',
@@ -48,7 +49,7 @@ export default function TheLoai() {
 
   return (
     <View style={themeStyles.container}>
-      <StatusBar translucent backgroundColor="transparent" barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'} />
       
       {/* Header */}
       <View style={themeStyles.header}>

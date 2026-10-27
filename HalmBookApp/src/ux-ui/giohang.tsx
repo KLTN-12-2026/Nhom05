@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Platform, StatusBar } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppNavigation, useAppThemeStyles } from './navigation';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 
 // Mock data cho Giỏ hàng
 const MOCK_CART = [
@@ -38,7 +39,7 @@ export default function GioHang() {
 
   return (
     <View style={themeStyles.container}>
-      <StatusBar translucent backgroundColor="transparent" barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'} />
       
       {/* Header giống các trang khác */}
       <View style={themeStyles.header}>

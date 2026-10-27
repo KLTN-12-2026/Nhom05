@@ -1,6 +1,7 @@
 import { useAppNavigation, useAppThemeStyles } from './navigation';
 import React, { useState, useRef, useEffect } from 'react';
 import { Platform, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { 
   ArrowLeft, Search, Settings, List, 
   Bookmark, Music, Play, Pause, X, Check, Volume2, Upload, Eye, EyeOff, Sliders, Type, Sun, Moon, Palette, Layers, BookOpen, Maximize2, Minimize2
@@ -606,7 +607,7 @@ function NativeReader({ onBack }: ReaderProps) {
 
   return (
     <SafeAreaView style={themeReaderStyles.container}>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'} />
       <View style={themeReaderStyles.header}>
         <TouchableOpacity onPress={onBack} accessibilityLabel="Quay lại">
           <ArrowLeft size={22} color={isDarkMode ? '#E4E6EB' : '#17202a'} />

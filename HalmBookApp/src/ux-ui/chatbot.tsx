@@ -1,5 +1,6 @@
 import { ArrowLeft, BookOpen, Bot, Image as ImageIcon, Mic, MoreVertical, Send } from 'lucide-react-native';
 import { useRef, useState } from 'react';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { useAppNavigation, useAppThemeStyles } from './navigation';
 import {
   FlatList,
@@ -119,7 +120,7 @@ export default function ChatBotScreen({
 
   return (
     <SafeAreaView style={themeStyles.safeArea}>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={isDarkMode ? '#101319' : '#fdfdfd'} />
+      <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'} />
 
       {/* Header */}
       <View style={themeStyles.header}>

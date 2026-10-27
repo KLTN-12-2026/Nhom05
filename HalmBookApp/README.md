@@ -1,58 +1,41 @@
-# Welcome to your Expo app 👋
+# HALMBOOK
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Ứng dụng đọc sách được xây dựng với Expo SDK 58, React Native và TypeScript.
 
-## Get started
-
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Chạy dự án
 
 ```bash
-npm run reset-project
+npm install
+npm start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Các lệnh tiện ích:
 
-### Other setup steps
+```bash
+npm run android
+npm run ios
+npm run web
+npm run lint
+npx tsc --noEmit
+npx expo-doctor
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+## Kết nối backend
 
-## Learn more
+API URL được đọc từ biến môi trường `EXPO_PUBLIC_API_URL`.
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+Copy-Item .env.example .env.local
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Sau đó sửa URL trong `.env.local`:
 
-## Join the community
+- Android Emulator: `http://10.0.2.2:8082`
+- iOS Simulator hoặc web: `http://localhost:8082`
+- Thiết bị thật: `http://<IPv4-của-máy-chạy-backend>:8082`, với hai thiết bị cùng mạng LAN
 
-Join our community of developers creating universal apps.
+Không commit `.env.local`. Expo sẽ nạp các biến có tiền tố `EXPO_PUBLIC_` vào ứng dụng lúc chạy.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Cấu trúc
 
--update by An
+Ứng dụng sử dụng `App.tsx` và navigation nội bộ bằng state. Package `expo-router` vẫn được giữ trong dependency tree để tương thích với bộ package Expo hiện tại, nhưng dự án không sử dụng file-based routing.

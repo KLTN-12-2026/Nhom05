@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Platform, ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppNavigation, useAppThemeStyles } from './navigation';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 
 // Mock data: Sách đã từng upload
 const UPLOAD_HISTORY = [
@@ -15,7 +16,7 @@ export default function UploadFile() {
 
   return (
     <View style={themeStyles.container}>
-      <StatusBar translucent backgroundColor="transparent" barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'} />
       
       {/* Header đồng nhất với các màn hình khác */}
       <View style={themeStyles.header}>

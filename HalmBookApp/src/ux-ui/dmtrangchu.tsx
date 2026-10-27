@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, Platfo
 import { Ionicons } from '@expo/vector-icons'; 
 import { useAppNavigation } from './navigation';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 
 // Mock Data
 const CAROUSEL = [
@@ -59,7 +60,7 @@ export default function DmTrangChu({ isDarkMode, onToggleDarkMode }: DmTrangChuP
 
   return (
     <SafeAreaView edges={['top']} style={styles.container}>
-      <StatusBar translucent={false} backgroundColor={isDarkMode ? '#1F2228' : '#5a8b82'} barStyle={isDarkMode ? "light-content" : "dark-content"} />
+      <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'} />
       
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} bounces={false}>
         
