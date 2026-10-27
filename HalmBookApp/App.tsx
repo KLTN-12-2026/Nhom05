@@ -52,7 +52,7 @@ export default function App() {
   const [routes, setRoutes] = useState<ScreenRoute[]>([{ name: 'auth' }]);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [homeRefreshKey, setHomeRefreshKey] = useState(0);
-  const blurTargetRef = useRef<View | null>(null);
+  const blurTargetRef = useRef<any>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',

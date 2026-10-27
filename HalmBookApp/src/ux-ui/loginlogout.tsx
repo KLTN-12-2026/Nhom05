@@ -9,7 +9,7 @@ import { Alert, KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleShee
 // CẤU HÌNH KẾT NỐI (ĐIỂM MÙ LOCALHOST)
 // ----------------------------------------------------
 // KHÔNG ĐƯỢC dùng 'localhost'. Phải dùng IPv4 của máy tính chạy Spring Boot.
-const API_BASE_URL = 'http://192.168.10.190:8082';
+const API_BASE_URL = 'http://172.31.99.163:8082';
 
 const axiosAppInstance = axios.create({
   baseURL: API_BASE_URL,

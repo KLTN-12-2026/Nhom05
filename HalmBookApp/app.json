@@ -3,6 +3,7 @@
     "name": "HALMBOOK",
     "slug": "HALMBOOK",
     "version": "1.0.0",
+    "sdkVersion": "58.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "halmbook",
@@ -20,7 +21,7 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "output": "static",
+      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
