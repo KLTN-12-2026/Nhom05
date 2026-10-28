@@ -1,7 +1,9 @@
 import { ArrowLeft, Bookmark, BookOpen, Heart } from 'lucide-react-native';
 import { useAppNavigation, useAppThemeStyles } from './navigation';
 import { useState } from 'react';
+import { getBookCoverSource } from './bookCovers';
 import {
+  Image,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -14,6 +16,7 @@ interface BookDetailProps {
   book: {
     id: string;
     title: string;
+    img_url?: string;
     author?: string;
     chapter?: string;
     tag?: string;
@@ -51,7 +54,14 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
         {/* Phần Thông Tin Sách Chính (Hero Card) */}
         <View style={themeStyles.heroSection}>
           <View style={themeStyles.bookCoverLarge}>
-            <Text style={themeStyles.coverText}>BÌA{'\n'}TRUYỆN</Text>
+            {(() => {
+              const coverSource = getBookCoverSource(book.id, (book as any).img_url);
+              return coverSource ? (
+                <Image source={coverSource} style={StyleSheet.absoluteFill} resizeMode="cover" />
+              ) : (
+                <Text style={themeStyles.coverText}>{"BÌA\nTRUYỆN"}</Text>
+              );
+            })()}
           </View>
 
           <View style={themeStyles.heroInfo}>
@@ -145,6 +155,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 3, borderBottomColor: '#1a1a1a', alignItems: 'center'
   },
   bookCoverLarge: {
+    overflow: 'hidden',
     width: 110, height: 160, backgroundColor: '#5a8b82',
     borderRadius: 12, borderWidth: 3, borderColor: '#1a1a1a',
     justifyContent: 'center', alignItems: 'center',

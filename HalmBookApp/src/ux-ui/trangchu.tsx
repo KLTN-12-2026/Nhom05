@@ -1,8 +1,25 @@
 import { Ionicons } from '@expo/vector-icons';
+import axios from 'axios';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Dimensions, Platform, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, UIManager, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Animated,
+  Dimensions,
+  Image,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  UIManager,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAppNavigation } from './navigation';
+import { BookData, useAppNavigation } from './navigation';
+import { getBookCoverSource } from './bookCovers';
 
 const { width, height } = Dimensions.get('window');
 
@@ -11,25 +28,60 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-// Mock Data
-const CAROUSEL = [
-  { id: '1', title: 'Cao Võ Tiến Hóa: Bắt Đầu Từ Việc Thức Tỉnh...' },
-  { id: '2', title: 'Toàn Cầu Băng Phong: Ta Chế Tạo Phòng An Toàn' },
-] as const;
-
-const NOVELS = [
-  { id: '1', title: 'Bỏ làm simp chúa, ta có trong tay...', chapter: 'Chapter 335' },
-  { id: '2', title: 'Đồ Đệ Của Ta Đều Là Trùm Phản Diện', chapter: 'Chapter 555' },
-  { id: '3', title: 'Buôn Bán Thời Tận Thế: Ta Dùng...', chapter: 'Chapter 70' },
+// Cấu hình kết nối Backend - Tái sử dụng cấu hình từ loginlogout.tsx và hỗ trợ fallback môi trường
+const API_BASE_URL = 'http://192.168.2.77:8082';
+const CANDIDATE_API_URLS = [
+  API_BASE_URL,
+  'http://localhost:8082',
+  'http://127.0.0.1:8082',
+  'http://192.168.1.165:8082',
+  'http://10.0.2.2:8082',
 ];
 
-const BXH_NOVELS = [
-  { id: '1', title: 'Thiên Đạo Đồ Thư Quán', chapter: 'Chapter 1024' },
-  { id: '2', title: 'Võ Luyện Đỉnh Phong', chapter: 'Chapter 3000' },
-  { id: '3', title: 'Toàn Chức Pháp Sư', chapter: 'Chapter 2500' },
-  { id: '4', title: 'Đấu Phá Thương Khung', chapter: 'Chapter 1641' },
-  { id: '5', title: 'Nguyên Tôn', chapter: 'Chapter 1200' },
-];
+export interface HomeBookItem extends BookData {
+  id: string;
+  book_id?: string;
+  bookName?: string;
+  img_url?: string;
+  description?: string;
+  price?: number;
+  category_id?: number;
+  category_name?: string;
+}
+
+const mapBookDtoToItem = (item: any, index: number): HomeBookItem => {
+  const id = String(item.book_id || item.id || `book-${index}`);
+  const title = String(item.bookName || item.title || 'Chưa có tiêu đề');
+  const author = item.author || 'HALM BOOK';
+  let img_url = item.img_url || item.img || undefined;
+  if (img_url && typeof img_url === 'string' && img_url.startsWith('/')) {
+    img_url = API_BASE_URL + img_url;
+  }
+  const tag = item.category_name || item.tag || 'Sách hay';
+  const description = item.description || item.desc || '';
+  const price = item.rent_price !== undefined ? item.rent_price : item.price;
+  const rating = item.rating ? String(item.rating) : '5.0';
+  const reads = item.read_count ? `${item.read_count}` : '1.2K';
+  const chapter = item.total_pages ? `${item.total_pages} trang` : (item.chapter || `Tác giả: ${author}`);
+
+  return {
+    id,
+    title,
+    author,
+    chapter,
+    tag,
+    rating,
+    reads,
+    img_url,
+    description,
+    price,
+    category_id: item.category_id,
+    category_name: item.category_name,
+  };
+};
+
+// Fallback Banner khi chưa có dữ liệu từ backend
+const CAROUSEL: any[] = [];
 
 // MÀU SẮC THƯƠNG HIỆU
 const BRAND = {
@@ -186,6 +238,98 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
   const scrollOffset = useRef(0);
   const pullStart = useRef<number | null>(null);
   const refreshStarted = useRef(false);
+
+  // State quản lý danh sách sách từ API BE
+  const [books, setBooks] = useState<HomeBookItem[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>('Tất cả');
+
+  const categoriesList = useMemo(() => [
+    'Tất cả',
+    'Văn Học Hiện Thực',
+    'Phóng Sự & Xã Hội',
+    'Tình Cảm & Tiểu Thuyết',
+    'Hồi Ký & Lịch Sử',
+    'Danh Tác Kinh Điển',
+  ], []);
+
+  const recommendedBooks = useMemo(() => {
+    const list = books.filter(b => b.category_id === 1 || b.category_id === 4);
+    return list.length > 0 ? list : books;
+  }, [books]);
+
+  const recentBooks = useMemo(() => {
+    const list = books.filter(b => b.category_id === 5 || b.category_id === 3);
+    return list.length > 0 ? list : books.slice().reverse();
+  }, [books]);
+
+  const categorizedBooks = useMemo(() => {
+    if (selectedCategory === 'Tất cả') return books;
+    return books.filter(b => {
+      const cat = b.category_name || '';
+      if (selectedCategory === 'Văn Học Hiện Thực') return cat.includes('Hiện Thực') || b.category_id === 5;
+      if (selectedCategory === 'Phóng Sự & Xã Hội') return cat.includes('Phóng Sự') || b.category_id === 3;
+      if (selectedCategory === 'Tình Cảm & Tiểu Thuyết') return cat.includes('Tình Cảm') || b.category_id === 4;
+      if (selectedCategory === 'Hồi Ký & Lịch Sử') return cat.includes('Hồi Ký') || cat.includes('Lịch Sử') || b.category_id === 2;
+      if (selectedCategory === 'Danh Tác Kinh Điển') return cat.includes('Kinh Điển') || b.category_id === 1;
+      return true;
+    });
+  }, [books, selectedCategory]);
+
+  const fetchBooks = async (signal?: AbortSignal) => {
+    setIsLoading(true);
+    setErrorMessage(null);
+
+    const urls = Array.from(new Set(CANDIDATE_API_URLS));
+    let lastError: any = null;
+    let fetchedData: any = null;
+
+    for (const baseUrl of urls) {
+      try {
+        const response = await axios.get(`${baseUrl}/api/home/books`, {
+          params: { page: 0, size: 50 },
+          timeout:9000,
+          signal,
+        });
+        fetchedData = response.data;
+        if (fetchedData) break;
+      } catch (err: any) {
+        lastError = err;
+        if (axios.isCancel(err) || (err && err.name === 'CanceledError')) {
+          return;
+        }
+      }
+    }
+
+    if (fetchedData) {
+      const rawList = Array.isArray(fetchedData)
+        ? fetchedData
+        : Array.isArray(fetchedData.content)
+          ? fetchedData.content
+          : Array.isArray(fetchedData.data)
+            ? fetchedData.data
+            : [];
+
+      const mappedList = rawList.map(mapBookDtoToItem);
+      setBooks(mappedList);
+      setIsLoading(false);
+    } else {
+      setErrorMessage(
+        lastError?.response?.data?.message ||
+        lastError?.message ||
+        'Không thể kết nối máy chủ để lấy dữ liệu sách.'
+      );
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchBooks(controller.signal);
+    return () => controller.abort();
+  }, []);
+
   const getTouchPageY = (nativeEvent: {
     pageY?: number;
     touches?: ArrayLike<{ pageY: number }>;
@@ -210,39 +354,57 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
   });
 
   const styles = getStyles(isDarkMode);
-  const handleRefresh = () => {
+
+  const handleRefresh = async () => {
     if (refreshStarted.current) return;
     refreshStarted.current = true;
     if (Platform.OS === 'web') {
-      window.location.reload();
+      await fetchBooks();
+      refreshStarted.current = false;
       return;
     }
     setRefreshing(true);
+    await fetchBooks();
+    setRefreshing(false);
     onRefresh();
   };
 
-  const renderNovelCard = (novel: any, width: number = 110) => (
-    <TouchableOpacity key={novel.id} style={[styles.novelCard, { width }]} activeOpacity={0.9} onPress={() => navigate('bookDetail', novel)}>
-      <View style={[styles.novelCover, { height: width * 1.3 }]}>
-        <Text style={styles.novelCoverText}>Ảnh{'\n'}Truyện</Text>
-      </View>
-      <Text style={styles.novelTitle} numberOfLines={2}>{novel.title}</Text>
-      <Text style={styles.novelChapter}>{novel.chapter}</Text>
-    </TouchableOpacity>
-  );
+  const renderNovelCard = (novel: any, cardWidth: number | string = 110) => {
+    const coverSource = getBookCoverSource(novel.id, novel.img_url);
+    return (
+      <TouchableOpacity key={novel.id} style={[styles.novelCard, { width: cardWidth as any }]} activeOpacity={0.9} onPress={() => navigate('bookDetail', novel)}>
+        <View style={[styles.novelCover, { height: typeof cardWidth === 'number' ? cardWidth * 1.3 : 150 }]}>
+          {coverSource ? (
+            <Image source={coverSource} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          ) : (
+            <Text style={styles.novelCoverText}>Ảnh{'\n'}Truyện</Text>
+          )}
+        </View>
+        <Text style={styles.novelTitle} numberOfLines={2}>{novel.title}</Text>
+        <Text style={styles.novelChapter}>{novel.chapter || novel.author || 'Đang cập nhật'}</Text>
+      </TouchableOpacity>
+    );
+  };
 
-  const renderRankItem = (novel: any, index: number) => (
-    <TouchableOpacity key={novel.id} style={styles.rankItem} activeOpacity={0.8} onPress={() => navigate('bookDetail', novel)}>
-      <Text style={[styles.rankNumber, index < 3 ? styles.rankNumberTop : null]}>{index + 1}</Text>
-      <View style={styles.rankCover}>
-         <Text style={styles.rankCoverText}>Ảnh</Text>
-      </View>
-      <View style={styles.rankInfo}>
-        <Text style={styles.rankTitle} numberOfLines={1}>{novel.title}</Text>
-        <Text style={styles.rankChapter}>{novel.chapter}</Text>
-      </View>
-    </TouchableOpacity>
-  );
+  const renderRankItem = (novel: any, index: number) => {
+    const coverSource = getBookCoverSource(novel.id, novel.img_url);
+    return (
+      <TouchableOpacity key={novel.id} style={styles.rankItem} activeOpacity={0.8} onPress={() => navigate('bookDetail', novel)}>
+        <Text style={[styles.rankNumber, index < 3 ? styles.rankNumberTop : null]}>{index + 1}</Text>
+        <View style={styles.rankCover}>
+          {coverSource ? (
+            <Image source={coverSource} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          ) : (
+            <Text style={styles.rankCoverText}>Ảnh</Text>
+          )}
+        </View>
+        <View style={styles.rankInfo}>
+          <Text style={styles.rankTitle} numberOfLines={1}>{novel.title}</Text>
+          <Text style={styles.rankChapter}>{novel.chapter || novel.author || 'Đang cập nhật'}</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   const toolbarData = isDarkMode 
     ? [
@@ -337,10 +499,17 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
             snapToInterval={315} 
             decelerationRate="fast"
           >
-            {CAROUSEL.map((banner, index) => (
-              <TouchableOpacity key={banner.id} style={styles.bannerCard} activeOpacity={0.9} onPress={() => navigate('bookDetail', { id: banner.id, title: banner.title })}>
+            {(books.length > 0 ? books.slice(0, 5) : CAROUSEL).map((banner: any, index: number) => (
+              <TouchableOpacity key={banner.id} style={styles.bannerCard} activeOpacity={0.9} onPress={() => navigate('bookDetail', banner)}>
                 <View style={styles.bannerImagePlaceholder}>
-                  <Text style={styles.bannerImageText}>Banner {index + 1}</Text>
+                  {(() => {
+                    const bSource = getBookCoverSource(banner.id, banner.img_url);
+                    return bSource ? (
+                      <Image source={bSource} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                    ) : (
+                      <Text style={styles.bannerImageText}>Banner {index + 1}</Text>
+                    );
+                  })()}
                 </View>
                 <View style={styles.bannerOverlay}>
                   <Text style={styles.bannerTitle} numberOfLines={1}>{banner.title}</Text>
@@ -383,9 +552,27 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
             <Ionicons name="sparkles" size={18} color="#1a1a1a" style={{marginRight: 6}} />
             <Text style={[styles.sectionTitleText, { color: '#1a1a1a' }]}>Khuyến Khích Đọc</Text>
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList}>
-            {NOVELS.map(n => renderNovelCard(n, 120))}
-          </ScrollView>
+          {isLoading ? (
+            <View style={styles.statusBox}>
+              <ActivityIndicator size="small" color={isDarkMode ? '#D8B36A' : '#5a8b82'} />
+              <Text style={styles.statusText}>Đang tải dữ liệu sách...</Text>
+            </View>
+          ) : errorMessage ? (
+            <View style={styles.statusBox}>
+              <Text style={styles.statusErrorText}>{errorMessage}</Text>
+              <TouchableOpacity style={styles.retryBtn} onPress={() => fetchBooks()}>
+                <Text style={styles.retryBtnText}>Thử lại</Text>
+              </TouchableOpacity>
+            </View>
+          ) : books.length === 0 ? (
+            <View style={styles.statusBox}>
+              <Text style={styles.statusEmptyText}>Chưa có sách nào trong kho lưu trữ</Text>
+            </View>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList}>
+              {recommendedBooks.map(n => renderNovelCard(n, 120))}
+            </ScrollView>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -393,9 +580,24 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
             <Ionicons name="flash" size={18} color="#1a1a1a" style={{marginRight: 6}} />
             <Text style={[styles.sectionTitleText, { color: '#1a1a1a' }]}>Mới Cập Nhật</Text>
           </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList}>
-            {NOVELS.slice().reverse().map(n => renderNovelCard(n, 120))}
-          </ScrollView>
+          {isLoading ? (
+            <View style={styles.statusBox}>
+              <ActivityIndicator size="small" color={isDarkMode ? '#D8B36A' : '#5a8b82'} />
+              <Text style={styles.statusText}>Đang tải dữ liệu sách...</Text>
+            </View>
+          ) : errorMessage ? (
+            <View style={styles.statusBox}>
+              <Text style={styles.statusErrorText}>{errorMessage}</Text>
+            </View>
+          ) : books.length === 0 ? (
+            <View style={styles.statusBox}>
+              <Text style={styles.statusEmptyText}>Chưa có sách mới cập nhật</Text>
+            </View>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList}>
+              {recentBooks.map(n => renderNovelCard(n, 120))}
+            </ScrollView>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -404,22 +606,37 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
             <Text style={[styles.sectionTitleText, { color: '#1a1a1a' }]}>Bảng Xếp Hạng</Text>
           </View>
           
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList} snapToInterval={315} decelerationRate="fast">
-            <View style={styles.rankPage}>
-              <View style={styles.rankPageHeader}>
-                <Text style={styles.rankPageTitle}>🏆 Top Tuần</Text>
-                <Text style={styles.rankPageMore}>Xem thêm ›</Text>
-              </View>
-              {BXH_NOVELS.map((novel, index) => renderRankItem(novel, index))}
+          {isLoading ? (
+            <View style={styles.statusBox}>
+              <ActivityIndicator size="small" color={isDarkMode ? '#D8B36A' : '#5a8b82'} />
+              <Text style={styles.statusText}>Đang tải bảng xếp hạng...</Text>
             </View>
-            <View style={styles.rankPage}>
-              <View style={styles.rankPageHeader}>
-                <Text style={styles.rankPageTitle}>🔥 Top Tháng</Text>
-                <Text style={styles.rankPageMore}>Xem thêm ›</Text>
-              </View>
-              {BXH_NOVELS.map((novel, index) => renderRankItem(novel, index))}
+          ) : errorMessage ? (
+            <View style={styles.statusBox}>
+              <Text style={styles.statusErrorText}>{errorMessage}</Text>
             </View>
-          </ScrollView>
+          ) : books.length === 0 ? (
+            <View style={styles.statusBox}>
+              <Text style={styles.statusEmptyText}>Chưa có dữ liệu bảng xếp hạng</Text>
+            </View>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList} snapToInterval={315} decelerationRate="fast">
+              <View style={styles.rankPage}>
+                <View style={styles.rankPageHeader}>
+                  <Text style={styles.rankPageTitle}>🏆 Top Tuần</Text>
+                  <Text style={styles.rankPageMore}>Xem thêm ›</Text>
+                </View>
+                {books.slice(0, 5).map((novel, index) => renderRankItem(novel, index))}
+              </View>
+              <View style={styles.rankPage}>
+                <View style={styles.rankPageHeader}>
+                  <Text style={styles.rankPageTitle}>🔥 Top Tháng</Text>
+                  <Text style={styles.rankPageMore}>Xem thêm ›</Text>
+                </View>
+                {books.slice(0, 5).reverse().map((novel, index) => renderRankItem(novel, index))}
+              </View>
+            </ScrollView>
+          )}
         </View>
 
         <View style={[styles.section, { paddingHorizontal: 15 }]}>
@@ -428,21 +645,54 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
             <Text style={[styles.sectionTitleText, { color: '#1a1a1a' }]}>Danh Mục Sách</Text>
           </View>
           
-          <View style={styles.categoryTags}>
-            {['Mới cập nhật', 'Top tuần', 'Top tháng', 'Mới ra mắt'].map(tag => (
-              <TouchableOpacity key={tag} style={styles.categoryTag} onPress={() => navigate('categories')}>
-                <Text style={styles.categoryTagText}>{tag}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 8, gap: 8 }}>
+            {categoriesList.map(tag => {
+              const isActive = selectedCategory === tag;
+              return (
+                <TouchableOpacity
+                  key={tag}
+                  style={[
+                    styles.categoryTag,
+                    isActive && {
+                      backgroundColor: isDarkMode ? '#D8B36A' : '#5a8b82',
+                      borderColor: isDarkMode ? '#E5CA98' : '#1a1a1a',
+                    }
+                  ]}
+                  onPress={() => setSelectedCategory(tag)}
+                >
+                  <Text style={[
+                    styles.categoryTagText,
+                    isActive && { color: isDarkMode ? '#12151B' : '#ffffff', fontWeight: '800' }
+                  ]}>
+                    {tag}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
           
-          <View style={styles.gridContainer}>
-            {NOVELS.concat(NOVELS).map((n, idx) => (
-              <View key={idx} style={styles.gridItem}>
-                {renderNovelCard(n, '100%' as any)}
-              </View>
-            ))}
-          </View>
+          {isLoading ? (
+            <View style={styles.statusBox}>
+              <ActivityIndicator size="small" color={isDarkMode ? '#D8B36A' : '#5a8b82'} />
+              <Text style={styles.statusText}>Đang tải danh mục sách...</Text>
+            </View>
+          ) : errorMessage ? (
+            <View style={styles.statusBox}>
+              <Text style={styles.statusErrorText}>{errorMessage}</Text>
+            </View>
+          ) : books.length === 0 ? (
+            <View style={styles.statusBox}>
+              <Text style={styles.statusEmptyText}>Chưa có sách trong danh mục</Text>
+            </View>
+          ) : (
+            <View style={styles.gridContainer}>
+              {categorizedBooks.map((n, idx) => (
+                <View key={n.id || idx} style={styles.gridItem}>
+                  {renderNovelCard(n, '100%' as any)}
+                </View>
+              ))}
+            </View>
+          )}
         </View>
 
         <View style={styles.footerBranding}>
@@ -682,6 +932,7 @@ const getStyles = (isDark: boolean) => {
       justifyContent: 'center',
       alignItems: 'center',
       marginRight: 12,
+      overflow: 'hidden',
     },
     rankCoverText: { fontSize: 10, color: textSub, fontWeight: '800' },
     rankInfo: { flex: 1 },
@@ -730,5 +981,49 @@ const getStyles = (isDark: boolean) => {
     },
     footerBrandTitle: { fontSize: 28, fontWeight: '900', color: isDark ? '#535A68' : '#ccc', letterSpacing: 1 },
     footerBrandSlogan: { fontSize: 12, fontWeight: '700', color: isDark ? '#535A68' : '#ccc', marginTop: 5 },
+
+    statusBox: {
+      paddingVertical: 24,
+      paddingHorizontal: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginHorizontal: 15,
+      backgroundColor: isDark ? '#1B1F28' : '#fafafa',
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: isDark ? '#363D4B' : '#e0e0e0',
+      borderStyle: 'dashed',
+    },
+    statusText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: textSub,
+      marginTop: 8,
+    },
+    statusErrorText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: '#ff6b6b',
+      textAlign: 'center',
+      marginBottom: 10,
+    },
+    statusEmptyText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: textSub,
+      textAlign: 'center',
+    },
+    retryBtn: {
+      paddingHorizontal: 16,
+      paddingVertical: 7,
+      backgroundColor: isDark ? '#D8B36A' : '#1a1a1a',
+      borderRadius: 8,
+      marginTop: 4,
+    },
+    retryBtnText: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: isDark ? '#1a1a1a' : '#fff',
+    },
   });
 };
