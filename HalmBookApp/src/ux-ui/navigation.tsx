@@ -35,6 +35,8 @@ interface NavigationContextValue {
   goBack: () => void;
   logout: () => void;
   isDarkMode: boolean;
+  isFooterVisible?: boolean;
+  setFooterVisible?: (visible: boolean) => void;
 }
 
 export const NavigationContext = createContext<NavigationContextValue | null>(null);
@@ -95,7 +97,7 @@ export function useAppThemeStyles<T extends AppStyleSheet>(styles: T): T {
   return useMemo(
     () => isDarkMode
       ? Object.fromEntries(
-          Object.entries(styles).map(([name, style]) => [name, darkenStyle(StyleSheet.flatten(style))]),
+          Object.entries(styles).map(([name, style]) => [name, darkenStyle((StyleSheet.flatten(style) || {}) as ViewStyle | TextStyle)]),
         ) as T
       : styles,
     [isDarkMode, styles],

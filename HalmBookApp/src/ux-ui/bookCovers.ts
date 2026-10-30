@@ -1,5 +1,9 @@
+import Constants from 'expo-constants';
+
 // Cấu hình URL ảnh bìa sách từ Backend cho App Expo
-const API_BASE_URL = 'http://192.168.2.77:8082';
+const debuggerHost = Constants.expoConfig?.hostUri;
+const localhost = debuggerHost ? debuggerHost.split(':')[0] : 'localhost';
+const API_BASE_URL = `http://${localhost}:8082`;
 
 export const getBookCoverSource = (bookId?: string, remoteUrl?: string): any => {
   if (remoteUrl && typeof remoteUrl === 'string' && remoteUrl.trim().length > 0) {
