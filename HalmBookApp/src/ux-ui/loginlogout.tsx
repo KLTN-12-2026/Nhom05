@@ -1,13 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useAppNavigation, useAppThemeStyles } from './navigation';
-import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useAppNavigation, useAppThemeStyles } from './navigation';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL
-  ?? (Platform.OS === 'android' ? 'http://10.0.2.2:8082' : 'http://localhost:8082');
+const API_BASE_URL = 'http://172.31.99.157:8082';
+// const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL
+// ?? (Platform.OS === 'android' ? 'http://10.0.2.2:8082' : 'http://localhost:8082');
 
 const axiosAppInstance = axios.create({
   baseURL: API_BASE_URL,
