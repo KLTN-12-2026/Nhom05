@@ -1,5 +1,6 @@
 package com.example.demochatbot.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -19,10 +20,11 @@ public class Category {
     private int category_id;
     private String category_name;
 
+    @JsonIgnore
     @OneToMany(mappedBy = "category")
     private List<Book> books;
 
+    @JsonIgnore
     @OneToMany(mappedBy = "category")
     private List<Promotion> promotions;
 }
-

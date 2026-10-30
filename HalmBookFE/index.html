@@ -5,8 +5,111 @@
   <meta charset="UTF-8" />
   <link rel="icon" type="image/png" href="/logo.png" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script>
+    (function () {
+      try {
+        const savedTheme = localStorage.getItem('color-theme') || localStorage.getItem('halm-theme') || localStorage.getItem('halm_theme');
+        const isDark = savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (isDark) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <script>
+    window.tailwind = window.tailwind || {};
+    window.tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['var(--font-ui)', 'Inter', 'sans-serif'],
+            display: ['var(--font-display)', 'Inter', 'sans-serif'],
+            metadata: ['var(--font-metadata)', 'Roboto', 'sans-serif'],
+            editorial: ['var(--font-editorial)', 'Open Sans', 'sans-serif'],
+            nunito: ['Nunito', 'sans-serif'],
+          },
+          colors: {
+            paper: {
+              50: '#FAF8F5',
+              100: '#F5F2EB',
+              200: '#EAE5D9',
+              DEFAULT: '#F7F4EE',
+              surface: '#FFFEFA',
+              border: '#E3DDD0',
+            },
+            ink: {
+              50: '#F5F5F4',
+              300: '#A8A6A1',
+              muted: '#66645E',
+              DEFAULT: '#1E1F1D',
+              pure: '#111210',
+            },
+            wine: {
+              DEFAULT: '#8E3038',
+              light: '#A83B46',
+              dark: '#6F252C',
+            },
+            gold: {
+              DEFAULT: '#B8860B',
+              light: '#D4AF37',
+            },
+            night: {
+              DEFAULT: '#111210',
+              bg: '#111210',
+              surface: '#181916',
+              card: '#20221E',
+              border: '#2C2E29',
+              text: '#EDE9DF',
+              muted: '#96938B',
+            }
+          }
+        }
+      }
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.tailwindcss.com" crossorigin>
+  <link rel="preload" href="https://cdn.tailwindcss.com" as="script">
+  <link rel="preload" href="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" as="script">
+  <script>
+    if (window.location.pathname.startsWith('/admin')) {
+      if (window.tailwind && window.tailwind.config && window.tailwind.config.theme && window.tailwind.config.theme.extend) {
+        window.tailwind.config.theme.extend.colors = {
+          ...window.tailwind.config.theme.extend.colors,
+          primary: '#2563eb',
+          'brand-blue': '#2563eb',
+          slate: {
+            850: '#152033',
+            950: '#0b1329',
+          }
+        };
+      }
+      var adminTwScript = document.createElement('script');
+      adminTwScript.id = 'admin-tailwind-cdn';
+      adminTwScript.src = 'https://cdn.tailwindcss.com';
+      document.head.appendChild(adminTwScript);
+    }
+  </script>
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Quicksand:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap">
+  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css">
+  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/duotone/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="/libs/jszip.min.js"></script>
+  <script src="/libs/epub.min.js"></script>
+  <script src="/libs/pdf.min.js"></script>
+  <script>
+    if (window.pdfjsLib) {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = '/libs/pdf.worker.min.js';
+    }
+  </script>
   <title>HALMBOOK</title>
 </head>
 
