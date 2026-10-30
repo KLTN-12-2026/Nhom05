@@ -17,6 +17,7 @@ public class Book {
     @Id
     @Column(name = "book_id")
     private String book_id;
+
     private String bookName;
     private String isbn;
     private String author;
@@ -25,14 +26,26 @@ public class Book {
     private Integer totalPages;
     private Double rent_price;
     private Integer readCount = 0;
+
+    @Column(columnDefinition = "TEXT")
     private String img_url;
+
     private String imgPublicId;
+
+    @Column(columnDefinition = "TEXT")
     private String pdf_url;
+
     private String pdfPublicId;
+
+    @Column(columnDefinition = "TEXT")
     private String audio_url;
+
     private String fileFormat = "PDF";
     private Double fileSizeMb = 0.0;
+
+    @Column(columnDefinition = "TEXT")
     private String description;
+
     private String status = "PUBLISHED";
 
     @Column(name = "created_at")
