@@ -24,16 +24,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import java.io.File;
 import java.nio.file.Files;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-==import java.nio.file.Path;
+import java.nio.file.Path;
 import java.nio.file.Paths;
-=import java.util.List;
+import java.util.List;
 import java.util.Map;
 
-
 @RestController
-@CrossOrigin(origins = "http://localhost:5173", allowedHeaders = "*")
+@CrossOrigin(originPatterns = "*", allowedHeaders = "*")
 @RequestMapping("/api/home")
 public class HomeController {
 
@@ -82,7 +79,6 @@ public class HomeController {
         }
         return ResponseEntity.notFound().build();
     }
-
 
     /**
      * API lấy danh sách thông tin cơ bản của sách (Metadata, không bao gồm link file PDF)
@@ -225,7 +221,7 @@ public class HomeController {
     @GetMapping("/customer/info")
     public ResponseEntity<?> getCustomerInfo() {
         try {
-            int accountId = customerService.    getCurrentAccountId();
+            int accountId = customerService.getCurrentAccountId();
             Customer customer = customerService.findCustomerById(accountId);
             if (customer == null) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Không tìm thấy thông tin khách hàng!");

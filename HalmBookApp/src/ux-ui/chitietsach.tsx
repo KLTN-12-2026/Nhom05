@@ -1,9 +1,4 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-=======
-import { ArrowLeft, Bookmark, BookOpen, Heart } from 'lucide-react-native';
-import { useAppNavigation, useAppThemeStyles } from './navigation';
-import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
-import { useState } from 'react';
 import {
   ArrowLeft,
   Bookmark,
@@ -16,7 +11,7 @@ import {
   Quote,
   Star as StarIcon,
 } from 'lucide-react-native';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
