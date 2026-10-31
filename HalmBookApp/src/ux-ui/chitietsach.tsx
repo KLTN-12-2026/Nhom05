@@ -1,4 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+=======
+import { ArrowLeft, Bookmark, BookOpen, Heart } from 'lucide-react-native';
+import { useAppNavigation, useAppThemeStyles } from './navigation';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
+import { useState } from 'react';
 import {
   ArrowLeft,
   Bookmark,
@@ -387,6 +392,7 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
 
       {/* HIỆU ỨNG BẦU TRỜI SAO VÀ SAO BĂNG ĐỒNG BỘ TRANG CHỦ APP */}
       <DarkModeBackgroundEffects visible={isDarkMode} />
+
 
       {/* Header Điều Hướng */}
       <View style={themeStyles.header}>

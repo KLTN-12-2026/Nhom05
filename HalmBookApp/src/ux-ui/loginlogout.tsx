@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useAppNavigation, useAppThemeStyles } from './navigation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import Constants from 'expo-constants';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useAppNavigation, useAppThemeStyles } from './navigation';
 
 // ----------------------------------------------------
 // CẤU HÌNH KẾT NỐI (ĐIỂM MÙ LOCALHOST)
@@ -13,6 +14,8 @@ import { Alert, KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleShee
 const debuggerHost = Constants.expoConfig?.hostUri;
 const localhost = debuggerHost ? debuggerHost.split(':')[0] : 'localhost';
 const API_BASE_URL = `http://${localhost}:8082`;
+// const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL
+// ?? (Platform.OS === 'android' ? 'http://10.0.2.2:8082' : 'http://localhost:8082');
 
 const axiosAppInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -253,7 +256,7 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
       style={themeStyles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <StatusBar translucent backgroundColor="transparent" barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'} />
 
       {/* Background Trang trí */}
       <View style={themeStyles.bgCircleTop} />

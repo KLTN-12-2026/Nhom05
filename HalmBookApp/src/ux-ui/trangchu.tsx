@@ -22,6 +22,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BookData, useAppNavigation } from './navigation';
 import { getBookCoverSource } from './bookCovers';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 
 const { width, height } = Dimensions.get('window');
 
@@ -533,7 +534,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
   return (
     <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: isDarkMode ? BRAND.black : '#fff' }]}>
       <Animated.View style={[styles.container, { backgroundColor: animatedBg }]}>
-      <StatusBar translucent={false} backgroundColor={isDarkMode ? '#1F2228' : '#5a8b82'} barStyle={isDarkMode ? "light-content" : "dark-content"} />
+      <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'} />
       
       {/* TRUNG TÂM HIỆU ỨNG DARK MODE */}
       <DarkModeBackgroundEffects visible={isDarkMode} />

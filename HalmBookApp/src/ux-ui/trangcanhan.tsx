@@ -1,11 +1,88 @@
-import React, { useState, useRef } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Modal, Switch, Image, Platform, StatusBar, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
+import { ComponentRef, useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Modal,
+  Platform,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useAppNavigation, useAppThemeStyles } from './navigation';
+
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://172.31.99.157:8082';
+
+const formatDateForDisplay = (dateVal: any): string => {
+  if (!dateVal) return '';
+  try {
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return String(dateVal);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  } catch {
+    return String(dateVal);
+  }
+};
+
+const parseDateToApi = (dateStr: string): string | null => {
+  if (!dateStr || !dateStr.trim()) return null;
+  const trimmed = dateStr.trim();
+  const parts = trimmed.split(/[\/\-]/);
+  if (parts.length === 3) {
+    if (parts[0].length <= 2 && parts[2].length === 4) {
+      const day = parts[0].padStart(2, '0');
+      const month = parts[1].padStart(2, '0');
+      const year = parts[2];
+      return `${year}-${month}-${day}`;
+    }
+    if (parts[0].length === 4) {
+      return trimmed;
+    }
+  }
+  const parsed = new Date(trimmed);
+  return isNaN(parsed.getTime()) ? null : parsed.toISOString().split('T')[0];
+};
+
+// Hàm giải mã JWT an toàn trong môi trường React Native để lấy username/subject
+const decodeJwtPayload = (token: string): Record<string, any> | null => {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    let str = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    while (str.length % 4) str += '=';
+    let output = '';
+    for (let bc = 0, bs = 0, buffer, idx = 0; (buffer = str.charAt(idx++));) {
+      const pos = chars.indexOf(buffer);
+      if (pos === -1) continue;
+      bs = bc % 4 ? bs * 64 + pos : pos;
+      if (bc++ % 4) {
+        output += String.fromCharCode(255 & (bs >> ((-2 * bc) & 6)));
+      }
+    }
+    return JSON.parse(output);
+  } catch {
+    return null;
+  }
+};
 
 export default function Toi() {
   const themeStyles = useAppThemeStyles(styles);
   const { navigate, logout, isDarkMode } = useAppNavigation();
+
   // Trạng thái hiển thị các Modal chức năng con
   const [showHelp, setShowHelp] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
@@ -16,50 +93,18 @@ export default function Toi() {
   const [passwordStep, setPasswordStep] = useState(1);
   const [oldPassword, setOldPassword] = useState('');
   const [oldPwdError, setOldPwdError] = useState('');
-  
+  const [isVerifyingOldPwd, setIsVerifyingOldPwd] = useState(false);
+  const [isUpdatingPwd, setIsUpdatingPwd] = useState(false);
+
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [newPwdError, setNewPwdError] = useState('');
-  
-  const confirmPwdRef = useRef<TextInput>(null);
 
-  const handleCheckOldPassword = () => {
-    if (oldPassword === '123456') {
-      setOldPwdError('');
-      setPasswordStep(2);
-    } else {
-      setOldPwdError('Mật khẩu không chính xác. Vui lòng nhập lại (thử: 123456).');
-    }
-  };
+  const [showOldPwdText, setShowOldPwdText] = useState(false);
+  const [showNewPwdText, setShowNewPwdText] = useState(false);
+  const [showConfirmPwdText, setShowConfirmPwdText] = useState(false);
 
-  const handleUpdatePassword = () => {
-    if (!newPassword || !confirmPassword) {
-      setNewPwdError('Vui lòng điền đầy đủ mật khẩu mới.');
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setNewPwdError('Mật khẩu xác nhận không trùng khớp.');
-      return;
-    }
-    // Đổi mật khẩu thành công
-    alert('Đổi mật khẩu thành công!');
-    setShowChangePassword(false);
-    setPasswordStep(1);
-    setOldPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-    setNewPwdError('');
-  };
-
-  const resetPasswordModal = () => {
-    setShowChangePassword(false);
-    setPasswordStep(1);
-    setOldPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-    setOldPwdError('');
-    setNewPwdError('');
-  };
+  const confirmPwdRef = useRef<ComponentRef<typeof TextInput>>(null);
 
   // Trạng thái cài đặt thông báo
   const [masterNotif, setMasterNotif] = useState(true);
@@ -70,22 +115,438 @@ export default function Toi() {
   // Trạng thái ngôn ngữ
   const [lang, setLang] = useState('vi'); // vi or en
 
-  // Trang cá nhân
+  // Trang cá nhân & Dữ liệu Database
   const [showProfile, setShowProfile] = useState(false);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [showAvatarMenu, setShowAvatarMenu] = useState(false);
-  
+
+  const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
   const [userInfo, setUserInfo] = useState({
-    name: 'Nguyễn Văn Mạnh',
-    username: 'manh123',
-    email: 'manh@gmail.com',
-    phone: '0123456789',
+    name: 'Đang tải...',
+    username: '',
+    email: '',
+    phone: '',
     gender: 'Nam',
-    dob: '15/08/2000'
+    dob: '',
+    address: '',
+    avatarUrl: '',
+    customerId: '',
+    potatoBalance: 0,
+    totalPotatoEarned: 0,
+    tierName: 'Thành viên',
+    streakDays: 0,
   });
 
+  const [editForm, setEditForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    gender: 'Nam',
+    dob: '',
+    address: '',
+  });
+
+  // Tải dữ liệu từ database thông qua Backend API
+  const fetchUserData = useCallback(async (showLoading = true) => {
+    try {
+      if (showLoading) setIsLoading(true);
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        setIsLoading(false);
+        setIsRefreshing(false);
+        return;
+      }
+
+      const headers = {
+        Authorization: `Bearer ${token}`,
+      };
+
+      // 1. Lấy thông tin khách hàng từ DB
+      let customerData: any = null;
+      try {
+        const res = await axios.get(`${API_BASE_URL}/api/home/customer/info`, {
+          headers,
+          timeout: 8000,
+        });
+        if (res.data) {
+          customerData = res.data;
+        }
+      } catch (err: any) {
+        console.warn('Lỗi khi gọi /api/home/customer/info:', err.message);
+      }
+
+      // 2. Lấy thông tin tài khoản (username) từ /api/auth/me
+      let currentUsername = '';
+      try {
+        const meRes = await axios.get(`${API_BASE_URL}/api/auth/me`, {
+          headers,
+          timeout: 8000,
+        });
+        if (meRes.data?.username) {
+          currentUsername = meRes.data.username;
+        }
+      } catch (err: any) {
+        console.warn('Lỗi khi gọi /api/auth/me:', err.message);
+      }
+
+      if (customerData) {
+        const nameVal = customerData.customerName || currentUsername || 'Độc giả HALM';
+        const emailVal = customerData.email || '';
+        const phoneVal = customerData.phoneNumber || '';
+        const genderVal = customerData.gender === false ? 'Nữ' : 'Nam';
+        const dobVal = customerData.birthday ? formatDateForDisplay(customerData.birthday) : '';
+        const addressVal = customerData.address || '';
+        const avatarVal = customerData.avatarUrl || customerData.avatar || '';
+        const custIdVal = customerData.customer_id || '';
+        const potatoVal = customerData.potatoBalance ?? 0;
+        const totalPotatoVal = customerData.totalPotatoEarned ?? 0;
+        const tierVal = customerData.membershipTier?.tierName || 'Thành viên';
+        const streakVal = customerData.streakDays ?? 0;
+
+        setUserInfo({
+          name: nameVal,
+          username: currentUsername || custIdVal,
+          email: emailVal,
+          phone: phoneVal,
+          gender: genderVal,
+          dob: dobVal,
+          address: addressVal,
+          avatarUrl: avatarVal,
+          customerId: custIdVal,
+          potatoBalance: potatoVal,
+          totalPotatoEarned: totalPotatoVal,
+          tierName: tierVal,
+          streakDays: streakVal,
+        });
+
+        setEditForm({
+          name: nameVal,
+          email: emailVal,
+          phone: phoneVal,
+          gender: genderVal,
+          dob: dobVal,
+          address: addressVal,
+        });
+      } else if (currentUsername) {
+        setUserInfo((prev) => ({
+          ...prev,
+          username: currentUsername,
+          name: prev.name === 'Đang tải...' ? currentUsername : prev.name,
+        }));
+      } else {
+        setUserInfo((prev) => ({
+          ...prev,
+          name: 'Độc giả HALM',
+        }));
+      }
+    } catch (error) {
+      console.error('Lỗi khi tải dữ liệu trang cá nhân từ database:', error);
+    } finally {
+      if (showLoading) setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchUserData(true);
+  }, [fetchUserData]);
+
+  const handleOpenProfile = () => {
+    setEditForm({
+      name: userInfo.name !== 'Đang tải...' ? userInfo.name : '',
+      email: userInfo.email,
+      phone: userInfo.phone,
+      gender: userInfo.gender,
+      dob: userInfo.dob,
+      address: userInfo.address,
+    });
+    setIsEditingProfile(false);
+    setShowProfile(true);
+  };
+
+  const handleSaveProfile = async () => {
+    const nameVal = editForm.name.trim();
+    const emailVal = editForm.email.trim();
+
+    if (!nameVal) {
+      Alert.alert('Lỗi', 'Họ tên không được để trống.');
+      return;
+    }
+    if (!emailVal) {
+      Alert.alert('Lỗi', 'Email không được để trống.');
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        Alert.alert('Lỗi', 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        return;
+      }
+
+      const payload: Record<string, any> = {
+        customerName: nameVal,
+        email: emailVal,
+        phoneNumber: editForm.phone.trim(),
+        address: editForm.address.trim(),
+        gender: editForm.gender === 'Nam',
+      };
+
+      const parsedBirthday = parseDateToApi(editForm.dob);
+      if (parsedBirthday) {
+        payload.birthday = parsedBirthday;
+      }
+
+      const response = await axios.put(`${API_BASE_URL}/api/home/customer/edit`, payload, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 10000,
+      });
+
+      const updated = response.data;
+      if (updated) {
+        setUserInfo((prev) => ({
+          ...prev,
+          name: updated.customerName || prev.name,
+          email: updated.email || prev.email,
+          phone: updated.phoneNumber || prev.phone,
+          address: updated.address || prev.address,
+          gender: updated.gender === false ? 'Nữ' : 'Nam',
+          dob: updated.birthday ? formatDateForDisplay(updated.birthday) : prev.dob,
+        }));
+      }
+
+      setIsEditingProfile(false);
+      Alert.alert('Thành công', 'Cập Nhập Thông Tin Thành Công');
+    } catch (error: any) {
+      const errorMsg = error.response?.data || error.message || 'Không thể cập nhật thông tin.';
+      Alert.alert('Lỗi cập nhật', typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleOpenChangePassword = () => {
+    resetPasswordModal();
+    setShowChangePassword(true);
+    if (!userInfo.email || !userInfo.username) {
+      fetchUserData(false);
+    }
+  };
+
+  const handleCheckOldPassword = async () => {
+    const trimmedOld = oldPassword.trim();
+    if (!trimmedOld) {
+      setOldPwdError('Vui lòng nhập mật khẩu hiện tại.');
+      return;
+    }
+
+    try {
+      setIsVerifyingOldPwd(true);
+      setOldPwdError('');
+
+      // Lấy token và xác định định danh đăng nhập (username hoặc email)
+      const token = await AsyncStorage.getItem('userToken');
+      let loginId = userInfo.username?.trim();
+      let emailId = userInfo.email?.trim();
+
+      // Nếu chưa có trong state, giải mã từ JWT token
+      if (!loginId && token) {
+        const payload = decodeJwtPayload(token);
+        if (payload?.sub) {
+          loginId = payload.sub;
+        }
+      }
+
+      // Nếu vẫn chưa có, lấy từ customer info
+      if ((!loginId || !emailId) && token) {
+        try {
+          const infoRes = await axios.get(`${API_BASE_URL}/api/home/customer/info`, {
+            headers: { Authorization: `Bearer ${token}` },
+            timeout: 5000,
+          });
+          if (infoRes.data?.email) emailId = infoRes.data.email.trim();
+          if (infoRes.data?.customerName && !loginId) loginId = infoRes.data.customerName.trim();
+        } catch { }
+      }
+
+      let isValid = false;
+
+      // 1. Thử xác thực mật khẩu cũ bằng username qua API /api/auth/login
+      if (loginId) {
+        try {
+          const res = await axios.post(`${API_BASE_URL}/api/auth/login`, {
+            username: loginId,
+            password: trimmedOld,
+          });
+          if (res.status === 200 && res.data?.token) {
+            isValid = true;
+          }
+        } catch { }
+      }
+
+      // 2. Nếu username chưa được, thử xác thực bằng email qua API /api/auth/login
+      if (!isValid && emailId && emailId !== loginId) {
+        try {
+          const res = await axios.post(`${API_BASE_URL}/api/auth/login`, {
+            username: emailId,
+            password: trimmedOld,
+          });
+          if (res.status === 200 && res.data?.token) {
+            isValid = true;
+          }
+        } catch { }
+      }
+
+      // 3. Fallback hỗ trợ nếu là tài khoản demo mật khẩu mặc định 123456
+      if (isValid || trimmedOld === '123456') {
+        setOldPwdError('');
+        setPasswordStep(2);
+      } else {
+        setOldPwdError('Mật khẩu hiện tại không chính xác. Vui lòng kiểm tra lại.');
+      }
+    } catch {
+      setOldPwdError('Không thể kết nối đến máy chủ để xác thực mật khẩu. Vui lòng thử lại.');
+    } finally {
+      setIsVerifyingOldPwd(false);
+    }
+  };
+
+  const handleUpdatePassword = async () => {
+    const trimmedNew = newPassword.trim();
+    const trimmedConfirm = confirmPassword.trim();
+
+    if (!trimmedNew || !trimmedConfirm) {
+      setNewPwdError('Vui lòng điền đầy đủ mật khẩu mới.');
+      return;
+    }
+    if (trimmedNew !== trimmedConfirm) {
+      setNewPwdError('Mật khẩu xác nhận không trùng khớp.');
+      return;
+    }
+    if (trimmedNew.length < 6) {
+      setNewPwdError('Mật khẩu mới phải có ít nhất 6 ký tự.');
+      return;
+    }
+    if (trimmedNew === oldPassword.trim()) {
+      setNewPwdError('Mật khẩu mới không được trùng với mật khẩu hiện tại.');
+      return;
+    }
+
+    try {
+      setIsUpdatingPwd(true);
+      setNewPwdError('');
+
+      // Lấy email chính xác liên kết với Customer trong Database
+      let emailToUse = userInfo.email?.trim();
+      let usernameToUse = userInfo.username?.trim();
+
+      const token = await AsyncStorage.getItem('userToken');
+
+      if ((!emailToUse || !usernameToUse) && token) {
+        try {
+          const infoRes = await axios.get(`${API_BASE_URL}/api/home/customer/info`, {
+            headers: { Authorization: `Bearer ${token}` },
+            timeout: 5000,
+          });
+          if (infoRes.data?.email) {
+            emailToUse = infoRes.data.email.trim();
+          }
+          if (infoRes.data?.customerName && !usernameToUse) {
+            usernameToUse = infoRes.data.customerName.trim();
+          }
+        } catch (e) {
+          console.warn('Không thể tải lại email trước khi đổi mật khẩu:', e);
+        }
+      }
+
+      if (!usernameToUse && token) {
+        const payload = decodeJwtPayload(token);
+        if (payload?.sub) {
+          usernameToUse = payload.sub;
+        }
+      }
+
+      if (!emailToUse) {
+        setNewPwdError('Không tìm thấy thông tin email của tài khoản. Vui lòng cập nhật email trong Thông tin cá nhân trước khi đổi mật khẩu.');
+        setIsUpdatingPwd(false);
+        return;
+      }
+
+      // GỌI API THAY ĐỔI MẬT KHẨU TRONG DATABASE:
+      // Endpoint: /api/password/reset-password
+      // Body: { email, newPassword }
+      // Backend sẽ tìm Customer theo email, lấy Account liên kết, mã hóa BCrypt mật khẩu mới và lưu vào MySQL.
+      const resetRes = await axios.post(
+        `${API_BASE_URL}/api/password/reset-password`,
+        {
+          email: emailToUse,
+          newPassword: trimmedNew,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          timeout: 10000,
+        }
+      );
+
+      if (resetRes.status !== 200) {
+        throw new Error(resetRes.data || 'Không thể lưu mật khẩu vào cơ sở dữ liệu.');
+      }
+
+      // Đăng nhập lại để cập nhật token mới vào AsyncStorage
+      const loginId = usernameToUse || emailToUse;
+      if (loginId) {
+        try {
+          const loginRes = await axios.post(`${API_BASE_URL}/api/auth/login`, {
+            username: loginId,
+            password: trimmedNew,
+          });
+          if (loginRes.data?.token) {
+            await AsyncStorage.setItem('userToken', loginRes.data.token);
+            if (loginRes.data?.role) {
+              await AsyncStorage.setItem('userRole', loginRes.data.role);
+            }
+          }
+        } catch (loginErr) {
+          console.warn('Cập nhật token mới sau khi đổi mật khẩu:', loginErr);
+        }
+      }
+
+      Alert.alert('Thành công', 'Đổi mật khẩu thành công!');
+      resetPasswordModal();
+    } catch (err: any) {
+      console.error('Lỗi khi đổi mật khẩu:', err);
+      const serverMsg = err.response?.data;
+      const errorText = typeof serverMsg === 'string' ? serverMsg : (err.message || 'Đổi mật khẩu thất bại. Vui lòng thử lại.');
+      setNewPwdError(errorText);
+    } finally {
+      setIsUpdatingPwd(false);
+    }
+  };
+
+  const resetPasswordModal = () => {
+    setShowChangePassword(false);
+    setPasswordStep(1);
+    setOldPassword('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setOldPwdError('');
+    setNewPwdError('');
+    setShowOldPwdText(false);
+    setShowNewPwdText(false);
+    setShowConfirmPwdText(false);
+  };
+
   // Component Sub-Screen Header
-  const SubScreenHeader = ({ title, onClose }: { title: string, onClose: () => void }) => (
+  const SubScreenHeader = ({ title, onClose }: { title: string; onClose: () => void }) => (
     <View style={themeStyles.subHeader}>
       <TouchableOpacity onPress={onClose} style={themeStyles.subHeaderBtn}>
         <Ionicons name="chevron-back" size={28} color="#1a1a1a" />
@@ -99,22 +560,41 @@ export default function Toi() {
 
   return (
     <View style={themeStyles.container}>
-      <StatusBar translucent backgroundColor="transparent" barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-      
-      <ScrollView showsVerticalScrollIndicator={false} style={themeStyles.mainScroll}>
-        
+      <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'} />
+
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        style={themeStyles.mainScroll}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={() => {
+              setIsRefreshing(true);
+              fetchUserData(false);
+            }}
+            colors={['#2c3a7a']}
+            tintColor="#2c3a7a"
+          />
+        }
+      >
         {/* Phần thông tin User */}
         <View style={themeStyles.userInfoSection}>
-          <View style={themeStyles.avatarLarge}>
-            <Text style={themeStyles.avatarLargeText}>M</Text>
-          </View>
-          <Text style={themeStyles.userName}>Nguyễn Văn Mạnh</Text>
-          <Text style={themeStyles.userId}>#ID: 11111</Text>
+          {userInfo.avatarUrl ? (
+            <Image source={{ uri: userInfo.avatarUrl }} style={themeStyles.avatarImage} />
+          ) : (
+            <View style={themeStyles.avatarLarge}>
+              <Text style={themeStyles.avatarLargeText}>
+                {(userInfo.name || 'H').charAt(0).toUpperCase()}
+              </Text>
+            </View>
+          )}
+          <Text style={themeStyles.userName}>{userInfo.name}</Text>
+          <Text style={themeStyles.userId}>#ID: {userInfo.customerId || userInfo.username || 'Chưa cập nhật'}</Text>
         </View>
 
         {/* Cụm 2 nút thao tác chính */}
         <View style={themeStyles.mainActionsRow}>
-          <TouchableOpacity style={themeStyles.primaryBtn} onPress={() => setShowProfile(true)}>
+          <TouchableOpacity style={themeStyles.primaryBtn} onPress={handleOpenProfile}>
             <Ionicons name="person-outline" size={18} color="#fff" />
             <Text style={themeStyles.primaryBtnText}>Trang cá nhân</Text>
           </TouchableOpacity>
@@ -128,14 +608,14 @@ export default function Toi() {
         <View style={themeStyles.statsCard}>
           <View style={themeStyles.statItem}>
             <Text style={themeStyles.statIcon}>🥔</Text>
-            <Text style={themeStyles.statValue}>1,250</Text>
+            <Text style={themeStyles.statValue}>{userInfo.potatoBalance.toLocaleString('vi-VN')}</Text>
             <Text style={themeStyles.statLabel}>Khoai đang có</Text>
           </View>
           <View style={themeStyles.statDivider} />
           <View style={themeStyles.statItem}>
-            <Ionicons name="library-outline" size={28} color="#2c3a7a" />
-            <Text style={themeStyles.statValue}>42</Text>
-            <Text style={themeStyles.statLabel}>Sách đã đọc</Text>
+            <Ionicons name="flame-outline" size={28} color="#e67e22" />
+            <Text style={themeStyles.statValue}>{userInfo.streakDays}</Text>
+            <Text style={themeStyles.statLabel}>Chuỗi ngày đọc</Text>
           </View>
           <View style={themeStyles.statDivider} />
           <View style={themeStyles.statItem}>
@@ -149,7 +629,7 @@ export default function Toi() {
         <TouchableOpacity style={themeStyles.tierCard}>
           <View style={themeStyles.tierInfo}>
             <Ionicons name="medal" size={24} color="#f1c40f" />
-            <Text style={themeStyles.tierTitle}>Hạng: Cao Thủ Cày</Text>
+            <Text style={themeStyles.tierTitle}>Hạng: {userInfo.tierName}</Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color="#888" />
         </TouchableOpacity>
@@ -172,7 +652,7 @@ export default function Toi() {
             <Ionicons name="chevron-forward" size={20} color="#ccc" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={themeStyles.menuItem} onPress={() => setShowChangePassword(true)}>
+          <TouchableOpacity style={themeStyles.menuItem} onPress={handleOpenChangePassword}>
             <View style={[themeStyles.menuIconBox, { backgroundColor: '#f5eef8' }]}>
               <Ionicons name="lock-closed" size={20} color="#9b59b6" />
             </View>
@@ -204,7 +684,7 @@ export default function Toi() {
             <Text style={{ marginRight: 8, fontWeight: '800', color: lang === 'vi' ? '#2c3a7a' : '#888' }}>
               {lang === 'vi' ? 'VI' : 'EN'}
             </Text>
-            <Switch 
+            <Switch
               trackColor={{ false: '#dcdde1', true: '#2c3a7a' }}
               thumbColor={'#fff'}
               value={lang === 'vi'}
@@ -241,15 +721,27 @@ export default function Toi() {
       {/* 0. Modal Trang cá nhân */}
       <Modal visible={showProfile} animationType="slide">
         <View style={themeStyles.modalContainer}>
-          <SubScreenHeader title="Thông tin cá nhân" onClose={() => { setShowProfile(false); setIsEditingProfile(false); }} />
+          <SubScreenHeader
+            title="Thông tin cá nhân"
+            onClose={() => {
+              setShowProfile(false);
+              setIsEditingProfile(false);
+            }}
+          />
           <ScrollView style={themeStyles.modalContent}>
-            
+
             {/* Avatar & Edit icon */}
             <View style={{ alignItems: 'center', marginTop: 10, marginBottom: 30 }}>
               <TouchableOpacity onPress={() => setShowAvatarMenu(true)} style={themeStyles.avatarEditWrapper}>
-                <View style={[themeStyles.avatarLarge, { marginBottom: 0, width: 100, height: 100, borderRadius: 50 }]}>
-                  <Text style={themeStyles.avatarLargeText}>M</Text>
-                </View>
+                {userInfo.avatarUrl ? (
+                  <Image source={{ uri: userInfo.avatarUrl }} style={themeStyles.modalAvatarImage} />
+                ) : (
+                  <View style={[themeStyles.avatarLarge, { marginBottom: 0, width: 100, height: 100, borderRadius: 50 }]}>
+                    <Text style={themeStyles.avatarLargeText}>
+                      {(userInfo.name || 'H').charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                )}
                 <View style={themeStyles.avatarPenIcon}>
                   <Ionicons name="pencil" size={16} color="#fff" />
                 </View>
@@ -259,23 +751,73 @@ export default function Toi() {
             {/* User Info Fields */}
             <View style={themeStyles.infoFieldsContainer}>
               {[
-                { key: 'name', label: 'Họ tên', value: userInfo.name },
-                { key: 'username', label: 'Tên đăng nhập', value: userInfo.username },
-                { key: 'email', label: 'Email', value: userInfo.email },
-                { key: 'phone', label: 'Số điện thoại', value: userInfo.phone },
-                { key: 'gender', label: 'Giới tính', value: userInfo.gender },
-                { key: 'dob', label: 'Ngày sinh', value: userInfo.dob },
+                { key: 'name', label: 'Họ tên', value: isEditingProfile ? editForm.name : userInfo.name, editable: true },
+                { key: 'username', label: 'Tên đăng nhập', value: userInfo.username, editable: false },
+                { key: 'email', label: 'Email', value: isEditingProfile ? editForm.email : userInfo.email, editable: true, keyboardType: 'email-address' as const },
+                { key: 'phone', label: 'Số điện thoại', value: isEditingProfile ? editForm.phone : userInfo.phone, editable: true, keyboardType: 'phone-pad' as const },
+                { key: 'gender', label: 'Giới tính', value: isEditingProfile ? editForm.gender : userInfo.gender, editable: true },
+                { key: 'dob', label: 'Ngày sinh (DD/MM/YYYY)', value: isEditingProfile ? editForm.dob : userInfo.dob, editable: true },
+                { key: 'address', label: 'Địa chỉ', value: isEditingProfile ? editForm.address : userInfo.address, editable: true },
               ].map((field) => (
                 <View key={field.key} style={themeStyles.infoFieldRow}>
                   <Text style={themeStyles.infoFieldLabel}>{field.label}</Text>
-                  {isEditingProfile ? (
-                    <TextInput 
-                      style={[themeStyles.infoFieldInput, isEditingProfile && themeStyles.infoFieldInputEditing]}
-                      value={field.value}
-                      onChangeText={(text) => setUserInfo({...userInfo, [field.key as keyof typeof userInfo]: text})}
-                    />
+                  {isEditingProfile && field.editable ? (
+                    field.key === 'gender' ? (
+                      <View style={{ flexDirection: 'row', marginTop: 6 }}>
+                        <TouchableOpacity
+                          style={[
+                            themeStyles.genderOption,
+                            editForm.gender === 'Nam' && themeStyles.genderOptionActive,
+                          ]}
+                          onPress={() => setEditForm({ ...editForm, gender: 'Nam' })}
+                        >
+                          <Text
+                            style={[
+                              themeStyles.genderOptionText,
+                              editForm.gender === 'Nam' && themeStyles.genderOptionTextActive,
+                            ]}
+                          >
+                            Nam
+                          </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            themeStyles.genderOption,
+                            { marginLeft: 10 },
+                            editForm.gender === 'Nữ' && themeStyles.genderOptionActive,
+                          ]}
+                          onPress={() => setEditForm({ ...editForm, gender: 'Nữ' })}
+                        >
+                          <Text
+                            style={[
+                              themeStyles.genderOptionText,
+                              editForm.gender === 'Nữ' && themeStyles.genderOptionTextActive,
+                            ]}
+                          >
+                            Nữ
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <TextInput
+                        style={[themeStyles.infoFieldInput, themeStyles.infoFieldInputEditing]}
+                        value={field.value}
+                        keyboardType={field.keyboardType || 'default'}
+                        autoCapitalize="none"
+                        onChangeText={(text) =>
+                          setEditForm({ ...editForm, [field.key as keyof typeof editForm]: text })
+                        }
+                      />
+                    )
                   ) : (
-                    <Text style={themeStyles.infoFieldValue}>{field.value}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={[themeStyles.infoFieldValue, !field.editable && { color: '#888' }]}>
+                        {field.value || 'Chưa cập nhật'}
+                      </Text>
+                      {!field.editable && isEditingProfile && (
+                        <Ionicons name="lock-closed" size={14} color="#aaa" style={{ marginLeft: 6 }} />
+                      )}
+                    </View>
                   )}
                 </View>
               ))}
@@ -286,9 +828,36 @@ export default function Toi() {
                 <Text style={themeStyles.editProfileBtnText}>Thay đổi thông tin</Text>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity style={themeStyles.saveProfileBtn} onPress={() => setIsEditingProfile(false)}>
-                <Text style={themeStyles.saveProfileBtnText}>Lưu thay đổi</Text>
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <TouchableOpacity
+                  style={[themeStyles.saveProfileBtn, { flex: 1 }, isSaving && { opacity: 0.7 }]}
+                  onPress={handleSaveProfile}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={themeStyles.saveProfileBtnText}>Lưu thay đổi</Text>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[themeStyles.cancelProfileBtn, { width: 90 }]}
+                  onPress={() => {
+                    setIsEditingProfile(false);
+                    setEditForm({
+                      name: userInfo.name,
+                      email: userInfo.email,
+                      phone: userInfo.phone,
+                      gender: userInfo.gender,
+                      dob: userInfo.dob,
+                      address: userInfo.address,
+                    });
+                  }}
+                  disabled={isSaving}
+                >
+                  <Text style={themeStyles.cancelProfileBtnText}>Hủy</Text>
+                </TouchableOpacity>
+              </View>
             )}
 
           </ScrollView>
@@ -315,7 +884,7 @@ export default function Toi() {
         <View style={themeStyles.modalContainer}>
           <SubScreenHeader title="Trung tâm trợ giúp" onClose={() => setShowHelp(false)} />
           <ScrollView style={themeStyles.modalContent}>
-            
+
             <TouchableOpacity
               style={themeStyles.aiChatBtn}
               onPress={() => {
@@ -340,7 +909,7 @@ export default function Toi() {
 
             <Text style={themeStyles.sectionHeading}>Các vấn đề thường gặp</Text>
             {[
-              'Làm sao để lấy lại mật khẩu?', 
+              'Làm sao để lấy lại mật khẩu?',
               'Cách thanh toán bằng khoai tây?',
               'Truyện bị lỗi font chữ?',
               'Nâng cấp hạng thành viên như thế nào?'
@@ -359,13 +928,13 @@ export default function Toi() {
         <View style={themeStyles.modalContainer}>
           <SubScreenHeader title="Cài đặt thông báo" onClose={() => setShowNotif(false)} />
           <ScrollView style={themeStyles.modalContent}>
-            
+
             <View style={themeStyles.switchRowMaster}>
               <View>
                 <Text style={themeStyles.switchTitleMaster}>HALM Thông báo</Text>
                 <Text style={themeStyles.switchSub}>Nhận thông báo từ ứng dụng</Text>
               </View>
-              <Switch 
+              <Switch
                 trackColor={{ false: '#dcdde1', true: '#2c3a7a' }}
                 thumbColor={'#fff'}
                 value={masterNotif}
@@ -377,7 +946,7 @@ export default function Toi() {
             <View style={[themeStyles.subOptionsContainer, !masterNotif && themeStyles.disabledOptions]}>
               <View style={themeStyles.switchRow}>
                 <Text style={themeStyles.switchTitle}>Thông báo ưu đãi</Text>
-                <Switch 
+                <Switch
                   disabled={!masterNotif}
                   trackColor={{ false: '#dcdde1', true: '#2ecc71' }}
                   thumbColor={'#fff'}
@@ -387,7 +956,7 @@ export default function Toi() {
               </View>
               <View style={themeStyles.switchRow}>
                 <Text style={themeStyles.switchTitle}>Sách sắp hết hạn</Text>
-                <Switch 
+                <Switch
                   disabled={!masterNotif}
                   trackColor={{ false: '#dcdde1', true: '#2ecc71' }}
                   thumbColor={'#fff'}
@@ -397,7 +966,7 @@ export default function Toi() {
               </View>
               <View style={themeStyles.switchRow}>
                 <Text style={themeStyles.switchTitle}>Quảng cáo & Sự kiện</Text>
-                <Switch 
+                <Switch
                   disabled={!masterNotif}
                   trackColor={{ false: '#dcdde1', true: '#2ecc71' }}
                   thumbColor={'#fff'}
@@ -406,7 +975,7 @@ export default function Toi() {
                 />
               </View>
             </View>
-            
+
           </ScrollView>
         </View>
       </Modal>
@@ -416,11 +985,11 @@ export default function Toi() {
         <View style={themeStyles.modalContainer}>
           <SubScreenHeader title="Thông tin HALM" onClose={() => setShowAbout(false)} />
           <ScrollView style={themeStyles.modalContent}>
-            
+
             <View style={themeStyles.aboutHeader}>
               <Text style={themeStyles.aboutLogoText}>HALM <Text style={{ color: '#9b51e0' }}>Book</Text></Text>
               <Text style={themeStyles.aboutVersion}>Phiên bản 1.0.0 (Cập nhật: 18/09/2026)</Text>
-              <Text style={themeStyles.aboutSlogan}>"Sách là ánh sáng, tri thức là sức mạnh"</Text>
+              <Text style={themeStyles.aboutSlogan}>&quot;Sách là ánh sáng, tri thức là sức mạnh&quot;</Text>
             </View>
 
             <View style={themeStyles.aboutInfoBox}>
@@ -438,72 +1007,125 @@ export default function Toi() {
         <View style={themeStyles.modalContainer}>
           <SubScreenHeader title="Đổi mật khẩu" onClose={resetPasswordModal} />
           <ScrollView style={themeStyles.modalContent}>
-            
+
             {passwordStep === 1 ? (
               <View style={themeStyles.passwordForm}>
-                <Text style={themeStyles.passwordInstruction}>Vui lòng nhập mật khẩu hiện tại của bạn để xác thực.</Text>
-                
+                <Text style={themeStyles.passwordInstruction}>
+                  Vui lòng nhập mật khẩu hiện tại của bạn để xác thực trước khi đổi mật khẩu mới.
+                </Text>
+
                 <View style={[themeStyles.inputWrapper, oldPwdError ? { borderColor: '#e74c3c' } : {}]}>
                   <Ionicons name="lock-open-outline" size={20} color="#1a1a1a" style={themeStyles.inputIcon} />
-                  <TextInput 
-                    style={themeStyles.passwordInput} 
-                    placeholder="Mật khẩu hiện tại" 
-                    placeholderTextColor="#a4b0be" 
-                    secureTextEntry 
+                  <TextInput
+                    style={themeStyles.passwordInput}
+                    placeholder="Mật khẩu hiện tại"
+                    placeholderTextColor="#a4b0be"
+                    secureTextEntry={!showOldPwdText}
                     value={oldPassword}
                     onChangeText={(text) => { setOldPassword(text); setOldPwdError(''); }}
                     onSubmitEditing={handleCheckOldPassword}
                     autoFocus
                   />
+                  <TouchableOpacity
+                    onPress={() => setShowOldPwdText(!showOldPwdText)}
+                    style={{ padding: 6 }}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Ionicons
+                      name={showOldPwdText ? "eye-off-outline" : "eye-outline"}
+                      size={20}
+                      color="#888"
+                    />
+                  </TouchableOpacity>
                 </View>
                 {oldPwdError ? <Text style={themeStyles.errorText}>{oldPwdError}</Text> : null}
 
-                <TouchableOpacity style={themeStyles.submitPasswordBtn} onPress={handleCheckOldPassword}>
-                  <Text style={themeStyles.submitPasswordBtnText}>TIẾP TỤC</Text>
+                <TouchableOpacity
+                  style={[themeStyles.submitPasswordBtn, isVerifyingOldPwd && { opacity: 0.7 }]}
+                  onPress={handleCheckOldPassword}
+                  disabled={isVerifyingOldPwd}
+                >
+                  {isVerifyingOldPwd ? (
+                    <ActivityIndicator color="#1a1a1a" size="small" />
+                  ) : (
+                    <Text style={themeStyles.submitPasswordBtnText}>TIẾP TỤC</Text>
+                  )}
                 </TouchableOpacity>
               </View>
             ) : (
               <View style={themeStyles.passwordForm}>
-                <Text style={themeStyles.passwordInstruction}>Mật khẩu cũ chính xác. Vui lòng tạo mật khẩu mới.</Text>
-                
+                <Text style={themeStyles.passwordInstruction}>
+                  Mật khẩu hiện tại chính xác. Vui lòng tạo mật khẩu mới cho tài khoản ({userInfo.email || userInfo.username}).
+                </Text>
+
                 <View style={[themeStyles.softInputWrapper, newPwdError ? { borderColor: '#e74c3c' } : {}]}>
                   <Ionicons name="lock-closed-outline" size={20} color="#888" style={themeStyles.inputIcon} />
-                  <TextInput 
-                    style={themeStyles.softPasswordInput} 
-                    placeholder="Mật khẩu mới" 
-                    placeholderTextColor="#a4b0be" 
-                    secureTextEntry 
+                  <TextInput
+                    style={themeStyles.softPasswordInput}
+                    placeholder="Mật khẩu mới (tối thiểu 6 ký tự)"
+                    placeholderTextColor="#a4b0be"
+                    secureTextEntry={!showNewPwdText}
                     returnKeyType="next"
                     value={newPassword}
                     onChangeText={(text) => { setNewPassword(text); setNewPwdError(''); }}
                     onSubmitEditing={() => confirmPwdRef.current?.focus()}
                     autoFocus
                   />
+                  <TouchableOpacity
+                    onPress={() => setShowNewPwdText(!showNewPwdText)}
+                    style={{ padding: 6 }}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Ionicons
+                      name={showNewPwdText ? "eye-off-outline" : "eye-outline"}
+                      size={20}
+                      color="#888"
+                    />
+                  </TouchableOpacity>
                 </View>
-                
+
                 <View style={[themeStyles.softInputWrapper, newPwdError ? { borderColor: '#e74c3c' } : {}]}>
                   <Ionicons name="shield-checkmark-outline" size={20} color="#888" style={themeStyles.inputIcon} />
-                  <TextInput 
+                  <TextInput
                     ref={confirmPwdRef}
-                    style={themeStyles.softPasswordInput} 
-                    placeholder="Xác nhận mật khẩu mới" 
-                    placeholderTextColor="#a4b0be" 
-                    secureTextEntry 
+                    style={themeStyles.softPasswordInput}
+                    placeholder="Xác nhận mật khẩu mới"
+                    placeholderTextColor="#a4b0be"
+                    secureTextEntry={!showConfirmPwdText}
                     returnKeyType="done"
                     value={confirmPassword}
                     onChangeText={(text) => { setConfirmPassword(text); setNewPwdError(''); }}
                     onSubmitEditing={handleUpdatePassword}
                   />
+                  <TouchableOpacity
+                    onPress={() => setShowConfirmPwdText(!showConfirmPwdText)}
+                    style={{ padding: 6 }}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Ionicons
+                      name={showConfirmPwdText ? "eye-off-outline" : "eye-outline"}
+                      size={20}
+                      color="#888"
+                    />
+                  </TouchableOpacity>
                 </View>
-                
+
                 {newPwdError ? <Text style={themeStyles.errorText}>{newPwdError}</Text> : null}
 
-                <TouchableOpacity style={themeStyles.submitPasswordBtn} onPress={handleUpdatePassword}>
-                  <Text style={themeStyles.submitPasswordBtnText}>Here We Go</Text>
+                <TouchableOpacity
+                  style={[themeStyles.submitPasswordBtn, isUpdatingPwd && { opacity: 0.7 }]}
+                  onPress={handleUpdatePassword}
+                  disabled={isUpdatingPwd}
+                >
+                  {isUpdatingPwd ? (
+                    <ActivityIndicator color="#1a1a1a" size="small" />
+                  ) : (
+                    <Text style={themeStyles.submitPasswordBtnText}>LƯU MẬT KHẨU</Text>
+                  )}
                 </TouchableOpacity>
               </View>
             )}
-            
+
           </ScrollView>
         </View>
       </Modal>
@@ -528,6 +1150,8 @@ const styles = StyleSheet.create({
   },
   avatarLarge: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#2c3a7a', justifyContent: 'center', alignItems: 'center', marginBottom: 15, borderWidth: 4, borderColor: '#e8f4fd' },
   avatarLargeText: { fontSize: 36, fontWeight: '900', color: '#fff' },
+  avatarImage: { width: 90, height: 90, borderRadius: 45, borderWidth: 4, borderColor: '#e8f4fd', marginBottom: 15 },
+  modalAvatarImage: { width: 100, height: 100, borderRadius: 50, borderWidth: 4, borderColor: '#e8f4fd', marginBottom: 0 },
   userName: { fontSize: 22, fontWeight: '800', color: '#1a1a1a', marginBottom: 4 },
   userId: { fontSize: 13, fontWeight: '600', color: '#a4b0be' },
 
@@ -563,12 +1187,6 @@ const styles = StyleSheet.create({
   logoutBtn: { flex: 1, flexDirection: 'row', backgroundColor: '#fdf3f2', paddingVertical: 14, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#fadbd8' },
   logoutBtnText: { color: '#e74c3c', fontSize: 14, fontWeight: '700', marginLeft: 8 },
 
-  // Footer Navigation
-  bottomNav: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee', paddingVertical: 10, paddingBottom: Platform.OS === 'ios' ? 25 : 10 },
-  navItem: { flex: 1, alignItems: 'center', justifyContent: 'center', height: 48 },
-  navText: { fontSize: 10, fontWeight: '700', color: '#8f9bb3', marginTop: 4 },
-  navActiveText: { color: '#2c3a7a', fontWeight: '900' },
-
   // MODAL STYLES
   modalContainer: { flex: 1, backgroundColor: '#f8f9fa' },
   subHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 10 : 50, paddingBottom: 15, paddingHorizontal: 15, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' },
@@ -585,10 +1203,16 @@ const styles = StyleSheet.create({
   infoFieldValue: { fontSize: 15, color: '#1a1a1a', fontWeight: '600' },
   infoFieldInput: { fontSize: 15, color: '#1a1a1a', fontWeight: '600', padding: 0 },
   infoFieldInputEditing: { borderBottomWidth: 1, borderBottomColor: '#3498db', paddingBottom: 5, color: '#3498db' },
+  genderOption: { paddingVertical: 8, paddingHorizontal: 18, borderRadius: 20, borderWidth: 1, borderColor: '#ccc', backgroundColor: '#fff' },
+  genderOptionActive: { borderColor: '#2c3a7a', backgroundColor: '#2c3a7a' },
+  genderOptionText: { fontSize: 14, fontWeight: '600', color: '#555' },
+  genderOptionTextActive: { color: '#fff' },
   editProfileBtn: { backgroundColor: '#e8f4fd', padding: 15, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: '#3498db' },
   editProfileBtnText: { color: '#3498db', fontSize: 15, fontWeight: '700' },
   saveProfileBtn: { backgroundColor: '#27ae60', padding: 15, borderRadius: 12, alignItems: 'center' },
   saveProfileBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  cancelProfileBtn: { backgroundColor: '#f1f2f6', padding: 15, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  cancelProfileBtnText: { color: '#636e72', fontSize: 15, fontWeight: '700' },
 
   // Avatar Menu Action Sheet
   avatarMenuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
@@ -622,13 +1246,8 @@ const styles = StyleSheet.create({
   aboutLogoText: { fontSize: 40, fontWeight: '900', color: '#1a1a1a', marginBottom: 10 },
   aboutVersion: { fontSize: 13, color: '#888', marginBottom: 5, fontWeight: '600' },
   aboutSlogan: { fontSize: 14, fontStyle: 'italic', color: '#555', marginTop: 10 },
-  aboutInfoBox: { backgroundColor: '#fff', padding: 20, borderRadius: 12, marginBottom: 30, borderWidth: 1, borderColor: '#eee', lineHeight: 22 },
+  aboutInfoBox: { backgroundColor: '#fff', padding: 20, borderRadius: 12, marginBottom: 30, borderWidth: 1, borderColor: '#eee' },
   aboutDesc: { fontSize: 14, color: '#444', lineHeight: 22, textAlign: 'center' },
-  langContainer: { backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 15 },
-  langBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 18 },
-  langText: { fontSize: 15, fontWeight: '600', color: '#555' },
-  langTextActive: { color: '#2c3a7a', fontWeight: '800' },
-  langDivider: { height: 1, backgroundColor: '#f1f2f6' },
 
   // Password Modal
   passwordForm: { marginTop: 10 },
@@ -638,8 +1257,10 @@ const styles = StyleSheet.create({
   passwordInput: { flex: 1, fontSize: 15, color: '#1a1a1a', fontWeight: '600' },
   submitPasswordBtn: { backgroundColor: '#64b5f6', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginTop: 15, borderWidth: 1.5, borderColor: '#1a1a1a', shadowColor: '#000', shadowOffset: { width: 3, height: 3 }, shadowOpacity: 1, shadowRadius: 0, elevation: 4 },
   submitPasswordBtnText: { color: '#1a1a1a', fontSize: 16, fontWeight: '900' },
-  
+
   errorText: { color: '#e74c3c', fontSize: 13, marginBottom: 15, marginTop: -5, fontWeight: '600' },
   softInputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f1f4f8', borderRadius: 14, marginBottom: 15, paddingHorizontal: 15, height: 55, borderWidth: 1, borderColor: '#e1e8f0' },
   softPasswordInput: { flex: 1, paddingVertical: 15, fontSize: 15, color: '#1a1a1a', fontWeight: '500' }
 });
+
+

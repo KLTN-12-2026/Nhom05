@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import type { RefObject } from 'react';
+import type { ComponentRef, RefObject } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppNavigation } from './navigation';
@@ -8,7 +8,7 @@ import { useAppNavigation } from './navigation';
 interface SharedHeaderProps {
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
-  blurTarget: RefObject<View | null>;
+  blurTarget: RefObject<ComponentRef<typeof View> | null>;
   compact?: boolean;
 }
 

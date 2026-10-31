@@ -98,6 +98,7 @@ export function useAppThemeStyles<T extends AppStyleSheet>(styles: T): T {
     () => isDarkMode
       ? Object.fromEntries(
           Object.entries(styles).map(([name, style]) => [name, darkenStyle((StyleSheet.flatten(style) || {}) as ViewStyle | TextStyle)]),
+
         ) as T
       : styles,
     [isDarkMode, styles],
