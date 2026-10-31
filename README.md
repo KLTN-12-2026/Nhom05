@@ -5,7 +5,7 @@
 > **Khóa luận tốt nghiệp:** Xây dựng nền tảng đọc sách trực tuyến HALM Book tích hợp trợ lý AI  
 > **Giảng viên hướng dẫn:** ThS. Trịnh Sử Trường Thi  
 
-HALM BOOK là hệ sinh thái đọc và thuê sách điện tử thế hệ mới, mang đến trải nghiệm tiếp cận tri thức liền mạch trên cả nền tảng **Web** và **Ứng dụng di động (Mobile App)**. Dự án kết hợp công nghệ AI đàm thoại hiện đại (Google Gemini) để đồng hành, giải đáp thắc mắc và gợi ý sách thông minh cho độc giả, đi cùng hệ thống đọc sách chuyên sâu (bản scan lật trang 3D và chế độ dàn trang chữ động Reflow Text).
+HALM BOOK là hệ sinh thái đọc và thuê sách điện tử thế hệ mới, mang đến trải nghiệm tiếp cận tri thức liền mạch trên cả nền tảng **Website** và **Ứng dụng di động (Mobile Application)**. Dự án kết hợp công nghệ AI đàm thoại hiện đại (Google Gemini) để đồng hành, giải đáp thắc mắc và gợi ý sách thông minh cho độc giả, đi cùng hệ thống đọc sách chuyên sâu (bản scan lật trang 3D và chế độ dàn trang chữ động Reflow Text).
 
 ---
 
