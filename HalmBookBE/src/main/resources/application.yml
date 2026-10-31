@@ -13,7 +13,7 @@ spring:
     name: HalmBookBE
   ai:
     openai:
-      api-key: ${GEMINI_KEY}
+      api-key: ${GEMINI_KEY:mock_gemini_key}
       base-url: https://generativelanguage.googleapis.com/v1beta/openai
       chat:
         options:
@@ -22,9 +22,10 @@ spring:
 
   # Cấu hình database nguyên vẹn của bạn
   datasource:
-    url: jdbc:mysql://localhost:3306/halmbook
-    username:  ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+    url: jdbc:mysql://localhost:3107/halmbook
+    username: ${DB_USERNAME:root}
+
+    password: ${DB_PASSWORD:123456}
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
@@ -38,7 +39,7 @@ spring:
     host: smtp.gmail.com
     port: 587
     username: buihuonga33w@gmail.com
-    password: ${MAIL_PASSWORD}
+    password: ${MAIL_PASSWORD:mock_mail_password}
     properties:
       mail:
         smtp:
@@ -51,14 +52,14 @@ spring:
             required: true
 
 cloudinary:
-  cloud-name: ${CLOUDINARY_CLOUD_NAME}
-  api-key: ${CLOUDINARY_API_KEY}
-  api-secret: ${CLOUDINARY_API_SECRET}
+  cloud-name: ${CLOUDINARY_CLOUD_NAME:mock_cloud_name}
+  api-key: ${CLOUDINARY_API_KEY:mock_api_key}
+  api-secret: ${CLOUDINARY_API_SECRET:mock_api_secret}
 
 google:
   client:
-    id: ${GOOGLE_CLIENT_ID}
-    secret: ${GOOGLE_CLIENT_SECRET}
+    id: ${GOOGLE_CLIENT_ID:mock_google_id}
+    secret: ${GOOGLE_CLIENT_SECRET:mock_google_secret}
 
 jwt:
     secret: ${JWT_SECRET:HALMBOOK_Super_Secret_Key_For_JWT_Authentication_2026_Must_Be_Long}
