@@ -72,6 +72,12 @@ textarea,
   user-select: text;
 }
 
+/* An con mat mac dinh cua trinh duyet Edge/Chrome */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none !important;
+}
+
 /* Màu custom cho Tailwind v4 */
 @theme {
   --color-brand-primary: #a78bfa;

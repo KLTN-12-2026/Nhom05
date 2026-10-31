@@ -104,6 +104,7 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
       // 4. LƯU TRỮ VĨNH VIỄN VÀO ĐIỆN THOẠI
       await AsyncStorage.setItem('userToken', token);
       if (role) await AsyncStorage.setItem('userRole', role);
+      if (userVal) await AsyncStorage.setItem('username', userVal);
 
       showSuccess('Đăng nhập thành công! Chào mừng bạn đến với HALM BOOK.', onLoginSuccess);
 
@@ -253,7 +254,7 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
       style={themeStyles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <StatusBar translucent backgroundColor="transparent" barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      <StatusBar {...({ translucent: true, backgroundColor: "transparent" } as any)} barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
 
       {/* Background Trang trí */}
       <View style={themeStyles.bgCircleTop} />

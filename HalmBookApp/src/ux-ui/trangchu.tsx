@@ -533,7 +533,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
   return (
     <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: isDarkMode ? BRAND.black : '#fff' }]}>
       <Animated.View style={[styles.container, { backgroundColor: animatedBg }]}>
-      <StatusBar translucent={false} backgroundColor={isDarkMode ? '#1F2228' : '#5a8b82'} barStyle={isDarkMode ? "light-content" : "dark-content"} />
+      <StatusBar {...({ translucent: false, backgroundColor: isDarkMode ? "#1F2228" : "#5a8b82" } as any)} barStyle={isDarkMode ? "light-content" : "dark-content"} />
       
       {/* TRUNG TÂM HIỆU ỨNG DARK MODE */}
       <DarkModeBackgroundEffects visible={isDarkMode} />

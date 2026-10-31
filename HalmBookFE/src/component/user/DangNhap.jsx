@@ -6,7 +6,7 @@ import Popup from "./layout/Popup";
 import logo from '../../img/logo.png';
 import { useGoogleLogin } from '@react-oauth/google';
 import fbLoginModule from 'react-facebook-login/dist/facebook-login-render-props';
-import { saveAuthSession } from '../../service/AuthToken';
+import { useAuth } from '../../context/AuthContext';
 
 const API_BASE_URL = "http://localhost:8082";
 
@@ -14,6 +14,7 @@ const FacebookLogin = fbLoginModule.default || fbLoginModule;
 
 const DangNhap = () => {
     const navigate = useNavigate();
+    const { login } = useAuth();
 
     // --- STATE CHUYỂN ĐỔI FORM ---
     const [loginClass, setLoginClass] = useState('active');
@@ -61,7 +62,7 @@ const DangNhap = () => {
                 });
 
                 const role = res.data.role;
-                saveAuthSession(res.data, { remember: true });
+                await login(res.data, { remember: true });
 
                 setPopup({ message: "Đăng nhập Facebook thành công!", type: "success" });
                 redirectAfterLogin(role);
@@ -84,7 +85,7 @@ const DangNhap = () => {
                 });
 
                 const role = response.data.role;
-                saveAuthSession(response.data, { remember: true });
+                await login(response.data, { remember: true });
 
                 setPopup({ message: "Đăng nhập Google thành công!", type: "success" });
                 redirectAfterLogin(role);
@@ -124,7 +125,7 @@ const DangNhap = () => {
             const role = response.data.role;
 
             try {
-                saveAuthSession(response.data);
+                await login(response.data);
             } catch (error) {
                 return setPopup({ 
                     message: error.message,

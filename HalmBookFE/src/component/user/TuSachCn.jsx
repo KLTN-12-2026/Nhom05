@@ -572,159 +572,22 @@ html.dark .my-books-page [class~="dark:bg-gold"]{background:#B8860B}html.dark .m
                             </div>
 
                             {/* List of horizontal active loan cards */}
-                            <div className="space-y-5">
-
-                                {/* Book Card 1 */}
-                                <div className="rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-5 sm:p-6 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row gap-5 lg:gap-6 items-start md:items-center">
-                                    {/* Book Cover */}
-                                    <div className="relative shrink-0 mx-auto md:mx-0 w-32 sm:w-36 h-48 sm:h-52 rounded-xl overflow-hidden book-cover-elevated bg-paper-200 dark:bg-night-surface">
-                                        <img src="/logo.png" alt="Có Hai Con Mèo Ngồi Bên Cửa Sổ"
-                                            className="w-full h-full object-cover p-2"
-                                            onError={(event) => handleImageError(event, "/logo.png")} />
-                                        <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-emerald-600/90 text-white text-[9px] font-metadata-spec font-black uppercase tracking-wider backdrop-blur-sm">
-                                            Đang Đọc
-                                        </span>
-                                    </div>
-
-                                    {/* Book Details & Progress */}
-                                    <div className="flex-1 w-full space-y-3.5">
-                                        <div className="flex flex-wrap items-center justify-between gap-2">
-                                            <div>
-                                                <span className="font-metadata-spec text-[10px] uppercase font-bold tracking-wider text-wine dark:text-gold">Văn Học Việt Nam • Tuổi Trẻ</span>
-                                                <h3 className="font-display font-black text-lg sm:text-xl text-ink dark:text-night-text mt-0.5 hover:text-wine dark:hover:text-gold transition-colors cursor-pointer" onClick={() => { window.location.href = 'book-detail.html'; }}>
-                                                    Có Hai Con Mèo Ngồi Bên Cửa Sổ
-                                                </h3>
-                                                <p className="font-editorial-body text-xs text-ink-muted dark:text-night-muted mt-0.5">
-                                                    Tác giả: <strong className="text-ink dark:text-night-text font-semibold">Nguyễn Nhật Ánh</strong> • NXB Trẻ
-                                                </p>
-                                            </div>
-
-                                            {/* Time Remaining Badge */}
-                                            <div className="px-3 py-1.5 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border text-xs font-metadata-spec font-bold text-ink dark:text-night-text flex items-center gap-1.5">
-                                                <i className="ph-bold ph-clock text-amber-500"></i>
-                                                <span>Còn <strong>12 Ngày</strong> thuê</span>
-                                            </div>
-                                        </div>
-
-                                        {/* Progress Bar Container */}
-                                        <div className="space-y-1.5 p-3.5 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border">
-                                            <div className="flex items-center justify-between text-xs font-metadata-spec font-bold">
-                                                <span className="text-ink dark:text-night-text flex items-center gap-1">
-                                                    <i className="ph-bold ph-bookmarks text-wine dark:text-gold"></i>
-                                                    Tiến độ đọc: <strong>Trang 54 / 120</strong>
-                                                </span>
-                                                <span className="text-wine dark:text-gold font-extrabold">45% Hoàn Thành</span>
-                                            </div>
-                                            <div className="w-full h-2 rounded-full bg-paper-200 dark:bg-night-border overflow-hidden">
-                                                <div className="h-full bg-gradient-to-r from-wine to-wine-light dark:from-gold dark:to-gold-light rounded-full" style={{ width: '45%' }}></div>
-                                            </div>
-                                            <div className="flex items-center justify-between text-[10px] font-metadata-spec text-ink-muted dark:text-night-muted pt-0.5">
-                                                <span>Lần đọc gần nhất: Hôm qua 21:15</span>
-                                                <span>Ước tính còn khoảng 1.5 giờ đọc</span>
-                                            </div>
-                                        </div>
-
-                                        {/* Action Buttons Toolbar */}
-                                        <div className="flex flex-wrap items-center gap-2.5 pt-1">
-                                            <Link to="/trangchu" className="px-4 py-2 rounded-xl bg-wine hover:bg-wine-dark text-white dark:bg-gold dark:hover:bg-gold-light dark:text-night-bg text-xs font-metadata-spec font-bold transition-all flex items-center gap-1.5 shadow-sm">
-                                                <span>Đọc Tiếp Ngay</span>
-                                                <i className="ph-bold ph-arrow-right"></i>
-                                            </Link>
-
-                                            <button type="button" onClick={() => openRenewModal("Có Hai Con Mèo Ngồi Bên Cửa Sổ", 12)} className="px-3.5 py-2 rounded-xl bg-paper-200 dark:bg-night-surface hover:bg-paper-border dark:hover:bg-night-border text-ink dark:text-night-text border border-paper-border dark:border-night-border text-xs font-metadata-spec font-bold transition-colors flex items-center gap-1.5">
-                                                <i className="ph-bold ph-arrows-clockwise text-wine dark:text-gold"></i>
-                                                <span>Thêm thời gian đọc</span>
-                                            </button>
-
-                                            <button type="button" onClick={() => openChatbot("Tóm tắt ý chính của chương 3 cuốn Có Hai Con Mèo Ngồi Bên Cửa Sổ")} className="px-3.5 py-2 rounded-xl bg-paper-200 dark:bg-night-surface hover:bg-paper-border dark:hover:bg-night-border text-ink dark:text-night-text border border-paper-border dark:border-night-border text-xs font-metadata-spec font-bold transition-colors flex items-center gap-1.5">
-                                                <i className="ph-bold ph-sparkle text-gold"></i>
-                                                <span>Hỏi Đáp AI</span>
-                                            </button>
-
-                                            <a href="book-detail.html" className="px-3.5 py-2 rounded-xl text-ink-muted dark:text-night-muted hover:text-ink dark:hover:text-white text-xs font-metadata-spec font-bold transition-colors ml-auto">
-                                                Chi Tiết Sách
-                                            </a>
-                                        </div>
-                                    </div>
+                            <div className="w-full rounded-2xl border border-dashed border-paper-border dark:border-night-border p-8 text-center bg-paper-surface/50 dark:bg-night-card/50">
+                                <div className="w-14 h-14 rounded-full bg-wine/10 dark:bg-gold/15 text-wine dark:text-gold flex items-center justify-center mx-auto mb-3 text-2xl">
+                                    <i className="ph-bold ph-book-open"></i>
                                 </div>
-
-                                {/* Book Card 2 */}
-                                <div className="rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-5 sm:p-6 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row gap-5 lg:gap-6 items-start md:items-center">
-                                    {/* Book Cover */}
-                                    <div className="relative shrink-0 mx-auto md:mx-0 w-32 sm:w-36 h-48 sm:h-52 rounded-xl overflow-hidden book-cover-elevated bg-paper-200 dark:bg-night-surface">
-                                        <img src="/logo.png" alt="Điện Biên Phủ - Bản Hùng Ca Bất Diệt"
-                                            className="w-full h-full object-cover p-2"
-                                            onError={(event) => handleImageError(event, "/logo.png")} />
-                                        <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-rose-600/95 text-white text-[9px] font-metadata-spec font-black uppercase tracking-wider backdrop-blur-sm animate-pulse">
-                                            Còn 0 Ngày
-                                        </span>
-                                    </div>
-
-                                    {/* Book Details & Progress */}
-                                    <div className="flex-1 w-full space-y-3.5">
-                                        <div className="flex flex-wrap items-center justify-between gap-2">
-                                            <div>
-                                                <span className="font-metadata-spec text-[10px] uppercase font-bold tracking-wider text-rose-600 dark:text-rose-400">Lịch Sử • Quân Sự Việt Nam</span>
-                                                <h3 className="font-display font-black text-lg sm:text-xl text-ink dark:text-night-text mt-0.5 hover:text-wine dark:hover:text-gold transition-colors cursor-pointer" onClick={() => { window.location.href = 'book-detail.html'; }}>
-                                                    Điện Biên Phủ — Ký Ức 56 Ngày Đêm Lừng Lẫy
-                                                </h3>
-                                                <p className="font-editorial-body text-xs text-ink-muted dark:text-night-muted mt-0.5">
-                                                    Tác giả: <strong className="text-ink dark:text-night-text font-semibold">Nhiều tác giả</strong> • NXB Quân Đội Nhân Dân
-                                                </p>
-                                            </div>
-
-                                            {/* Time Remaining Badge */}
-                                            <div className="px-3 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/25 text-xs font-metadata-spec font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
-                                                <i className="ph-bold ph-warning text-rose-500"></i>
-                                                <span>Còn 0 ngày</span>
-                                            </div>
-                                        </div>
-
-                                        {/* Progress Bar Container */}
-                                        <div className="space-y-1.5 p-3.5 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border">
-                                            <div className="flex items-center justify-between text-xs font-metadata-spec font-bold">
-                                                <span className="text-ink dark:text-night-text flex items-center gap-1">
-                                                    <i className="ph-bold ph-bookmarks text-wine dark:text-gold"></i>
-                                                    Tiến độ đọc: <strong>Trang 218 / 280</strong>
-                                                </span>
-                                                <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">78% Hoàn Thành</span>
-                                            </div>
-                                            <div className="w-full h-2 rounded-full bg-paper-200 dark:bg-night-border overflow-hidden">
-                                                <div className="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full" style={{ width: '78%' }}></div>
-                                            </div>
-                                            <div className="flex items-center justify-between text-[10px] font-metadata-spec text-ink-muted dark:text-night-muted pt-0.5">
-                                                <span>Lần đọc gần nhất: 3 giờ trước</span>
-                                                <span>Chỉ còn 62 trang là hoàn thành tác phẩm</span>
-                                            </div>
-                                        </div>
-
-                                        {/* Action Buttons Toolbar */}
-                                        <div className="flex flex-wrap items-center gap-2.5 pt-1">
-                                            <button type="button" onClick={() => handleContinueReading("Điện Biên Phủ — Ký Ức 56 Ngày Đêm Lừng Lẫy", true)} className="px-4 py-2 rounded-xl bg-wine hover:bg-wine-dark text-white dark:bg-gold dark:hover:bg-gold-light dark:text-night-bg text-xs font-metadata-spec font-bold transition-all flex items-center gap-1.5 shadow-sm">
-                                                <span>Đọc Tiếp Ngay</span>
-                                                <i className="ph-bold ph-arrow-right"></i>
-                                            </button>
-
-                                            <button type="button" onClick={() => openRenewModal("Điện Biên Phủ — Ký Ức 56 Ngày Đêm Lừng Lẫy", 0)} className="px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500 hover:text-white text-rose-600 dark:text-rose-400 border border-rose-500/30 text-xs font-metadata-spec font-bold transition-colors flex items-center gap-1.5">
-                                                <i className="ph-bold ph-clock-countdown"></i>
-                                                <span>Cần gia hạn sách</span>
-                                            </button>
-
-                                            <button type="button" onClick={() => openChatbot("Tóm tắt ý nghĩa chiến thắng Điện Biên Phủ trong tác phẩm")} className="px-3.5 py-2 rounded-xl bg-paper-200 dark:bg-night-surface hover:bg-paper-border dark:hover:bg-night-border text-ink dark:text-night-text border border-paper-border dark:border-night-border text-xs font-metadata-spec font-bold transition-colors flex items-center gap-1.5">
-                                                <i className="ph-bold ph-sparkle text-gold"></i>
-                                                <span>Hỏi Đáp AI</span>
-                                            </button>
-
-                                            <a href="book-detail.html" className="px-3.5 py-2 rounded-xl text-ink-muted dark:text-night-muted hover:text-ink dark:hover:text-white text-xs font-metadata-spec font-bold transition-colors ml-auto">
-                                                Chi Tiết Sách
-                                            </a>
-                                        </div>
-                                    </div>
-                                </div>
-
+                                <h3 className="font-display font-bold text-base text-ink dark:text-night-text mb-1">
+                                    Bạn chưa có sách đang đọc hoặc đang thuê
+                                </h3>
+                                <p className="font-metadata-spec text-xs text-ink-muted dark:text-night-muted max-w-md mx-auto mb-4">
+                                    Hãy chọn các tác phẩm kinh điển từ kho sách của HALM Book để bắt đầu hành trình đọc.
+                                </p>
+                                <Link to="/trangchu" className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-wine hover:bg-wine-dark text-white dark:bg-gold dark:hover:bg-gold-light dark:text-night-bg font-metadata-spec font-bold text-xs transition-colors shadow-sm">
+                                    <i className="ph-bold ph-compass"></i>
+                                    <span>Khám Phá Kho Sách Thật</span>
+                                </Link>
                             </div>
                         </div>
-
 
                         {/* ====================================================
                      SECTION 2: SÁCH ĐÃ THUÊ & LỊCH SỬ HOÀN THÀNH (HISTORY GRID)
@@ -748,143 +611,12 @@ html.dark .my-books-page [class~="dark:bg-gold"]{background:#B8860B}html.dark .m
                             </div>
 
                             {/* Books Grid (4 items desktop) */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-
-                                {/* History Book 1 */}
-                                <div className="rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-4 shadow-sm hover:shadow-lg transition-all flex flex-col justify-between group">
-                                    <div>
-                                        <div className="w-full h-52 rounded-xl overflow-hidden bg-paper-200 dark:bg-night-surface book-cover-elevated relative mb-3">
-                                            <img src="https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=400&q=80" alt="Atomic Habits" className="w-full h-full object-cover" />
-                                            <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-emerald-600/90 text-white text-[9px] font-metadata-spec font-black backdrop-blur-sm">
-                                                Đã đọc xong ✓
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-1 text-amber-500 text-xs mb-1">
-                                            <i className="ph-fill ph-star"></i>
-                                            <i className="ph-fill ph-star"></i>
-                                            <i className="ph-fill ph-star"></i>
-                                            <i className="ph-fill ph-star"></i>
-                                            <i className="ph-fill ph-star"></i>
-                                            <span className="font-metadata-spec font-bold text-ink-muted text-[10px] ml-1">(5.0)</span>
-                                        </div>
-                                        <h4 className="font-display font-bold text-sm text-ink dark:text-night-text line-clamp-1 hover:text-wine dark:hover:text-gold cursor-pointer" onClick={() => { window.location.href = 'book-detail.html'; }}>
-                                            Atomic Habits — Thói Quen Nguyên Tử
-                                        </h4>
-                                        <p className="font-metadata-spec text-xs text-ink-muted dark:text-night-muted mt-0.5">James Clear</p>
-                                        <div className="text-[10px] font-metadata-spec text-ink-muted dark:text-night-muted mt-2 pt-2 border-t border-paper-border dark:border-night-border flex justify-between">
-                                            <span>Hoàn thành: 14/10/2026</span>
-                                            <span className="text-emerald-600 font-bold">+10 XP</span>
-                                        </div>
-                                    </div>
-
-                                    <button type="button" onClick={() => showToast("Thuê Lại Sách", "Đã thêm Atomic Habits vào giỏ hàng với giá ưu đãi!")} className="w-full mt-4 py-2 px-3 rounded-xl bg-paper-200 dark:bg-night-surface hover:bg-wine hover:text-white dark:hover:bg-gold dark:hover:text-night-bg text-ink dark:text-night-text border border-paper-border dark:border-night-border text-xs font-metadata-spec font-bold transition-colors flex items-center justify-center gap-1.5">
-                                        <i className="ph-bold ph-shopping-bag"></i>
-                                        <span>Thuê Lại (10 Khoai)</span>
-                                    </button>
-                                </div>
-
-                                {/* History Book 2 */}
-                                <div className="rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-4 shadow-sm hover:shadow-lg transition-all flex flex-col justify-between group">
-                                    <div>
-                                        <div className="w-full h-52 rounded-xl overflow-hidden bg-paper-200 dark:bg-night-surface book-cover-elevated relative mb-3">
-                                            <img src="/logo.png" alt="Dune" className="w-full h-full object-cover p-2" onError={(event) => handleImageError(event, "/logo.png")} />
-                                            <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-slate-700/90 text-white text-[9px] font-metadata-spec font-black backdrop-blur-sm">
-                                                Hết hạn thuê
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-1 text-amber-500 text-xs mb-1">
-                                            <i className="ph-fill ph-star"></i>
-                                            <i className="ph-fill ph-star"></i>
-                                            <i className="ph-fill ph-star"></i>
-                                            <i className="ph-fill ph-star"></i>
-                                            <i className="ph-fill ph-star-half"></i>
-                                            <span className="font-metadata-spec font-bold text-ink-muted text-[10px] ml-1">(4.8)</span>
-                                        </div>
-                                        <h4 className="font-display font-bold text-sm text-ink dark:text-night-text line-clamp-1 hover:text-wine dark:hover:text-gold cursor-pointer" onClick={() => { window.location.href = 'book-detail.html'; }}>
-                                            Dune — Xứ Cát (Tập 1)
-                                        </h4>
-                                        <p className="font-metadata-spec text-xs text-ink-muted dark:text-night-muted mt-0.5">Frank Herbert</p>
-                                        <div className="text-[10px] font-metadata-spec text-ink-muted dark:text-night-muted mt-2 pt-2 border-t border-paper-border dark:border-night-border flex justify-between">
-                                            <span>Hết hạn: 08/10/2026</span>
-                                            <span>Đã đọc 100%</span>
-                                        </div>
-                                    </div>
-
-                                    <button type="button" onClick={() => showToast("Thuê Lại Sách", "Đã thêm Dune - Xứ Cát vào giỏ hàng!")} className="w-full mt-4 py-2 px-3 rounded-xl bg-paper-200 dark:bg-night-surface hover:bg-wine hover:text-white dark:hover:bg-gold dark:hover:text-night-bg text-ink dark:text-night-text border border-paper-border dark:border-night-border text-xs font-metadata-spec font-bold transition-colors flex items-center justify-center gap-1.5">
-                                        <i className="ph-bold ph-shopping-bag"></i>
-                                        <span>Thuê Lại (15 Khoai)</span>
-                                    </button>
-                                </div>
-
-                                {/* History Book 3 */}
-                                <div className="rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-4 shadow-sm hover:shadow-lg transition-all flex flex-col justify-between group">
-                                    <div>
-                                        <div className="w-full h-52 rounded-xl overflow-hidden bg-paper-200 dark:bg-night-surface book-cover-elevated relative mb-3">
-                                            <img src="/logo.png" alt="Nghệ Thuật Chiến Tranh" className="w-full h-full object-cover p-2" onError={(event) => handleImageError(event, "/logo.png")} />
-                                            <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-emerald-600/90 text-white text-[9px] font-metadata-spec font-black backdrop-blur-sm">
-                                                Đã đọc xong ✓
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-1 text-amber-500 text-xs mb-1">
-                                            <i className="ph-fill ph-star"></i>
-                                            <i className="ph-fill ph-star"></i>
-                                            <i className="ph-fill ph-star"></i>
-                                            <i className="ph-fill ph-star"></i>
-                                            <i className="ph-fill ph-star"></i>
-                                            <span className="font-metadata-spec font-bold text-ink-muted text-[10px] ml-1">(5.0)</span>
-                                        </div>
-                                        <h4 className="font-display font-bold text-sm text-ink dark:text-night-text line-clamp-1 hover:text-wine dark:hover:text-gold cursor-pointer" onClick={() => { window.location.href = 'book-detail.html'; }}>
-                                            Nghệ Thuật Chiến Tranh — Binh Pháp Tôn Tử
-                                        </h4>
-                                        <p className="font-metadata-spec text-xs text-ink-muted dark:text-night-muted mt-0.5">Tôn Tử</p>
-                                        <div className="text-[10px] font-metadata-spec text-ink-muted dark:text-night-muted mt-2 pt-2 border-t border-paper-border dark:border-night-border flex justify-between">
-                                            <span>Hoàn thành: 28/09/2026</span>
-                                            <span className="text-emerald-600 font-bold">+10 XP</span>
-                                        </div>
-                                    </div>
-
-                                    <button type="button" onClick={() => showToast("Thuê Lại Sách", "Đã thêm Nghệ Thuật Chiến Tranh vào giỏ hàng!")} className="w-full mt-4 py-2 px-3 rounded-xl bg-paper-200 dark:bg-night-surface hover:bg-wine hover:text-white dark:hover:bg-gold dark:hover:text-night-bg text-ink dark:text-night-text border border-paper-border dark:border-night-border text-xs font-metadata-spec font-bold transition-colors flex items-center justify-center gap-1.5">
-                                        <i className="ph-bold ph-shopping-bag"></i>
-                                        <span>Thuê Lại (10 Khoai)</span>
-                                    </button>
-                                </div>
-
-                                {/* History Book 4 */}
-                                <div className="rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-4 shadow-sm hover:shadow-lg transition-all flex flex-col justify-between group">
-                                    <div>
-                                        <div className="w-full h-52 rounded-xl overflow-hidden bg-paper-200 dark:bg-night-surface book-cover-elevated relative mb-3">
-                                            <img src="/logo.png" alt="Thành Cổ Quảng Trị" className="w-full h-full object-cover p-2" onError={(event) => handleImageError(event, "/logo.png")} />
-                                            <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-emerald-600/90 text-white text-[9px] font-metadata-spec font-black backdrop-blur-sm">
-                                                Đã đọc xong ✓
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-1 text-amber-500 text-xs mb-1">
-                                            <i className="ph-fill ph-star"></i>
-                                            <i className="ph-fill ph-star"></i>
-                                            <i className="ph-fill ph-star"></i>
-                                            <i className="ph-fill ph-star"></i>
-                                            <i className="ph-fill ph-star"></i>
-                                            <span className="font-metadata-spec font-bold text-ink-muted text-[10px] ml-1">(5.0)</span>
-                                        </div>
-                                        <h4 className="font-display font-bold text-sm text-ink dark:text-night-text line-clamp-1 hover:text-wine dark:hover:text-gold cursor-pointer" onClick={() => { window.location.href = 'book-detail.html'; }}>
-                                            Thành Cổ Quảng Trị — 81 Ngày Đêm Huyền Thoại
-                                        </h4>
-                                        <p className="font-metadata-spec text-xs text-ink-muted dark:text-night-muted mt-0.5">Ký Ức Chiến Tranh</p>
-                                        <div className="text-[10px] font-metadata-spec text-ink-muted dark:text-night-muted mt-2 pt-2 border-t border-paper-border dark:border-night-border flex justify-between">
-                                            <span>Hoàn thành: 15/09/2026</span>
-                                            <span className="text-emerald-600 font-bold">+10 XP</span>
-                                        </div>
-                                    </div>
-
-                                    <button type="button" onClick={() => showToast("Thuê Lại Sách", "Đã thêm Thành Cổ Quảng Trị vào giỏ hàng!")} className="w-full mt-4 py-2 px-3 rounded-xl bg-paper-200 dark:bg-night-surface hover:bg-wine hover:text-white dark:hover:bg-gold dark:hover:text-night-bg text-ink dark:text-night-text border border-paper-border dark:border-night-border text-xs font-metadata-spec font-bold transition-colors flex items-center justify-center gap-1.5">
-                                        <i className="ph-bold ph-shopping-bag"></i>
-                                        <span>Thuê Lại (12 Khoai)</span>
-                                    </button>
-                                </div>
-
+                            <div className="w-full rounded-2xl border border-dashed border-paper-border dark:border-night-border p-8 text-center bg-paper-surface/50 dark:bg-night-card/50">
+                                <p className="font-metadata-spec text-xs text-ink-muted dark:text-night-muted">
+                                    Chưa có lịch sử sách đã hoàn thành. Toàn bộ sách đọc sẽ được đồng bộ tự động tại đây.
+                                </p>
                             </div>
                         </div>
-
 
                         {/* ====================================================
                      SECTION 3: TRÍCH DẪN TÂM ĐẮC & GHI CHÚ TRỢ LÝ AI (SMART HIGHLIGHTS)

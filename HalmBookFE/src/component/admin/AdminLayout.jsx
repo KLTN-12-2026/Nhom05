@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { Outlet, NavLink, useLocation, Link, useNavigate } from 'react-router-dom';
-import { clearAuthSession } from '../../service/AuthToken';
+import { useAuth } from '../../context/AuthContext';
 
 const AdminLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { logout } = useAuth();
 
   const handleLogout = () => {
-    clearAuthSession();
+    logout();
     navigate('/dangnhap', { replace: true });
   };
 

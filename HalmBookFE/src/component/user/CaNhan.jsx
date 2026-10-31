@@ -115,6 +115,65 @@ export default function Profile() {
     const [isSaving, setIsSaving] = useState(false);
     const navigate = useNavigate();
 
+    // State đổi mật khẩu
+    const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+    const [passwordForm, setPasswordForm] = useState({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+    });
+    const [showNewPassword, setShowNewPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+    const handleOpenPasswordModal = () => {
+        setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+        setShowNewPassword(false);
+        setShowConfirmPassword(false);
+        setIsPasswordModalOpen(true);
+    };
+
+    const handleClosePasswordModal = () => {
+        if (isChangingPassword) return;
+        setIsPasswordModalOpen(false);
+        setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    };
+
+    const handleChangePasswordSubmit = async (e) => {
+        if (e) e.preventDefault();
+        if (!passwordForm.currentPassword) {
+            showToast('Thiếu Thông Tin', 'Vui lòng nhập mật khẩu hiện tại.');
+            return;
+        }
+        if (!passwordForm.newPassword) {
+            showToast('Thiếu Thông Tin', 'Vui lòng nhập mật khẩu mới.');
+            return;
+        }
+        if (passwordForm.newPassword.length < 6) {
+            showToast('Mật Khẩu Quá Ngắn', 'Mật khẩu mới phải có ít nhất 6 ký tự.');
+            return;
+        }
+        if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+            showToast('Không Khớp', 'Mật khẩu mới và xác nhận mật khẩu không trùng khớp.');
+            return;
+        }
+        setIsChangingPassword(true);
+        try {
+            await customerService.changePassword({
+                oldPassword: passwordForm.currentPassword,
+                newPassword: passwordForm.newPassword,
+                confirmPassword: passwordForm.confirmPassword
+            });
+            showToast('Đổi Mật Khẩu Thành Công', 'Mật khẩu của bạn đã được cập nhật.');
+            setIsPasswordModalOpen(false);
+            setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+        } catch (error) {
+            showToast('Lỗi Đổi Mật Khẩu', error.message || 'Không thể đổi mật khẩu. Vui lòng thử lại.');
+        } finally {
+            setIsChangingPassword(false);
+        }
+    };
+
    
     const fetchCustomerData = async (silent = false) => {
         if (!silent) setIsLoading(true);
@@ -346,6 +405,12 @@ export default function Profile() {
             --font-ui: "Inter", sans-serif;
             --font-metadata: "Roboto", sans-serif;
             --font-editorial: "Open Sans", sans-serif;
+        }
+
+        /* An con mat mac dinh cua trinh duyet */
+        input::-ms-reveal,
+        input::-ms-clear {
+            display: none !important;
         }
 
         html {
@@ -977,14 +1042,24 @@ export default function Profile() {
                                                         </button>
                                                     </>
                                                 ) : (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setIsEditing(true)}
-                                                        className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full bg-wine hover:bg-wine-dark text-white font-metadata-spec text-xs font-bold transition-colors shadow-sm"
-                                                    >
-                                                        <i className="ph-bold ph-pencil-simple text-sm"></i>
-                                                        <span>Chỉnh Sửa Thông Tin</span>
-                                                    </button>
+                                                    <>
+                                                        <button
+                                                            type="button"
+                                                            onClick={handleOpenPasswordModal}
+                                                            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full border border-wine/30 dark:border-gold/40 text-wine dark:text-gold hover:bg-wine/10 dark:hover:bg-gold/15 font-metadata-spec text-xs font-bold transition-colors shadow-sm"
+                                                        >
+                                                            <i className="ph-bold ph-lock-key text-sm"></i>
+                                                            <span>Đổi Mật Khẩu</span>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setIsEditing(true)}
+                                                            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full bg-wine hover:bg-wine-dark text-white font-metadata-spec text-xs font-bold transition-colors shadow-sm"
+                                                        >
+                                                            <i className="ph-bold ph-pencil-simple text-sm"></i>
+                                                            <span>Chỉnh Sửa Thông Tin</span>
+                                                        </button>
+                                                    </>
                                                 )}
                                             </div>
                                         </div>
@@ -1339,6 +1414,144 @@ export default function Profile() {
                         <img src="/logo.png" alt="Chatbot" className="w-full h-full rounded-full object-cover" />
                     </button>
                 </div>
+            {/* MODAL ĐỔI MẬT KHẨU */}
+            {isPasswordModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div 
+                        className="w-full max-w-md rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border shadow-2xl overflow-hidden transition-all"
+                        role="dialog"
+                        aria-modal="true"
+                    >
+                        {/* Header */}
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-paper-border dark:border-night-border">
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-lg bg-wine/10 dark:bg-gold/15 text-wine dark:text-gold flex items-center justify-center text-base">
+                                    <i className="ph-bold ph-lock-key"></i>
+                                </div>
+                                <h3 className="font-display font-bold text-base text-ink dark:text-night-text">
+                                    Đổi Mật Khẩu
+                                </h3>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleClosePasswordModal}
+                                disabled={isChangingPassword}
+                                className="w-8 h-8 rounded-lg text-ink-muted hover:text-ink dark:text-night-muted dark:hover:text-night-text hover:bg-paper-200 dark:hover:bg-night-surface flex items-center justify-center transition-colors disabled:opacity-50"
+                            >
+                                <i className="ph-bold ph-x text-sm"></i>
+                            </button>
+                        </div>
+
+                        {/* Form */}
+                        <form onSubmit={handleChangePasswordSubmit} className="p-6 space-y-4">
+                            {/* 1. Mật khẩu hiện tại (Mặc định hiển thị, không cần con mắt) */}
+                            <div className="space-y-1.5">
+                                <label className="font-metadata-spec text-xs font-bold text-ink dark:text-night-text flex items-center gap-1.5">
+                                    <i className="ph-bold ph-lock text-wine dark:text-gold text-xs"></i> Mật Khẩu Hiện Tại
+                                </label>
+                                <input
+                                    type="text"
+                                    value={passwordForm.currentPassword}
+                                    onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                                    placeholder="Nhập mật khẩu hiện tại"
+                                    disabled={isChangingPassword}
+                                    className="w-full px-3.5 py-2.5 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border text-xs font-metadata-spec font-bold text-ink dark:text-night-text shadow-inner transition-colors focus:border-wine dark:focus:border-gold outline-none disabled:opacity-60"
+                                />
+                            </div>
+
+                            {/* 2. Mật khẩu mới (Có con mắt tinh tế, căn giữa hoàn hảo) */}
+                            <div className="space-y-1.5">
+                                <label className="font-metadata-spec text-xs font-bold text-ink dark:text-night-text flex items-center gap-1.5">
+                                    <i className="ph-bold ph-shield-check text-wine dark:text-gold text-xs"></i> Mật Khẩu Mới
+                                </label>
+                                <div className="relative flex items-center">
+                                    <input
+                                        type={showNewPassword ? "text" : "password"}
+                                        value={passwordForm.newPassword}
+                                        onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                                        placeholder="Nhập mật khẩu mới"
+                                        disabled={isChangingPassword}
+                                        className="w-full px-3.5 py-2.5 pr-10 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border text-xs font-metadata-spec font-bold text-ink dark:text-night-text shadow-inner transition-colors focus:border-wine dark:focus:border-gold outline-none disabled:opacity-60"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowNewPassword(!showNewPassword)}
+                                        tabIndex={-1}
+                                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center justify-center text-ink-muted/60 hover:text-wine dark:hover:text-gold transition-colors focus:outline-none"
+                                        aria-label={showNewPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                                    >
+                                        {showNewPassword ? (
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" className="w-[18px] h-[18px]">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
+                                            </svg>
+                                        ) : (
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" className="w-[18px] h-[18px]">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                                            </svg>
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* 3. Xác nhận mật khẩu mới (Có con mắt tinh tế, căn giữa hoàn hảo) */}
+                            <div className="space-y-1.5">
+                                <label className="font-metadata-spec text-xs font-bold text-ink dark:text-night-text flex items-center gap-1.5">
+                                    <i className="ph-bold ph-check-circle text-wine dark:text-gold text-xs"></i> Xác Nhận Mật Khẩu Mới
+                                </label>
+                                <div className="relative flex items-center">
+                                    <input
+                                        type={showConfirmPassword ? "text" : "password"}
+                                        value={passwordForm.confirmPassword}
+                                        onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                                        placeholder="Nhập lại mật khẩu mới"
+                                        disabled={isChangingPassword}
+                                        className="w-full px-3.5 py-2.5 pr-10 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border text-xs font-metadata-spec font-bold text-ink dark:text-night-text shadow-inner transition-colors focus:border-wine dark:focus:border-gold outline-none disabled:opacity-60"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                        tabIndex={-1}
+                                        className="absolute inset-y-0 right-0 pr-3.5 flex items-center justify-center text-ink-muted/60 hover:text-wine dark:hover:text-gold transition-colors focus:outline-none"
+                                        aria-label={showConfirmPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                                    >
+                                        {showConfirmPassword ? (
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" className="w-[18px] h-[18px]">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
+                                            </svg>
+                                        ) : (
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" className="w-[18px] h-[18px]">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                                            </svg>
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="pt-3 flex items-center justify-end gap-3 border-t border-paper-border dark:border-night-border">
+                                <button
+                                    type="button"
+                                    onClick={handleClosePasswordModal}
+                                    disabled={isChangingPassword}
+                                    className="px-4 py-2.5 rounded-full border border-paper-border dark:border-night-border text-xs font-bold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface transition-colors disabled:opacity-50"
+                                >
+                                    Hủy Bỏ
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isChangingPassword}
+                                    className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full bg-wine hover:bg-wine-dark text-white font-metadata-spec text-xs font-bold transition-colors shadow-sm disabled:opacity-50"
+                                >
+                                    <i className={`ph-bold ${isChangingPassword ? 'ph-spinner animate-spin' : 'ph-check'} text-sm`}></i>
+                                    <span>{isChangingPassword ? 'Đang lưu...' : 'Lưu Thay Đổi'}</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
             </UserLayout>
         </>
     );

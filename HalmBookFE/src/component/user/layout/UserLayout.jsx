@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import logo from "../../../img/logo.png";
 import { clearAuthSession } from "../../../service/AuthToken";
+import { useAuth } from "../../../context/AuthContext";
 import axiosInstance from "../../../service/AxiosInstance";
 import { triggerAirplaneBannerAnimation } from "./helicopterAnimation";
 
@@ -20,6 +21,7 @@ const HEADER_LOGO = "/logo.png";
 function UserHeader({ onOpenChatbot, onThemeChange }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const [isDark, setIsDark] = useState(() => localStorage.getItem("color-theme") === "dark");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
@@ -73,7 +75,7 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
   }, []);
 
   const handleLogout = () => {
-    clearAuthSession();
+    logout();
     navigate("/dangnhap", { replace: true });
   };
 

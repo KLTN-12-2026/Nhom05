@@ -8,9 +8,7 @@ const handleError = (error) => {
             return;
         }
         console.error("LỖI SERVER:", error.response.data);
-        throw new Error(error.response.data?.message || `Lỗi HTTP : ${error.response.status}`)
-
-
+        throw new Error(error.response.data?.message || `Lỗi HTTP : ${error.response.status}`);
     } else if (error.request) {
         console.error("No response received:", error.request);
         throw new Error("Không nhận được phản hồi từ Server.");
@@ -33,6 +31,16 @@ export const getCurrentCustomer = async () => {
 export const updateCustomer = async (customerDetails) => {
     try {
         const response = await axiosInstance.put("/api/home/customer/edit", customerDetails);
+        return response.data;
+    } catch (error) {
+        handleError(error);
+        throw error;
+    }
+};
+
+export const changePassword = async (passwordData) => {
+    try {
+        const response = await axiosInstance.put("/api/home/customer/change-password", passwordData);
         return response.data;
     } catch (error) {
         handleError(error);

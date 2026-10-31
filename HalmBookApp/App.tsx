@@ -1,3 +1,5 @@
+import axios from 'axios';
+import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurTargetView } from 'expo-blur';
 import { ComponentType, useEffect, useRef, useState } from 'react';
@@ -38,6 +40,40 @@ const SCREENS_WITH_SHARED_HEADER: AppScreen[] = [
 
 const LoginLogoutWithSuccess = LoginLogout as ComponentType<{ onLoginSuccess: () => void }>;
 
+const debuggerHost = Constants.expoConfig?.hostUri;
+const localhost = debuggerHost ? debuggerHost.split(':')[0] : 'localhost';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || `http://${localhost}:8082`;
+
+const CANDIDATE_API_URLS = [
+  process.env.EXPO_PUBLIC_API_URL,
+  `http://${localhost}:8082`,
+  'http://localhost:8082',
+  'http://127.0.0.1:8082',
+  'http://10.0.2.2:8082',
+].filter(Boolean) as string[];
+
+const decodeJwtPayload = (token: string): Record<string, any> | null => {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    let str = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    while (str.length % 4) str += '=';
+    let output = '';
+    for (let bc = 0, bs = 0, buffer, idx = 0; (buffer = str.charAt(idx++));) {
+      const pos = chars.indexOf(buffer);
+      if (pos === -1) continue;
+      bs = bc % 4 ? bs * 64 + pos : pos;
+      if (bc++ % 4) {
+        output += String.fromCharCode(255 & (bs >> ((-2 * bc) & 6)));
+      }
+    }
+    return JSON.parse(output);
+  } catch {
+    return null;
+  }
+};
+
 export default function App() {
   const [routes, setRoutes] = useState<ScreenRoute[]>([{ name: 'auth' }]);
   const [isReady, setIsReady] = useState(false);
@@ -54,26 +90,92 @@ export default function App() {
     },
   ]);
 
-  // Khôi phục phiên đăng nhập và vị trí màn hình trước khi reload trong Expo
+  // Khôi phục phiên đăng nhập và kiểm tra tính hợp lệ của token
   useEffect(() => {
     let isMounted = true;
     const restoreSession = async () => {
       try {
         const token = await AsyncStorage.getItem('userToken');
-        if (token && isMounted) {
-          const savedRoutesStr = await AsyncStorage.getItem('savedRoutes');
-          if (savedRoutesStr) {
-            const parsed = JSON.parse(savedRoutesStr);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setRoutes(parsed);
-              setIsReady(true);
-              return;
+        if (!token) {
+          if (isMounted) {
+            setRoutes([{ name: 'auth' }]);
+            setIsReady(true);
+          }
+          return;
+        }
+
+        // 1. Kiểm tra hạn sử dụng JWT Token (exp) - Token sống 1 ngày
+        const jwtPayload = decodeJwtPayload(token);
+        const nowInSeconds = Math.floor(Date.now() / 1000);
+        if (!jwtPayload || !jwtPayload.exp || nowInSeconds >= jwtPayload.exp) {
+          console.warn('Token đã hết hạn (> 1 ngày) hoặc không hợp lệ. Yêu cầu đăng nhập.');
+          await AsyncStorage.multiRemove(['userToken', 'userRole', 'savedRoutes', 'cachedUserProfile']);
+          if (isMounted) {
+            setRoutes([{ name: 'auth' }]);
+            setIsReady(true);
+          }
+          return;
+        }
+
+        // 2. Xác thực trực tiếp với Backend để kiểm tra server có đang chạy và chấp nhận token không
+        let isTokenValidOnBackend = false;
+        const urls = CANDIDATE_API_URLS.filter((url, idx, arr) => arr.indexOf(url) === idx);
+        for (const baseUrl of urls) {
+          try {
+            const res = await axios.get(`${baseUrl}/api/home/customer/info`, {
+              headers: { Authorization: `Bearer ${token}` },
+              timeout: 3000,
+            });
+            if (res.status === 200) {
+              isTokenValidOnBackend = true;
+              break;
+            }
+          } catch (err: any) {
+            if (err?.response?.status === 404) {
+              // 404: Token hoàn toàn hợp lệ, chỉ là tài khoản chưa có bản ghi customer
+              isTokenValidOnBackend = true;
+              break;
+            }
+            if (err?.response?.status === 401) {
+              // Backend từ chối xác thực vì token hết hạn hoặc sai
+              isTokenValidOnBackend = false;
+              break;
             }
           }
+        }
+
+        if (!isTokenValidOnBackend) {
+          console.warn('Backend từ chối token hoặc chưa sẵn sàng. Yêu cầu đăng nhập đầu tiên.');
+          await AsyncStorage.multiRemove(['userToken', 'userRole', 'savedRoutes', 'cachedUserProfile']);
+          if (isMounted) {
+            setRoutes([{ name: 'auth' }]);
+            setIsReady(true);
+          }
+          return;
+        }
+
+        // 3. Token hoàn toàn hợp lệ và Backend đang chạy -> Giữ nguyên phiên khi Expo reload
+        if (isMounted) {
+          const savedRoutesStr = await AsyncStorage.getItem('savedRoutes');
+          if (savedRoutesStr) {
+            try {
+              const parsed = JSON.parse(savedRoutesStr);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                setRoutes(parsed);
+                setIsReady(true);
+                return;
+              }
+            } catch {}
+          }
           setRoutes([{ name: 'home' }]);
+          setIsReady(true);
         }
       } catch (err) {
-        console.warn('Lỗi khôi phục session Expo:', err);
+        console.warn('Lỗi kiểm tra session:', err);
+        if (isMounted) {
+          setRoutes([{ name: 'auth' }]);
+          setIsReady(true);
+        }
       } finally {
         if (isMounted) setIsReady(true);
       }
