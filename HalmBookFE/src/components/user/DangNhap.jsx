@@ -329,7 +329,7 @@ const DangNhap = () => {
                                 <i className="fab fa-brands fa-google"></i>
                             </button>
                             <FacebookLogin
-                                appId="1559212956245733" // Lấy từ https://developers.facebook.com/
+                                appId={import.meta.env.VITE_FACEBOOK_APP_ID || "1559212956245733"} // Lấy từ https://developers.facebook.com/
                                 autoLoad={false}
                                 fields="name,email,picture"
                                 callback={loginWithFacebook}

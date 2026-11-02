@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { isDarkMode, applyTheme } from '@/utils/theme';
 
 export default function Payment({ onNavigate }) {
+  const navigate = useNavigate();
   // --- 1. PACKAGES CONFIGURATION ---
   const vipPackages = [
     {
@@ -349,21 +351,11 @@ export default function Payment({ onNavigate }) {
             </div>
           </div>
 
-          {/* Quick Navigation & Current Potato Balance */}
+          {/* Quick Navigation */}
           <div className="flex items-center gap-3 font-metadata-spec text-xs">
             <button
               type="button"
-              onClick={() => onNavigate ? onNavigate('wallet') : window.location.href = 'wallet.html'}
-              className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-gold/10 hover:bg-gold/20 border border-gold/40 text-gold-dark dark:text-gold shadow-xs transition-colors cursor-pointer"
-              title="Chuyển sang màn Ví Khoai Tây"
-            >
-              <i className="ph-fill ph-wallet text-sm"></i>
-              <span className="font-bold">Ví Khoai Tây: {walletBalance.toLocaleString()}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => onNavigate ? onNavigate('cart') : window.location.href = 'cart.html'}
+              onClick={() => navigate('/giohang')}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-paper-border dark:border-night-border hover:border-wine dark:hover:border-gold font-bold text-ink dark:text-night-text transition-colors cursor-pointer"
             >
               <i className="ph-bold ph-shopping-bag text-xs"></i>
@@ -407,7 +399,7 @@ export default function Payment({ onNavigate }) {
             </div>
             <button
               type="button"
-              onClick={() => onNavigate ? onNavigate('wallet') : window.location.href = 'wallet.html'}
+              onClick={() => navigate('/canhan?tab=wallet')}
               className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-wine hover:bg-wine-dark text-white font-bold text-xs shrink-0 shadow transition-all hover:-translate-y-0.5 cursor-pointer"
             >
               <i className="ph-fill ph-wallet"></i>
@@ -1015,15 +1007,15 @@ export default function Payment({ onNavigate }) {
           <div className="flex items-center gap-4">
             <span>Hotline: <strong className="text-ink dark:text-night-text">0909.090.909</strong></span>
             <span>•</span>
-            <button type="button" onClick={() => onNavigate ? onNavigate('wallet') : window.location.href = 'wallet.html'} className="hover:text-wine dark:hover:text-gold font-bold text-gold cursor-pointer">
+            <button type="button" onClick={() => onNavigate ? onNavigate('wallet') : navigate('/canhan?tab=wallet')} className="hover:text-wine dark:hover:text-gold font-bold text-gold cursor-pointer">
               Ví Khoai
             </button>
             <span>•</span>
-            <button type="button" onClick={() => onNavigate ? onNavigate('cart') : window.location.href = 'cart.html'} className="hover:text-wine dark:hover:text-gold cursor-pointer">
+            <button type="button" onClick={() => onNavigate ? onNavigate('cart') : navigate('/giohang')} className="hover:text-wine dark:hover:text-gold cursor-pointer">
               Giỏ Hàng
             </button>
             <span>•</span>
-            <button type="button" onClick={() => onNavigate ? onNavigate('home') : window.location.href = 'tc.html'} className="hover:text-wine dark:hover:text-gold cursor-pointer">
+            <button type="button" onClick={() => onNavigate ? onNavigate('home') : navigate('/trangchu')} className="hover:text-wine dark:hover:text-gold cursor-pointer">
               Trang Chủ
             </button>
           </div>

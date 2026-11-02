@@ -8,6 +8,17 @@ import com.example.demochatbot.dto.CartItemDto;
 import com.example.demochatbot.service.customer.CustomerService;
 import com.example.demochatbot.service.book.BookService;
 import com.example.demochatbot.service.cart.CartService;
+import com.example.demochatbot.service.evaluate.EvaluateService;
+import com.example.demochatbot.service.order.OrderService;
+import com.example.demochatbot.service.bookmark.BookmarkService;
+import com.example.demochatbot.dto.ReadingNoteBookmarkDto;
+import com.example.demochatbot.dto.ReadingNoteBookmarkRequest;
+import com.example.demochatbot.dto.EvaluateDto;
+import com.example.demochatbot.dto.EvaluateCreateRequest;
+import com.example.demochatbot.dto.ChangePasswordRequest;
+import com.example.demochatbot.dto.CheckoutRequest;
+import com.example.demochatbot.dto.CheckoutResponse;
+import com.example.demochatbot.dto.RentedBookDto;
 import com.example.demochatbot.model.Book;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -42,6 +53,15 @@ public class HomeController {
 
     @Autowired
     private CartService cartService;
+
+    @Autowired
+    private EvaluateService evaluateService;
+
+    @Autowired
+    private OrderService orderService;
+
+    @Autowired
+    private BookmarkService bookmarkService;
 
     /**
      * API lấy danh sách sách (Đầy đủ)
@@ -225,6 +245,35 @@ public class HomeController {
         }
     }
 
+    @PostMapping("/customer/change-password")
+    public ResponseEntity<?> changePassword(@RequestBody ChangePasswordRequest request) {
+        try {
+            int accountId = customerService.getCurrentAccountId();
+            if (accountId <= 0) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(java.util.Map.of("message", "Vui lòng đăng nhập để đổi mật khẩu!"));
+            }
+
+            if (request.getOldPassword() == null || request.getOldPassword().trim().isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(java.util.Map.of("message", "Vui lòng nhập mật khẩu hiện tại!"));
+            }
+
+            if (request.getNewPassword() == null || request.getNewPassword().trim().length() < 6) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(java.util.Map.of("message", "Mật khẩu mới phải có ít nhất 6 ký tự!"));
+            }
+
+            if (request.getConfirmPassword() != null && !request.getNewPassword().equals(request.getConfirmPassword())) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(java.util.Map.of("message", "Mật khẩu xác nhận không khớp!"));
+            }
+
+            customerService.changePassword(accountId, request.getOldPassword(), request.getNewPassword());
+            return ResponseEntity.ok(java.util.Map.of("success", true, "message", "Đổi mật khẩu thành công!"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(java.util.Map.of("success", false, "message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(java.util.Map.of("success", false, "message", "Lỗi xử lý đổi mật khẩu: " + e.getMessage()));
+        }
+    }
+
     @PostMapping("/cart/add")
     public ResponseEntity<?> addToCart(@RequestBody AddToCartRequest request) {
         try {
@@ -270,6 +319,186 @@ public class HomeController {
             ));
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    /**
+     * API lấy danh sách cảm nhận / đánh giá của 1 cuốn sách
+     */
+    @GetMapping("/books/{bookId}/evaluates")
+    public ResponseEntity<List<EvaluateDto>> getBookEvaluates(@PathVariable("bookId") String bookId) {
+        List<EvaluateDto> evaluates = evaluateService.getEvaluatesByBookId(bookId);
+        return ResponseEntity.ok(evaluates);
+    }
+
+    /**
+     * API gửi đánh giá sách mới (kèm số sao 1-5 và nội dung cảm nhận)
+     * Thưởng +5 Khoai cho người đọc khi đánh giá thành công
+     */
+    @PostMapping("/books/{bookId}/evaluates")
+    public ResponseEntity<?> createBookEvaluate(
+            @PathVariable("bookId") String bookId,
+            @RequestBody EvaluateCreateRequest request) {
+        try {
+            if (request == null) {
+                request = new EvaluateCreateRequest();
+            }
+            request.setBookId(bookId);
+
+            Integer accountId = null;
+            try {
+                accountId = customerService.getCurrentAccountId();
+            } catch (Exception ignored) {
+                // Cho phép khách vãng lai gửi đánh giá ẩn danh
+            }
+
+            EvaluateDto created = evaluateService.createEvaluate(request, accountId);
+            return ResponseEntity.status(HttpStatus.CREATED).body(created);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Lỗi gửi đánh giá: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * API thích (like) 1 đánh giá
+     */
+    @PostMapping("/evaluates/{evaluateId}/like")
+    public ResponseEntity<?> likeEvaluate(@PathVariable("evaluateId") int evaluateId) {
+        try {
+            int likes = evaluateService.likeEvaluate(evaluateId);
+            return ResponseEntity.ok(Map.of("likesCount", likes));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    /**
+     * API thực hiện thanh toán thuê sách bằng Khoai Tây
+     */
+    @PostMapping("/checkout")
+    public ResponseEntity<?> checkoutWithPotato(@RequestBody CheckoutRequest request) {
+        try {
+            int accountId = customerService.getCurrentAccountId();
+            if (accountId <= 0) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("message", "Vui lòng đăng nhập để thực hiện thanh toán thuê sách!"));
+            }
+
+            CheckoutResponse response = orderService.checkoutWithPotato(accountId, request);
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Lỗi xử lý thanh toán: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * API lấy danh sách các cuốn sách đang sở hữu/thuê trong Tủ Sách Cá Nhân
+     */
+    @GetMapping("/bookshelf")
+    public ResponseEntity<?> getCustomerBookshelf() {
+        try {
+            int accountId = customerService.getCurrentAccountId();
+            if (accountId <= 0) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("message", "Vui lòng đăng nhập để xem Tủ Sách Cá Nhân!"));
+            }
+
+            List<RentedBookDto> bookshelf = orderService.getCustomerBookshelf(accountId);
+            return ResponseEntity.ok(bookshelf);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Lỗi khi tải tủ sách: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * API kiểm tra quyền đọc toàn bộ của 1 cuốn sách
+     */
+    @GetMapping("/bookshelf/check/{bookId}")
+    public ResponseEntity<?> checkBookAccess(@PathVariable("bookId") String bookId) {
+        try {
+            int accountId = customerService.getCurrentAccountId();
+            if (accountId <= 0) {
+                return ResponseEntity.ok(Map.of("hasAccess", false));
+            }
+            boolean hasAccess = orderService.checkBookAccess(accountId, bookId);
+            return ResponseEntity.ok(Map.of("hasAccess", hasAccess));
+        } catch (Exception e) {
+            return ResponseEntity.ok(Map.of("hasAccess", false));
+        }
+    }
+
+    /**
+     * API lay danh sach ghi chu & bookmark cua cuon sach
+     */
+    @GetMapping("/books/{bookId}/bookmarks")
+    public ResponseEntity<?> getBookBookmarks(@PathVariable("bookId") String bookId) {
+        try {
+            int accountId = customerService.getCurrentAccountId();
+            if (accountId <= 0) {
+                return ResponseEntity.ok(List.of());
+            }
+            List<ReadingNoteBookmarkDto> bookmarks = bookmarkService.getBookmarksByBook(accountId, bookId);
+            return ResponseEntity.ok(bookmarks);
+        } catch (Exception e) {
+            return ResponseEntity.ok(List.of());
+        }
+    }
+
+    /**
+     * API luu ghi chu / bookmark moi cho cuon sach
+     */
+    @PostMapping("/books/{bookId}/bookmarks")
+    public ResponseEntity<?> createBookBookmark(
+            @PathVariable("bookId") String bookId,
+            @RequestBody ReadingNoteBookmarkRequest request) {
+        try {
+            int accountId = customerService.getCurrentAccountId();
+            if (accountId <= 0) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("message", "Vui long dang nhap de luu ghi chu!"));
+            }
+            if (request == null) {
+                request = new ReadingNoteBookmarkRequest();
+            }
+            request.setBookId(bookId);
+            ReadingNoteBookmarkDto created = bookmarkService.createBookmark(accountId, request);
+            return ResponseEntity.status(HttpStatus.CREATED).body(created);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Loi khi luu ghi chu: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * API xoa ghi chu / bookmark
+     */
+    @DeleteMapping("/books/bookmarks/{noteId}")
+    public ResponseEntity<?> deleteBookBookmark(@PathVariable("noteId") int noteId) {
+        try {
+            int accountId = customerService.getCurrentAccountId();
+            if (accountId <= 0) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("message", "Vui long dang nhap!"));
+            }
+            boolean deleted = bookmarkService.deleteBookmark(accountId, noteId);
+            if (deleted) {
+                return ResponseEntity.ok(Map.of("message", "Da xoa ghi chu thanh cong!"));
+            }
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "Khong tim thay ghi chu can xoa!"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Loi khi xoa ghi chu: " + e.getMessage()));
         }
     }
 }

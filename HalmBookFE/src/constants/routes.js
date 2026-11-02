@@ -16,6 +16,8 @@ export const ROUTES = {
   READ_BOOK_DETAIL: '/docsach/:id',
   CART: '/giohang',
   PAYMENT: '/thanhtoan',
+  WALLET: '/vi-khoai',
+  MISSIONS: '/nhiemvu',
 
   // Admin Protected
   ADMIN: '/admin',

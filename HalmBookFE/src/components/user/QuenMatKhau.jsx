@@ -3,6 +3,7 @@ import { ToastContainer, toast, Zoom } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import "./css/QuenMatKhau.css";
 import logo from '@/assets/images/logo.png';
+import { API_BASE_URL } from '@/constants/apiEndpoints';
 
 export default function ForgotPassword() {
     // --- STATE QUẢN LÝ CÁC BƯỚC ---
@@ -32,7 +33,7 @@ export default function ForgotPassword() {
             });
 
             try {
-                const response = await fetch("http://localhost:8082/api/password/send-otp", {
+                const response = await fetch(`${API_BASE_URL}/api/password/send-otp`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ email: email })
@@ -83,7 +84,7 @@ export default function ForgotPassword() {
             });
 
             try {
-                const response = await fetch("http://localhost:8082/api/password/verify-otp", {
+                const response = await fetch(`${API_BASE_URL}/api/password/verify-otp`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ email: email, otp: otp })
@@ -138,7 +139,7 @@ export default function ForgotPassword() {
             });
 
             try {
-                const response = await fetch("http://localhost:8082/api/password/reset-password", {
+                const response = await fetch(`${API_BASE_URL}/api/password/reset-password`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ email: email, newPassword: password })
