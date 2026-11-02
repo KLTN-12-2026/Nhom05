@@ -33,15 +33,15 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 
-
 @RestController
-@CrossOrigin(origins = "http://localhost:5173", allowedHeaders = "*")
+@CrossOrigin(originPatterns = "*", allowedHeaders = "*")
 @RequestMapping("/api/home")
 public class HomeController {
 
@@ -79,6 +79,25 @@ public class HomeController {
         Page<BookDto> books = bookService.findAllBook(resolvedPageable)
                 .map(BookDto::fromEntity);
         return ResponseEntity.ok(books);
+    }
+
+    @GetMapping("/covers/{fileName}")
+    public ResponseEntity<byte[]> getBookCover(@PathVariable("fileName") String fileName) {
+        try {
+            File file = new File("E:/Khoa_Luan/Nhom05/HalmBookBE/src/main/resources/static/covers/" + fileName);
+            if (!file.exists()) {
+                file = new File("E:/Khoa_Luan/BOOK/img/" + fileName);
+            }
+            if (file.exists()) {
+                byte[] bytes = Files.readAllBytes(file.toPath());
+                return ResponseEntity.ok()
+                        .header(HttpHeaders.CONTENT_TYPE, MediaType.IMAGE_JPEG_VALUE)
+                        .header(HttpHeaders.CACHE_CONTROL, "max-age=86400")
+                        .body(bytes);
+            }
+        } catch (Exception ignored) {
+        }
+        return ResponseEntity.notFound().build();
     }
 
     /**
@@ -222,7 +241,7 @@ public class HomeController {
     @GetMapping("/customer/info")
     public ResponseEntity<?> getCustomerInfo() {
         try {
-            int accountId = customerService.    getCurrentAccountId();
+            int accountId = customerService.getCurrentAccountId();
             Customer customer = customerService.findCustomerById(accountId);
             if (customer == null) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Không tìm thấy thông tin khách hàng!");

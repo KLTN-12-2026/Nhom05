@@ -1,13 +1,21 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useAppNavigation, useAppThemeStyles } from './navigation';
-import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
+import Constants from 'expo-constants';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useAppNavigation, useAppThemeStyles } from './navigation';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL
-  ?? (Platform.OS === 'android' ? 'http://10.0.2.2:8082' : 'http://localhost:8082');
+// ----------------------------------------------------
+// CẤU HÌNH KẾT NỐI (ĐIỂM MÙ LOCALHOST)
+// ----------------------------------------------------
+// KHÔNG ĐƯỢC dùng 'localhost'. Phải dùng IPv4 của máy tính chạy Spring Boot.
+const debuggerHost = Constants.expoConfig?.hostUri;
+const localhost = debuggerHost ? debuggerHost.split(':')[0] : 'localhost';
+const API_BASE_URL = `http://${localhost}:8082`;
+// const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL
+// ?? (Platform.OS === 'android' ? 'http://10.0.2.2:8082' : 'http://localhost:8082');
 
 const axiosAppInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -104,7 +112,7 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
 
     } catch (error: any) {
       // 5. Bắt lỗi chuẩn mực
-      const errorMsg = error.response?.data || "Kiểm tra lại tài khoản, mật khẩu hoặc kết nối mạng.";
+      const errorMsg = error.response?.data || "lỗi đăng nhập. Vui lòng thử lại.";
       Alert.alert("Đăng nhập thất bại", errorMsg);
       setIsLoginSubmitting(false);
     }

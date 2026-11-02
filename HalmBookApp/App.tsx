@@ -27,16 +27,6 @@ interface ScreenRoute {
   book?: BookData;
 }
 
-const DEFAULT_BOOK: BookData = {
-  id: 'demo-book',
-  title: 'Lưu Viện Quan Trung',
-  author: 'Đang cập nhật',
-  chapter: 'Full 500 Chương',
-  tag: 'Tiên Hiệp',
-  rating: '4.9',
-  reads: '15K',
-};
-
 const SCREENS_WITH_SHARED_HEADER: AppScreen[] = [
   'offers',
   'upload',
@@ -50,8 +40,11 @@ const LoginLogoutWithSuccess = LoginLogout as ComponentType<{ onLoginSuccess: ()
 
 export default function App() {
   const [routes, setRoutes] = useState<ScreenRoute[]>([{ name: 'auth' }]);
+  const [isReady, setIsReady] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isFooterVisible, setIsFooterVisible] = useState(true);
   const [homeRefreshKey, setHomeRefreshKey] = useState(0);
+
   const blurTargetRef = useRef<ComponentRef<typeof View> | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
@@ -61,6 +54,47 @@ export default function App() {
       time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
     },
   ]);
+
+  // Khôi phục phiên đăng nhập và vị trí màn hình trước khi reload trong Expo
+  useEffect(() => {
+    let isMounted = true;
+    const restoreSession = async () => {
+      try {
+        const token = await AsyncStorage.getItem('userToken');
+        if (token && isMounted) {
+          const savedRoutesStr = await AsyncStorage.getItem('savedRoutes');
+          if (savedRoutesStr) {
+            const parsed = JSON.parse(savedRoutesStr);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setRoutes(parsed);
+              setIsReady(true);
+              return;
+            }
+          }
+          setRoutes([{ name: 'home' }]);
+        }
+      } catch (err) {
+        console.warn('Lỗi khôi phục session Expo:', err);
+      } finally {
+        if (isMounted) setIsReady(true);
+      }
+    };
+    restoreSession();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Tự động lưu lại vị trí màn hình hiện tại để khi reload Expo vẫn giữ nguyên
+  useEffect(() => {
+    if (!isReady) return;
+    if (routes.length > 0 && routes[routes.length - 1].name !== 'auth') {
+      AsyncStorage.setItem('savedRoutes', JSON.stringify(routes)).catch(() => {});
+    } else {
+      AsyncStorage.removeItem('savedRoutes').catch(() => {});
+    }
+  }, [routes, isReady]);
+
   const currentRoute = routes[routes.length - 1];
   const activeTabRoute = [...routes].reverse().find((route) =>
     PRIMARY_TABS.some((tab) => tab.id === route.name),
@@ -68,18 +102,25 @@ export default function App() {
   const activeNav = activeTabRoute?.name ?? 'home';
 
   const navigate = (name: AppScreen, book?: BookData) => {
+    setIsFooterVisible(true);
     setRoutes((current) => [...current, { name, book }]);
   };
 
   const navigateTab = (name: AppScreen) => {
+    setIsFooterVisible(true);
     setRoutes([{ name }]);
   };
 
   const goBack = () => {
+    setIsFooterVisible(true);
     setRoutes((current) => current.length > 1 ? current.slice(0, -1) : current);
   };
 
-  const finishLogin = () => setRoutes([{ name: 'home' }]);
+  const finishLogin = () => {
+    const nextRoutes: ScreenRoute[] = [{ name: 'home' }];
+    setRoutes(nextRoutes);
+    AsyncStorage.setItem('savedRoutes', JSON.stringify(nextRoutes)).catch(() => {});
+  };
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -92,7 +133,7 @@ export default function App() {
 
   const logout = async () => {
     try {
-      await AsyncStorage.multiRemove(['userToken', 'userRole']);
+      await AsyncStorage.multiRemove(['userToken', 'userRole', 'savedRoutes']);
       setRoutes([{ name: 'auth' }]);
     } catch {
       Alert.alert('Không thể đăng xuất', 'Đã xảy ra lỗi khi xóa thông tin đăng nhập.');
@@ -113,7 +154,15 @@ export default function App() {
     ]);
   };
 
-  const navigation = { navigate, navigateTab, goBack, logout, isDarkMode };
+  const navigation = {
+    navigate,
+    navigateTab,
+    goBack,
+    logout,
+    isDarkMode,
+    isFooterVisible,
+    setFooterVisible: setIsFooterVisible,
+  };
   const showSharedHeader = SCREENS_WITH_SHARED_HEADER.includes(currentRoute.name);
   const toggleDarkMode = () => setIsDarkMode((current) => !current);
   const refreshHome = () => setHomeRefreshKey((current) => current + 1);
@@ -176,14 +225,22 @@ export default function App() {
       );
       break;
     case 'bookDetail':
-      screen = (
+      screen = currentRoute.book ? (
         <BookDetailScreen
-          book={currentRoute.book ?? DEFAULT_BOOK}
+          book={currentRoute.book}
           onBack={goBack}
           onStartReading={() => navigate('reader')}
         />
-      );
+      ) : null;
       break;
+  }
+
+  if (!isReady) {
+    return (
+      <SafeAreaProvider>
+        <View style={{ flex: 1, backgroundColor: isDarkMode ? '#101319' : '#fff' }} />
+      </SafeAreaProvider>
+    );
   }
 
   return (
@@ -205,7 +262,13 @@ export default function App() {
             >
               {screen}
             </BlurTargetView>
-            <Footer activeNav={activeNav} floating={currentRoute.name === 'home'} />
+            {!['auth', 'reader', 'chatbot'].includes(currentRoute.name) && (
+              <Footer
+                activeNav={activeNav}
+                floating={currentRoute.name === 'home' || currentRoute.name === 'bookDetail'}
+                visible={isFooterVisible}
+              />
+            )}
           </View>
         )}
       </NavigationContext.Provider>

@@ -19,7 +19,7 @@ import java.util.Optional;
 import java.util.Random;
 
 @RestController
-@CrossOrigin(origins = "http://localhost:5173", allowedHeaders = "*")
+@CrossOrigin(originPatterns = "*", allowedHeaders = "*")
 @RequestMapping("/api/password")
 public class PasswordController {
 
@@ -36,14 +36,12 @@ public class PasswordController {
     private PasswordEncoder passwordEncoder;
 
     // 1. Gửi mã otp
-
     @PostMapping("/send-otp")
     public ResponseEntity<String> sendOtp(@RequestBody EmailRequest emailRequest) {
 
         String email = emailRequest.getEmail();
         // Tìm mail trong hệ thống
         Optional<Customer> customerOtp = customerRepository.findByEmail(email);
-
 
         if (customerOtp.isEmpty()) {
             System.out.println("Ko tìm thấy email này !");
@@ -91,19 +89,37 @@ public class PasswordController {
 
     @PostMapping("/reset-password")
     public ResponseEntity<String> resetPassword(@RequestBody ResetPasswordRequest request) {
-        Optional<Customer> customerOpt = customerRepository.findByEmail(request.getEmail());
-
-        if (customerOpt.isEmpty()) {
-            return new ResponseEntity<>("Email không hợp lệ.", HttpStatus.BAD_REQUEST);
+        if (request.getNewPassword() == null || request.getNewPassword().trim().isEmpty()) {
+            return new ResponseEntity<>("Mật khẩu mới không được để trống.", HttpStatus.BAD_REQUEST);
         }
 
-        Account account = customerOpt.get().getAccount();
+        Account account = null;
+
+        // 1. Tìm Account qua email của Customer
+        if (request.getEmail() != null && !request.getEmail().trim().isEmpty()) {
+            Optional<Customer> customerOpt = customerRepository.findByEmail(request.getEmail().trim());
+            if (customerOpt.isPresent()) {
+                account = customerOpt.get().getAccount();
+            }
+        }
+
+        // 2. Fallback: Tìm Account qua username nếu được cung cấp hoặc nếu email truyền vào chính là username
+        if (account == null && request.getUsername() != null && !request.getUsername().trim().isEmpty()) {
+            account = accountRepository.findByUsername(request.getUsername().trim()).orElse(null);
+        }
+        if (account == null && request.getEmail() != null && !request.getEmail().trim().isEmpty()) {
+            account = accountRepository.findByUsername(request.getEmail().trim()).orElse(null);
+        }
+
+        if (account == null) {
+            return new ResponseEntity<>("Không tìm thấy tài khoản tương ứng với email/username này.", HttpStatus.BAD_REQUEST);
+        }
 
         // Cập nhật mật khẩu mới vào Account
         if (passwordEncoder != null) {
-            account.setPassword(passwordEncoder.encode(request.getNewPassword()));
+            account.setPassword(passwordEncoder.encode(request.getNewPassword().trim()));
         } else {
-            account.setPassword(request.getNewPassword());
+            account.setPassword(request.getNewPassword().trim());
         }
 
         // Xóa OTP sau khi dùng xong để bảo mật
@@ -111,7 +127,7 @@ public class PasswordController {
         account.setOtpExpiration(null);
 
         accountRepository.save(account);
-        System.out.println("Đổi mật khẩu thành công !");
+        System.out.println("Đổi mật khẩu thành công cho tài khoản: " + account.getUsername());
         return new ResponseEntity<>("Đổi mật khẩu thành công.", HttpStatus.OK);
     }
 }

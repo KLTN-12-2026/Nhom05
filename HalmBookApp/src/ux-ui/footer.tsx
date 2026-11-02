@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { Animated, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppNavigation } from './navigation';
 
@@ -14,19 +15,34 @@ export const PRIMARY_TABS = [
 interface FooterProps {
   activeNav: string;
   floating?: boolean;
+  visible?: boolean;
 }
 
-export default function Footer({ activeNav, floating = false }: FooterProps) {
+export default function Footer({ activeNav, floating = false, visible = true }: FooterProps) {
   const { navigateTab, isDarkMode } = useAppNavigation();
   const insets = useSafeAreaInsets();
+  const animTranslateY = useRef(new Animated.Value(0)).current;
+
+  // Hiệu ứng ẩn khi cuộn xuống và hiện khi cuộn lên mượt mà
+  useEffect(() => {
+    Animated.spring(animTranslateY, {
+      toValue: visible ? 0 : 120,
+      useNativeDriver: true,
+      friction: 8,
+      tension: 50,
+    }).start();
+  }, [visible]);
 
   return (
-    <View
+    <Animated.View
       pointerEvents={floating ? 'box-none' : 'auto'}
       style={[
         styles.footerWrap,
         floating && styles.footerWrapFloating,
-        { paddingBottom: Math.max(insets.bottom, 8) + 6 },
+        {
+          paddingBottom: Math.max(insets.bottom, 8) + 6,
+          transform: [{ translateY: animTranslateY }],
+        },
       ]}
     >
       <View style={[styles.bottomNav, isDarkMode && styles.bottomNavDark]}>
@@ -51,7 +67,7 @@ export default function Footer({ activeNav, floating = false }: FooterProps) {
           );
         })}
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -98,9 +114,9 @@ const styles = StyleSheet.create({
   },
   navItemActive: {
     width: 72,
-    backgroundColor: '#E6F0FF',
+    backgroundColor: 'rgba(20, 115, 230, 0.12)',
   },
   navItemActiveDark: {
-    backgroundColor: '#303D52',
+    backgroundColor: 'rgba(216, 179, 106, 0.16)',
   },
 });
