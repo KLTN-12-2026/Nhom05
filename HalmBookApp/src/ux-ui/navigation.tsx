@@ -29,7 +29,7 @@ export interface BookData {
   rating?: string;
 }
 
-interface NavigationContextValue {
+export interface NavigationContextValue {
   navigate: (screen: AppScreen, book?: BookData) => void;
   navigateTab: (screen: AppScreen) => void;
   goBack: () => void;
@@ -37,6 +37,15 @@ interface NavigationContextValue {
   isDarkMode: boolean;
   isFooterVisible?: boolean;
   setFooterVisible?: (visible: boolean) => void;
+
+  // ============================================================================
+  // [GIẢI THÍCH CODE]: Trạng thái đăng nhập và bản thông báo dành cho khách vãng lai
+  // ============================================================================
+  // isLoggedIn: Biến cờ boolean cho biết người dùng đã đăng nhập (true) hay là khách vãng lai (false)
+  isLoggedIn: boolean;
+  setIsLoggedIn?: (val: boolean) => void;
+  // showLoginAlert: Hàm hiển thị popup thông báo với dòng nút 'Đăng nhập ngay'
+  showLoginAlert: (message: string) => void;
 }
 
 export const NavigationContext = createContext<NavigationContextValue | null>(null);
@@ -98,7 +107,6 @@ export function useAppThemeStyles<T extends AppStyleSheet>(styles: T): T {
     () => isDarkMode
       ? Object.fromEntries(
           Object.entries(styles).map(([name, style]) => [name, darkenStyle((StyleSheet.flatten(style) || {}) as ViewStyle | TextStyle)]),
-
         ) as T
       : styles,
     [isDarkMode, styles],

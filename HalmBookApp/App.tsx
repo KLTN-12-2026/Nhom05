@@ -21,6 +21,7 @@ import TrangChu from './src/ux-ui/trangchu';
 import TuSach from './src/ux-ui/tusach';
 import UploadFile from './src/ux-ui/uploadfile';
 import UuDai from './src/ux-ui/uudai';
+import AuthRequiredModal from './src/ux-ui/AuthRequiredModal';
 
 interface ScreenRoute {
   name: AppScreen;
@@ -39,11 +40,47 @@ const SCREENS_WITH_SHARED_HEADER: AppScreen[] = [
 const LoginLogoutWithSuccess = LoginLogout as ComponentType<{ onLoginSuccess: () => void }>;
 
 export default function App() {
-  const [routes, setRoutes] = useState<ScreenRoute[]>([{ name: 'auth' }]);
+  // ============================================================================
+  // [GIẢI THÍCH CODE]: MỚI CHẠY LÊN MẶC ĐỊNH LÀ MÀN TRANG CHỦ CHƯA ĐĂNG NHẬP
+  // - routes khởi tạo là [{ name: 'home' }] -> vào ngay Trang chủ
+  // - isLoggedIn khởi tạo là false -> khách vãng lai (chưa đăng nhập)
+  // ============================================================================
+  const [routes, setRoutes] = useState<ScreenRoute[]>([{ name: 'home' }]);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isFooterVisible, setIsFooterVisible] = useState(true);
   const [homeRefreshKey, setHomeRefreshKey] = useState(0);
+
+  // ============================================================================
+  // [GIẢI THÍCH CODE]: Quản lý bản thông báo yêu cầu đăng nhập
+  // Khi khách vãng lai nhấn uploadfile, trang cá nhân, tủ sách hoặc thanh toán,
+  // modal này sẽ bật lên hiển thị dòng thông báo kèm nút "Đăng nhập ngay"
+  // ============================================================================
+  const [authModal, setAuthModal] = useState<{
+    visible: boolean;
+    message: string;
+  }>({
+    visible: false,
+    message: '',
+  });
+
+  const showLoginAlert = (message: string) => {
+    setAuthModal({
+      visible: true,
+      message,
+    });
+  };
+
+  const closeAuthModal = () => {
+    setAuthModal({ visible: false, message: '' });
+  };
+
+  const handleModalLoginPress = () => {
+    closeAuthModal();
+    // [GIẢI THÍCH CODE]: Nhấn "Đăng nhập ngay" -> chuyển sang màn hình đăng nhập
+    navigate('auth');
+  };
 
   const blurTargetRef = useRef<ComponentRef<typeof View> | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
@@ -55,45 +92,33 @@ export default function App() {
     },
   ]);
 
-  // Khôi phục phiên đăng nhập và vị trí màn hình trước khi reload trong Expo
+  // ============================================================================
+  // [GIẢI THÍCH CODE]: KHỞI TẠO ỨNG DỤNG MẶC ĐỊNH LÀ KHÁCH VÃNG LAI TẠI TRANG CHỦ
+  // Khi mới chạy ứng dụng lên, xóa các token/phiên cũ lưu trong máy để đảm bảo:
+  // 1. Luôn mở màn hình Trang chủ ('home')
+  // 2. Luôn ở trạng thái Chưa đăng nhập (isLoggedIn = false)
+  // 3. Khách muốn đăng nhập sẽ bấm vào icon account ở góc hoặc nút "Đăng nhập ngay"
+  // ============================================================================
   useEffect(() => {
     let isMounted = true;
-    const restoreSession = async () => {
+    const initApp = async () => {
       try {
-        const token = await AsyncStorage.getItem('userToken');
-        if (token && isMounted) {
-          const savedRoutesStr = await AsyncStorage.getItem('savedRoutes');
-          if (savedRoutesStr) {
-            const parsed = JSON.parse(savedRoutesStr);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setRoutes(parsed);
-              setIsReady(true);
-              return;
-            }
-          }
+        await AsyncStorage.multiRemove(['userToken', 'userRole', 'savedRoutes']);
+        if (isMounted) {
+          setIsLoggedIn(false);
           setRoutes([{ name: 'home' }]);
         }
       } catch (err) {
-        console.warn('Lỗi khôi phục session Expo:', err);
+        console.warn('Lỗi khởi tạo app:', err);
       } finally {
         if (isMounted) setIsReady(true);
       }
     };
-    restoreSession();
+    initApp();
     return () => {
       isMounted = false;
     };
   }, []);
-
-  // Tự động lưu lại vị trí màn hình hiện tại để khi reload Expo vẫn giữ nguyên
-  useEffect(() => {
-    if (!isReady) return;
-    if (routes.length > 0 && routes[routes.length - 1].name !== 'auth') {
-      AsyncStorage.setItem('savedRoutes', JSON.stringify(routes)).catch(() => {});
-    } else {
-      AsyncStorage.removeItem('savedRoutes').catch(() => {});
-    }
-  }, [routes, isReady]);
 
   const currentRoute = routes[routes.length - 1];
   const activeTabRoute = [...routes].reverse().find((route) =>
@@ -101,25 +126,74 @@ export default function App() {
   );
   const activeNav = activeTabRoute?.name ?? 'home';
 
+  // ============================================================================
+  // [GIẢI THÍCH CODE]: Hàm điều hướng `navigate`
+  // Tự động chặn khách vãng lai nếu cố gắng mở các màn hình yêu cầu tài khoản
+  // ============================================================================
   const navigate = (name: AppScreen, book?: BookData) => {
+    if (!isLoggedIn) {
+      if (name === 'upload') {
+        showLoginAlert('Bạn phải đăng nhập mới dùng được chức năng uploadfile');
+        return;
+      }
+      if (name === 'bookshelf') {
+        showLoginAlert('Bạn phải đăng nhập để dùng chức năng tủ sách');
+        return;
+      }
+      if (name === 'profile') {
+        showLoginAlert('Bạn phải đăng nhập để dùng chức năng trang cá nhân');
+        return;
+      }
+      if (name === 'cart') {
+        showLoginAlert('Bạn phải đăng nhập để dùng chức năng giỏ hàng');
+        return;
+      }
+      if (name === 'payment') {
+        showLoginAlert('Bạn phải đăng nhập để thanh toán');
+        return;
+      }
+    }
     setIsFooterVisible(true);
     setRoutes((current) => [...current, { name, book }]);
   };
 
+  // ============================================================================
+  // [GIẢI THÍCH CODE]: Hàm chuyển tab Footer `navigateTab`
+  // Tự động chặn khách vãng lai khi nhấn vào các tab upload, tủ sách, trang cá nhân
+  // ============================================================================
   const navigateTab = (name: AppScreen) => {
+    if (!isLoggedIn) {
+      if (name === 'upload') {
+        showLoginAlert('Bạn phải đăng nhập mới dùng được chức năng uploadfile');
+        return;
+      }
+      if (name === 'bookshelf') {
+        showLoginAlert('Bạn phải đăng nhập để dùng chức năng tủ sách');
+        return;
+      }
+      if (name === 'profile') {
+        showLoginAlert('Bạn phải đăng nhập để dùng chức năng trang cá nhân');
+        return;
+      }
+      if (name === 'cart') {
+        showLoginAlert('Bạn phải đăng nhập để dùng chức năng giỏ hàng');
+        return;
+      }
+    }
     setIsFooterVisible(true);
     setRoutes([{ name }]);
   };
 
   const goBack = () => {
     setIsFooterVisible(true);
-    setRoutes((current) => current.length > 1 ? current.slice(0, -1) : current);
+    // Nếu ngăn xếp chỉ còn 1 trang (ví dụ màn auth), quay về màn home
+    setRoutes((current) => current.length > 1 ? current.slice(0, -1) : [{ name: 'home' }]);
   };
 
+  // [GIẢI THÍCH CODE]: Khi đăng nhập thành công, cập nhật isLoggedIn = true và về Trang chủ
   const finishLogin = () => {
-    const nextRoutes: ScreenRoute[] = [{ name: 'home' }];
-    setRoutes(nextRoutes);
-    AsyncStorage.setItem('savedRoutes', JSON.stringify(nextRoutes)).catch(() => {});
+    setIsLoggedIn(true);
+    setRoutes([{ name: 'home' }]);
   };
 
   useEffect(() => {
@@ -131,10 +205,12 @@ export default function App() {
     return () => subscription.remove();
   }, [routes.length]);
 
+  // [GIẢI THÍCH CODE]: Khi đăng xuất, xóa token và đưa người dùng về Trang chủ làm khách vãng lai
   const logout = async () => {
     try {
       await AsyncStorage.multiRemove(['userToken', 'userRole', 'savedRoutes']);
-      setRoutes([{ name: 'auth' }]);
+      setIsLoggedIn(false);
+      setRoutes([{ name: 'home' }]);
     } catch {
       Alert.alert('Không thể đăng xuất', 'Đã xảy ra lỗi khi xóa thông tin đăng nhập.');
     }
@@ -160,6 +236,9 @@ export default function App() {
     goBack,
     logout,
     isDarkMode,
+    isLoggedIn,
+    setIsLoggedIn,
+    showLoginAlert,
     isFooterVisible,
     setFooterVisible: setIsFooterVisible,
   };
@@ -271,6 +350,19 @@ export default function App() {
             )}
           </View>
         )}
+
+        {/* ============================================================================
+            [GIẢI THÍCH CODE]: BẢN THÔNG BÁO YÊU CẦU ĐĂNG NHẬP
+            Hiển thị đè lên trên màn hình khi khách vãng lai nhấn uploadfile, trangcanhan,
+            tusach hoặc thanh toán giỏ hàng. Có dòng 'Đăng nhập ngay' để vào màn đăng nhập.
+            ============================================================================ */}
+        <AuthRequiredModal
+          visible={authModal.visible}
+          message={authModal.message}
+          onClose={closeAuthModal}
+          onLogin={handleModalLoginPress}
+          isDarkMode={isDarkMode}
+        />
       </NavigationContext.Provider>
     </SafeAreaProvider>
   );

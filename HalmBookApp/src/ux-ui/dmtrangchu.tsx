@@ -31,7 +31,7 @@ interface DmTrangChuProps {
 }
 
 export default function DmTrangChu({ isDarkMode, onToggleDarkMode }: DmTrangChuProps) {
-  const { navigate } = useAppNavigation();
+  const { navigate, isLoggedIn } = useAppNavigation();
   
   const styles = getStyles(isDarkMode);
 
@@ -85,8 +85,26 @@ export default function DmTrangChu({ isDarkMode, onToggleDarkMode }: DmTrangChuP
               <Ionicons name={isDarkMode ? "moon" : "sunny"} size={22} color={isDarkMode ? "#f1c40f" : "#1a1a1a"} />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.avatarBtn} onPress={() => navigate('profile')}>
-              <Text style={styles.avatarText}>A</Text>
+            {/* ============================================================================
+                [GIẢI THÍCH CODE]: Nút góc màn hình: icon account cho khách vãng lai
+                ============================================================================ */}
+            <TouchableOpacity
+              style={styles.avatarBtn}
+              onPress={() => {
+                if (!isLoggedIn) {
+                  navigate('auth');
+                } else {
+                  navigate('profile');
+                }
+              }}
+              accessibilityRole="button"
+              accessibilityLabel={!isLoggedIn ? 'Đăng nhập tài khoản' : 'Trang cá nhân'}
+            >
+              {!isLoggedIn ? (
+                <Ionicons name="person-outline" size={22} color={isDarkMode ? '#fff' : '#1a1a1a'} />
+              ) : (
+                <Text style={styles.avatarText}>A</Text>
+              )}
             </TouchableOpacity>
           </View>
 
