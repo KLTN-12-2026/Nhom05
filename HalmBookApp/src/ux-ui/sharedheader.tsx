@@ -18,7 +18,7 @@ export default function SharedHeader({
   blurTarget,
   compact = false,
 }: SharedHeaderProps) {
-  const { navigate, navigateTab } = useAppNavigation();
+  const { navigate, navigateTab, isLoggedIn, showLoginAlert } = useAppNavigation();
   const foreground = isDarkMode ? '#F5F1E8' : '#11131A';
 
   return (
@@ -53,17 +53,39 @@ export default function SharedHeader({
               <MaterialCommunityIcons name="bell-outline" size={23} color={foreground} />
               <View style={styles.notice} />
             </TouchableOpacity>
+            {/* ============================================================================
+                [GIẢI THÍCH CODE]: Nút Giỏ hàng ở Header dùng chung
+                Khi chưa đăng nhập (!isLoggedIn), nhấn vào giỏ hàng sẽ yêu cầu đăng nhập luôn,
+                hiển thị thông báo "Bạn phải đăng nhập để dùng chức năng giỏ hàng" kèm nút "Đăng nhập ngay".
+                ============================================================================ */}
             <TouchableOpacity
               style={styles.actionButton}
-              onPress={() => navigate('cart')}
+              onPress={() => {
+                if (!isLoggedIn) {
+                  showLoginAlert('Bạn phải đăng nhập để dùng chức năng giỏ hàng');
+                  return;
+                }
+                navigate('cart');
+              }}
               accessibilityRole="button"
               accessibilityLabel="Giỏ hàng"
             >
               <Ionicons name="cart-outline" size={23} color={foreground} />
             </TouchableOpacity>
+            {/* ============================================================================
+                [GIẢI THÍCH CODE]: Khách vãng lai nhấn vào icon trang cá nhân ở header
+                Hiển thị thông báo: "Bạn phải đăng nhập để dùng chức năng trang cá nhân"
+                kèm dòng nút "Đăng nhập ngay" để điều hướng sang màn đăng nhập.
+                ============================================================================ */}
             <TouchableOpacity
               style={styles.avatar}
-              onPress={() => navigateTab('profile')}
+              onPress={() => {
+                if (!isLoggedIn) {
+                  showLoginAlert('Bạn phải đăng nhập để dùng chức năng trang cá nhân');
+                  return;
+                }
+                navigateTab('profile');
+              }}
               accessibilityRole="button"
               accessibilityLabel="Trang cá nhân"
             >
