@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import axiosInstance from '@/services/axiosClient';
 import UserLayout from './layout/UserLayout';
 import { openBookReaderTransition } from './bookReaderTransition';
+
+const STAR_FEEDBACK_TEXTS = ["Rất tệ", "Tệ", "Bình thường", "Rất hay", "Tuyệt tác!"];
 
 const tailwindConfig = {
     darkMode: 'class',
@@ -417,14 +419,18 @@ const pageStyles = `
                     transition: box-shadow 0.8s ease;
                 `;
 
+                const activeBook = window.__CURRENT_BOOK__;
+                const authorText = activeBook?.author ? `Một tác phẩm của ${activeBook.author}` : 'Ấn phẩm chọn lọc';
+                const titleText = activeBook?.bookName || 'HALM BOOK';
+
                 pages.innerHTML = `
-                    <div style={{position: "absolute", left: "0", top: "0", bottom: "0", width: "28px", background: "linear-gradient(to right, rgba(142,48,56,0.14) 0%, rgba(142,48,56,0.04) 55%, transparent 100%)", pointerEvents: "none", borderRadius: "2px 0 0 2px"}}></div>
-                    <div id="page-content" style={{height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "2.5rem", position: "relative", zIndex: "2"}}>
-                        <p style={{fontFamily: "'Playfair Display', serif", fontStyle: "italic", color: "#8E3038", fontSize: "1.15rem", marginBottom: "12px"}}>Một tác phẩm của Nguyễn Nhật Ánh</p>
-                        <h2 style={{fontFamily: "'Playfair Display', serif", fontWeight: "900", color: "#6F252C", fontSize: "2.2rem", textShadow: "1px 1px 0 rgba(255,255,255,0.8)", marginBottom: "20px", lineHeight: "1.3"}}>Ngày Xưa Có<br>Một Chuyện Tình</h2>
-                        <div style={{height: "2px", width: "50px", background: "#8E3038", margin: "0 auto 25px"}}></div>
-                        <p style={{fontFamily: "'Playfair Display', serif", fontSize: "1rem", color: "#6E6D7A", fontStyle: "italic", maxWidth: "82%", lineHeight: "1.8"}}>
-                            "Tình yêu là một thứ gì đó vô hình, nhưng lại khiến người ta có thể vì nó mà chờ đợi cả một đời..."
+                    <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 28px; background: linear-gradient(to right, rgba(142,48,56,0.14) 0%, rgba(142,48,56,0.04) 55%, transparent 100%); pointer-events: none; border-radius: 2px 0 0 2px"></div>
+                    <div id="page-content" style="height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 2.5rem; position: relative; z-index: 2">
+                        <p style="font-family: 'Playfair Display', serif; font-style: italic; color: #8E3038; font-size: 1.15rem; margin-bottom: 12px">${authorText}</p>
+                        <h2 style="font-family: 'Playfair Display', serif; font-weight: 900; color: #6F252C; font-size: 1.9rem; text-shadow: 1px 1px 0 rgba(255,255,255,0.8); margin-bottom: 20px; line-height: 1.3">${titleText}</h2>
+                        <div style="height: 2px; width: 50px; background: #8E3038; margin: 0 auto 25px"></div>
+                        <p style="font-family: 'Playfair Display', serif; font-size: 0.95rem; color: #6E6D7A; font-style: italic; max-width: 82%; line-height: 1.8">
+                            "Không Gian Đọc Sách & Kết Nối Tri Thức"
                         </p>
                     </div>
                 `;
@@ -566,28 +572,52 @@ const pageStyles = `
             '1': { name: 'Thuê 1 Ngày (24h)', days: 1, price: 2, label: 'Thuê 1 Ngày - 2 Khoai', isBuy: false },
             '3': { name: 'Thuê 3 Ngày (Cuối tuần)', days: 3, price: 5, label: 'Thuê 3 Ngày - 5 Khoai', isBuy: false },
             '7': { name: 'Thuê 7 Ngày (1 Tuần)', days: 7, price: 9, label: 'Thuê 7 Ngày - 9 Khoai', isBuy: false },
+            '15': { name: 'Thuê 15 Ngày', days: 15, price: 18, label: 'Thuê 15 Ngày - 18 Khoai', isBuy: false },
+            '30': { name: 'Thuê 30 Ngày', days: 30, price: 30, label: 'Thuê 30 Ngày - 30 Khoai', isBuy: false },
             'forever': { name: 'Mua Đứt (Sở Hữu Trọn Đời)', days: 99999, price: 39, label: 'Mua Đứt - 39 Khoai', isBuy: true }
         };
 
         let currentRentalPlanKey = '7';
         let cartItems = [];
 
+        function resolvePlanDisplay(planKey, rentalDays) {
+            if (planKey === 'forever' || rentalDays >= 9999) {
+                return { type: 'Mua Đứt', plan: 'Sở Hữu Trọn Đời', days: 99999, price: 39 };
+            }
+            if (String(planKey) === '1' || rentalDays === 1) {
+                return { type: 'Thuê Đọc', plan: 'Thuê 1 Ngày (24h)', days: 1, price: 2 };
+            }
+            if (String(planKey) === '3' || rentalDays === 3) {
+                return { type: 'Thuê Đọc', plan: 'Thuê 3 Ngày', days: 3, price: 5 };
+            }
+            if (String(planKey) === '15' || rentalDays === 15) {
+                return { type: 'Thuê Đọc', plan: 'Thuê 15 Ngày', days: 15, price: 18 };
+            }
+            if (String(planKey) === '30' || rentalDays === 30) {
+                return { type: 'Thuê Đọc', plan: 'Thuê 30 Ngày', days: 30, price: 30 };
+            }
+            return { type: 'Thuê Đọc', plan: 'Thuê 7 Ngày (1 Tuần)', days: 7, price: 9 };
+        }
+
         async function fetchServerCart() {
             try {
                 const res = await axiosInstance.get('/api/home/cart/items');
                 if (Array.isArray(res.data)) {
-                    cartItems = res.data.map(item => ({
-                        id: item.cartItemId,
-                        bookId: item.bookId,
-                        title: item.bookName,
-                        author: item.author,
-                        type: 'Thuê Đọc',
-                        plan: 'Theo gói hệ thống',
-                        price: item.selectedPrice ?? item.rentPrice ?? 0,
-                        days: item.rentalDays ?? (item.planKey === 'forever' ? 99999 : Number(item.planKey) || 7),
-                        planKey: item.planKey || '7',
-                        cover: item.imgUrl || '/logo.png'
-                    }));
+                    cartItems = res.data.map(item => {
+                        const resolved = resolvePlanDisplay(item.planKey, item.rentalDays);
+                        return {
+                            id: item.cartItemId,
+                            bookId: item.bookId,
+                            title: item.bookName,
+                            author: item.author,
+                            type: resolved.type,
+                            plan: resolved.plan,
+                            price: item.selectedPrice ?? resolved.price,
+                            days: item.rentalDays ?? resolved.days,
+                            planKey: item.planKey || '7',
+                            cover: item.imgUrl || '/logo.png'
+                        };
+                    });
                     updateCartUI();
                 }
             } catch (err) {
@@ -598,13 +628,24 @@ const pageStyles = `
         // Tải giỏ hàng khi khởi tạo
         fetchServerCart();
 
+        window.openRentalModal = openRentalModal;
+        window.closeRentalModal = closeRentalModal;
+        window.selectRentalModalPlan = selectRentalModalPlan;
+        window.confirmRentalModalAddToCart = confirmRentalModalAddToCart;
+        window.addBuyForeverToCart = addBuyForeverToCart;
+        if (new URLSearchParams(window.location.search).get('openRental') === 'true') {
+            setTimeout(() => {
+                if (typeof openRentalModal === 'function') openRentalModal();
+            }, 450);
+        }
+
         function openRentalModal() {
             const modal = document.getElementById('rentalModal');
             const backdrop = document.getElementById('rentalModalBackdrop');
             const userKhoaiEl = document.getElementById('rentalModalUserKhoai');
             const headerKhoaiEl = document.getElementById('user-khoai-val');
 
-            const currentKhoai = headerKhoaiEl ? (parseInt(headerKhoaiEl.textContent.replace(/,/g, '')) || 1250) : 1250;
+            const currentKhoai = headerKhoaiEl ? (parseInt(headerKhoaiEl.textContent.replace(/,/g, '')) || 0) : 0;
             if (userKhoaiEl) userKhoaiEl.textContent = currentKhoai.toLocaleString();
 
             selectRentalModalPlan(currentRentalPlanKey);
@@ -734,7 +775,7 @@ const pageStyles = `
             const userKhoaiEl = document.getElementById('cartDrawerUserKhoai');
             const headerKhoaiEl = document.getElementById('user-khoai-val');
 
-            const currentKhoai = headerKhoaiEl ? (parseInt(headerKhoaiEl.textContent.replace(/,/g, '')) || 1250) : 1250;
+            const currentKhoai = headerKhoaiEl ? (parseInt(headerKhoaiEl.textContent.replace(/,/g, '')) || 0) : 0;
             if (userKhoaiEl) userKhoaiEl.textContent = currentKhoai.toLocaleString();
 
             const totalCount = cartItems.length;
@@ -808,8 +849,8 @@ const pageStyles = `
             }
         }
 
-        // Thanh toán toàn bộ Giỏ Hàng bằng Khoai
-        function handleCheckoutCart() {
+        // Thanh toán toàn bộ Giỏ Hàng bằng Khoai Tây thực tế
+        async function handleCheckoutCart() {
             if (cartItems.length === 0) {
                 showToast('Giỏ hàng đang trống!', 'error');
                 return;
@@ -817,32 +858,55 @@ const pageStyles = `
 
             const totalPrice = cartItems.reduce((sum, item) => sum + item.price, 0);
             const khoaiEl = document.getElementById('user-khoai-val');
-            let currentKhoai = khoaiEl ? (parseInt(khoaiEl.textContent.replace(/,/g, '')) || 1250) : 1250;
+            let currentKhoai = khoaiEl ? (parseInt(khoaiEl.textContent.replace(/,/g, '')) || 0) : 0;
 
             if (currentKhoai < totalPrice) {
-                showToast('Số dư Khoai không đủ (' + totalPrice + ' Khoai cần có, bạn đang có ' + currentKhoai + ' Khoai). Vui lòng nạp hoặc tích lũy thêm!', 'error');
+                showToast('Số dư Khoai không đủ (' + totalPrice + ' Khoai cần có, bạn đang có ' + currentKhoai + ' Khoai). Vui lòng nạp thêm Khoai!', 'error');
                 return;
             }
 
-            // Trừ Khoai
-            currentKhoai -= totalPrice;
-            if (khoaiEl) khoaiEl.textContent = currentKhoai.toLocaleString();
+            const checkoutBtn = document.getElementById('btnCheckoutCart');
+            if (checkoutBtn) checkoutBtn.disabled = true;
 
-            // Cập nhật số sách trong Tủ Sách
-            const rentedBadge = document.getElementById('rentedCountBadge');
-            if (rentedBadge) {
-                let currentRented = parseInt(rentedBadge.textContent) || 0;
-                rentedBadge.textContent = currentRented + cartItems.length;
-                rentedBadge.classList.add('scale-125');
-                setTimeout(() => rentedBadge.classList.remove('scale-125'), 300);
+            try {
+                const checkoutItems = cartItems.map(item => ({
+                    bookId: item.bookId || item.id,
+                    cartItemId: item.cartItemId,
+                    planKey: String(item.planKey || '7'),
+                    durationDays: item.durationDays || 7,
+                    price: item.price
+                }));
+
+                const res = await axiosInstance.post('/api/home/checkout', {
+                    items: checkoutItems,
+                    paymentMethod: 'POTATO_WALLET'
+                });
+
+                currentKhoai = res.data.remainingPotatoBalance;
+                if (khoaiEl) khoaiEl.textContent = currentKhoai.toLocaleString();
+                const rentalModalKhoai = document.getElementById('rentalModalUserKhoai');
+                if (rentalModalKhoai) rentalModalKhoai.textContent = currentKhoai.toLocaleString();
+                const cartDrawerKhoai = document.getElementById('cartDrawerUserKhoai');
+                if (cartDrawerKhoai) cartDrawerKhoai.textContent = currentKhoai.toLocaleString();
+
+                const boughtCount = cartItems.length;
+                cartItems = [];
+                updateCartUI();
+                toggleCartDrawer(false);
+
+                window.dispatchEvent(new CustomEvent('halm-cart-updated'));
+                window.dispatchEvent(new CustomEvent('halm-potato-updated', {
+                    detail: { potatoBalance: currentKhoai }
+                }));
+                window.dispatchEvent(new CustomEvent('halm-bookshelf-updated'));
+
+                showToast('🎉 Thanh toán thành công ' + boughtCount + ' ấn phẩm (-' + totalPrice + ' Khoai)! Sách đã chuyển vào Tủ Sách Cá Nhân.', 'success');
+            } catch (err) {
+                const errMsg = err?.response?.data?.message || err.message || 'Lỗi khi thanh toán đơn thuê sách.';
+                showToast(errMsg, 'error');
+            } finally {
+                if (checkoutBtn) checkoutBtn.disabled = false;
             }
-
-            const boughtCount = cartItems.length;
-            cartItems = [];
-            updateCartUI();
-            toggleCartDrawer(false);
-
-            showToast('🎉 Thanh toán thành công ' + boughtCount + ' ấn phẩm (-' + totalPrice + ' Khoai)! Sách đã chuyển vào Tủ Sách, mở đọc ngay.', 'success');
         }
 
         // 7. WISHLIST & SHARE HELPERS
@@ -1004,55 +1068,60 @@ const pageStyles = `
             const rating = ratingContainer ? (ratingContainer.getAttribute('data-rating') || 5) : 5;
             let starsHtml = '';
             for (let i = 0; i < 5; i++) {
-                starsHtml += i < rating ? '<i className="ph-fill ph-star"></i>' : '<i className="ph-bold ph-star text-gray-300"></i>';
+                starsHtml += i < rating ? '<i class="ph-fill ph-star"></i>' : '<i class="ph-bold ph-star text-gray-300"></i>';
             }
 
             const list = document.getElementById('reviewList');
             if (list) {
+                const emptyNotice = document.getElementById('emptyReviewNotice');
+                if (emptyNotice) {
+                    emptyNotice.remove();
+                }
+
                 const item = document.createElement('div');
-                item.className = 'p-5 rounded-2xl bg-paper-50 dark:bg-night-surface border border-paper-border dark:border-night-border animate-fade-in';
+                item.className = 'review-item p-5 rounded-2xl bg-paper-50 dark:bg-night-surface border border-paper-border dark:border-night-border animate-fade-in';
                 item.innerHTML = `
-                    <div className="flex items-start justify-between mb-2">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-wine text-white font-bold font-serif flex items-center justify-center shrink-0">
+                    <div class="flex items-start justify-between mb-2">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-full bg-wine text-white font-bold font-serif flex items-center justify-center shrink-0">
                                 B
                             </div>
                             <div>
-                                <h4 className="font-bold text-sm text-ink dark:text-night-text flex items-center gap-1.5">
+                                <h4 class="font-bold text-sm text-ink dark:text-night-text flex items-center gap-1.5">
                                     Bạn (Độc giả HALM VIP)
-                                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full font-sans">Vừa xong</span>
+                                    <span class="text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full font-sans">Vừa xong</span>
                                 </h4>
-                                <span className="text-[11px] text-ink-muted dark:text-night-muted">Vừa đăng</span>
+                                <span class="text-[11px] text-ink-muted dark:text-night-muted">Vừa đăng</span>
                             </div>
                         </div>
-                        <div className="flex text-amber-400 text-xs">${starsHtml}</div>
+                        <div class="flex text-amber-400 text-xs">${starsHtml}</div>
                     </div>
-                    <p className="text-sm text-ink/80 dark:text-night-muted leading-relaxed pl-13 mb-3">
+                    <p class="text-sm text-ink/80 dark:text-night-muted leading-relaxed pl-13 mb-3">
                         "${text.replace(/</g, "&lt;").replace(/>/g, "&gt;")}"
                     </p>
-                    <div className="flex items-center gap-4 text-xs text-ink-muted dark:text-night-muted pl-0 sm:pl-13">
-                        <button onclick="likeComment(this)" className="flex items-center gap-1 hover:text-wine dark:hover:text-gold transition font-bold cursor-pointer">
-                            <i className="ph-bold ph-thumbs-up"></i> <span>1</span>
+                    <div class="flex items-center gap-4 text-xs text-ink-muted dark:text-night-muted pl-0 sm:pl-13">
+                        <button onclick="likeComment(this)" class="flex items-center gap-1 hover:text-wine dark:hover:text-gold transition font-bold cursor-pointer">
+                            <i class="ph-bold ph-thumbs-up"></i> <span>1</span>
                         </button>
-                        <button onclick="toggleReplyBox(this)" className="flex items-center gap-1 hover:text-wine dark:hover:text-gold transition font-bold cursor-pointer">
-                            <i className="ph-bold ph-chat-teardrop-dots"></i> Phản hồi
+                        <button onclick="toggleReplyBox(this)" class="flex items-center gap-1 hover:text-wine dark:hover:text-gold transition font-bold cursor-pointer">
+                            <i class="ph-bold ph-chat-teardrop-dots"></i> Phản hồi
                         </button>
                     </div>
 
                     <!-- Reply Form Container -->
-                    <div className="reply-box-container hidden mt-3 pl-0 sm:pl-13 pt-3 border-t border-paper-border/60 dark:border-night-border/60 animate-fade-in">
-                        <div className="flex items-start gap-2.5 sm:gap-3 bg-paper-100/70 dark:bg-night-surface/90 p-3 sm:p-3.5 rounded-2xl border border-paper-border/70 dark:border-night-border/70">
-                            <div className="w-8 h-8 rounded-full bg-wine text-white font-bold flex items-center justify-center shrink-0 text-xs shadow-2xs">
+                    <div class="reply-box-container hidden mt-3 pl-0 sm:pl-13 pt-3 border-t border-paper-border/60 dark:border-night-border/60 animate-fade-in">
+                        <div class="flex items-start gap-2.5 sm:gap-3 bg-paper-100/70 dark:bg-night-surface/90 p-3 sm:p-3.5 rounded-2xl border border-paper-border/70 dark:border-night-border/70">
+                            <div class="w-8 h-8 rounded-full bg-wine text-white font-bold flex items-center justify-center shrink-0 text-xs shadow-2xs">
                                 B
                             </div>
-                            <div className="flex-1 min-w-0">
-                                <textarea placeholder="Nhập câu trả lời của bạn..." rows="2" className="reply-input w-full bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-2.5 rounded-xl text-xs sm:text-sm text-ink dark:text-night-text placeholder-ink-muted focus:outline-none focus:border-wine dark:focus:border-gold transition resize-none"></textarea>
-                                <div className="flex items-center justify-end gap-2 mt-2">
-                                    <button type="button" onclick="cancelReply(this)" className="px-3 py-1.5 text-xs font-semibold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-card rounded-lg transition cursor-pointer">
+                            <div class="flex-1 min-w-0">
+                                <textarea placeholder="Nhập câu trả lời của bạn..." rows="2" class="reply-input w-full bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-2.5 rounded-xl text-xs sm:text-sm text-ink dark:text-night-text placeholder-ink-muted focus:outline-none focus:border-wine dark:focus:border-gold transition resize-none"></textarea>
+                                <div class="flex items-center justify-end gap-2 mt-2">
+                                    <button type="button" onclick="cancelReply(this)" class="px-3 py-1.5 text-xs font-semibold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-card rounded-lg transition cursor-pointer">
                                         Hủy
                                     </button>
-                                    <button type="button" onclick="submitReply(this)" className="bg-wine hover:bg-wine-dark text-white px-4 py-1.5 text-xs font-bold rounded-lg shadow-sm transition cursor-pointer flex items-center gap-1">
-                                        <i className="ph-bold ph-paper-plane-tilt"></i> Gửi phản hồi
+                                    <button type="button" onclick="submitReply(this)" class="bg-wine hover:bg-wine-dark text-white px-4 py-1.5 text-xs font-bold rounded-lg shadow-sm transition cursor-pointer flex items-center gap-1">
+                                        <i class="ph-bold ph-paper-plane-tilt"></i> Gửi phản hồi
                                     </button>
                                 </div>
                             </div>
@@ -1060,12 +1129,28 @@ const pageStyles = `
                     </div>
 
                     <!-- Nested Replies List -->
-                    <div className="replies-list-container space-y-2 mt-2.5 pl-0 sm:pl-13"></div>
+                    <div class="replies-list-container space-y-2 mt-2.5 pl-0 sm:pl-13"></div>
                 `;
                 list.prepend(item);
                 textarea.value = '';
+
+                // Cập nhật số lượng đánh giá hiển thị
+                const totalCount = list.querySelectorAll('.review-item').length;
+                const totalEl = document.getElementById('totalReviewsCountText');
+                const topEl = document.getElementById('topReviewCount');
+                if (totalEl) totalEl.textContent = `${totalCount} đánh giá`;
+                if (topEl) topEl.textContent = `${totalCount} đánh giá độc giả`;
+
                 showToast('Đã đăng cảm nhận của bạn thành công! (+5 Khoai)', 'success');
             }
+        }
+
+        if (typeof window !== 'undefined') {
+            window.postComment = postComment;
+            window.likeComment = likeComment;
+            window.toggleReplyBox = toggleReplyBox;
+            window.cancelReply = cancelReply;
+            window.submitReply = submitReply;
         }
 
         function likeComment(btn) {
@@ -1293,6 +1378,192 @@ export default function ChiTietSach() {
     const [book, setBook] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState("");
+    const [rentStatus, setRentStatus] = useState({
+        hasAccess: false,
+        remainingDays: 0,
+        isForever: false,
+        status: ''
+    });
+
+    // ==========================================
+    // 1. STATE QUẢN LÝ ĐÁNH GIÁ & CẢM NHẬN ĐỘC GIẢ
+    // ==========================================
+    const [reviews, setReviews] = useState([]);
+    const [isLoadingReviews, setIsLoadingReviews] = useState(false);
+    const [selectedStar, setSelectedStar] = useState(5);
+    const [hoverStar, setHoverStar] = useState(0);
+    const [commentInput, setCommentInput] = useState("");
+    const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+    const [activeReplyId, setActiveReplyId] = useState(null);
+    const [replyInputText, setReplyInputText] = useState("");
+    const [isSubmittingReply, setIsSubmittingReply] = useState(false);
+
+    // ==========================================
+    // 2. STATE QUẢN LÝ CHATBOT TRỢ LÝ AI
+    // ==========================================
+    const [isChatbotOpen, setIsChatbotOpen] = useState(false);
+    const [chatMessages, setChatMessages] = useState([]);
+    const [chatInputText, setChatInputText] = useState("");
+    const [isChatbotLoading, setIsChatbotLoading] = useState(false);
+    const chatBodyRef = useRef(null);
+
+    // Tải danh sách đánh giá từ Backend
+    const fetchEvaluates = async (targetBookId) => {
+        if (!targetBookId) return;
+        try {
+            setIsLoadingReviews(true);
+            const res = await axiosInstance.get(`/api/home/books/${encodeURIComponent(targetBookId)}/evaluates`);
+            if (Array.isArray(res.data)) {
+                setReviews(res.data);
+            }
+        } catch (err) {
+            console.warn("Không thể tải danh sách đánh giá từ máy chủ:", err);
+        } finally {
+            setIsLoadingReviews(false);
+        }
+    };
+
+    // Gửi đánh giá mới kèm số sao lên Backend
+    const handlePostReview = async () => {
+        const text = commentInput.trim();
+        if (!text) {
+            showToast('Vui lòng nhập nội dung cảm nhận của bạn!', 'error');
+            return;
+        }
+
+        const targetBookId = book?.book_id || book?.id || bookId;
+        if (!targetBookId) {
+            showToast('Không xác định được mã sách!', 'error');
+            return;
+        }
+
+        try {
+            setIsSubmittingReview(true);
+            const currentToken = sessionStorage.getItem("token") || localStorage.getItem("token");
+            const config = currentToken ? { headers: { Authorization: `Bearer ${currentToken}` } } : {};
+
+            const res = await axiosInstance.post(
+                `/api/home/books/${encodeURIComponent(targetBookId)}/evaluates`,
+                {
+                    bookId: targetBookId,
+                    star: selectedStar,
+                    content: text
+                },
+                config
+            );
+
+            if (res.data) {
+                setReviews(prev => [res.data, ...prev]);
+                setCommentInput("");
+                setSelectedStar(5);
+                setHoverStar(0);
+                showToast('🎉 Đã đăng cảm nhận thành công! (+5 Khoai)', 'success');
+            }
+        } catch (err) {
+            console.error("Lỗi khi gửi đánh giá:", err);
+            const msg = err.response?.data?.message || 'Không thể lưu đánh giá. Vui lòng thử lại sau!';
+            showToast(msg, 'error');
+        } finally {
+            setIsSubmittingReview(false);
+        }
+    };
+
+    // Tăng lượt thích cho 1 đánh giá
+    const handleLikeReview = async (evaluateId) => {
+        try {
+            const res = await axiosInstance.post(`/api/home/evaluates/${evaluateId}/like`);
+            const newCount = res.data?.likesCount;
+            setReviews(prev => prev.map(r => r.evaluateId === evaluateId ? { ...r, likesCount: newCount } : r));
+        } catch (err) {
+            console.warn("Lỗi khi thích đánh giá:", err);
+        }
+    };
+
+    // Gửi phản hồi (reply) cho 1 đánh giá
+    const handleSubmitReply = async (parentId) => {
+        const text = replyInputText.trim();
+        if (!text) {
+            showToast('Vui lòng nhập nội dung phản hồi!', 'error');
+            return;
+        }
+        const targetBookId = book?.book_id || book?.id || bookId;
+        try {
+            setIsSubmittingReply(true);
+            const currentToken = sessionStorage.getItem("token") || localStorage.getItem("token");
+            const config = currentToken ? { headers: { Authorization: `Bearer ${currentToken}` } } : {};
+
+            const res = await axiosInstance.post(
+                `/api/home/books/${encodeURIComponent(targetBookId)}/evaluates`,
+                {
+                    bookId: targetBookId,
+                    content: text,
+                    parentId: parentId
+                },
+                config
+            );
+
+            if (res.data) {
+                setReviews(prev => prev.map(r => {
+                    if (r.evaluateId === parentId) {
+                        return { ...r, replies: [...(r.replies || []), res.data] };
+                    }
+                    return r;
+                }));
+                setReplyInputText("");
+                setActiveReplyId(null);
+                showToast('Đã gửi phản hồi thành công! (+2 Khoai)', 'success');
+            }
+        } catch (err) {
+            showToast('Không thể gửi phản hồi lúc này.', 'error');
+        } finally {
+            setIsSubmittingReply(false);
+        }
+    };
+
+    // Gửi câu hỏi đến Trợ lý Sách AI
+    const handleSendChatMessage = async (textToSend) => {
+        const msg = (typeof textToSend === 'string' ? textToSend : chatInputText).trim();
+        if (!msg || isChatbotLoading) return;
+
+        setChatMessages(prev => [...prev, { sender: 'user', text: msg }]);
+        setChatInputText("");
+        setIsChatbotLoading(true);
+
+        setTimeout(() => {
+            if (chatBodyRef.current) {
+                chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
+            }
+        }, 50);
+
+        try {
+            const currentToken = sessionStorage.getItem("token") || localStorage.getItem("token");
+            const config = currentToken ? { headers: { Authorization: `Bearer ${currentToken}` } } : {};
+
+            const res = await axiosInstance.post(
+                "/api/chat",
+                { message: msg },
+                config
+            );
+
+            const reply = res.data?.reply;
+            if (reply) {
+                setChatMessages(prev => [...prev, { sender: 'bot', text: reply }]);
+            } else {
+                setChatMessages(prev => [...prev, { sender: 'bot', text: "Hiện tại trợ lý chưa nhận được thông tin phù hợp, bạn thử hỏi lại câu khác nhé." }]);
+            }
+        } catch (err) {
+            console.error("Lỗi AI Chatbot:", err);
+            const errMsg = err.response?.data?.reply || err.response?.data?.message || "Hệ thống AI đang quá tải hoặc bảo trì. Vui lòng thử lại sau giây lát.";
+            setChatMessages(prev => [...prev, { sender: 'bot', text: errMsg }]);
+        } finally {
+            setIsChatbotLoading(false);
+            setTimeout(() => {
+                if (chatBodyRef.current) {
+                    chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
+                }
+            }, 100);
+        }
+    };
 
     const handleReadBook = () => {
         if (!book) {
@@ -1302,18 +1573,20 @@ export default function ChiTietSach() {
 
         const bookCard = document.getElementById('book-card');
         const coverUrl = book.img_url || book.img || '/logo.png';
+        const targetBookId = book.book_id || book.id || bookId;
+        const readModeParam = rentStatus.hasAccess ? 'full' : 'trial';
+
         openBookReaderTransition({
             bookCard,
             coverUrl,
             book,
             onComplete: () => {
-            const targetBookId = book.book_id || book.id || bookId;
-            if (targetBookId) {
-                navigate('/docsach/' + encodeURIComponent(targetBookId));
-            } else {
-                navigate('/docsach');
-            }
-        },
+                if (targetBookId) {
+                    navigate('/docsach/' + encodeURIComponent(targetBookId) + `?mode=${readModeParam}`);
+                } else {
+                    navigate(`/docsach?mode=${readModeParam}`);
+                }
+            },
         });
     };
 
@@ -1360,6 +1633,46 @@ export default function ChiTietSach() {
                     setBook(response.data);
                     window.__CURRENT_BOOK_PDF__ = response.data.pdf_url;
                     window.__CURRENT_BOOK__ = response.data;
+                    fetchEvaluates(targetId);
+                    setChatMessages([
+                        {
+                            sender: 'bot',
+                            text: `Chào bạn! Mình là Trợ lý Sách HALM. Bạn muốn tìm hiểu thêm về cuốn sách "${response.data.bookName || 'này'}" của tác giả ${response.data.author || 'này'} hay nhận gợi ý tác phẩm tương tự?`
+                        }
+                    ]);
+
+                    // Kiểm tra trạng thái đã sở hữu / thuê của người dùng
+                    try {
+                        const checkRes = await axiosInstance.get(`/api/home/bookshelf/check/${encodeURIComponent(targetId)}`, {
+                            signal: controller.signal
+                        });
+                        if (checkRes.data?.hasAccess) {
+                            let daysLeft = 0;
+                            let isForeverOwned = false;
+                            let statusText = 'ACTIVE';
+                            try {
+                                const shelfRes = await axiosInstance.get('/api/home/bookshelf', { signal: controller.signal });
+                                if (Array.isArray(shelfRes.data)) {
+                                    const match = shelfRes.data.find(b => String(b.bookId) === String(targetId) || String(b.id) === String(targetId));
+                                    if (match) {
+                                        daysLeft = match.remainingDays ?? 0;
+                                        isForeverOwned = Boolean(match.isForever || match.remainingDays > 1000);
+                                        statusText = match.status || 'ACTIVE';
+                                    }
+                                }
+                            } catch (_) {}
+                            setRentStatus({
+                                hasAccess: true,
+                                remainingDays: daysLeft,
+                                isForever: isForeverOwned,
+                                status: statusText
+                            });
+                        } else {
+                            setRentStatus({ hasAccess: false, remainingDays: 0, isForever: false, status: '' });
+                        }
+                    } catch (_) {
+                        setRentStatus({ hasAccess: false, remainingDays: 0, isForever: false, status: '' });
+                    }
                 } else {
                     setError("Không nhận được dữ liệu sách từ máy chủ.");
                 }
@@ -1379,16 +1692,129 @@ export default function ChiTietSach() {
         return () => controller.abort();
     }, [bookId]);
 
+    // Lắng nghe cập nhật Tủ Sách từ Giỏ Hàng hoặc Mua Sách
+    useEffect(() => {
+        const handleBookshelfUpdated = () => {
+            const targetId = bookId || (book ? (book.book_id || book.id) : '');
+            if (targetId) {
+                axiosInstance.get(`/api/home/bookshelf/check/${encodeURIComponent(targetId)}`)
+                    .then(res => {
+                        if (res.data?.hasAccess) {
+                            axiosInstance.get('/api/home/bookshelf').then(shelfRes => {
+                                if (Array.isArray(shelfRes.data)) {
+                                    const match = shelfRes.data.find(b => String(b.bookId) === String(targetId) || String(b.id) === String(targetId));
+                                    if (match) {
+                                        setRentStatus({
+                                            hasAccess: true,
+                                            remainingDays: match.remainingDays ?? 0,
+                                            isForever: Boolean(match.isForever || match.remainingDays > 1000),
+                                            status: match.status || 'ACTIVE'
+                                        });
+                                    }
+                                }
+                            }).catch(() => {});
+                        } else {
+                            setRentStatus({ hasAccess: false, remainingDays: 0, isForever: false, status: '' });
+                        }
+                    }).catch(() => {});
+            }
+        };
+        window.addEventListener('halm-bookshelf-updated', handleBookshelfUpdated);
+        return () => window.removeEventListener('halm-bookshelf-updated', handleBookshelfUpdated);
+    }, [bookId, book]);
+
+    // Quản lý số dư Khoai thực tế của người dùng
+    const [userKhoai, setUserKhoai] = useState(0);
+
+    useEffect(() => {
+        let isMounted = true;
+        const fetchUserKhoai = async () => {
+            try {
+                const res = await axiosInstance.get('/api/home/customer/info');
+                if (isMounted && res.data && res.data.potatoBalance !== undefined) {
+                    const balance = res.data.potatoBalance;
+                    setUserKhoai(balance);
+                    const el = document.getElementById('user-khoai-val');
+                    if (el) el.textContent = balance.toLocaleString();
+                    const modalEl = document.getElementById('rentalModalUserKhoai');
+                    if (modalEl) modalEl.textContent = balance.toLocaleString();
+                    const drawerEl = document.getElementById('cartDrawerUserKhoai');
+                    if (drawerEl) drawerEl.textContent = balance.toLocaleString();
+                }
+            } catch (e) {
+                // Khách vãng lai chưa đăng nhập
+            }
+        };
+        fetchUserKhoai();
+
+        const handlePotatoUpdated = (event) => {
+            if (event?.detail) {
+                const val = event.detail.potatoBalance ?? event.detail.balance ?? 0;
+                setUserKhoai(val);
+                const el = document.getElementById('user-khoai-val');
+                if (el) el.textContent = val.toLocaleString();
+                const modalEl = document.getElementById('rentalModalUserKhoai');
+                if (modalEl) modalEl.textContent = val.toLocaleString();
+                const drawerEl = document.getElementById('cartDrawerUserKhoai');
+                if (drawerEl) drawerEl.textContent = val.toLocaleString();
+            } else {
+                fetchUserKhoai();
+            }
+        };
+        window.addEventListener('halm-potato-updated', handlePotatoUpdated);
+        return () => {
+            isMounted = false;
+            window.removeEventListener('halm-potato-updated', handlePotatoUpdated);
+        };
+    }, []);
+
     useEffect(() => {
         if (document.documentElement.classList.contains('dark')) {
             createStars();
         }
     }, []);
 
+    // Tính toán số sao trung bình và số lượng đánh giá thực tế từ state reviews
+    const calculatedAvgRating = reviews.length > 0
+        ? (reviews.reduce((sum, r) => sum + (r.star || 5), 0) / reviews.length).toFixed(1)
+        : (book?.rating ? Number(book.rating).toFixed(1) : '5.0');
+    const totalReviewCount = reviews.length;
+    const reviewStatusText = totalReviewCount === 0 ? "Chưa có đánh giá" : `${totalReviewCount} đánh giá độc giả`;
+
     return (
         <>
             <style>{pageStyles}</style>
             <style>{`
+                /* ========================================================
+                   TRIỆT TIÊU HIỆN TƯỢNG HẮT SÁNG KHI CHUYỂN DARK/LIGHT MODE
+                   ======================================================== */
+                button, [role="button"], .tab-btn {
+                    -webkit-tap-highlight-color: transparent !important;
+                    outline: none !important;
+                }
+                .dark button, .dark [role="button"] {
+                    text-shadow: none !important;
+                }
+                #btn-read-now, #btn-rent-book, #btnConfirmAddToCart, #btnCheckoutCart, #btnPostComment, #chatbotTriggerBtn, .tab-btn {
+                    filter: none !important;
+                }
+                .dark #btn-read-now,
+                .dark #btn-rent-book,
+                .dark #btnConfirmAddToCart,
+                .dark #btnCheckoutCart,
+                .dark #btnPostComment,
+                .dark .tab-btn {
+                    box-shadow: none !important;
+                    filter: none !important;
+                }
+                .dark #btn-read-now:hover,
+                .dark #btn-rent-book:hover,
+                .dark #btnConfirmAddToCart:hover,
+                .dark #btnCheckoutCart:hover,
+                .dark #btnPostComment:hover {
+                    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6) !important;
+                }
+
                 #rentalModalBackdrop {
                     z-index: 9999 !important;
                     background: rgba(15, 16, 14, 0.82) !important;
@@ -1443,7 +1869,13 @@ export default function ChiTietSach() {
                     color: #fcd34d !important;
                 }
             `}</style>
-            <UserLayout className="selection:bg-wine-100 selection:text-wine dark:selection:bg-wine-dark dark:selection:text-gold-light">
+            <UserLayout 
+                className="selection:bg-wine-100 selection:text-wine dark:selection:bg-wine-dark dark:selection:text-gold-light"
+                onOpenChatbot={(prompt) => {
+                    setIsChatbotOpen(true);
+                    if (prompt) handleSendChatMessage(prompt);
+                }}
+            >
             <div className="antialiased flex flex-col min-h-screen relative pt-24">
 {/* Màn chắn chống nháy giao diện khi quay lại từ trang đọc */}
     
@@ -1497,13 +1929,6 @@ export default function ChiTietSach() {
 
             {/* Utility Controls */}
             <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                
-                {/* Potato / Khoai Balance */}
-                <div className="hidden sm:flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border shadow-sm text-xs font-bold text-ink dark:text-night-text cursor-pointer hover:border-gold transition-colors" title="Số dư Khoai thưởng của bạn" onClick={(event) => { showToast('Bạn đang có 1,250 Khoai tích lũy!', 'success') }}>
-                    <span className="w-2 h-2 rounded-full bg-gold animate-ping"></span>
-                    <span id="user-khoai-val" className="font-outfit font-extrabold text-sm">1,250</span>
-                    <span className="text-gold font-extrabold flex items-center gap-0.5">Khoai <i className="ph-fill ph-coins text-xs"></i></span>
-                </div>
 
                 {/* Giỏ Hàng Thuê / Mua Sách */}
                 <button type="button" onClick={(event) => { toggleCartDrawer(true) }} className="p-2.5 rounded-full text-ink dark:text-night-text hover:bg-paper-200 dark:hover:bg-night-card transition-colors relative cursor-pointer group" title="Giỏ hàng thuê & mua sách">
@@ -1539,7 +1964,7 @@ export default function ChiTietSach() {
         <div id="mobileDrawer" className="hidden lg:hidden px-6 py-4 bg-paper-surface dark:bg-night-surface border-b border-paper-border dark:border-night-border space-y-3">
             <div className="flex items-center justify-between pb-3 border-b border-paper-border dark:border-night-border">
                 <span className="text-xs text-ink-muted dark:text-night-muted">Số dư khoai:</span>
-                <span className="text-xs font-bold text-gold flex items-center gap-1">1,250 Khoai <i className="ph-fill ph-coins"></i></span>
+                <span className="text-xs font-bold text-gold flex items-center gap-1 cursor-pointer" onClick={() => navigate('/canhan?tab=wallet')}>{userKhoai.toLocaleString()} Khoai <i className="ph-fill ph-coins"></i></span>
             </div>
             <nav className="flex flex-col gap-2.5 text-xs font-bold uppercase tracking-wider">
                 <a href="/trangchu" className="py-1 text-ink dark:text-night-text hover:text-wine">Trang Chủ</a>
@@ -1612,7 +2037,7 @@ export default function ChiTietSach() {
                                         <i className="ph-fill ph-shield-check text-emerald-400"></i> Bản Quyền Đọc Online
                                     </span>
                                     <span className="font-outfit font-bold text-[11px] text-amber-300">
-                                        316 Trang Ebook
+                                        {book?.totalPages ? `${book.totalPages} Trang Ebook` : 'Bản Đọc Ebook'}
                                     </span>
                                 </div>
                             </div>
@@ -1651,22 +2076,35 @@ export default function ChiTietSach() {
                             <i className="ph-fill ph-star"></i>
                             <i className="ph-fill ph-star"></i>
                             <i className="ph-fill ph-star"></i>
-                            <i className="ph-fill ph-star-half"></i>
+                            <i className="ph-fill ph-star"></i>
                         </div>
-                        <span className="font-outfit font-black text-sm sm:text-base text-ink dark:text-night-text">4.8</span>
+                        <span className="font-outfit font-black text-sm sm:text-base text-ink dark:text-night-text">{calculatedAvgRating}</span>
                         <span className="text-gray-300 dark:text-gray-600">•</span>
-                        <a href="#danh-gia" className="text-xs text-ink-muted dark:text-night-muted hover:text-wine dark:hover:text-gold underline underline-offset-4 font-medium">
-                            1,245 đánh giá độc giả
+                        <a href="#danh-gia" id="topReviewCount" className="text-xs text-ink-muted dark:text-night-muted hover:text-wine dark:hover:text-gold underline underline-offset-4 font-medium">
+                            {reviewStatusText}
                         </a>
                         <span className="text-gray-300 dark:text-gray-600">•</span>
                         <span className="text-xs text-ink-muted dark:text-night-muted font-medium flex items-center gap-1.5">
-                            <i className="ph-bold ph-book-open text-wine dark:text-gold"></i> 18,490 lượt đọc
+                            <i className="ph-bold ph-book-open text-wine dark:text-gold"></i> {book?.readCount ? `${book.readCount.toLocaleString()} lượt đọc` : '0 lượt đọc'}
                         </span>
                     </div>
 
                     {/* ================= BOOK ACTION SECTION ================= */}
                     <div id="tuy-chon-thue" className="bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border rounded-3xl p-6 mb-6 shadow-sm">
                         
+                        {/* Status notification when book is owned/rented */}
+                        {rentStatus.hasAccess && (
+                            <div className="mb-5 p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between text-xs font-outfit">
+                                <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-bold">
+                                    <i className="ph-fill ph-check-circle text-lg"></i>
+                                    <span>Tác phẩm đã mở khóa toàn bộ trong Tủ Sách Cá Nhân</span>
+                                </div>
+                                <span className="font-black px-3 py-1 rounded-full bg-emerald-600 text-white text-[11px] shadow-xs">
+                                    {rentStatus.isForever ? 'Sở Hữu Trọn Đời' : `Còn lại ${rentStatus.remainingDays} ngày`}
+                                </span>
+                            </div>
+                        )}
+
                         {/* Top Pricing & Ebook Badge */}
                         <div className="flex items-center justify-between flex-wrap gap-3 mb-5 pb-4 border-b border-paper-border/60 dark:border-night-border/60">
                             <div>
@@ -1687,21 +2125,56 @@ export default function ChiTietSach() {
                             </div>
                         </div>
 
-                        {/* Primary Action Buttons: Đọc Thử & Thêm Vào Giỏ Hàng (Phối màu phân cấp hài hòa) */}
+                        {/* Primary Action Buttons: Đọc Sách / Đọc Thử & Thuê / Gia Hạn */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-4">
-                            
-                            {/* 1. Đọc Thử Miễn Phí (Nút phụ - Tông màu giấy sáng nhã nhặn, viền sắc nét) */}
-                            <button id="btn-read-now" type="button" onClick={handleReadBook} className="w-full bg-paper-surface hover:bg-paper-100 dark:bg-night-surface dark:hover:bg-night-border text-ink dark:text-night-text border-2 border-paper-border dark:border-night-border hover:border-wine/70 dark:hover:border-gold/70 font-outfit font-extrabold py-3.5 px-4 rounded-2xl transition-all shadow-xs hover:shadow-md flex items-center justify-center gap-2 text-sm group cursor-pointer" title="Đọc thử cuốn sách">
-                                <i className="ph-bold ph-book-open text-base text-wine dark:text-gold group-hover:scale-110 transition-transform"></i>
-                                <span className="group-hover:text-wine dark:group-hover:text-gold transition-colors">Đọc Thử {book?.pdf_url ? '(PDF)' : ''}</span>
-                            </button>
+                            {rentStatus.hasAccess ? (
+                                <>
+                                    {/* Nút đọc toàn bộ sách đã mở khóa */}
+                                    <button 
+                                        id="btn-read-now" 
+                                        type="button" 
+                                        onClick={handleReadBook} 
+                                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-outfit font-extrabold py-3.5 px-4 rounded-2xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 text-sm group cursor-pointer" 
+                                        title="Đọc toàn bộ cuốn sách"
+                                    >
+                                        <i className="ph-bold ph-book-open text-base text-emerald-200 group-hover:scale-110 transition-transform"></i>
+                                        <span>ĐỌC SÁCH NGAY (BẢN FULL)</span>
+                                    </button>
 
-                            {/* 2. Thêm Vào Giỏ Hàng (Nút chính - Màu vang đỏ sang trọng, icon vàng kim) */}
-                            <button id="btn-rent-book" type="button" onClick={(event) => { openRentalModal() }} className="w-full bg-wine hover:bg-wine-dark text-white font-outfit font-extrabold py-3.5 px-4 rounded-2xl transition-colors flex items-center justify-center gap-2 text-sm cursor-pointer group" title="Chọn gói thuê hoặc mua sách">
-                                <i className="ph-bold ph-shopping-cart-simple text-base text-amber-300 group-hover:scale-110 transition-transform"></i>
-                                <span>Thêm Vào Giỏ Hàng</span>
-                            </button>
+                                    {/* Trạng thái sở hữu hoặc nút gia hạn */}
+                                    {rentStatus.isForever ? (
+                                        <div className="w-full bg-amber-500/10 dark:bg-gold/15 border-2 border-amber-500/40 dark:border-gold/40 text-amber-700 dark:text-gold font-outfit font-extrabold py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2 text-sm">
+                                            <i className="ph-fill ph-seal-check text-base"></i>
+                                            <span>Đã Sở Hữu Trọn Đời</span>
+                                        </div>
+                                    ) : (
+                                        <button 
+                                            id="btn-rent-book" 
+                                            type="button" 
+                                            onClick={() => openRentalModal()} 
+                                            className="w-full bg-wine hover:bg-wine-dark text-white font-outfit font-extrabold py-3.5 px-4 rounded-2xl transition-colors flex items-center justify-center gap-2 text-sm cursor-pointer group" 
+                                            title="Gia hạn thời hạn thuê cuốn sách"
+                                        >
+                                            <i className="ph-bold ph-calendar-plus text-base text-amber-300 group-hover:scale-110 transition-transform"></i>
+                                            <span>Gia Hạn Thuê Thêm</span>
+                                        </button>
+                                    )}
+                                </>
+                            ) : (
+                                <>
+                                    {/* 1. Đọc Thử Miễn Phí (Nút phụ) */}
+                                    <button id="btn-read-now" type="button" onClick={handleReadBook} className="w-full bg-paper-surface hover:bg-paper-100 dark:bg-night-surface dark:hover:bg-night-border text-ink dark:text-night-text border-2 border-paper-border dark:border-night-border hover:border-wine/70 dark:hover:border-gold/70 font-outfit font-extrabold py-3.5 px-4 rounded-2xl transition-all shadow-xs hover:shadow-md flex items-center justify-center gap-2 text-sm group cursor-pointer" title="Đọc thử cuốn sách">
+                                        <i className="ph-bold ph-book-open text-base text-wine dark:text-gold group-hover:scale-110 transition-transform"></i>
+                                        <span className="group-hover:text-wine dark:group-hover:text-gold transition-colors">Đọc Thử {book?.pdf_url ? '(PDF)' : ''}</span>
+                                    </button>
 
+                                    {/* 2. Thêm Vào Giỏ Hàng (Nút chính) */}
+                                    <button id="btn-rent-book" type="button" onClick={() => { openRentalModal() }} className="w-full bg-wine hover:bg-wine-dark text-white font-outfit font-extrabold py-3.5 px-4 rounded-2xl transition-colors flex items-center justify-center gap-2 text-sm cursor-pointer group" title="Chọn gói thuê hoặc mua sách">
+                                        <i className="ph-bold ph-shopping-cart-simple text-base text-amber-300 group-hover:scale-110 transition-transform"></i>
+                                        <span>Thêm Vào Giỏ Hàng</span>
+                                    </button>
+                                </>
+                            )}
                         </div>
 
                         {/* Micro Feature Assurance List */}
@@ -1821,16 +2294,13 @@ export default function ChiTietSach() {
                 {/* Tab 2: Excerpts */}
                 <div id="tab-excerpts" className="tab-pane hidden space-y-4">
                     <div className="bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border rounded-3xl p-6 sm:p-8 shadow-sm">
-                        <span className="text-xs font-bold text-wine dark:text-gold uppercase tracking-wider mb-2 block">Trích đoạn 1</span>
+                        <span className="text-xs font-bold text-wine dark:text-gold uppercase tracking-wider mb-2 block">Lời tựa & Thông điệp</span>
                         <blockquote className="font-serif italic text-base sm:text-lg text-ink dark:text-night-text leading-relaxed">
-                            "Tôi nhận ra rằng tình yêu không chỉ là sự chiếm hữu hay mong muốn có được người mình yêu bằng mọi giá. Tình yêu đôi khi là nhìn người ấy mỉm cười, dù nụ cười ấy được thắp lên bởi một người khác..."
-                        </blockquote>
-                    </div>
-
-                    <div className="bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border rounded-3xl p-6 sm:p-8 shadow-sm">
-                        <span className="text-xs font-bold text-wine dark:text-gold uppercase tracking-wider mb-2 block">Trích đoạn 2</span>
-                        <blockquote className="font-serif italic text-base sm:text-lg text-ink dark:text-night-text leading-relaxed">
-                            "Mùa hè năm đó, hoa phượng nở đỏ rực cả một góc trời quê. Chúng tôi chạy trên con đê lộng gió mà ngỡ rằng mùa hè sẽ không bao giờ kết thúc, và tuổi trẻ của chúng tôi sẽ mãi vẹn nguyên như thế..."
+                            {book?.description ? (
+                                `"${book.description.length > 240 ? book.description.slice(0, 240) + '...' : book.description}"`
+                            ) : (
+                                `"Mỗi cuốn sách là một hải đăng tri thức, soi sáng tâm hồn và mở ra những chân trời mới cho độc giả."`
+                            )}
                         </blockquote>
                     </div>
                 </div>
@@ -1838,23 +2308,36 @@ export default function ChiTietSach() {
                 {/* Tab 3: Author */}
                 <div id="tab-author" className="tab-pane hidden bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border rounded-3xl p-6 sm:p-8 shadow-sm">
                     <div className="flex flex-col md:flex-row gap-6 items-start">
-                        <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-2xl overflow-hidden shrink-0 border-2 border-paper-border dark:border-night-border shadow-md">
-                            <img src="https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=300&q=80" alt="Nhà văn Nguyễn Nhật Ánh" className="w-full h-full object-cover" />
+                        <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-gradient-to-br from-wine to-[#681921] text-gold dark:text-gold-light flex flex-col items-center justify-center shrink-0 border-2 border-wine/20 dark:border-gold/30 shadow-md">
+                            <i className="ph-duotone ph-feather text-3xl sm:text-4xl mb-1"></i>
+                            <span className="font-serif font-bold text-xs tracking-wider uppercase">
+                                {book?.author ? book.author.split(' ').map(n => n[0]).join('').slice(0, 3) : 'HALM'}
+                            </span>
                         </div>
                         <div className="flex-1">
                             <h3 className="text-xl sm:text-2xl font-serif font-bold text-ink dark:text-night-text mb-2">
-                                Nhà Văn Nguyễn Nhật Ánh
+                                {book?.author || 'Tác giả đang cập nhật'}
                             </h3>
-                            <p className="text-xs sm:text-sm text-wine dark:text-gold font-semibold uppercase tracking-wider mb-3">
-                                Cây bút quen thuộc của bao thế hệ thanh thiếu niên Việt Nam
+                            <p className="text-xs sm:text-sm text-wine dark:text-gold font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                                <i className="ph-bold ph-pen-nib"></i>
+                                <span>{book?.category_name || (typeof book?.category === 'object' ? book.category?.category_name : book?.category) || 'Tác phẩm văn học & tri thức'}</span>
                             </p>
                             <p className="text-sm text-ink/80 dark:text-night-muted leading-relaxed mb-4">
-                                Nguyễn Nhật Ánh sinh năm 1955 tại Quảng Nam. Ông là tác giả của hàng chục bộ truyện dài thiếu nhi và thanh xuân nổi tiếng được tái bản hàng trăm lần như <em>Kính Vạn Hoa</em>, <em>Cho Tôi Xin Một Vé Đi Tuổi Thơ</em>, <em>Mắt Biếc</em>, <em>Cô Gái Đến Từ Hôm Qua</em>, <em>Tôi Thấy Hoa Vàng Trên Cỏ Xanh</em>... Tác phẩm của ông được trao Giải thưởng Văn học ASEAN năm 2010.
+                                {book?.author ? (
+                                    <>
+                                        <strong>{book.author}</strong> là tác giả của tác phẩm <em>"{book.bookName}"</em>. Hiện tại ban biên tập HALM BOOK đang cập nhật hồ sơ chi tiết, tiểu sử và toàn bộ danh mục trước tác của tác giả để bạn đọc tiện tra cứu và tìm hiểu thêm.
+                                    </>
+                                ) : (
+                                    "Thông tin chi tiết về tác giả đang được ban biên tập hoàn thiện và đồng bộ."
+                                )}
                             </p>
-                            <div className="flex flex-wrap gap-2 text-xs font-bold">
-                                <span className="px-3 py-1 rounded-full bg-paper-50 dark:bg-night-surface border border-paper-border dark:border-night-border">40+ Năm Sáng Tác</span>
-                                <span className="px-3 py-1 rounded-full bg-paper-50 dark:bg-night-surface border border-paper-border dark:border-night-border">Giải Thưởng Văn Học ASEAN</span>
-                                <span className="px-3 py-1 rounded-full bg-paper-50 dark:bg-night-surface border border-paper-border dark:border-night-border">5+ Phim Điện Ảnh Chuyển Thể</span>
+                            <div className="flex flex-wrap gap-2 text-xs font-semibold">
+                                <span className="px-3 py-1.5 rounded-full bg-paper-50 dark:bg-night-surface border border-paper-border dark:border-night-border text-ink dark:text-night-text flex items-center gap-1.5">
+                                    <i className="ph-bold ph-book-bookmark text-wine dark:text-gold"></i> Tác phẩm: {book?.bookName || 'Sách'}
+                                </span>
+                                <span className="px-3 py-1.5 rounded-full bg-paper-50 dark:bg-night-surface border border-paper-border dark:border-night-border text-ink dark:text-night-text flex items-center gap-1.5">
+                                    <i className="ph-bold ph-shield-check text-emerald-600 dark:text-emerald-400"></i> Bản quyền phát hành HALM BOOK
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -1893,14 +2376,14 @@ export default function ChiTietSach() {
             </section>
 
             {/* ========================================================
-                 RELATED BOOKS: CÙNG TÁC GIẢ NGUYỄN NHẬT ÁNH
+                 RELATED BOOKS: CÙNG TÁC GIẢ
                  ======================================================== */}
             <section className="mb-16">
                 {/* Section Header with Left/Right Scroll Controls */}
                 <div className="flex items-center justify-between mb-6">
                     <div>
                         <h2 className="text-xl sm:text-2xl font-serif font-bold text-ink dark:text-night-text">
-                            Sách Cùng Tác Giả Nguyễn Nhật Ánh
+                            Sách Cùng Tác Giả {book?.author ? `(${book.author})` : ''}
                         </h2>
                         <p className="text-xs text-ink-muted dark:text-night-muted mt-0.5">
                             Vuốt hoặc bấm nút mũi tên để xem thêm tác phẩm
@@ -2074,16 +2557,16 @@ export default function ChiTietSach() {
 
                     {/* Rating Score Highlight */}
                     <div className="flex items-center gap-3 bg-paper-50 dark:bg-night-surface px-4 py-2.5 rounded-2xl border border-paper-border dark:border-night-border self-start sm:self-auto">
-                        <span className="text-3xl font-outfit font-black text-wine dark:text-gold">4.8</span>
+                        <span id="avgRatingScore" className="text-3xl font-outfit font-black text-wine dark:text-gold">{calculatedAvgRating}</span>
                         <div className="flex flex-col">
                             <div className="flex text-amber-400 text-xs">
-                                <i className="ph-fill ph-star"></i>
-                                <i className="ph-fill ph-star"></i>
-                                <i className="ph-fill ph-star"></i>
-                                <i className="ph-fill ph-star"></i>
-                                <i className="ph-fill ph-star-half"></i>
+                                {[1, 2, 3, 4, 5].map(s => (
+                                    <i key={s} className={Math.round(Number(calculatedAvgRating)) >= s ? "ph-fill ph-star" : "ph-bold ph-star text-gray-300 dark:text-gray-600"}></i>
+                                ))}
                             </div>
-                            <span className="text-[11px] font-bold text-ink-muted dark:text-night-muted">1,245 đánh giá</span>
+                            <span id="totalReviewsCountText" className="text-[11px] font-bold text-ink-muted dark:text-night-muted">
+                                {totalReviewCount === 0 ? "Chưa có đánh giá" : `${totalReviewCount} đánh giá`}
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -2097,24 +2580,64 @@ export default function ChiTietSach() {
                         <div className="flex-1">
                             <div className="flex flex-wrap items-center gap-2 mb-3">
                                 <span className="text-xs font-semibold text-ink-muted dark:text-night-muted uppercase tracking-wider">Đánh giá của bạn:</span>
-                                <div id="ratingStars" className="flex text-amber-400 text-lg gap-1 cursor-pointer">
-                                    <i className="ph-bold ph-star text-gray-300 dark:text-gray-600 hover:text-amber-400 transition" data-index="1"></i>
-                                    <i className="ph-bold ph-star text-gray-300 dark:text-gray-600 hover:text-amber-400 transition" data-index="2"></i>
-                                    <i className="ph-bold ph-star text-gray-300 dark:text-gray-600 hover:text-amber-400 transition" data-index="3"></i>
-                                    <i className="ph-bold ph-star text-gray-300 dark:text-gray-600 hover:text-amber-400 transition" data-index="4"></i>
-                                    <i className="ph-bold ph-star text-gray-300 dark:text-gray-600 hover:text-amber-400 transition" data-index="5"></i>
+                                <div id="ratingStars" className="flex text-amber-400 text-lg gap-1.5 cursor-pointer">
+                                    {[1, 2, 3, 4, 5].map((star) => (
+                                        <i
+                                            key={star}
+                                            onMouseEnter={() => setHoverStar(star)}
+                                            onMouseLeave={() => setHoverStar(0)}
+                                            onClick={() => setSelectedStar(star)}
+                                            className={`transition-colors cursor-pointer ${
+                                                (hoverStar || selectedStar) >= star
+                                                    ? "ph-fill ph-star text-amber-400"
+                                                    : "ph-bold ph-star text-gray-300 dark:text-gray-600 hover:text-amber-400"
+                                            }`}
+                                            title={`${star} sao`}
+                                        ></i>
+                                    ))}
                                 </div>
-                                <span id="ratingFeedback" className="text-xs text-wine dark:text-gold font-bold ml-2">Chọn số sao</span>
+                                <span id="ratingFeedback" className="text-xs text-wine dark:text-gold font-bold ml-2">
+                                    {hoverStar || selectedStar}/5 sao — {STAR_FEEDBACK_TEXTS[(hoverStar || selectedStar) - 1] || "Tuyệt tác!"}
+                                </span>
                             </div>
 
-                            <textarea id="commentInput" rows="3" placeholder="Bạn cảm nhận thế nào về câu chuyện này? Hãy chia sẻ nhé..." className="w-full bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-3.5 rounded-xl text-sm text-ink dark:text-night-text placeholder-ink-muted focus:outline-none focus:border-wine dark:focus:border-gold transition resize-none"></textarea>
+                            <textarea
+                                id="commentInput"
+                                rows="3"
+                                value={commentInput}
+                                disabled={isSubmittingReview}
+                                onChange={(e) => setCommentInput(e.target.value)}
+                                placeholder="Bạn cảm nhận thế nào về câu chuyện này? Hãy chia sẻ nhé..."
+                                className="w-full bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-3.5 rounded-xl text-sm text-ink dark:text-night-text placeholder-ink-muted focus:outline-none focus:border-wine dark:focus:border-gold transition resize-none disabled:opacity-60"
+                            ></textarea>
                             
                             <div className="flex items-center justify-end gap-3 mt-3">
-                                <button onClick={(event) => { document.getElementById('commentInput').value='' }} className="px-4 py-2 text-xs font-semibold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-card rounded-xl transition cursor-pointer">
+                                <button
+                                    type="button"
+                                    disabled={isSubmittingReview}
+                                    onClick={() => { setCommentInput(''); setSelectedStar(5); setHoverStar(0); }}
+                                    className="px-4 py-2 text-xs font-semibold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-card rounded-xl transition cursor-pointer disabled:opacity-50"
+                                >
                                     Hủy
                                 </button>
-                                <button onClick={(event) => { postComment() }} className="bg-wine hover:bg-wine-dark text-white px-6 py-2 text-xs font-bold rounded-xl shadow-md transition cursor-pointer flex items-center gap-1.5">
-                                    <i className="ph-bold ph-paper-plane-tilt"></i> Đăng Bình Luận
+                                <button
+                                    type="button"
+                                    id="btnPostComment"
+                                    disabled={isSubmittingReview || !commentInput.trim()}
+                                    onClick={handlePostReview}
+                                    className="bg-wine hover:bg-wine-dark disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2.5 text-xs font-bold rounded-xl shadow-md transition-all cursor-pointer flex items-center gap-2"
+                                >
+                                    {isSubmittingReview ? (
+                                        <>
+                                            <i className="ph-bold ph-spinner animate-spin text-sm"></i>
+                                            <span>Đang gửi cảm nhận...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <i className="ph-bold ph-paper-plane-tilt"></i>
+                                            <span>Đăng Bình Luận</span>
+                                        </>
+                                    )}
                                 </button>
                             </div>
                         </div>
@@ -2123,129 +2646,145 @@ export default function ChiTietSach() {
 
                 {/* Review Feed List */}
                 <div id="reviewList" className="space-y-4">
-                    
-                    {/* Review Item 1 */}
-                    <div className="p-5 rounded-2xl bg-paper-50 dark:bg-night-surface border border-paper-border dark:border-night-border">
-                        <div className="flex items-start justify-between mb-2">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-wine/10 dark:bg-wine/30 text-wine dark:text-gold font-bold font-serif flex items-center justify-center shrink-0">
-                                    V
-                                </div>
-                                <div>
-                                    <h4 className="font-bold text-sm text-ink dark:text-night-text flex items-center gap-1.5">
-                                        Vũ Thanh Hà
-                                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full font-sans flex items-center gap-1"><i className="ph-bold ph-book-open"></i> Đang thuê đọc</span>
-                                    </h4>
-                                    <span className="text-[11px] text-ink-muted dark:text-night-muted">4 giờ trước</span>
-                                </div>
-                            </div>
-                            <div className="flex text-amber-400 text-xs">
-                                <i className="ph-fill ph-star"></i>
-                                <i className="ph-fill ph-star"></i>
-                                <i className="ph-fill ph-star"></i>
-                                <i className="ph-fill ph-star"></i>
-                                <i className="ph-fill ph-star"></i>
-                            </div>
+                    {isLoadingReviews ? (
+                        <div className="py-10 text-center text-ink-muted dark:text-night-muted">
+                            <i className="ph-bold ph-spinner animate-spin text-2xl mb-2 text-wine dark:text-gold block mx-auto"></i>
+                            <span className="text-xs font-semibold">Đang tải cảm nhận bạn đọc...</span>
                         </div>
-                        <p className="text-sm text-ink/80 dark:text-night-muted leading-relaxed pl-13 mb-3">
-                            "Đọc online rất mượt mà trên iPad. Tác phẩm mang lại chiều sâu cảm xúc thực sự khó quên về tuổi trẻ, những ngã rẽ cuộc đời và đức hy sinh thầm lặng của nhân vật Vinh."
-                        </p>
-                        <div className="flex items-center gap-4 text-xs text-ink-muted dark:text-night-muted pl-0 sm:pl-13">
-                            <button onClick={(event) => { likeComment(event.currentTarget) }} className="flex items-center gap-1 hover:text-wine dark:hover:text-gold transition font-bold cursor-pointer">
-                                <i className="ph-bold ph-thumbs-up"></i> <span>28</span>
-                            </button>
-                            <button onClick={(event) => { toggleReplyBox(event.currentTarget) }} className="flex items-center gap-1 hover:text-wine dark:hover:text-gold transition font-bold cursor-pointer">
-                                <i className="ph-bold ph-chat-teardrop-dots"></i> Phản hồi
-                            </button>
+                    ) : reviews.length === 0 ? (
+                        <div id="emptyReviewNotice" className="text-center py-12 px-4 bg-paper-50/70 dark:bg-night-surface/60 rounded-2xl border border-dashed border-paper-border dark:border-night-border text-ink-muted dark:text-night-muted">
+                            <div className="w-14 h-14 mx-auto mb-3 rounded-full bg-paper-100 dark:bg-night-surface flex items-center justify-center text-wine dark:text-gold shadow-sm">
+                                <i className="ph-duotone ph-chat-centered-text text-2xl"></i>
+                            </div>
+                            <h4 className="text-sm font-bold text-ink dark:text-night-text mb-1">Chưa có cảm nhận nào từ bạn đọc</h4>
+                            <p className="text-xs text-ink-muted dark:text-night-muted max-w-sm mx-auto leading-relaxed">
+                                Hãy là người đầu tiên chia sẻ suy nghĩ và cảm nhận của bạn về cuốn sách này!
+                            </p>
                         </div>
-
-                        {/* Reply Form Container (Ẩn mặc định, nhấn Phản hồi để mở) */}
-                        <div className="reply-box-container hidden mt-3 pl-0 sm:pl-13 pt-3 border-t border-paper-border/60 dark:border-night-border/60 animate-fade-in">
-                            <div className="flex items-start gap-2.5 sm:gap-3 bg-paper-100/70 dark:bg-night-surface/90 p-3 sm:p-3.5 rounded-2xl border border-paper-border/70 dark:border-night-border/70">
-                                <div className="w-8 h-8 rounded-full bg-wine text-white font-bold flex items-center justify-center shrink-0 text-xs shadow-2xs">
-                                    B
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <textarea placeholder="Nhập phản hồi của bạn cho Vũ Thanh Hà..." rows="2" className="reply-input w-full bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-2.5 rounded-xl text-xs sm:text-sm text-ink dark:text-night-text placeholder-ink-muted focus:outline-none focus:border-wine dark:focus:border-gold transition resize-none"></textarea>
-                                    <div className="flex items-center justify-end gap-2 mt-2">
-                                        <button type="button" onClick={(event) => { cancelReply(event.currentTarget) }} className="px-3 py-1.5 text-xs font-semibold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-card rounded-lg transition cursor-pointer">
-                                            Hủy
-                                        </button>
-                                        <button type="button" onClick={(event) => { submitReply(event.currentTarget) }} className="bg-wine hover:bg-wine-dark text-white px-4 py-1.5 text-xs font-bold rounded-lg shadow-sm transition cursor-pointer flex items-center gap-1">
-                                            <i className="ph-bold ph-paper-plane-tilt"></i> Gửi phản hồi
-                                        </button>
+                    ) : (
+                        reviews.map((rev) => (
+                            <div key={rev.evaluateId} className="review-item p-5 rounded-2xl bg-paper-50 dark:bg-night-surface border border-paper-border dark:border-night-border animate-fade-in">
+                                <div className="flex items-start justify-between mb-2">
+                                    <div className="flex items-center gap-3">
+                                        {rev.avatarUrl ? (
+                                            <img src={rev.avatarUrl} alt={rev.customerName} className="w-10 h-10 rounded-full object-cover shrink-0 border border-paper-border" />
+                                        ) : (
+                                            <div className="w-10 h-10 rounded-full bg-wine/10 dark:bg-wine/30 text-wine dark:text-gold font-bold font-serif flex items-center justify-center shrink-0">
+                                                {rev.customerName ? rev.customerName.charAt(0).toUpperCase() : 'Đ'}
+                                            </div>
+                                        )}
+                                        <div>
+                                            <h4 className="font-bold text-sm text-ink dark:text-night-text flex items-center gap-1.5">
+                                                {rev.customerName || "Độc giả HALM"}
+                                                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full font-sans flex items-center gap-1">
+                                                    <i className="ph-bold ph-book-open"></i> Độc giả HALM
+                                                </span>
+                                            </h4>
+                                            <span className="text-[11px] text-ink-muted dark:text-night-muted">{rev.createdAt || "Vừa xong"}</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex text-amber-400 text-xs">
+                                        {[1, 2, 3, 4, 5].map((s) => (
+                                            <i key={s} className={rev.star >= s ? "ph-fill ph-star" : "ph-bold ph-star text-gray-300 dark:text-gray-600"}></i>
+                                        ))}
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-
-                        {/* Nested Replies List */}
-                        <div className="replies-list-container space-y-2 mt-2.5 pl-0 sm:pl-13"></div>
-                    </div>
-
-                    {/* Review Item 2 */}
-                    <div className="p-5 rounded-2xl bg-paper-50 dark:bg-night-surface border border-paper-border dark:border-night-border">
-                        <div className="flex items-start justify-between mb-2">
-                            <div className="flex items-center gap-3">
-                                <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80" alt="Phương Thùy" className="w-10 h-10 rounded-full object-cover shrink-0" />
-                                <div>
-                                    <h4 className="font-bold text-sm text-ink dark:text-night-text flex items-center gap-1.5">
-                                        Phương Thùy
-                                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full font-sans flex items-center gap-1"><i className="ph-bold ph-book-open"></i> Đang thuê đọc</span>
-                                    </h4>
-                                    <span className="text-[11px] text-ink-muted dark:text-night-muted">1 ngày trước</span>
+                                <p className="text-sm text-ink/80 dark:text-night-muted leading-relaxed pl-0 sm:pl-13 mb-3 whitespace-pre-wrap">
+                                    "{rev.content}"
+                                </p>
+                                <div className="flex items-center gap-4 text-xs text-ink-muted dark:text-night-muted pl-0 sm:pl-13">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleLikeReview(rev.evaluateId)}
+                                        className="flex items-center gap-1 hover:text-wine dark:hover:text-gold transition font-bold cursor-pointer"
+                                    >
+                                        <i className="ph-bold ph-thumbs-up"></i> <span>{rev.likesCount || 0}</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setActiveReplyId(activeReplyId === rev.evaluateId ? null : rev.evaluateId);
+                                            setReplyInputText("");
+                                        }}
+                                        className="flex items-center gap-1 hover:text-wine dark:hover:text-gold transition font-bold cursor-pointer"
+                                    >
+                                        <i className="ph-bold ph-chat-teardrop-dots"></i> Phản hồi
+                                    </button>
                                 </div>
-                            </div>
-                            <div className="flex text-amber-400 text-xs">
-                                <i className="ph-fill ph-star"></i>
-                                <i className="ph-fill ph-star"></i>
-                                <i className="ph-fill ph-star"></i>
-                                <i className="ph-fill ph-star"></i>
-                                <i className="ph-fill ph-star"></i>
-                            </div>
-                        </div>
-                        <p className="text-sm text-ink/80 dark:text-night-muted leading-relaxed pl-13 mb-3">
-                            "Giao diện đọc online mượt mà, lật trang 3D cực kỳ thích mắt. Chức năng thuê sách bằng Khoai rất tiết kiệm và tiện lợi để đọc trên điện thoại mọi lúc!"
-                        </p>
-                        <div className="flex items-center gap-4 text-xs text-ink-muted dark:text-night-muted pl-0 sm:pl-13">
-                            <button onClick={(event) => { likeComment(event.currentTarget) }} className="flex items-center gap-1 hover:text-wine dark:hover:text-gold transition font-bold cursor-pointer">
-                                <i className="ph-bold ph-thumbs-up"></i> <span>45</span>
-                            </button>
-                            <button onClick={(event) => { toggleReplyBox(event.currentTarget) }} className="flex items-center gap-1 hover:text-wine dark:hover:text-gold transition font-bold cursor-pointer">
-                                <i className="ph-bold ph-chat-teardrop-dots"></i> Phản hồi
-                            </button>
-                        </div>
 
-                        {/* Reply Form Container (Ẩn mặc định, nhấn Phản hồi để mở) */}
-                        <div className="reply-box-container hidden mt-3 pl-0 sm:pl-13 pt-3 border-t border-paper-border/60 dark:border-night-border/60 animate-fade-in">
-                            <div className="flex items-start gap-2.5 sm:gap-3 bg-paper-100/70 dark:bg-night-surface/90 p-3 sm:p-3.5 rounded-2xl border border-paper-border/70 dark:border-night-border/70">
-                                <div className="w-8 h-8 rounded-full bg-wine text-white font-bold flex items-center justify-center shrink-0 text-xs shadow-2xs">
-                                    B
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <textarea placeholder="Nhập phản hồi của bạn cho Phương Thùy..." rows="2" className="reply-input w-full bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-2.5 rounded-xl text-xs sm:text-sm text-ink dark:text-night-text placeholder-ink-muted focus:outline-none focus:border-wine dark:focus:border-gold transition resize-none"></textarea>
-                                    <div className="flex items-center justify-end gap-2 mt-2">
-                                        <button type="button" onClick={(event) => { cancelReply(event.currentTarget) }} className="px-3 py-1.5 text-xs font-semibold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-card rounded-lg transition cursor-pointer">
-                                            Hủy
-                                        </button>
-                                        <button type="button" onClick={(event) => { submitReply(event.currentTarget) }} className="bg-wine hover:bg-wine-dark text-white px-4 py-1.5 text-xs font-bold rounded-lg shadow-sm transition cursor-pointer flex items-center gap-1">
-                                            <i className="ph-bold ph-paper-plane-tilt"></i> Gửi phản hồi
-                                        </button>
+                                {/* Form phản hồi mở rộng */}
+                                {activeReplyId === rev.evaluateId && (
+                                    <div className="mt-3 pl-0 sm:pl-13 pt-3 border-t border-paper-border/60 dark:border-night-border/60 animate-fade-in">
+                                        <div className="flex items-start gap-2.5 sm:gap-3 bg-paper-100/70 dark:bg-night-surface/90 p-3 sm:p-3.5 rounded-2xl border border-paper-border/70 dark:border-night-border/70">
+                                            <div className="w-8 h-8 rounded-full bg-wine text-white font-bold flex items-center justify-center shrink-0 text-xs shadow-2xs">
+                                                B
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <textarea
+                                                    rows="2"
+                                                    value={replyInputText}
+                                                    disabled={isSubmittingReply}
+                                                    onChange={(e) => setReplyInputText(e.target.value)}
+                                                    placeholder={`Nhập phản hồi của bạn cho ${rev.customerName || "độc giả"}...`}
+                                                    className="w-full bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-2.5 rounded-xl text-xs sm:text-sm text-ink dark:text-night-text placeholder-ink-muted focus:outline-none focus:border-wine dark:focus:border-gold transition resize-none disabled:opacity-60"
+                                                ></textarea>
+                                                <div className="flex items-center justify-end gap-2 mt-2">
+                                                    <button
+                                                        type="button"
+                                                        disabled={isSubmittingReply}
+                                                        onClick={() => { setActiveReplyId(null); setReplyInputText(""); }}
+                                                        className="px-3 py-1.5 text-xs font-semibold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-card rounded-lg transition cursor-pointer"
+                                                    >
+                                                        Hủy
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        disabled={isSubmittingReply || !replyInputText.trim()}
+                                                        onClick={() => handleSubmitReply(rev.evaluateId)}
+                                                        className="bg-wine hover:bg-wine-dark disabled:opacity-50 text-white px-4 py-1.5 text-xs font-bold rounded-lg shadow-sm transition cursor-pointer flex items-center gap-1"
+                                                    >
+                                                        {isSubmittingReply ? (
+                                                            <>
+                                                                <i className="ph-bold ph-spinner animate-spin"></i>
+                                                                <span>Đang gửi...</span>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <i className="ph-bold ph-paper-plane-tilt"></i>
+                                                                <span>Gửi phản hồi</span>
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
+                                )}
+
+                                {/* Danh sách phản hồi con (Replies) */}
+                                {rev.replies && rev.replies.length > 0 && (
+                                    <div className="space-y-2 mt-3 pl-0 sm:pl-13 border-t border-paper-border/40 dark:border-night-border/40 pt-2.5">
+                                        {rev.replies.map((reply) => (
+                                            <div key={reply.evaluateId} className="flex items-start gap-2.5 bg-paper-100/60 dark:bg-night-surface/60 p-3 rounded-xl border border-paper-border/50 dark:border-night-border/50 text-xs">
+                                                <div className="w-7 h-7 rounded-full bg-wine text-white font-bold flex items-center justify-center shrink-0 text-[11px] shadow-2xs">
+                                                    {reply.customerName ? reply.customerName.charAt(0).toUpperCase() : 'B'}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center justify-between mb-0.5">
+                                                        <span className="font-bold text-ink dark:text-night-text">{reply.customerName || "Độc giả"}</span>
+                                                        <span className="text-[10px] text-ink-muted dark:text-night-muted">{reply.createdAt || "Vừa xong"}</span>
+                                                    </div>
+                                                    <p className="text-ink/90 dark:text-night-muted leading-relaxed text-xs">
+                                                        {reply.content}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
-                        </div>
-
-                        {/* Nested Replies List */}
-                        <div className="replies-list-container space-y-2 mt-2.5 pl-0 sm:pl-13"></div>
-                    </div>
-
-                </div>
-
-                <div className="text-center mt-8">
-                    <button onClick={(event) => { showToast('Đã tải thêm 10 bình luận mới!', 'info') }} className="px-6 py-2.5 rounded-xl border border-paper-border dark:border-night-border text-xs font-bold text-ink dark:text-night-text hover:bg-paper-50 dark:hover:bg-night-surface transition shadow-sm">
-                        Xem thêm bình luận khác (1,243)
-                    </button>
+                        ))
+                    )}
                 </div>
             </section>
 
@@ -2322,60 +2861,113 @@ export default function ChiTietSach() {
     </footer>)}
 
     {/* ========================================================
-         FLOATING AI CHATBOT MASCOT BUTTON 
+         FLOATING AI CHATBOT MASCOT BUTTON (TÍCH HỢP TRỰC TIẾP API)
          ======================================================== */}
     <div className="fixed bottom-6 right-6 z-40 flex flex-col items-end">
         
         {/* Chatbot Popup Window */}
-        <div id="chatbotPopup" className="hidden w-80 sm:w-96 bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border rounded-3xl shadow-2xl overflow-hidden mb-3 transition-all duration-300">
-            {/* Header */}
-            <div className="bg-wine dark:bg-wine-dark p-4 text-white flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                    <img src="img/icon-removebg-preview.png" alt="HALM AI" className="w-8 h-8 object-contain" />
-                    <div>
-                        <h4 className="font-outfit font-black text-sm">Trợ Lý Sách HALM AI</h4>
-                        <span className="text-[10px] text-emerald-300 flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Sẵn sàng giải đáp
-                        </span>
+        {isChatbotOpen && (
+            <div id="chatbotPopup" className="w-80 sm:w-96 bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border rounded-3xl shadow-2xl overflow-hidden mb-3 transition-all duration-300 animate-fade-in flex flex-col">
+                {/* Header */}
+                <div className="bg-wine dark:bg-wine-dark p-4 text-white flex items-center justify-between shadow-xs">
+                    <div className="flex items-center gap-2.5">
+                        <img src="img/icon-removebg-preview.png" alt="HALM AI" className="w-8 h-8 object-contain" />
+                        <div>
+                            <h4 className="font-outfit font-black text-sm">Trợ Lý Sách HALM AI</h4>
+                            <span className="text-[10px] text-emerald-300 flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Sẵn sàng giải đáp
+                            </span>
+                        </div>
                     </div>
+                    <button type="button" onClick={() => setIsChatbotOpen(false)} className="text-white/80 hover:text-white text-lg p-1 transition-colors cursor-pointer" title="Đóng chat">
+                        <i className="ph-bold ph-x"></i>
+                    </button>
                 </div>
-                <button onClick={(event) => { toggleChatbot(false) }} className="text-white/80 hover:text-white text-lg">
-                    <i className="ph-bold ph-x"></i>
-                </button>
-            </div>
 
-            {/* Chat messages body */}
-            <div id="chatMessages" className="p-4 h-64 overflow-y-auto space-y-3 text-xs">
-                <div className="flex gap-2 items-start">
-                    <img src="img/icon-removebg-preview.png" className="w-6 h-6 object-contain shrink-0 mt-0.5" />
-                    <div className="p-3 rounded-2xl rounded-tl-sm bg-paper-100 dark:bg-night-surface text-ink dark:text-night-text leading-relaxed">
-                        Chào bạn! Mình là Trợ lý Sách HALM. Bạn muốn tìm hiểu thêm về cốt truyện <em>Ngày Xưa Có Một Chuyện Tình</em> hay nhận gợi ý sách tương tự?
-                    </div>
+                {/* Chat messages body */}
+                <div ref={chatBodyRef} id="chatMessages" className="p-4 h-64 overflow-y-auto space-y-3 text-xs bg-paper-50/50 dark:bg-night-surface/50">
+                    {chatMessages.length === 0 ? (
+                        <div className="text-center py-6 text-ink-muted dark:text-night-muted">
+                            <i className="ph-bold ph-sparkle text-2xl text-wine dark:text-gold mb-1 block"></i>
+                            <p>Xin chào! Mình có thể hỗ trợ gì về cuốn sách này?</p>
+                        </div>
+                    ) : (
+                        chatMessages.map((msg, idx) => (
+                            <div key={idx} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start items-start gap-2'} animate-fade-in`}>
+                                {msg.sender === 'bot' && (
+                                    <img src="img/icon-removebg-preview.png" className="w-6 h-6 object-contain shrink-0 mt-0.5" alt="AI" />
+                                )}
+                                <div className={`p-3 rounded-2xl text-xs leading-relaxed max-w-[85%] whitespace-pre-wrap ${
+                                    msg.sender === 'user'
+                                        ? 'bg-wine text-white rounded-tr-xs shadow-xs'
+                                        : 'bg-paper-100 dark:bg-night-surface text-ink dark:text-night-text rounded-tl-xs border border-paper-border/70 dark:border-night-border/70 shadow-xs'
+                                }`}>
+                                    {msg.text}
+                                </div>
+                            </div>
+                        ))
+                    )}
+                    {isChatbotLoading && (
+                        <div className="flex items-center gap-2 text-ink-muted dark:text-night-muted text-xs animate-fade-in pl-8">
+                            <span className="w-2 h-2 rounded-full bg-wine dark:text-gold animate-bounce"></span>
+                            <span className="w-2 h-2 rounded-full bg-wine dark:text-gold animate-bounce [animation-delay:0.2s]"></span>
+                            <span className="w-2 h-2 rounded-full bg-wine dark:text-gold animate-bounce [animation-delay:0.4s]"></span>
+                            <span className="text-[11px] ml-1">HALM AI đang soạn phản hồi...</span>
+                        </div>
+                    )}
+                </div>
+
+                {/* Quick Suggestion Chips */}
+                <div className="px-3 pb-2 pt-1 flex gap-1.5 overflow-x-auto text-[11px] font-bold bg-paper-surface dark:bg-night-card border-t border-paper-border/40 dark:border-night-border/40" style={{scrollbarWidth: 'none'}}>
+                    <button
+                        type="button"
+                        onClick={() => handleSendChatMessage(`Tóm tắt ý nghĩa và bài học của cuốn sách ${book?.bookName || ''}`)}
+                        className="px-2.5 py-1 rounded-full bg-paper-100 dark:bg-night-surface text-wine dark:text-gold shrink-0 border border-paper-border dark:border-night-border hover:bg-wine/10 dark:hover:bg-gold/15 transition-colors cursor-pointer"
+                    >
+                        💡 Ý nghĩa tác phẩm
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => handleSendChatMessage(`Giới thiệu về phong cách sáng tác của tác giả ${book?.author || ''}`)}
+                        className="px-2.5 py-1 rounded-full bg-paper-100 dark:bg-night-surface text-wine dark:text-gold shrink-0 border border-paper-border dark:border-night-border hover:bg-wine/10 dark:hover:bg-gold/15 transition-colors cursor-pointer"
+                    >
+                        🌿 Về tác giả
+                    </button>
+                </div>
+
+                {/* Input bar */}
+                <div className="p-3 border-t border-paper-border dark:border-night-border flex items-center gap-2 bg-paper-surface dark:bg-night-card">
+                    <input
+                        type="text"
+                        id="chatInput"
+                        value={chatInputText}
+                        disabled={isChatbotLoading}
+                        onChange={(e) => setChatInputText(e.target.value)}
+                        placeholder="Hỏi bất kỳ điều gì..."
+                        className="flex-1 bg-paper-50 dark:bg-night-surface px-3 py-2 rounded-xl text-xs text-ink dark:text-night-text focus:outline-none focus:border-wine dark:focus:border-gold border border-paper-border dark:border-night-border disabled:opacity-60"
+                        onKeyDown={(event) => { if (event.key === 'Enter') handleSendChatMessage(); }}
+                    />
+                    <button
+                        type="button"
+                        disabled={isChatbotLoading || !chatInputText.trim()}
+                        onClick={() => handleSendChatMessage()}
+                        className="p-2 rounded-xl bg-wine hover:bg-wine-dark disabled:opacity-50 text-white text-sm transition-colors cursor-pointer shadow-xs"
+                    >
+                        <i className="ph-bold ph-paper-plane-tilt"></i>
+                    </button>
                 </div>
             </div>
-
-            {/* Quick Suggestion Chips */}
-            <div className="px-3 pb-2 flex gap-1.5 overflow-x-auto text-[11px] font-bold">
-                <button onClick={(event) => { sendQuickPrompt('Tóm tắt ý nghĩa tác phẩm') }} className="px-2.5 py-1 rounded-full bg-paper-100 dark:bg-night-surface text-wine dark:text-gold shrink-0 border border-paper-border dark:border-night-border">
-                    💡 Ý nghĩa tác phẩm
-                </button>
-                <button onClick={(event) => { sendQuickPrompt('So sánh với Mắt Biếc') }} className="px-2.5 py-1 rounded-full bg-paper-100 dark:bg-night-surface text-wine dark:text-gold shrink-0 border border-paper-border dark:border-night-border">
-                    🌿 So với Mắt Biếc
-                </button>
-            </div>
-
-            {/* Input bar */}
-            <div className="p-3 border-t border-paper-border dark:border-night-border flex items-center gap-2">
-                <input type="text" id="chatInput" placeholder="Hỏi bất kỳ điều gì..." className="flex-1 bg-paper-50 dark:bg-night-surface px-3 py-2 rounded-xl text-xs text-ink dark:text-night-text focus:outline-none focus:border-wine dark:focus:border-gold border border-paper-border dark:border-night-border" onKeyDown={(event) => { if(event.key==='Enter') sendChatMessage() }} />
-                <button onClick={(event) => { sendChatMessage() }} className="p-2 rounded-xl bg-wine hover:bg-wine-dark text-white text-sm">
-                    <i className="ph-bold ph-paper-plane-tilt"></i>
-                </button>
-            </div>
-        </div>
+        )}
 
         {/* Floating Mascot Trigger Button */}
-        <button id="chatbotTriggerBtn" onClick={(event) => { toggleChatbot() }} className="w-14 h-14 rounded-full bg-gradient-to-tr from-wine via-wine-light to-amber-600 text-white p-2 flex items-center justify-center shadow-2xl hover:scale-105 active:scale-95 transition-all cursor-pointer group relative">
-            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-400 border-2 border-white rounded-full"></span>
+        <button
+            id="chatbotTriggerBtn"
+            type="button"
+            onClick={() => setIsChatbotOpen(prev => !prev)}
+            className="w-14 h-14 rounded-full bg-gradient-to-tr from-wine via-wine-light to-amber-600 text-white p-2 flex items-center justify-center shadow-2xl hover:scale-105 active:scale-95 transition-all cursor-pointer group relative"
+            title="Mở Trợ lý Sách HALM AI"
+        >
+            <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-400 border-2 border-white dark:border-night-card rounded-full"></span>
             <img src="img/icon-removebg-preview.png" alt="Chatbot" className="w-full h-full object-contain group-hover:rotate-12 transition-transform" />
         </button>
     </div>
@@ -2387,11 +2979,11 @@ export default function ChiTietSach() {
         {/* Modal Header */}
         <div className="flex items-start justify-between pb-4 border-b border-paper-border dark:border-night-border mb-5">
             <div className="flex items-center gap-3">
-                <img src="/logo.png" alt="Bìa sách" className="w-12 h-16 object-cover rounded-xl shadow-md shrink-0 border border-paper-border/60 dark:border-night-border/60" />
+                <img src={book?.img_url || book?.img || '/logo.png'} alt={book?.bookName || "Bìa sách"} className="w-12 h-16 object-cover rounded-xl shadow-md shrink-0 border border-paper-border/60 dark:border-night-border/60" />
                 <div>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-wine dark:text-gold bg-wine/10 dark:bg-gold/15 px-2 py-0.5 rounded-md inline-block mb-1">Thuê Hoặc Mua Ebook</span>
-                    <h3 className="font-outfit font-black text-base text-ink dark:text-night-text leading-tight">Ngày Xưa Có Một Chuyện Tình</h3>
-                    <p className="text-xs text-ink-muted dark:text-night-muted mt-0.5">Nguyễn Nhật Ánh • NXB Trẻ</p>
+                    <h3 className="font-outfit font-black text-base text-ink dark:text-night-text leading-tight">{book?.bookName || 'Chi tiết ấn phẩm'}</h3>
+                    <p className="text-xs text-ink-muted dark:text-night-muted mt-0.5">{book?.author || 'Tác giả đang cập nhật'} • HALM BOOK</p>
                 </div>
             </div>
             <button type="button" onClick={(event) => { closeRentalModal() }} className="w-8 h-8 rounded-full bg-paper-100 dark:bg-night-surface hover:bg-paper-200 dark:hover:bg-night-border text-ink-muted hover:text-ink dark:hover:text-night-text flex items-center justify-center transition-colors cursor-pointer shrink-0" title="Đóng">
@@ -2504,7 +3096,7 @@ export default function ChiTietSach() {
             <div className="flex items-center justify-between text-xs">
                 <span className="text-ink-muted dark:text-night-muted">Số dư Khoai của bạn:</span>
                 <span className="font-outfit font-bold text-ink dark:text-night-text flex items-center gap-1">
-                    <span id="rentalModalUserKhoai">1,250</span> <i className="ph-fill ph-coins text-gold"></i>
+                    <span id="rentalModalUserKhoai">{userKhoai.toLocaleString()}</span> <i className="ph-fill ph-coins text-gold"></i>
                 </span>
             </div>
 
@@ -2545,7 +3137,7 @@ export default function ChiTietSach() {
             <div className="flex items-center justify-between text-xs text-ink-muted dark:text-night-muted">
                 <span>Số dư Khoai của bạn:</span>
                 <span className="font-outfit font-bold text-ink dark:text-night-text flex items-center gap-1">
-                    <span id="cartDrawerUserKhoai">1,250</span> <i className="ph-fill ph-coins text-gold"></i>
+                    <span id="cartDrawerUserKhoai">{userKhoai.toLocaleString()}</span> <i className="ph-fill ph-coins text-gold"></i>
                 </span>
             </div>
             <div className="flex items-center justify-between">

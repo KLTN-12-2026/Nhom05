@@ -17,6 +17,7 @@ import ChiTietSach from '@/components/user/ChiTietSach';
 // User Pages
 import TrangChu from '@/components/user/TrangChu';
 import CaNhan from '@/components/user/CaNhan';
+import NhiemVu from '@/components/user/NhiemVu';
 
 // Admin Pages
 import AdminLayout from '@/components/admin/AdminLayout';
@@ -50,6 +51,10 @@ export default function AppRoutes() {
         <Route path={ROUTES.READ_BOOK_DETAIL} element={<DocSach />} />
         <Route path={ROUTES.CART} element={<GioHang />} />
         <Route path={ROUTES.PAYMENT} element={<ThanhToan />} />
+        <Route path={ROUTES.WALLET} element={<Navigate to="/canhan?tab=wallet" replace />} />
+        <Route path="/wallet" element={<Navigate to="/canhan?tab=wallet" replace />} />
+        <Route path={ROUTES.MISSIONS} element={<NhiemVu />} />
+        <Route path="/nhiemvu" element={<NhiemVu />} />
       </Route>
 
       {/* 3. KHU VỰC ADMIN (Bắt buộc quyền ADMIN) */}

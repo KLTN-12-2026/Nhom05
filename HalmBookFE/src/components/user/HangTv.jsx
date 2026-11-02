@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import UserLayout from './layout/UserLayout';
 import { isDarkMode, applyTheme } from '@/utils/theme';
+import { getMyTierSummary, checkinDailyStreak, getAllTiers } from '@/services/tierService';
+import { getCurrentCustomer } from '@/services/customerService';
+import { getTierInfo } from '@/utils/tierUtils';
 
 const tiersTailwindConfig = {
     darkMode: 'class',
@@ -97,7 +100,10 @@ function handleLogoError(event) {
     image.src = '/logo.png';
 }
 
-function renderTierContent(type) {
+function renderTierContent(type, summary) {
+    const books = summary?.booksReadCount ?? 0;
+    const points = summary?.totalPoints ?? 0;
+
     if (type === 'policy') {
         return <>
             <p>Khác biệt với các nền tảng thông thường yêu cầu tích lũy lại sau mỗi chu kỳ 12 tháng, HALM BOOK cam kết <strong>BẢO LƯU TRỌN ĐỜI</strong> thứ hạng thành viên của bạn:</p>
@@ -109,8 +115,20 @@ function renderTierContent(type) {
         </>;
     }
     if (type === 'tier2') {
+        const remainingBooks = Math.max(0, 10 - books);
+        const remainingPts = Math.max(0, 500 - points);
         return <>
-            <p>Bạn hiện đã đọc <strong>1/10 cuốn sách</strong> (còn 9 cuốn nữa để đạt hạng):</p>
+            <p>Tiến trình thực tế của bạn: <strong>{books}/10 cuốn sách</strong> (hoặc <strong>{points}/500 điểm XP</strong>):</p>
+            {remainingBooks === 0 || remainingPts === 0 ? (
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-bold my-2 text-xs flex items-center gap-1.5">
+                    <i className="ph-bold ph-check-circle text-base"></i>
+                    <span>Bạn đã mở khóa cấp bậc Cao Thủ Cày 🚜</span>
+                </div>
+            ) : (
+                <p className="text-xs text-wine dark:text-gold font-bold my-1">
+                    Chỉ cần cày thêm {remainingBooks} cuốn sách hoặc tích lũy thêm {remainingPts} XP nữa để thăng hạng!
+                </p>
+            )}
             <div className="p-3 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border my-2">
                 <div className="font-bold text-ink dark:text-night-text mb-1">Quyền lợi ngay khi thăng cấp:</div>
                 <ul className="list-disc pl-4 space-y-1 text-xs">
@@ -124,13 +142,18 @@ function renderTierContent(type) {
         </>;
     }
     if (type === 'tier3') {
+        const remainingBooks = Math.max(0, 50 - books);
+        const remainingPts = Math.max(0, 2500 - points);
         return <>
             <p>Hạng Lão Nông là biểu tượng của độc giả kiên trì và thông tuệ trên HALM BOOK:</p>
+            <p className="text-xs text-ink-muted dark:text-night-muted mt-1">
+                Tiến trình hiện tại: <strong>{books}/50 cuốn</strong> hoặc <strong>{points}/2.500 XP</strong> {remainingBooks > 0 && `(Còn ${remainingBooks} cuốn hoặc ${remainingPts} XP)`}.
+            </p>
             <div className="p-3 rounded-xl bg-gold/10 border border-gold/30 my-2">
                 <div className="font-bold text-gold mb-1">Đặc quyền cao cấp mở khóa:</div>
                 <ul className="list-disc pl-4 space-y-1 text-xs text-ink dark:text-night-text">
                     <li>Chiết khấu <strong>10%</strong> toàn bộ dịch vụ và thuê sách trọn đời.</li>
-                    <li><strong>Miễn phí 1 cuốn sách mỗi tháng</strong> (1 trong 5 sách do web cho phép).</li>
+                    <li><strong>Miễn phí 1 cuốn sách mỗi tháng</strong> do ban tuyển chọn cho phép.</li>
                     <li>Khung avatar Tinh Hoa hào quang vàng kim lấp lánh độc quyền.</li>
                     <li>Đọc trước các tác phẩm mới xuất bản trước 7 ngày.</li>
                     <li>Hotline hỗ trợ riêng 24/7.</li>
@@ -139,16 +162,21 @@ function renderTierContent(type) {
         </>;
     }
     if (type === 'tier4') {
+        const remainingBooks = Math.max(0, 150 - books);
+        const remainingPts = Math.max(0, 10000 - points);
         return <>
             <p>Đỉnh cao danh dự dành cho những độc giả xuất sắc nhất:</p>
+            <p className="text-xs text-ink-muted dark:text-night-muted mt-1">
+                Tiến trình hiện tại: <strong>{books}/150 cuốn</strong> hoặc <strong>{points}/10.000 XP</strong> {remainingBooks > 0 && `(Còn ${remainingBooks} cuốn hoặc ${remainingPts} XP)`}.
+            </p>
             <div className="p-3 rounded-xl bg-gradient-to-r from-amber-500/10 to-amber-600/10 border border-amber-500/40 my-2">
                 <div className="font-bold text-amber-500 mb-1">Đặc quyền tối thượng:</div>
                 <ul className="list-disc pl-4 space-y-1 text-xs text-ink dark:text-night-text">
                     <li>Giảm <strong>20%</strong> toàn bộ dịch vụ HALM BOOK trọn đời.</li>
                     <li>Tặng <strong>hộp quà ấn bản sách bìa cứng mạ vàng độc quyền</strong> tận nhà hàng năm.</li>
+                    <li>Miễn cọc sách trọn đời và mượn không giới hạn.</li>
                     <li>Đọc trước các tác phẩm mới xuất bản trước 14 ngày.</li>
                     <li>Chuyên viên chăm sóc khách hàng VIP riêng biệt (1-on-1).</li>
-                    <li>Khung 3D Hoàng Gia Ánh Kim lấp lánh biểu tượng vương giả.</li>
                 </ul>
             </div>
         </>;
@@ -174,6 +202,8 @@ function getBotReply(userInput) {
 }
 
 
+const getCleanTierName = (tier) => getTierInfo(tier).name;
+
 export default function Tiers() {
     const [isDark, setIsDark] = useState(() => isDarkMode());
     const [stars, setStars] = useState([]);
@@ -194,6 +224,60 @@ export default function Tiers() {
     const starsInitialized = useRef(false);
     const toastTimer = useRef(null);
     const pendingTimers = useRef(new Set());
+
+    // Dữ liệu thực tế từ API Hạng Thành Viên & Điểm Cày
+    const [customer, setCustomer] = useState(null);
+    const [tierSummary, setTierSummary] = useState(null);
+    const [allTiersList, setAllTiersList] = useState([]);
+    const [isLoadingTier, setIsLoadingTier] = useState(true);
+    const [isCheckingIn, setIsCheckingIn] = useState(false);
+
+    const loadTierSummary = async () => {
+        try {
+            setIsLoadingTier(true);
+            const [summary, tiers, cust] = await Promise.all([
+                getMyTierSummary().catch(() => null),
+                getAllTiers().catch(() => []),
+                getCurrentCustomer().catch(() => null)
+            ]);
+            if (summary) setTierSummary(summary);
+            if (Array.isArray(tiers) && tiers.length > 0) setAllTiersList(tiers);
+            if (cust) setCustomer(cust);
+        } catch (error) {
+            console.error("Lỗi khi tải dữ liệu hạng thành viên:", error);
+        } finally {
+            setIsLoadingTier(false);
+        }
+    };
+
+    const handleDailyCheckin = async () => {
+        setIsCheckingIn(true);
+        try {
+            const res = await checkinDailyStreak();
+            if (res.success) {
+                showToast("Điểm Danh Thành Công!", res.message);
+                loadTierSummary();
+                window.dispatchEvent(new CustomEvent('halm-potato-updated', {
+                    detail: { potatoBalance: res.potatoBalance }
+                }));
+            } else {
+                showToast("Điểm Danh Đọc Sách", res.message);
+            }
+        } catch (err) {
+            showToast("Lỗi Điểm Danh", err?.response?.data?.message || err?.message || "Không thể điểm danh.");
+        } finally {
+            setIsCheckingIn(false);
+        }
+    };
+
+    useEffect(() => {
+        loadTierSummary();
+        const handlePotatoUpdated = () => {
+            loadTierSummary();
+        };
+        window.addEventListener('halm-potato-updated', handlePotatoUpdated);
+        return () => window.removeEventListener('halm-potato-updated', handlePotatoUpdated);
+    }, []);
 
     useEffect(() => {
         applyTheme(isDark);
@@ -306,6 +390,15 @@ export default function Tiers() {
     const handleSearchSubmit = (event) => {
         event.preventDefault(); showToast("Tìm kiếm", "Đang tra cứu quyền lợi hạng thành viên...");
     };
+
+    const customerNameDisplay = customer?.customerName || tierSummary?.customerName || 'Độc Giả HALM';
+    const customerIdDisplay = customer?.customerId 
+        ? `id#C${String(customer.customerId).replace(/^C/i, '').padStart(5, '0')}`
+        : (customer?.customer_id 
+            ? `id#C${String(customer.customer_id).replace(/^C/i, '').padStart(5, '0')}`
+            : (tierSummary?.formattedMemberCode || 'id#C00007'));
+    const avatarSrc = customer?.avatar || customer?.avatarUrl || tierSummary?.avatarUrl;
+    const potatoBalanceDisplay = customer?.potatoBalance ?? tierSummary?.potatoBalance ?? 0;
 
     return (
         <>
@@ -690,8 +783,12 @@ export default function Tiers() {
                                 <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-36 h-36 bg-wine/10 dark:bg-gold/10 rounded-full blur-2xl pointer-events-none"></div>
 
                                 <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-wine to-wine-light dark:from-gold dark:to-gold-light p-1 shadow-md mb-3.5 relative">
-                                    <div className="w-full h-full rounded-full bg-paper-surface dark:bg-night-surface flex items-center justify-center font-display font-black text-2xl text-wine dark:text-gold">
-                                        A
+                                    <div className="w-full h-full rounded-full bg-paper-surface dark:bg-night-surface flex items-center justify-center font-display font-black text-2xl text-wine dark:text-gold overflow-hidden">
+                                        {avatarSrc ? (
+                                            <img src={avatarSrc} alt="Avatar" className="w-full h-full object-cover rounded-full" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/logo.png'; }} />
+                                        ) : (
+                                            <span>{customerNameDisplay.charAt(0).toUpperCase()}</span>
+                                        )}
                                     </div>
                                     <span className="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-emerald-500 border-2 border-white dark:border-night-card flex items-center justify-center text-[10px] text-white" title="Trực tuyến">
                                         <i className="ph-bold ph-check text-[9px]"></i>
@@ -699,96 +796,111 @@ export default function Tiers() {
                                 </div>
 
                                 <h2 className="font-display font-black text-lg text-ink dark:text-night-text leading-tight">
-                                    Alex Nguyễn
+                                    {customerNameDisplay}
                                 </h2>
                                 <p className="font-metadata-spec text-xs text-ink-muted dark:text-night-muted mt-0.5">
-                                    @alex.ng99
+                                    {customerIdDisplay}
                                 </p>
 
                                 <div className="mt-3.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25 text-xs font-metadata-spec font-bold" title="Hạng hiện tại">
                                     <i className="ph-bold ph-plant text-emerald-600 dark:text-emerald-400"></i>
-                                    <span>THỢ CÀY 🌱</span>
+                                    <span>{getCleanTierName(tierSummary?.currentTier).toUpperCase()}</span>
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-2 w-full pt-4 mt-4 border-t border-paper-border dark:border-night-border text-center">
                                     <Link to="/canhan?tab=wallet" className="p-2.5 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-gold transition-colors">
-                                        <span className="block font-metadata-spec text-base font-black text-ink dark:text-night-text">350</span>
+                                        <span className="block font-metadata-spec text-base font-black text-ink dark:text-night-text">{potatoBalanceDisplay.toLocaleString()}</span>
                                         <span className="font-metadata-spec text-[10px] text-ink-muted dark:text-night-muted">Khoai Tích Lũy</span>
                                     </Link>
-                                    <div className="p-2.5 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border">
-                                        <span className="block font-metadata-spec text-base font-black text-ink dark:text-night-text">1 / 10</span>
-                                        <span className="font-metadata-spec text-[10px] text-ink-muted dark:text-night-muted">Sách Thăng Hạng</span>
-                                    </div>
+                                    <Link to="/tusachcn" className="p-2.5 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-wine dark:hover:border-gold transition-colors">
+                                        <span className="block font-metadata-spec text-base font-black text-ink dark:text-night-text">
+                                            {tierSummary?.booksReadCount ?? 0}
+                                        </span>
+                                        <span className="font-metadata-spec text-[10px] text-ink-muted dark:text-night-muted">Sách Trong Tủ</span>
+                                    </Link>
                                 </div>
                             </div>
 
-                            {/* 2. Navigation Menu Card - STRICT ORDER (1: Profile, 2: Bookshelf, 3: Tiers, 4: Wallet, 5: History, Divider, 6: Logout) */}
+                            {/* 2. Navigation Menu Card - STRICT ORDER */}
                             <div className="rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-3 shadow-sm space-y-1">
                                 {/* 1. Thông Tin Cá Nhân */}
                                 <Link
                                     to="/canhan"
-                                    className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface hover:text-ink dark:hover:text-night-text transition-colors"
+                                    className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface hover:text-ink dark:hover:text-night-text transition-colors"
                                 >
-                                    <i className="ph-bold ph-user text-base text-ink-muted dark:text-night-muted"></i>
+                                    <i className="ph-bold ph-user text-base"></i>
                                     <span>Thông Tin Cá Nhân</span>
                                 </Link>
 
                                 {/* 2. Tủ Sách Cá Nhân */}
                                 <Link
                                     to="/tusachcn"
-                                    className="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface hover:text-ink dark:hover:text-night-text transition-colors"
+                                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface hover:text-ink dark:hover:text-night-text transition-colors"
                                 >
                                     <div className="flex items-center gap-3">
-                                        <i className="ph-bold ph-book-bookmark text-base text-ink-muted dark:text-night-muted"></i>
+                                        <i className="ph-bold ph-book-bookmark text-base"></i>
                                         <span>Tủ Sách Cá Nhân</span>
                                     </div>
-                                    <span className="potato-badge text-[11px] py-0 px-2">12 cuốn</span>
+                                    <span className="potato-badge text-[11px] py-0 px-2">{tierSummary?.booksReadCount ?? 0} cuốn</span>
                                 </Link>
 
                                 {/* 3. Hạng Thành Viên (ACTIVE) */}
-                                <Link
-                                    to="/hang"
-                                    className="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold bg-wine text-white dark:bg-gold dark:text-night-bg shadow-sm transition-colors"
+                                <div
+                                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold bg-wine text-white dark:bg-gold dark:text-night-bg shadow-sm transition-colors cursor-default"
                                 >
                                     <div className="flex items-center gap-3">
                                         <i className="ph-bold ph-trophy text-base"></i>
                                         <span>Hạng Thành Viên</span>
                                     </div>
-                                    <span className="text-[10px] uppercase font-black tracking-wider px-2 py-0.5 rounded-full bg-white/20 dark:bg-black/20">Active</span>
+                                    <span className="potato-badge text-[11px] py-0.5 px-2 inline-flex items-center gap-1.5 whitespace-nowrap font-bold bg-white/20 text-white dark:bg-black/20 dark:text-night-bg border-white/30">
+                                        <i className="ph-bold ph-shield text-[12px] shrink-0"></i>
+                                        <span>{getCleanTierName(tierSummary?.currentTier)}</span>
+                                    </span>
+                                </div>
+
+                                {/* 3.5. Nhiệm Vụ Hằng Ngày */}
+                                <Link
+                                    to="/nhiemvu"
+                                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface hover:text-ink dark:hover:text-night-text transition-colors"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <i className="ph-bold ph-target text-base text-amber-500"></i>
+                                        <span>Nhiệm Vụ Hằng Ngày</span>
+                                    </div>
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold">Streak 🔥</span>
                                 </Link>
 
                                 {/* 4. Ví Khoai Tây */}
                                 <Link
                                     to="/canhan?tab=wallet"
-                                    className="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface hover:text-ink dark:hover:text-night-text transition-colors"
+                                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface hover:text-ink dark:hover:text-night-text transition-colors"
                                 >
                                     <div className="flex items-center gap-3">
-                                        <i className="ph-bold ph-wallet text-base text-ink-muted dark:text-night-muted"></i>
+                                        <i className="ph-bold ph-wallet text-base"></i>
                                         <span>Ví Khoai Tây</span>
                                     </div>
-                                    <span className="potato-badge text-[11px] py-0 px-2">350 🥔</span>
+                                    <span className="potato-badge text-[11px] py-0 px-2">{potatoBalanceDisplay.toLocaleString()} 🥔</span>
                                 </Link>
 
                                 {/* 5. Lịch Sử Giao Dịch */}
                                 <Link
                                     to="/canhan?tab=history"
-                                    className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface hover:text-ink dark:hover:text-night-text transition-colors"
+                                    className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface hover:text-ink dark:hover:text-night-text transition-colors"
                                 >
-                                    <i className="ph-bold ph-clock-counter-clockwise text-base text-ink-muted dark:text-night-muted"></i>
+                                    <i className="ph-bold ph-clock-counter-clockwise text-base"></i>
                                     <span>Lịch Sử Giao Dịch</span>
                                 </Link>
 
-                                {/* Divider Line */}
-                                <div className="pt-2 border-t border-paper-border dark:border-night-border mt-2">
-                                    {/* 6. Đăng Xuất */}
-                                    <Link
-                                        to="/dangnhap"
-                                        className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors"
-                                    >
-                                        <i className="ph-bold ph-sign-out text-base"></i>
-                                        <span>Đăng Xuất</span>
-                                    </Link>
-                                </div>
+                                <div className="my-1.5 border-t border-paper-border dark:border-night-border"></div>
+
+                                {/* 6. Đăng Xuất */}
+                                <Link
+                                    to="/dangnhap"
+                                    className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors"
+                                >
+                                    <i className="ph-bold ph-sign-out text-base"></i>
+                                    <span>Đăng Xuất</span>
+                                </Link>
                             </div>
 
                         </aside>
@@ -817,6 +929,20 @@ export default function Tiers() {
 
 
                                 <div className="shrink-0 flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        disabled={isCheckingIn || tierSummary?.hasCheckedInToday}
+                                        onClick={handleDailyCheckin}
+                                        className={`px-3.5 py-2 rounded-xl text-xs font-metadata-spec font-bold transition-all flex items-center gap-1.5 shadow-sm ${
+                                            tierSummary?.hasCheckedInToday
+                                                ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30'
+                                                : 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white shadow-amber-500/20'
+                                        }`}
+                                    >
+                                        <i className={`ph-fill ${tierSummary?.hasCheckedInToday ? 'ph-check-circle' : 'ph-fire'} text-sm`}></i>
+                                        <span>{tierSummary?.hasCheckedInToday ? `Đã Điểm Danh (${tierSummary?.streakDays || 1} Ngày 🔥)` : 'Điểm Danh Nhận +5 Khoai & +20 XP 🔥'}</span>
+                                    </button>
+
                                     <button type="button" onClick={() => openTierModal("policy")} className="px-3.5 py-2 rounded-xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border text-xs font-metadata-spec font-bold text-ink dark:text-night-text hover:border-wine dark:hover:border-gold transition-colors flex items-center gap-1.5 shadow-sm">
                                         <i className="ph-bold ph-info text-wine dark:text-gold"></i>
                                         <span>Chính Sách Bảo Lưu Vĩnh Viễn</span>
@@ -863,9 +989,9 @@ export default function Tiers() {
                                             </div>
                                             <div className="flex items-baseline gap-3">
                                                 <h3 className="font-display font-black text-2xl sm:text-3xl tracking-tight text-white flex items-center gap-2">
-                                                    THỢ CÀY <span className="text-xl">🌱</span>
+                                                    {getCleanTierName(tierSummary?.currentTier).toUpperCase()}
                                                 </h3>
-                                                <span className="font-metadata-spec text-xs font-bold text-slate-400">TIER I</span>
+                                                <span className="font-metadata-spec text-xs font-bold text-slate-400">TIER {tierSummary?.currentTier?.tierId || 'I'}</span>
                                             </div>
                                         </div>
 
@@ -873,11 +999,11 @@ export default function Tiers() {
                                         <div className="flex items-end justify-between relative z-10 pt-3 border-t border-white/15">
                                             <div>
                                                 <span className="font-metadata-spec text-[9px] uppercase tracking-wider text-slate-400 block font-semibold">Chủ thẻ thành viên</span>
-                                                <span className="font-display font-black text-sm tracking-wide text-white uppercase">Alex Nguyễn</span>
+                                                <span className="font-display font-black text-sm tracking-wide text-white uppercase">{tierSummary?.customerName || 'Độc Giả HALM'}</span>
                                             </div>
                                             <div className="text-right">
                                                 <span className="font-metadata-spec text-[9px] uppercase tracking-wider text-slate-400 block font-semibold">Mã thành viên</span>
-                                                <span className="font-metadata-spec text-xs font-mono font-bold text-amber-300 tracking-wider">HALM-9924-VN</span>
+                                                <span className="font-metadata-spec text-xs font-mono font-bold text-amber-300 tracking-wider">{tierSummary?.formattedMemberCode || 'HALM-VIP-VN'}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -891,12 +1017,12 @@ export default function Tiers() {
                                             <div>
                                                 <span className="font-metadata-spec text-xs font-bold uppercase tracking-wider text-ink-muted dark:text-night-muted">Hành trình thăng hạng</span>
                                                 <h3 className="font-display font-black text-xl text-ink dark:text-night-text mt-0.5 flex items-center gap-2">
-                                                    Mục tiêu kế tiếp: <span className="text-wine dark:text-gold">Cao Thủ Cày 🚜</span>
+                                                    Mục tiêu kế tiếp: <span className="text-wine dark:text-gold">{tierSummary?.isMaxTier ? 'Cấp Bậc Tối Thượng' : getCleanTierName(tierSummary?.nextTier)}</span>
                                                 </h3>
                                             </div>
                                             <span className="potato-badge text-xs font-bold">
                                                 <i className="ph-bold ph-shield-check text-emerald-600 dark:text-emerald-400"></i>
-                                                <span>Hạng Vĩnh Viễn</span>
+                                                <span>Bảo Lưu Vĩnh Viễn</span>
                                             </span>
                                         </div>
 
@@ -905,20 +1031,22 @@ export default function Tiers() {
                                             <div className="flex items-center justify-between text-xs font-metadata-spec font-bold">
                                                 <span className="text-ink dark:text-night-text flex items-center gap-1.5">
                                                     <i className="ph-bold ph-book-open text-wine dark:text-gold"></i>
-                                                    Tiến trình đọc: <strong>1 / 10 Cuốn sách</strong>
+                                                    Tiến trình đọc: <strong>{tierSummary?.booksReadCount ?? 0} / {tierSummary?.booksRequiredForNext ?? 10} Cuốn sách ({tierSummary?.totalPoints ?? 0} XP)</strong>
                                                 </span>
-                                                <span className="text-wine dark:text-gold font-extrabold text-sm">10% Hoàn Thành</span>
+                                                <span className="text-wine dark:text-gold font-extrabold text-sm">{tierSummary?.overallProgressPercent ?? 0}% Hoàn Thành</span>
                                             </div>
 
 
                                             <div className="w-full h-4 rounded-full bg-paper-200 dark:bg-night-border p-0.5 overflow-hidden shadow-inner">
-                                                <div className="h-full rounded-full bg-gradient-to-r from-wine to-wine-light dark:from-gold dark:to-gold-light progress-striped transition-all duration-700" style={{ width: '10%' }}></div>
+                                                <div className="h-full rounded-full bg-gradient-to-r from-wine to-wine-light dark:from-gold dark:to-gold-light progress-striped transition-all duration-700" style={{ width: `${Math.max(5, tierSummary?.overallProgressPercent ?? 0)}%` }}></div>
                                             </div>
 
                                             <div className="flex items-center justify-between text-[11px] font-metadata-spec text-ink-muted dark:text-night-muted pt-1">
-                                                <span>🌱 Thợ Cày (0 sách)</span>
-                                                <span className="font-bold text-wine dark:text-gold">Chỉ còn 9 cuốn sách nữa</span>
-                                                <span>🚜 Cao Thủ Cày (10 sách)</span>
+                                                <span>{getCleanTierName(tierSummary?.currentTier)}</span>
+                                                <span className="font-bold text-wine dark:text-gold">
+                                                    {tierSummary?.isMaxTier ? 'Đạt đỉnh cao danh dự!' : `Chỉ còn ${tierSummary?.booksRemainingForNext ?? 0} cuốn sách (hoặc ${tierSummary?.pointsRemainingForNext ?? 0} XP)`}
+                                                </span>
+                                                <span>{tierSummary?.isMaxTier ? 'Đại Điền Chủ' : getCleanTierName(tierSummary?.nextTier)}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -927,19 +1055,19 @@ export default function Tiers() {
                                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-5 mt-5 border-t border-paper-border dark:border-night-border">
                                         <div className="p-3 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border text-center">
                                             <span className="font-metadata-spec text-[10px] font-bold uppercase text-ink-muted dark:text-night-muted block">Sách đã cày</span>
-                                            <span className="font-display font-black text-lg text-ink dark:text-night-text mt-0.5 block">1 <span className="text-xs font-normal text-ink-muted dark:text-night-muted">cuốn</span></span>
+                                            <span className="font-display font-black text-lg text-ink dark:text-night-text mt-0.5 block">{tierSummary?.booksReadCount ?? 0} <span className="text-xs font-normal text-ink-muted dark:text-night-muted">cuốn</span></span>
                                         </div>
                                         <div className="p-3 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border text-center">
                                             <span className="font-metadata-spec text-[10px] font-bold uppercase text-ink-muted dark:text-night-muted block">Điểm cày (XP)</span>
-                                            <span className="font-display font-black text-lg text-ink dark:text-night-text mt-0.5 block">120 <span className="text-xs font-normal text-gold">XP</span></span>
+                                            <span className="font-display font-black text-lg text-ink dark:text-night-text mt-0.5 block">{tierSummary?.totalPoints ?? 0} <span className="text-xs font-normal text-gold">XP</span></span>
                                         </div>
                                         <div className="p-3 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border text-center">
                                             <span className="font-metadata-spec text-[10px] font-bold uppercase text-ink-muted dark:text-night-muted block">Chuỗi đọc</span>
-                                            <span className="font-display font-black text-lg text-amber-500 mt-0.5 block flex items-center justify-center gap-0.5">5 <i className="ph-fill ph-fire text-base"></i></span>
+                                            <span className="font-display font-black text-lg text-amber-500 mt-0.5 block flex items-center justify-center gap-0.5">{tierSummary?.streakDays ?? 0} <i className="ph-fill ph-fire text-base"></i></span>
                                         </div>
                                         <div className="p-3 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border text-center">
                                             <span className="font-metadata-spec text-[10px] font-bold uppercase text-ink-muted dark:text-night-muted block">Chiết khấu</span>
-                                            <span className="font-display font-black text-lg text-emerald-600 dark:text-emerald-400 mt-0.5 block">Cơ bản</span>
+                                            <span className="font-display font-black text-lg text-emerald-600 dark:text-emerald-400 mt-0.5 block">{(tierSummary?.discountPercent ?? 0) > 0 ? `Giảm ${tierSummary.discountPercent}%` : 'Cơ bản (0%)'}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -1325,7 +1453,7 @@ export default function Tiers() {
 
 
                             <div className="space-y-4">
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                     <div>
                                         <h3 className="font-display font-black text-lg text-ink dark:text-night-text flex items-center gap-2">
                                             <i className="ph-bold ph-lightning text-amber-500"></i>
@@ -1335,9 +1463,14 @@ export default function Tiers() {
                                             Hoàn thành các thử thách hàng ngày và nhiệm vụ độc giả để tích lũy XP thăng hạng thần tốc.
                                         </p>
                                     </div>
-                                    <span className="potato-badge text-xs font-bold">
-                                        Cập nhật mỗi 24 giờ
-                                    </span>
+                                    <Link
+                                        to="/nhiemvu"
+                                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-wine hover:bg-wine-dark text-white dark:bg-gold dark:hover:bg-gold-light dark:text-night-bg text-xs font-metadata-spec font-bold transition-all shadow-sm shrink-0"
+                                    >
+                                        <i className="ph-bold ph-target text-sm"></i>
+                                        <span>Trung Tâm Nhiệm Vụ & Streak</span>
+                                        <i className="ph-bold ph-caret-right text-xs"></i>
+                                    </Link>
                                 </div>
 
 
@@ -1615,7 +1748,7 @@ export default function Tiers() {
                             </div>
                         </div>
 
-                        <div className="font-editorial-body text-xs text-ink/80 dark:text-night-muted leading-relaxed space-y-3 py-2" id="modal-content">{renderTierContent(activeTier)}</div>
+                        <div className="font-editorial-body text-xs text-ink/80 dark:text-night-muted leading-relaxed space-y-3 py-2" id="modal-content">{renderTierContent(activeTier, tierSummary)}</div>
 
                         <div className="mt-6 pt-4 border-t border-paper-border dark:border-night-border flex items-center justify-end gap-3 font-metadata-spec text-xs">
                             <button type="button" onClick={closeTierModal} className="px-4 py-2 rounded-xl bg-paper-200 dark:bg-night-surface text-ink dark:text-night-text hover:bg-paper-border font-bold transition-colors">

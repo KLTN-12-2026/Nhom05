@@ -3096,6 +3096,14 @@ const PAGE_SCRIPTS = ["https://unpkg.com/@phosphor-icons/web", "https://cdnjs.cl
 
 export default function Test() {
   useEffect(() => {
+    document.getElementById("book-hover-popup")?.remove();
+
+    return () => {
+      document.getElementById("book-hover-popup")?.remove();
+    };
+  }, []);
+
+  useEffect(() => {
     const timer = setTimeout(() => {
       if (typeof window.initBroadcastCarousel === "function") {
         window.initBroadcastCarousel();

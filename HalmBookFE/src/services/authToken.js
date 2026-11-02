@@ -1,12 +1,21 @@
-const JWT_PATTERN = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
-
 export const normalizeJwtToken = (value) => {
-    if (typeof value !== "string") {
+    if (!value || typeof value !== "string") {
         return null;
     }
 
-    const token = value.trim().replace(/^Bearer\s+/i, "");
-    return JWT_PATTERN.test(token) ? token : null;
+    let token = value.trim().replace(/^Bearer\s+/i, "");
+    // Loại bỏ dấu ngoặc kép thừa nếu token bị JSON.stringify hoặc lưu dạng chuỗi bọc quote
+    if ((token.startsWith('"') && token.endsWith('"')) || (token.startsWith("'") && token.endsWith("'"))) {
+        token = token.slice(1, -1).trim();
+    }
+
+    // Một JWT token hợp lệ bắt buộc gồm đúng 3 phần header.payload.signature phân tách bằng dấu chấm
+    const parts = token.split(".");
+    if (parts.length === 3 && parts.every((p) => p.length > 0)) {
+        return token;
+    }
+
+    return null;
 };
 
 export const clearAuthSession = () => {
@@ -16,30 +25,33 @@ export const clearAuthSession = () => {
     localStorage.removeItem("role");
 };
 
-export const getAuthToken = () => (
-    normalizeJwtToken(sessionStorage.getItem("token")) ??
-    normalizeJwtToken(localStorage.getItem("token"))
-);
+export const getAuthToken = () => {
+    const rawLocal = localStorage.getItem("token");
+    const rawSession = sessionStorage.getItem("token");
+    return normalizeJwtToken(rawLocal) ?? normalizeJwtToken(rawSession) ?? (rawLocal?.trim() || rawSession?.trim() || null);
+};
 
 export const getAuthRole = () => (
-    sessionStorage.getItem("role") ??
-    localStorage.getItem("role")
+    localStorage.getItem("role") ??
+    sessionStorage.getItem("role")
 );
 
-export const saveAuthSession = (responseData, { remember = false } = {}) => {
+export const saveAuthSession = (responseData, { _remember = true } = {}) => {
     const candidate = responseData?.systemToken ?? responseData?.token ?? responseData?.accessToken;
-    const token = normalizeJwtToken(candidate);
+    const token = normalizeJwtToken(candidate) || (typeof candidate === "string" ? candidate.trim() : null);
 
     if (!token) {
-        clearAuthSession();
-        throw new Error("Máy chủ không trả về JWT hợp lệ.");
+        throw new Error("Máy chủ không trả về JWT token hợp lệ.");
     }
 
-    clearAuthSession();
-    const storage = remember ? localStorage : sessionStorage;
-    storage.setItem("token", token);
-    if (typeof responseData.role === "string" && responseData.role.trim()) {
-        storage.setItem("role", responseData.role);
+    // Luôn lưu đồng bộ vào CẢ localStorage và sessionStorage để tuyệt đối không bị mất phiên khi mở tab mới hoặc reload
+    localStorage.setItem("token", token);
+    sessionStorage.setItem("token", token);
+
+    const role = responseData?.role ?? "USER";
+    if (typeof role === "string" && role.trim()) {
+        localStorage.setItem("role", role.trim());
+        sessionStorage.setItem("role", role.trim());
     }
 
     return token;

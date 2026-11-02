@@ -76,14 +76,10 @@ public class ChatService {
         try {
             return chatClient.prompt()
                     .system("""
-                            .system(""\"
-                           Bạn là HALM.AI.
-                           Sử dụng tiếng Việt, giọng điệu nghiêm túc, ngắn gọn và tập trung vào câu hỏi.
-                           Tuyệt đối không sử dụng định dạng Markdown (như các dấu *, **, #).
-                           Chỉ trình bày bằng văn bản trơn (plain text).
-                           Sử dụng ký tự xuống dòng để phân chia các ý rõ ràng.
-                           "\"")
-                           """)
+                            Bạn là HALM.AI - trợ lý ảo thông minh của nền tảng đọc sách HALM BOOK.
+                            Sử dụng tiếng Việt, giọng điệu thân thiện, ngắn gọn và tập trung vào câu hỏi của độc giả.
+                            Chỉ sử dụng ký tự xuống dòng để phân chia các ý rõ ràng.
+                            """)
                     .user(chatRequest.message())
                     .advisors(
                             MessageChatMemoryAdvisor.builder(chatMemory)

@@ -2,7 +2,6 @@ package com.example.demochatbot.controller;
 
 import com.example.demochatbot.dto.ChatRequest;
 import com.example.demochatbot.service.ai.ChatService;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -13,6 +12,10 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Controller xử lý hội thoại với Trợ lý AI (HALM.AI)
+ * Hỗ trợ cả người dùng đăng nhập lẫn khách vãng lai
+ */
 @RestController
 @RequestMapping("/api")
 public class ChatController {
@@ -30,13 +33,16 @@ public class ChatController {
         System.out.println("Đã truy cập vào chat!");
         System.out.println(chatRequest);
 
-        if (authentication == null
-                || !authentication.isAuthenticated()
-                || authentication.getName() == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        if (chatRequest == null || chatRequest.message() == null || chatRequest.message().trim().isEmpty()) {
+            Map<String, String> err = new HashMap<>();
+            err.put("reply", "Vui lòng nhập nội dung câu hỏi!");
+            return ResponseEntity.badRequest().body(err);
         }
 
-        String accountId = authentication.getName();
+        // Hỗ trợ cả người dùng đã đăng nhập lẫn độc giả vãng lai (guest)
+        String accountId = (authentication != null && authentication.isAuthenticated() && authentication.getName() != null && !authentication.getName().equals("anonymousUser"))
+                ? authentication.getName()
+                : "guest_session";
 
         String aiResponse = chatService.chat(chatRequest, accountId);
 

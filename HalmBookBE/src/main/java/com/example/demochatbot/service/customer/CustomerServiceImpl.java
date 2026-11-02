@@ -4,13 +4,13 @@ import com.example.demochatbot.model.Account;
 import com.example.demochatbot.model.Customer;
 import com.example.demochatbot.repository.AccountRepository;
 import com.example.demochatbot.repository.CustomerRepository;
+import com.example.demochatbot.service.account.CustomUserDetails;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.example.demochatbot.service.account.CustomUserDetails;
 
 @Service
 public class CustomerServiceImpl implements CustomerService {
@@ -102,15 +102,37 @@ public class CustomerServiceImpl implements CustomerService {
     public boolean changePassword(int accountId, String oldPassword, String newPassword) {
         Account account = accountRepository.findById(accountId).orElse(null);
         if (account == null) {
-            return false;
+            throw new RuntimeException("Không tìm thấy tài khoản người dùng!");
         }
-        if (passwordEncoder != null) {
-            if (!passwordEncoder.matches(oldPassword, account.getPassword())) {
-                return false;
+
+        boolean matches = false;
+        if (account.getPassword() != null) {
+            if (passwordEncoder != null && passwordEncoder.matches(oldPassword, account.getPassword())) {
+                matches = true;
+            } else if (account.getPassword().equals(oldPassword)) {
+                matches = true;
             }
-            account.setPassword(passwordEncoder.encode(newPassword));
+        }
+
+        if (!matches) {
+            throw new RuntimeException("Mật khẩu hiện tại không chính xác!");
+        }
+
+        if (newPassword == null || newPassword.trim().length() < 6) {
+            throw new RuntimeException("Mật khẩu mới phải có ít nhất 6 ký tự!");
+        }
+
+        String trimmedNewPassword = newPassword.trim();
+        if ((passwordEncoder != null && account.getPassword() != null
+                && passwordEncoder.matches(trimmedNewPassword, account.getPassword()))
+                || (account.getPassword() != null && account.getPassword().equals(trimmedNewPassword))) {
+            throw new RuntimeException("Mật khẩu mới không được trùng với mật khẩu hiện tại!");
+        }
+
+        if (passwordEncoder != null) {
+            account.setPassword(passwordEncoder.encode(trimmedNewPassword));
         } else {
-            account.setPassword(newPassword);
+            account.setPassword(trimmedNewPassword);
         }
         accountRepository.save(account);
         return true;
