@@ -34,7 +34,8 @@
         }
       ],
       "expo-router",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-asset"
     ],
     "experiments": {
       "reactCompiler": false

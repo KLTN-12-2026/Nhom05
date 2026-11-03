@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
+import axios, { AxiosRequestConfig } from 'axios';
+import Constants from 'expo-constants';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { ComponentRef, useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -26,9 +27,6 @@ import MembershipModal, {
   TierDto,
 } from './MembershipModal';
 
-<<<<<<< Updated upstream
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://172.31.99.157:8082';
-=======
 const resolvePrimaryApiUrl = (): string => {
   if (process.env.EXPO_PUBLIC_API_URL) {
     return process.env.EXPO_PUBLIC_API_URL.replace(/\/+$/, '');
@@ -250,7 +248,6 @@ const TRANSLATIONS = {
     msgPwdChanged: 'Password changed successfully!',
   },
 };
->>>>>>> Stashed changes
 
 const formatDateForDisplay = (dateVal: any): string => {
   if (!dateVal) return '';
@@ -414,11 +411,11 @@ export default function Toi() {
         console.warn('Lỗi khi gọi /api/home/customer/info:', err.message);
       }
 
-<<<<<<< Updated upstream
       // 2. Lấy thông tin tài khoản (username) từ /api/auth/me
       let currentUsername = '';
       try {
-        const meRes = await axios.get(`${API_BASE_URL}/api/auth/me`, {
+        const meRes = await apiRequestWithFallback('/api/auth/me', {
+          method: 'GET',
           headers,
           timeout: 8000,
         });
@@ -427,7 +424,8 @@ export default function Toi() {
         }
       } catch (err: any) {
         console.warn('Lỗi khi gọi /api/auth/me:', err.message);
-=======
+      }
+
       // 3. [GIẢI THÍCH CODE]: Lấy thông tin Hạng thành viên & Điểm cày XP từ Backend (/api/home/membership/my-tier)
       let tierSummaryData: CustomerTierSummaryDto | null = null;
       try {
@@ -464,7 +462,6 @@ export default function Toi() {
         }
       } catch (err: any) {
         console.warn('Lỗi khi tải danh sách /api/home/membership/tiers:', err.message);
->>>>>>> Stashed changes
       }
 
       if (customerData) {
@@ -952,13 +949,6 @@ export default function Toi() {
           </View>
         </View>
 
-<<<<<<< Updated upstream
-        {/* Hạng thành viên */}
-        <TouchableOpacity style={themeStyles.tierCard}>
-          <View style={themeStyles.tierInfo}>
-            <Ionicons name="medal" size={24} color="#f1c40f" />
-            <Text style={themeStyles.tierTitle}>Hạng: {userInfo.tierName}</Text>
-=======
         {/* [GIẢI THÍCH CODE]: Thanh Hạng Thành Viên Tương Tác - Chạm vào để xem chi tiết lộ trình & đặc quyền */}
         <TouchableOpacity
           style={themeStyles.tierCardEnhanced}
@@ -1011,15 +1001,9 @@ export default function Toi() {
               <Text style={themeStyles.tierCardFooterText}>Bảo lưu vĩnh viễn</Text>
             </View>
             <Text style={themeStyles.tierCardActionHint}>Xem quyền lợi & Lộ trình ❯</Text>
->>>>>>> Stashed changes
           </View>
         </TouchableOpacity>
 
-<<<<<<< Updated upstream
-        {/* Danh sách các Menu chức năng */}
-        <View style={themeStyles.menuSection}>
-          <TouchableOpacity style={themeStyles.menuItem} onPress={() => setShowHelp(true)}>
-=======
         {/* [GIẢI THÍCH CODE]: Thanh Điểm Danh Nhanh Ngay Tại Trang Cá Nhân */}
         <View style={themeStyles.quickCheckinBar}>
           <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
@@ -1066,13 +1050,12 @@ export default function Toi() {
 
           <TouchableOpacity
             style={themeStyles.menuItem}
-            onPress={() => navigate('transactions')}
+            onPress={() => setShowHelp(true)}
           >
->>>>>>> Stashed changes
             <View style={[themeStyles.menuIconBox, { backgroundColor: '#e8f4fd' }]}>
               <Ionicons name="help-buoy" size={20} color="#3498db" />
             </View>
-            <Text style={themeStyles.menuItemText}>Trung tâm trợ giúp</Text>
+            <Text style={themeStyles.menuItemText}>{t.menuHelp}</Text>
             <Ionicons name="chevron-forward" size={20} color="#ccc" />
           </TouchableOpacity>
 
@@ -1562,8 +1545,6 @@ export default function Toi() {
         </View>
       </Modal>
 
-<<<<<<< Updated upstream
-=======
       {/* 5. [GIẢI THÍCH CODE]: Modal Hạng Thành Viên & Đặc Quyền Độc Giả */}
       <MembershipModal
         visible={showTierModal}
@@ -1574,7 +1555,6 @@ export default function Toi() {
         onCheckinStreak={handleDailyCheckin}
         lang={lang}
       />
->>>>>>> Stashed changes
     </View>
   );
 }
@@ -1945,5 +1925,4 @@ const styles = StyleSheet.create({
   softInputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f1f4f8', borderRadius: 14, marginBottom: 15, paddingHorizontal: 15, height: 55, borderWidth: 1, borderColor: '#e1e8f0' },
   softPasswordInput: { flex: 1, paddingVertical: 15, fontSize: 15, color: '#1a1a1a', fontWeight: '500' }
 });
-
 

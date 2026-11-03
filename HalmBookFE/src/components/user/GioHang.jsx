@@ -71,7 +71,7 @@ export default function CartEnd() {
         loadScript('phosphor-icons-cdn', 'https://unpkg.com/@phosphor-icons/web');
 
         // --- 1. CART STATE MANAGEMENT ---
-        let userWalletBalance = 1250;
+        let userWalletBalance = 0; // Lấy số dư Khoai thực tế từ tài khoản đăng nhập
         let appliedCouponDiscount = 5; // Default coupon discount active
         let appliedCouponName = 'HALM2026';
         let giftTargetThreshold = 30; // Khoai threshold to receive Golden Bookmark
@@ -198,17 +198,43 @@ export default function CartEnd() {
             recalculateCart();
         }
 
-        function updateItemDuration(itemId, valueString) {
-            // valueString format: "days|price"
-            const [days, price] = valueString.split('|').map(Number);
+        async function updateItemDuration(itemId, valueString) {
+            // valueString format: "days|price|planKey"
+            const parts = valueString.split('|');
+            const days = Number(parts[0]);
+            const price = Number(parts[1]);
+            const planKey = parts[2] || (days >= 9999 ? 'forever' : String(days));
             const item = cartItems.find(i => i.id === itemId);
             if (item) {
                 item.days = days;
                 item.price = price;
+                item.planKey = planKey;
                 const priceEl = document.getElementById(`price-${itemId}`);
                 if (priceEl) priceEl.textContent = price;
+                const cardEl = document.querySelector(`[data-item-id="${itemId}"]`);
+                if (cardEl) {
+                    cardEl.dataset.price = price;
+                    cardEl.dataset.duration = days;
+                }
                 recalculateCart();
-                showToast('Thời hạn thuê', `Đã cập nhật ${item.title}: ${days} ngày (${price} Khoai).`);
+
+                // Đồng bộ lựa chọn số ngày thuê lên server
+                const targetBookId = item.bookId || (String(itemId).startsWith('rec-') ? String(itemId).replace('rec-', '') : String(itemId));
+                if (targetBookId) {
+                    try {
+                        await axiosInstance.post('/api/home/cart/add', {
+                            bookId: targetBookId,
+                            planKey: planKey,
+                            price: price
+                        });
+                        window.dispatchEvent(new Event('halm-cart-updated'));
+                    } catch (e) {
+                        console.warn('Lỗi đồng bộ gói thuê lên server:', e);
+                    }
+                }
+
+                const durationLabel = planKey === 'forever' ? 'Mua đứt (Trọn đời)' : `${days} ngày`;
+                showToast('Thời hạn thuê', `Đã cập nhật ${item.title}: ${durationLabel} (${price} Khoai).`);
             }
         }
 
@@ -352,7 +378,7 @@ export default function CartEnd() {
         }
 
         // --- 6. ADD RECOMMENDED BOOK TO CART ---
-        function addRecommendedBook(recId, title, author, cover, price, category, rentalDays = 7, planKey = '7') {
+        function addRecommendedBook(recId, title, author, cover, price, category, rentalDays = 7, planKey = '7', originalBookId = null) {
             // Check if already in cart
             const existing = cartItems.find(i => i.title === title);
             if (existing) {
@@ -362,8 +388,10 @@ export default function CartEnd() {
 
             const serverCartItemId = typeof recId === 'number' || (!isNaN(Number(recId)) && !String(recId).startsWith('rec-') && !String(recId).startsWith('book-rec-')) ? Number(recId) : null;
             const newId = recId ? String(recId) : `book-rec-${Date.now()}`;
+            const targetBookId = originalBookId || (String(recId).startsWith('rec-') ? String(recId).replace('rec-', '') : String(recId));
             const newItem = {
                 id: newId,
+                bookId: targetBookId,
                 cartItemId: serverCartItemId,
                 title: title,
                 author: author,
@@ -424,11 +452,12 @@ export default function CartEnd() {
                                     </span>
                                     <div class="relative">
                                         <select onchange="updateItemDuration('${newId}', this.value)" class="appearance-none pl-3 pr-8 py-1.5 rounded-lg text-xs font-metadata font-bold bg-paper-200/80 dark:bg-night-surface border border-paper-border dark:border-night-border text-ink dark:text-night-text focus:outline-none focus:border-wine dark:focus:border-gold cursor-pointer transition-colors shadow-sm">
-                                            <option value="1|${Math.round(price * 0.4)}" ${rentalDays === 1 ? 'selected' : ''} class="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">1 ngày (${Math.round(price * 0.4)} Khoai)</option>
-                                            <option value="3|${Math.round(price * 0.7)}" ${rentalDays === 3 ? 'selected' : ''} class="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">3 ngày (${Math.round(price * 0.7)} Khoai)</option>
-                                            <option value="7|${price}" ${rentalDays === 7 ? 'selected' : ''} class="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">7 ngày (${price} Khoai - Tiêu chuẩn)</option>
-                                            <option value="15|${Math.round(price * 1.8)}" class="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">15 ngày (${Math.round(price * 1.8)} Khoai)</option>
-                                            <option value="30|${Math.round(price * 2.8)}" class="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">30 ngày (${Math.round(price * 2.8)} Khoai)</option>
+                                            <option value="1|2|1" ${(rentalDays === 1 || String(planKey) === '1') ? 'selected' : ''} class="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">1 ngày (2 Khoai)</option>
+                                            <option value="3|5|3" ${(rentalDays === 3 || String(planKey) === '3') ? 'selected' : ''} class="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">3 ngày (5 Khoai)</option>
+                                            <option value="7|9|7" {((rentalDays === 7 || String(planKey) === '7') && rentalDays < 9999 && String(planKey) !== 'forever') ? 'selected' : ''} class="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">7 ngày (9 Khoai - Tiêu chuẩn)</option>
+                                            <option value="15|18|15" ${(rentalDays === 15 || String(planKey) === '15') ? 'selected' : ''} class="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">15 ngày (18 Khoai)</option>
+                                            <option value="30|30|30" ${(rentalDays === 30 || String(planKey) === '30') ? 'selected' : ''} class="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">30 ngày (30 Khoai)</option>
+                                            <option value="99999|39|forever" ${(rentalDays >= 9999 || String(planKey) === 'forever') ? 'selected' : ''} class="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">Mua đứt (39 Khoai - Trọn đời)</option>
                                         </select>
                                         <i class="ph-bold ph-caret-down text-xs text-ink-muted dark:text-night-muted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
                                     </div>
@@ -509,7 +538,7 @@ export default function CartEnd() {
             showToast('Đã hủy ưu đãi', 'Đã gỡ bỏ mã giảm giá.');
         }
 
-        // --- 8. CHECKOUT PROCESS ---
+        // --- 8. CHECKOUT PROCESS (THANH TOÁN THUÊ SÁCH BẰNG KHOAI TÂY THỰC TẾ) ---
         async function handleCheckoutProcess() {
             const selectedItems = cartItems.filter(i => i.selected);
             if (selectedItems.length === 0) {
@@ -522,56 +551,86 @@ export default function CartEnd() {
             const total = Math.max(0, subtotal - discount);
 
             if (userWalletBalance < total) {
-                showToast('Số dư không đủ', 'Số dư ví Khoai không đủ để thực hiện thanh toán.');
+                showToast('Số dư không đủ', `Số dư Ví Khoai không đủ (${userWalletBalance.toLocaleString()} < ${total.toLocaleString()} Khoai). Vui lòng nạp thêm Khoai!`);
                 return;
             }
 
-            // Deduct from balance
-            userWalletBalance -= total;
+            const checkoutBtn = document.getElementById('btn-checkout');
+            if (checkoutBtn) {
+                checkoutBtn.disabled = true;
+                checkoutBtn.innerText = 'Đang xử lý thanh toán...';
+            }
 
-            for (const item of selectedItems) {
-                if (item.cartItemId) {
-                    try {
-                        await axiosInstance.delete(`/api/home/cart/items/${item.cartItemId}`);
-                    } catch (err) {
-                        console.error('Lỗi khi xóa cart item sau khi thuê:', err);
-                    }
+            try {
+                // Đóng gói danh sách sách gửi lên backend API
+                const checkoutItems = selectedItems.map(item => ({
+                    bookId: item.bookId || item.id,
+                    cartItemId: item.cartItemId,
+                    planKey: String(item.planKey || '7'),
+                    durationDays: item.days || 7,
+                    price: item.price
+                }));
+
+                const response = await axiosInstance.post('/api/home/checkout', {
+                    items: checkoutItems,
+                    paymentMethod: 'POTATO_WALLET',
+                    couponCode: appliedCouponName || null,
+                    discountAmount: discount
+                });
+
+                const result = response.data;
+                userWalletBalance = result.remainingPotatoBalance;
+
+                // Cập nhật DOM biên lai
+                const paidEl = document.getElementById('checkout-receipt-paid');
+                if (paidEl) paidEl.textContent = `${result.totalKhoaiPaid} Khoai`;
+
+                const txCodeEl = document.getElementById('checkout-tx-code');
+                if (txCodeEl) txCodeEl.textContent = result.transactionNo;
+
+                const finalBalanceEl = document.getElementById('checkout-final-balance');
+                if (finalBalanceEl) finalBalanceEl.textContent = `${userWalletBalance.toLocaleString()} Khoai`;
+
+                // Cập nhật số dư trên thanh header và thẻ số dư
+                const navKhoaiEl = document.getElementById('user-khoai-nav');
+                if (navKhoaiEl) navKhoaiEl.textContent = userWalletBalance.toLocaleString();
+                const walletCardEl = document.getElementById('wallet-balance-display');
+                if (walletCardEl) walletCardEl.textContent = userWalletBalance.toLocaleString();
+
+                // Mở Modal Thành Công
+                const modal = document.getElementById('checkout-modal');
+                const dialog = document.getElementById('checkout-modal-dialog');
+                if (modal && dialog) {
+                    modal.classList.remove('opacity-0', 'pointer-events-none');
+                    dialog.classList.remove('scale-95');
+                    dialog.classList.add('scale-100');
+                }
+
+                // Xóa các cuốn sách đã thuê khỏi mảng giỏ hàng
+                cartItems = cartItems.filter(i => !i.selected);
+                document.querySelectorAll('.cart-item-card').forEach(card => {
+                    const targetId = card.getAttribute('data-item-id');
+                    const stillExists = cartItems.some(i => i.id === targetId);
+                    if (!stillExists) card.remove();
+                });
+
+                recalculateCart();
+                window.dispatchEvent(new CustomEvent('halm-cart-updated'));
+                window.dispatchEvent(new CustomEvent('halm-potato-updated', {
+                    detail: { potatoBalance: userWalletBalance }
+                }));
+                window.dispatchEvent(new CustomEvent('halm-bookshelf-updated'));
+
+                showToast('Thành công', 'Đã thuê sách thành công! Sách đã được chuyển vào Tủ Sách Cá Nhân.');
+            } catch (err) {
+                const errMsg = err?.response?.data?.message || err.message || 'Lỗi khi thực hiện thanh toán.';
+                showToast('Thất bại', errMsg);
+            } finally {
+                if (checkoutBtn) {
+                    checkoutBtn.disabled = false;
+                    checkoutBtn.innerText = 'Xác Nhận Thuê Sách Ngay';
                 }
             }
-            window.dispatchEvent(new Event('halm-cart-updated'));
-
-            // Generate Random Transaction ID
-            const txId = 'HLM-' + Math.floor(100000 + Math.random() * 900000);
-
-            // Update modal DOM
-            const paidEl = document.getElementById('checkout-receipt-paid');
-            if (paidEl) paidEl.textContent = `${total} Khoai`;
-
-            const txCodeEl = document.getElementById('checkout-tx-code');
-            if (txCodeEl) txCodeEl.textContent = txId;
-
-            const finalBalanceEl = document.getElementById('checkout-final-balance');
-            if (finalBalanceEl) finalBalanceEl.textContent = `${userWalletBalance.toLocaleString()} Khoai`;
-
-            // Open Checkout Modal
-            const modal = document.getElementById('checkout-modal');
-            const dialog = document.getElementById('checkout-modal-dialog');
-            if (modal && dialog) {
-                modal.classList.remove('opacity-0', 'pointer-events-none');
-                dialog.classList.remove('scale-95');
-                dialog.classList.add('scale-100');
-            }
-
-            // Remove selected items from cart
-            cartItems = cartItems.filter(i => !i.selected);
-            document.querySelectorAll('.cart-item-card').forEach(card => {
-                const targetId = card.getAttribute('data-item-id');
-                const stillExists = cartItems.some(i => i.id === targetId);
-                if (!stillExists) card.remove();
-            });
-
-            recalculateCart();
-            showToast('Thành công', 'Đã thuê sách thành công. Vui lòng kiểm tra Tủ Sách Cá Nhân.');
         }
 
         function closeCheckoutModal() {
@@ -931,8 +990,14 @@ export default function CartEnd() {
         async function fetchUserInfo() {
             try {
                 const res = await axiosInstance.get('/api/home/customer/info');
-                if (res.data && (res.data.khoai !== undefined || res.data.walletBalance !== undefined)) {
-                    userWalletBalance = Number(res.data.khoai ?? res.data.walletBalance) || 0;
+                if (res.data) {
+                    userWalletBalance = Number(res.data.potatoBalance ?? res.data.khoai ?? res.data.walletBalance ?? 0);
+                    const navEl = document.getElementById('user-khoai-nav');
+                    if (navEl) navEl.textContent = userWalletBalance.toLocaleString();
+                    const drawerEl = document.getElementById('drawer-potato-balance');
+                    if (drawerEl) drawerEl.textContent = userWalletBalance.toLocaleString();
+                    const walletEl = document.getElementById('wallet-balance-display');
+                    if (walletEl) walletEl.textContent = userWalletBalance.toLocaleString();
                     recalculateCart();
                 }
             } catch (err) {
@@ -957,7 +1022,8 @@ export default function CartEnd() {
                         item.selectedPrice ?? item.rentPrice ?? item.price ?? 0,
                         item.category || 'Sách',
                         item.rentalDays ?? (item.planKey === 'forever' ? 99999 : Number(item.planKey) || 7),
-                        item.planKey || '7'
+                        item.planKey || '7',
+                        item.bookId
                     );
                 });
                 recalculateCart();
@@ -1099,9 +1165,9 @@ export default function CartEnd() {
                             {/* Utilities: Potato Balance, Cart, Account, Theme Toggle, Mobile Menu */}
                             <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                                 {/* User Potato Balance */}
-                                <a href="profile.html" className="hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border shadow-sm text-xs font-metadata font-bold text-ink dark:text-night-text hover:border-gold transition-colors" title="Số dư Khoai thưởng của bạn">
+                                <a href="/canhan?tab=wallet" className="hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border shadow-sm text-xs font-metadata font-bold text-ink dark:text-night-text hover:border-gold transition-colors" title="Số dư Khoai thưởng của bạn - Bấm để vào Ví Khoai">
                                     <span className="w-2 h-2 rounded-full bg-gold animate-pulse"></span>
-                                    <span id="user-khoai-nav">1,250</span>
+                                    <span id="user-khoai-nav">0</span>
                                     <span className="text-gold font-extrabold flex items-center gap-0.5">Khoai <i className="ph-fill ph-coins text-[11px]"></i></span>
                                 </a>
                 
@@ -1133,7 +1199,7 @@ export default function CartEnd() {
                         <div id="mobile-drawer" className="hidden lg:hidden px-6 py-5 bg-paper-surface dark:bg-night-surface border-b border-paper-border dark:border-night-border space-y-3">
                             <div className="flex items-center justify-between pb-3 border-b border-paper-border dark:border-night-border">
                                 <span className="text-xs font-metadata text-ink-muted dark:text-night-muted">Số dư khoai:</span>
-                                <span className="text-xs font-metadata font-bold text-gold flex items-center gap-1">1,250 Khoai <i className="ph-fill ph-coins"></i></span>
+                                <a href="/canhan?tab=wallet" id="drawer-potato-balance" className="text-xs font-metadata font-bold text-gold flex items-center gap-1">0 Khoai <i className="ph-fill ph-coins"></i></a>
                             </div>
                             <nav className="flex flex-col gap-2 font-bold text-xs uppercase tracking-wider">
                                 <a href="testhome/tc.html" className="py-1.5 text-ink dark:text-night-text hover:text-wine">Trang Chủ</a>
@@ -1203,7 +1269,7 @@ export default function CartEnd() {
                                         <div>
                                             <div className="text-[10px] font-metadata uppercase tracking-wider font-bold text-ink-muted dark:text-night-muted">Số dư ví Khoai</div>
                                             <div className="font-metadata font-bold text-xs text-ink dark:text-night-text flex items-center gap-1">
-                                                <span id="wallet-balance-display">1,250</span> Khoai
+                                                <span id="wallet-balance-display">0</span> Khoai
                                                 <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">(Khả dụng)</span>
                                             </div>
                                         </div>
@@ -1944,7 +2010,7 @@ export default function CartEnd() {
                             </div>
                 
                             <div className="flex items-center gap-3 pt-2">
-                                <a href="my-books.html" className="flex-1 py-3 px-4 rounded-xl bg-wine hover:bg-wine-light text-white dark:bg-gold dark:hover:bg-gold-light dark:text-night-bg font-metadata font-bold text-xs uppercase tracking-wider shadow-md transition-all">
+                                <a href="/tusachcn" className="flex-1 py-3 px-4 rounded-xl bg-wine hover:bg-wine-light text-white dark:bg-gold dark:hover:bg-gold-light dark:text-night-bg font-metadata font-bold text-xs uppercase tracking-wider shadow-md transition-all text-center">
                                     Đến Tủ Sách Đọc Ngay
                                 </a>
                                 <button type="button" onClick={() => { window.closeCheckoutModal() }} className="py-3 px-4 rounded-xl border border-paper-border dark:border-night-border text-xs font-metadata font-bold text-ink-muted hover:text-ink dark:hover:text-white transition-colors">

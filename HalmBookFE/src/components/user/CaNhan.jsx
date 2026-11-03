@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useSearchParams, useNavigate } from 'react-router-dom';
 import UserLayout from './layout/UserLayout';
-import { useNavigate } from 'react-router-dom';
 import * as customerService from '@/services/customerService';
+import { getPotatoPackages, getPotatoTransactions, topupPotato, transferPotato } from '@/services/potatoService';
+import { getCustomerBookshelf } from '@/services/orderService';
+import StreakDiemDanh from './StreakDiemDanh';
 import { isDarkMode, applyTheme } from '@/utils/theme';
+import { getTierInfo } from '@/utils/tierUtils';
 
 const profileTailwindConfig = {
     darkMode: 'class',
@@ -73,6 +76,15 @@ function getBotReply(userInput) {
     return 'Tôi có thể hỗ trợ bạn cập nhật thông tin cá nhân, kiểm tra số dư Khoai hoặc hướng dẫn nâng hạng hội viên!';
 }
 
+const DEFAULT_PACKAGES = [
+    { packageId: 1, packageName: 'Gói Trải Nghiệm', priceVnd: 50000, potatoAmount: 50, bonusPotato: 0, bonusRate: 0, isHot: false, tag: 'Cơ Bản' },
+    { packageId: 2, packageName: 'Gói Tiêu Chuẩn', priceVnd: 200000, potatoAmount: 200, bonusPotato: 20, bonusRate: 10, isHot: true, tag: 'Đề Xuất 🔥' },
+    { packageId: 3, packageName: 'Gói Thân Thiết', priceVnd: 500000, potatoAmount: 500, bonusPotato: 75, bonusRate: 15, isHot: false, tag: '+15% Thưởng' },
+    { packageId: 4, packageName: 'Gói Đặc Quyền VIP', priceVnd: 1000000, potatoAmount: 1000, bonusPotato: 250, bonusRate: 25, isHot: false, tag: '+25% Thưởng VIP' },
+];
+
+
+
 export default function Profile() {
     const [searchParams, setSearchParams] = useSearchParams();
     const location = useLocation();
@@ -87,9 +99,107 @@ export default function Profile() {
     const [isEditing, setIsEditing] = useState(false);
     const [toast, setToast] = useState({ show: false, title: '', message: '' });
 
+    // State phục vụ Ví Khoai Tây & Lịch Sử Giao Dịch
+    const [packages, setPackages] = useState(DEFAULT_PACKAGES);
+    const [transactions, setTransactions] = useState([]);
+    const [rentedCount, setRentedCount] = useState(0);
+    const [isRechargeModalOpen, setIsRechargeModalOpen] = useState(false);
+    const [selectedPkg, setSelectedPkg] = useState(null);
+    const [isSubmittingTopup, setIsSubmittingTopup] = useState(false);
+    const [paymentMethod, setPaymentMethod] = useState('vietqr');
+    const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+    const [transferForm, setTransferForm] = useState({ receiver: '', amount: 10, note: '' });
+    const [isSubmittingTransfer, setIsSubmittingTransfer] = useState(false);
+    const [historyFilter, setHistoryFilter] = useState('all');
+    const [dailyCheckinDone, setDailyCheckinDone] = useState(false);
+
+    // State phục vụ Đổi Mật Khẩu (Popup 2 bước + Mắt hiển thị mật khẩu)
+    const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+    const [passwordStep, setPasswordStep] = useState(1);
+    const [passwordForm, setPasswordForm] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
+    const [showOldPassword, setShowOldPassword] = useState(false);
+    const [showNewPassword, setShowNewPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    const [passwordError, setPasswordError] = useState('');
+    const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
+
+    const openPasswordModal = () => {
+        setPasswordForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
+        setPasswordStep(1);
+        setPasswordError('');
+        setShowOldPassword(false);
+        setShowNewPassword(false);
+        setShowConfirmPassword(false);
+        setIsPasswordModalOpen(true);
+    };
+
+    const closePasswordModal = () => {
+        setIsPasswordModalOpen(false);
+        setPasswordError('');
+    };
+
+    const handleNextPasswordStep = (e) => {
+        if (e && e.preventDefault) e.preventDefault();
+        if (!passwordForm.oldPassword.trim()) {
+            setPasswordError('Vui lòng nhập mật khẩu hiện tại của bạn!');
+            return;
+        }
+        setPasswordError('');
+        setPasswordStep(2);
+    };
+
+    const handleSubmitChangePassword = async (e) => {
+        if (e && e.preventDefault) e.preventDefault();
+        setPasswordError('');
+
+        if (!passwordForm.newPassword) {
+            setPasswordError('Vui lòng nhập mật khẩu mới!');
+            return;
+        }
+        if (passwordForm.newPassword.length < 6) {
+            setPasswordError('Mật khẩu mới phải có độ dài từ 6 ký tự trở lên!');
+            return;
+        }
+        if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+            setPasswordError('Mật khẩu xác nhận không khớp với mật khẩu mới!');
+            return;
+        }
+        if (passwordForm.newPassword === passwordForm.oldPassword) {
+            setPasswordError('Mật khẩu mới không được trùng với mật khẩu hiện tại!');
+            return;
+        }
+
+        setIsSubmittingPassword(true);
+        try {
+            await customerService.changePassword({
+                oldPassword: passwordForm.oldPassword,
+                newPassword: passwordForm.newPassword,
+                confirmPassword: passwordForm.confirmPassword
+            });
+            closePasswordModal();
+            showToast('Đổi Mật Khẩu Thành Công!', 'Mật khẩu tài khoản của bạn đã được cập nhật thành công.');
+        } catch (err) {
+            console.error('Lỗi khi đổi mật khẩu:', err);
+            const msg = err.response?.data?.message || err.message || 'Không thể đổi mật khẩu. Vui lòng kiểm tra lại mật khẩu cũ!';
+            setPasswordError(msg);
+            showToast('Đổi Mật Khẩu Thất Bại', msg);
+        } finally {
+            setIsSubmittingPassword(false);
+        }
+    };
+
     const showToast = (title, message) => {
         setToast({ show: true, title, message });
         window.setTimeout(() => setToast({ show: false, title: '', message: '' }), 3500);
+    };
+
+    const copyToClipboard = (text, label) => {
+        try {
+            navigator.clipboard.writeText(text);
+            showToast("Đã Sao Chép", `Đã sao chép ${label} vào bộ nhớ tạm!`);
+        } catch {
+            showToast("Thông Báo", `Vui lòng sao chép thủ công: ${text}`);
+        }
     };
 
     const formatDateForInput = (dateVal) => {
@@ -116,7 +226,28 @@ export default function Profile() {
     const [isSaving, setIsSaving] = useState(false);
     const navigate = useNavigate();
 
-   
+    const loadWalletAndBookshelf = async () => {
+        try {
+            const [pkgs, txs, books] = await Promise.all([
+                getPotatoPackages().catch(() => []),
+                getPotatoTransactions().catch(() => []),
+                getCustomerBookshelf().catch(() => [])
+            ]);
+            if (Array.isArray(pkgs) && pkgs.length > 0) {
+                setPackages(pkgs);
+            }
+            if (Array.isArray(txs)) {
+                setTransactions(txs);
+            }
+            if (Array.isArray(books)) {
+                const active = books.filter(b => !b.expired && (b.remainingDays > 0 || b.remainingDays > 1000) && b.status === 'ACTIVE');
+                setRentedCount(active.length);
+            }
+        } catch (err) {
+            console.error("Lỗi khi tải dữ liệu ví / sách:", err);
+        }
+    };
+
     const fetchCustomerData = async (silent = false) => {
         if (!silent) setIsLoading(true);
         try {
@@ -220,6 +351,117 @@ export default function Profile() {
     useEffect(() => {
         applyTheme(isDark);
     }, [isDark]);
+
+    useEffect(() => {
+        loadWalletAndBookshelf();
+        const handlePotatoUpdated = (e) => {
+            const bal = e.detail?.potatoBalance;
+            if (bal !== undefined) {
+                setCustomer(prev => prev ? { ...prev, potatoBalance: bal } : prev);
+            }
+            loadWalletAndBookshelf();
+        };
+        const handleBookshelfUpdated = () => {
+            loadWalletAndBookshelf();
+        };
+        window.addEventListener('halm-potato-updated', handlePotatoUpdated);
+        window.addEventListener('halm-bookshelf-updated', handleBookshelfUpdated);
+        return () => {
+            window.removeEventListener('halm-potato-updated', handlePotatoUpdated);
+            window.removeEventListener('halm-bookshelf-updated', handleBookshelfUpdated);
+        };
+    }, []);
+
+    const openRechargeModal = (pkg) => {
+        setSelectedPkg(pkg || packages[0] || DEFAULT_PACKAGES[0]);
+        setPaymentMethod('vietqr');
+        setIsRechargeModalOpen(true);
+    };
+
+    const handleConfirmTopup = async () => {
+        if (!selectedPkg) return;
+        setIsSubmittingTopup(true);
+        try {
+            const res = await topupPotato({
+                packageId: selectedPkg.packageId,
+                amountMoney: selectedPkg.priceVnd,
+                note: `Nạp gói ${selectedPkg.packageName || selectedPkg.tag}`
+            });
+            if (res.wallet && res.wallet.potatoBalance !== undefined) {
+                setCustomer(prev => prev ? { ...prev, potatoBalance: res.wallet.potatoBalance } : prev);
+            }
+            if (res.transaction) {
+                setTransactions(prev => [res.transaction, ...prev]);
+            }
+            setIsRechargeModalOpen(false);
+            const totalReceived = (selectedPkg.potatoAmount || 0) + (selectedPkg.bonusPotato || 0);
+            showToast("Nạp Khoai Thành Công!", `Đã nạp thành công +${totalReceived.toLocaleString()} Khoai vào ví của bạn.`);
+            window.dispatchEvent(new CustomEvent('halm-potato-updated', {
+                detail: { potatoBalance: res.wallet?.potatoBalance }
+            }));
+        } catch (error) {
+            console.error("Lỗi nạp khoai:", error);
+            showToast("Nạp Khoai Thất Bại", error?.response?.data?.message || error?.message || "Không thể xử lý giao dịch.");
+        } finally {
+            setIsSubmittingTopup(false);
+        }
+    };
+
+    const handleTransferSubmit = async (e) => {
+        if (e && e.preventDefault) e.preventDefault();
+        const amount = parseInt(transferForm.amount, 10);
+        if (!amount || amount <= 0) {
+            showToast("Thông Báo", "Vui lòng nhập số Khoai hợp lệ!");
+            return;
+        }
+        if (amount > (customer?.potatoBalance ?? 0)) {
+            showToast("Số Dư Không Đủ", "Bạn không có đủ số Khoai trong ví để thực hiện tặng!");
+            return;
+        }
+        if (!transferForm.receiver.trim()) {
+            showToast("Thông Báo", "Vui lòng nhập ID hoặc Email người nhận!");
+            return;
+        }
+        setIsSubmittingTransfer(true);
+        try {
+            const res = await transferPotato({
+                receiver: transferForm.receiver.trim(),
+                amount: amount,
+                note: transferForm.note || "Tặng bạn đọc khoai đọc sách"
+            });
+            if (res.wallet && res.wallet.potatoBalance !== undefined) {
+                setCustomer(prev => prev ? { ...prev, potatoBalance: res.wallet.potatoBalance } : prev);
+            }
+            if (res.transaction) {
+                setTransactions(prev => [res.transaction, ...prev]);
+            }
+            setIsTransferModalOpen(false);
+            setTransferForm({ receiver: '', amount: 10, note: '' });
+            showToast("Tặng Khoai Thành Công!", `Đã chuyển ${amount.toLocaleString()} Khoai tới ${transferForm.receiver}.`);
+            window.dispatchEvent(new CustomEvent('halm-potato-updated', {
+                detail: { potatoBalance: res.wallet?.potatoBalance }
+            }));
+        } catch (error) {
+            console.error("Lỗi tặng khoai:", error);
+            showToast("Tặng Khoai Thất Bại", error?.response?.data?.message || error?.message || "Không tìm thấy người nhận hoặc lỗi hệ thống.");
+        } finally {
+            setIsSubmittingTransfer(false);
+        }
+    };
+
+    const handleDailyCheckin = () => {
+        if (dailyCheckinDone) {
+            showToast("Điểm Danh Hằng Ngày", "Hôm nay bạn đã điểm danh và nhận thưởng rồi!");
+            return;
+        }
+        setDailyCheckinDone(true);
+        const newBal = (customer?.potatoBalance ?? 0) + 5;
+        setCustomer(prev => prev ? { ...prev, potatoBalance: newBal } : prev);
+        showToast("Điểm Danh Thành Công!", "Chúc mừng bạn nhận được +5 Khoai Tây thưởng đọc sách mỗi ngày! 🥔");
+        window.dispatchEvent(new CustomEvent('halm-potato-updated', {
+            detail: { potatoBalance: newBal }
+        }));
+    };
 
     useEffect(() => {
         const handleGlobalThemeChange = (e) => {
@@ -691,8 +933,8 @@ export default function Profile() {
 
                                 <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-wine to-wine-light dark:from-gold dark:to-gold-light p-1 shadow-md mb-3.5 relative">
                                     <div className="w-full h-full rounded-full bg-paper-surface dark:bg-night-surface flex items-center justify-center font-display font-black text-2xl text-wine dark:text-gold overflow-hidden">
-                                        {customer?.avatar ? (
-                                            <img src={customer.avatar} alt="Avatar" className="w-full h-full object-cover rounded-full" />
+                                        {customer?.avatar || customer?.avatarUrl ? (
+                                            <img src={customer.avatar || customer.avatarUrl} alt="Avatar" className="w-full h-full object-cover rounded-full" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/logo.png'; }} />
                                         ) : (
                                             customer?.customerName ? customer.customerName.trim().charAt(0).toUpperCase() : 'U'
                                         )}
@@ -706,27 +948,27 @@ export default function Profile() {
                                     {customer?.customerName || 'Độc giả'}
                                 </h2>
                                 <p className="font-metadata-spec text-xs text-ink-muted dark:text-night-muted mt-0.5">
-                                    {customer?.customer_id || ''}
+                                    {customer?.customerId ? `id#C${String(customer.customerId).padStart(5, '0')}` : (customer?.customer_id ? `id#C${String(customer.customer_id).padStart(5, '0')}` : (customer?.email || 'id#C00007'))}
                                 </p>
 
-                                <Link to="/hang" className="mt-3.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-wine/10 text-wine dark:bg-gold/15 dark:text-gold border border-wine/25 dark:border-gold/30 text-xs font-metadata-spec font-bold hover:scale-105 transition-transform" title="Xem quyền lợi hội viên">
-                                    <i className="ph-bold ph-plant text-emerald-600 dark:text-emerald-400"></i>
-                                    <span>THỢ CÀY 🌱</span>
+                                <Link to="/hang" className="mt-3.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25 text-xs font-metadata-spec font-bold hover:scale-105 transition-transform" title="Xem cấp bậc hội viên">
+                                    <i className={`ph-bold ${getTierInfo(customer?.membershipTier).icon} text-emerald-600 dark:text-emerald-400`}></i>
+                                    <span>{getTierInfo(customer?.membershipTier).name}</span>
                                 </Link>
 
                                 <div className="grid grid-cols-2 gap-2 w-full pt-4 mt-4 border-t border-paper-border dark:border-night-border text-center">
-                                    <button type="button" onClick={() => handleSelectTab('wallet')} className="p-2 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-gold transition-colors">
-                                        <span className="block font-metadata-spec text-base font-black text-ink dark:text-night-text">350</span>
+                                    <button type="button" onClick={() => handleSelectTab('wallet')} className="p-2.5 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-gold transition-colors">
+                                        <span className="block font-metadata-spec text-base font-black text-ink dark:text-night-text">{(customer?.potatoBalance ?? 0).toLocaleString()}</span>
                                         <span className="font-metadata-spec text-[10px] text-ink-muted dark:text-night-muted">Khoai Tích Lũy</span>
                                     </button>
-                                    <Link to="/tusachcn" className="p-2 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-wine dark:hover:border-gold transition-colors">
-                                        <span className="block font-metadata-spec text-base font-black text-ink dark:text-night-text">12</span>
+                                    <Link to="/tusachcn" className="p-2.5 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-wine dark:hover:border-gold transition-colors">
+                                        <span className="block font-metadata-spec text-base font-black text-ink dark:text-night-text">{rentedCount}</span>
                                         <span className="font-metadata-spec text-[10px] text-ink-muted dark:text-night-muted">Sách Trong Tủ</span>
                                     </Link>
                                 </div>
                             </div>
 
-                            {/* 2. Navigation Menu Card - STRICT ORDER (1: Profile, 2: Tiers, 3: Wallet, 4: History, Divider, 5: Logout) */}
+                            {/* 2. Navigation Menu Card - STRICT ORDER (1: Profile, 2: Bookshelf, 3: Tiers, 4: Missions, 5: Wallet, 6: History, Divider, 7: Logout) */}
                             <div className="rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-3 shadow-sm space-y-1">
                                 {/* 1. Thông Tin Cá Nhân */}
                                 <button
@@ -750,7 +992,7 @@ export default function Profile() {
                                         <i className="ph-bold ph-book-bookmark text-base"></i>
                                         <span>Tủ Sách Cá Nhân</span>
                                     </div>
-                                    <span className="potato-badge text-[11px] py-0 px-2">12 cuốn</span>
+                                    <span className="potato-badge text-[11px] py-0 px-2">{rentedCount} cuốn</span>
                                 </Link>
 
                                 {/* 3. Hạng Thành Viên */}
@@ -762,7 +1004,22 @@ export default function Profile() {
                                         <i className="ph-bold ph-trophy text-base"></i>
                                         <span>Hạng Thành Viên</span>
                                     </div>
-                                    <span className="potato-badge text-[11px] py-0 px-2">🌱 Thợ Cày</span>
+                                    <span className="potato-badge text-[11px] py-0.5 px-2 inline-flex items-center gap-1.5 whitespace-nowrap font-bold">
+                                        <i className={`ph-bold ${getTierInfo(customer?.membershipTier).icon} text-[12px] text-amber-600 dark:text-amber-400 shrink-0`}></i>
+                                        <span>{getTierInfo(customer?.membershipTier).name}</span>
+                                    </span>
+                                </Link>
+
+                                {/* 3.5. Nhiệm Vụ Hằng Ngày */}
+                                <Link
+                                    to="/nhiemvu"
+                                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface hover:text-ink dark:hover:text-night-text transition-colors"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <i className="ph-bold ph-target text-base text-amber-500"></i>
+                                        <span>Nhiệm Vụ Hằng Ngày</span>
+                                    </div>
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold">Streak 🔥</span>
                                 </Link>
 
                                 {/* 4. Ví Khoai Tây */}
@@ -778,7 +1035,7 @@ export default function Profile() {
                                         <i className="ph-bold ph-wallet text-base"></i>
                                         <span>Ví Khoai Tây</span>
                                     </div>
-                                    <span className={`potato-badge text-[11px] py-0 px-2 ${activeTab === 'wallet' ? 'bg-white/20 text-white border-white/30' : ''}`}>350 🥔</span>
+                                    <span className={`potato-badge text-[11px] py-0 px-2 ${activeTab === 'wallet' ? 'bg-white/20 text-white border-white/30' : ''}`}>{(customer?.potatoBalance ?? 0).toLocaleString()} 🥔</span>
                                 </button>
 
                                 {/* 5. Lịch Sử Giao Dịch */}
@@ -987,14 +1244,24 @@ export default function Profile() {
                                                         </button>
                                                     </>
                                                 ) : (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setIsEditing(true)}
-                                                        className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full bg-wine hover:bg-wine-dark text-white font-metadata-spec text-xs font-bold transition-colors shadow-sm"
-                                                    >
-                                                        <i className="ph-bold ph-pencil-simple text-sm"></i>
-                                                        <span>Chỉnh Sửa Thông Tin</span>
-                                                    </button>
+                                                    <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 w-full sm:w-auto">
+                                                        <button
+                                                            type="button"
+                                                            onClick={openPasswordModal}
+                                                            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full bg-paper-200 dark:bg-night-surface hover:bg-paper-border dark:hover:bg-night-border border border-paper-border dark:border-night-border text-ink dark:text-night-text font-metadata-spec text-xs font-bold transition-all shadow-sm cursor-pointer"
+                                                        >
+                                                            <i className="ph-bold ph-lock-key text-sm text-wine dark:text-gold"></i>
+                                                            <span>Đổi Mật Khẩu</span>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setIsEditing(true)}
+                                                            className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full bg-wine hover:bg-wine-dark text-white font-metadata-spec text-xs font-bold transition-colors shadow-sm cursor-pointer"
+                                                        >
+                                                            <i className="ph-bold ph-pencil-simple text-sm"></i>
+                                                            <span>Chỉnh Sửa Thông Tin</span>
+                                                        </button>
+                                                    </div>
                                                 )}
                                             </div>
                                         </div>
@@ -1017,8 +1284,8 @@ export default function Profile() {
                                                 <i className="ph-bold ph-coins"></i>
                                             </div>
                                             <div>
-                                                <span className="font-metadata-spec text-[10px] text-ink-muted dark:text-night-muted block">Đơn Vị Thưởng</span>
-                                                <span className="font-display font-bold text-xs text-ink dark:text-night-text">350 Khoai Tây</span>
+                                                <span className="font-metadata-spec text-[10px] text-ink-muted dark:text-night-muted block">Số Dư Khoai</span>
+                                                <span className="font-display font-bold text-xs text-ink dark:text-night-text">{(customer?.potatoBalance ?? 0).toLocaleString()} Khoai Tây</span>
                                             </div>
                                         </div>
 
@@ -1047,8 +1314,9 @@ export default function Profile() {
                                                 <i className="ph-bold ph-caret-right text-[10px]"></i>
                                                 <span className="text-wine dark:text-gold font-bold">Ví khoai tây</span>
                                             </div>
-                                            <h1 className="font-display font-black text-2xl sm:text-3xl text-ink dark:text-night-text tracking-tight">
-                                                Ví Khoai Tây & Điểm Thưởng
+                                            <h1 className="font-display font-black text-2xl sm:text-3xl text-ink dark:text-night-text tracking-tight flex items-center gap-2.5">
+                                                <span>Ví Khoai Tây & Điểm Thưởng</span>
+                                                <span className="text-2xl">🥔</span>
                                             </h1>
                                         </div>
                                     </div>
@@ -1062,30 +1330,38 @@ export default function Profile() {
                                                     <i className="ph-bold ph-wallet"></i> Số Dư Khả Dụng
                                                 </span>
                                                 <div className="flex items-baseline gap-3 mt-3">
-                                                    <span className="font-display font-black text-4xl sm:text-5xl text-[#F4F2EC] tracking-tight">350</span>
+                                                    <span className="font-display font-black text-4xl sm:text-5xl text-[#F4F2EC] tracking-tight">{(customer?.potatoBalance ?? 0).toLocaleString()}</span>
                                                     <span className="font-display font-bold text-2xl text-[#D4AF37]">Khoai 🥔</span>
                                                 </div>
                                                 <p className="text-xs text-[#E9E4D6]/70 mt-2 max-w-md">
-                                                    Tương đương <strong>~35.000 VNĐ</strong> giá trị thuê mượn sách bản quyền và mở khóa chương VIP trên HALM BOOK.
+                                                    Tương đương <strong>~{((customer?.potatoBalance ?? 0) * 1000).toLocaleString()} VNĐ</strong> giá trị thuê mượn sách bản quyền và mở khóa chương VIP trên HALM BOOK.
                                                 </p>
                                             </div>
 
                                             <div className="flex flex-wrap sm:flex-nowrap gap-3">
                                                 <button
                                                     type="button"
-                                                    onClick={() => showToast('Cổng Nạp Khoai', 'Vui lòng chọn gói nạp khoai bên dưới để quét mã QR.')}
-                                                    className="px-5 py-3 rounded-2xl bg-gradient-to-r from-[#D4AF37] to-[#E5C158] hover:from-[#C59F2E] hover:to-[#D4AF37] text-[#1A1A17] font-bold text-xs flex items-center justify-center gap-2 shadow-lg transition-transform hover:scale-105"
+                                                    onClick={() => openRechargeModal(packages[0])}
+                                                    className="px-5 py-3 rounded-2xl bg-gradient-to-r from-[#D4AF37] to-[#E5C158] hover:from-[#C59F2E] hover:to-[#D4AF37] text-[#1A1A17] font-bold text-xs flex items-center justify-center gap-2 shadow-lg transition-transform hover:scale-105 cursor-pointer"
                                                 >
-                                                    <i className="ph-bold ph-plus-circle text-base"></i>
-                                                    <span>Nạp Khoai Ngay</span>
+                                                    <i className="ph-bold ph-lightning text-base"></i>
+                                                    <span>Nạp Khoai Siêu Tốc</span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsTransferModalOpen(true)}
+                                                    className="px-5 py-3 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 text-[#F4F2EC] font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                                                >
+                                                    <i className="ph-bold ph-paper-plane-tilt text-base text-gold"></i>
+                                                    <span>Tặng Khoai</span>
                                                 </button>
                                                 <button
                                                     type="button"
                                                     onClick={() => handleSelectTab('history')}
-                                                    className="px-5 py-3 rounded-2xl bg-white/10 hover:bg-white/20 border border-white/20 text-[#F4F2EC] font-bold text-xs flex items-center justify-center gap-2 transition-colors"
+                                                    className="px-5 py-3 rounded-2xl bg-white/5 hover:bg-white/15 border border-white/10 text-[#F4F2EC] font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
                                                 >
                                                     <i className="ph-bold ph-clock-counter-clockwise text-base"></i>
-                                                    <span>Lịch Sử Giao Dịch</span>
+                                                    <span>Lịch Sử</span>
                                                 </button>
                                             </div>
                                         </div>
@@ -1098,36 +1374,36 @@ export default function Profile() {
                                                 <i className="ph-bold ph-lightning text-wine dark:text-gold"></i>
                                                 Gói Nạp Khoai Ưu Đãi
                                             </h3>
-                                            <span className="text-xs font-bold text-wine dark:text-gold">Tặng thêm tới 30%</span>
+                                            <span className="text-xs font-bold text-wine dark:text-gold">Tặng thêm tới 40%</span>
                                         </div>
 
                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                                            {[
-                                                { price: '20.000đ', potato: '200', bonus: '', tag: 'Gói Thử Nghiệm' },
-                                                { price: '50.000đ', potato: '550', bonus: '+50 Khoai (10%)', tag: 'Gói Đọc Sách' },
-                                                { price: '100.000đ', potato: '1.200', bonus: '+200 Khoai (20%)', tag: 'Gói Mọt Sách', hot: true },
-                                                { price: '200.000đ', potato: '2.600', bonus: '+600 Khoai (30%)', tag: 'Gói Học Giả VIP' },
-                                            ].map((pkg, i) => (
-                                                <div key={i} className={`rounded-2xl p-5 border shadow-sm flex flex-col justify-between transition-all hover:shadow-md ${pkg.hot
+                                            {packages.map((pkg, i) => (
+                                                <div key={pkg.packageId || i} className={`rounded-2xl p-5 border shadow-sm flex flex-col justify-between transition-all hover:shadow-md ${pkg.isHot || pkg.hot
                                                     ? 'bg-paper-surface dark:bg-night-card border-wine/50 dark:border-gold/60 ring-2 ring-wine/20 dark:ring-gold/30'
                                                     : 'bg-paper-surface dark:bg-night-card border-paper-border dark:border-night-border'
                                                     }`}>
                                                     <div>
                                                         <div className="flex items-center justify-between mb-2">
-                                                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-ink-muted dark:text-night-muted">{pkg.tag}</span>
-                                                            {pkg.hot && <span className="potato-badge text-[9px] py-0 px-1.5 bg-wine text-white dark:bg-gold dark:text-night-bg">HOT</span>}
+                                                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-ink-muted dark:text-night-muted">{pkg.tag || pkg.packageName}</span>
+                                                            {(pkg.isHot || pkg.hot) && <span className="potato-badge text-[9px] py-0 px-1.5 bg-wine text-white dark:bg-gold dark:text-night-bg">HOT</span>}
                                                         </div>
-                                                        <div className="font-display font-black text-2xl text-ink dark:text-night-text">{pkg.potato} 🥔</div>
-                                                        {pkg.bonus && <div className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">{pkg.bonus}</div>}
+                                                        <div className="font-display font-black text-2xl text-ink dark:text-night-text">{(pkg.potatoAmount || 0).toLocaleString()} 🥔</div>
+                                                        {(pkg.bonusPotato > 0) && (
+                                                            <div className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">
+                                                                +{pkg.bonusPotato.toLocaleString()} Khoai ({pkg.bonusRate || Math.round((pkg.bonusPotato / pkg.potatoAmount) * 100)}%)
+                                                            </div>
+                                                        )}
                                                     </div>
                                                     <div className="mt-5 pt-3 border-t border-paper-border dark:border-night-border flex items-center justify-between">
-                                                        <span className="font-display font-black text-sm text-wine dark:text-gold">{pkg.price}</span>
+                                                        <span className="font-display font-black text-sm text-wine dark:text-gold">{(pkg.priceVnd || 0).toLocaleString()}đ</span>
                                                         <button
                                                             type="button"
-                                                            onClick={() => showToast('Chọn Gói Nạp', `Đã chọn ${pkg.tag} (${pkg.price}) — Chuyển tiếp cổng thanh toán...`)}
-                                                            className="px-3 py-1.5 rounded-xl bg-paper-200 dark:bg-night-surface hover:bg-wine hover:text-white dark:hover:bg-gold dark:hover:text-night-bg text-ink dark:text-night-text text-xs font-bold transition-colors"
+                                                            onClick={() => openRechargeModal(pkg)}
+                                                            className="px-3.5 py-1.5 rounded-xl bg-wine hover:bg-wine-dark text-white dark:bg-gold dark:hover:bg-gold-light dark:text-night-bg text-xs font-bold transition-all shadow-sm cursor-pointer flex items-center gap-1"
                                                         >
-                                                            Nạp
+                                                            <span>Nạp Ngay</span>
+                                                            <i className="ph-bold ph-caret-right text-xs"></i>
                                                         </button>
                                                     </div>
                                                 </div>
@@ -1135,41 +1411,61 @@ export default function Profile() {
                                         </div>
                                     </div>
 
-                                    {/* Daily Tasks to Earn Potatoes */}
+                                    {/* 1. Giao diện Streak Điểm Danh 7 Ngày */}
+                                    <div className="mb-2">
+                                        <StreakDiemDanh onShowToast={showToast} onCheckinSuccess={fetchCustomerData} />
+                                    </div>
+
+                                    {/* 2. Trung Tâm Nhiệm Vụ Hằng Ngày - Điều Hướng Tập Trung */}
                                     <div className="rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-6 shadow-sm space-y-4">
-                                        <h3 className="font-display font-black text-base text-ink dark:text-night-text flex items-center gap-2">
-                                            <i className="ph-bold ph-target text-wine dark:text-gold"></i>
-                                            Nhiệm Vụ Nhận Khoai Hằng Ngày
-                                        </h3>
-                                        <div className="space-y-3">
-                                            {[
-                                                { title: 'Điểm danh hằng ngày', reward: '+5 Khoai 🥔', progress: '1/1', done: true, desc: 'Đăng nhập vào HALM BOOK mỗi ngày để nhận quà.' },
-                                                { title: 'Đọc sách trên 30 phút', reward: '+15 Khoai 🥔', progress: '24/30 phút', done: false, desc: 'Đọc bất kỳ tác phẩm nào trong tủ sách của bạn.' },
-                                                { title: 'Chia sẻ hoặc đánh giá tác phẩm', reward: '+10 Khoai 🥔', progress: '0/1', done: false, desc: 'Để lại bình luận cảm nhận chân thực cho bạn đọc khác.' },
-                                            ].map((task, i) => (
-                                                <div key={i} className="p-3.5 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border flex items-center justify-between gap-3">
-                                                    <div>
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="font-display font-bold text-xs text-ink dark:text-night-text">{task.title}</span>
-                                                            <span className="text-[11px] font-black text-emerald-600 dark:text-emerald-400">{task.reward}</span>
-                                                        </div>
-                                                        <p className="text-[11px] text-ink-muted dark:text-night-muted mt-0.5">{task.desc}</p>
-                                                    </div>
-                                                    {task.done ? (
-                                                        <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400 text-xs font-bold">
-                                                            <i className="ph-bold ph-check"></i> Đã Nhận
-                                                        </span>
-                                                    ) : (
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => showToast('Nhiệm Vụ', `Tiến độ: ${task.progress}. Hãy hoàn thành để nhận ${task.reward}!`)}
-                                                            className="px-3 py-1 rounded-xl bg-paper-200 dark:bg-night-card hover:bg-wine hover:text-white dark:hover:bg-gold dark:hover:text-night-bg text-ink dark:text-night-text text-xs font-bold transition-colors whitespace-nowrap"
-                                                        >
-                                                            {task.progress}
-                                                        </button>
-                                                    )}
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                            <div className="flex items-center gap-3">
+                                                <span className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-gold flex items-center justify-center text-xl shrink-0">
+                                                    🎯
+                                                </span>
+                                                <div>
+                                                    <h3 className="font-display font-black text-base text-ink dark:text-night-text">
+                                                        Trung Tâm Nhiệm Vụ & Điểm Thưởng
+                                                    </h3>
+                                                    <p className="font-editorial-body text-xs text-ink-muted dark:text-night-muted">
+                                                        Làm nhiệm vụ đọc sách, đánh giá và duy trì streak để tích lũy Khoai đổi quà mỗi ngày.
+                                                    </p>
                                                 </div>
-                                            ))}
+                                            </div>
+
+                                            <Link
+                                                to="/nhiemvu"
+                                                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-wine hover:bg-wine-dark text-white dark:bg-gold dark:hover:bg-gold-light dark:text-night-bg font-metadata-spec font-bold text-xs shadow-sm transition-all self-start sm:self-auto shrink-0"
+                                            >
+                                                <span>Mở Trang Nhiệm Vụ Hằng Ngày</span>
+                                                <i className="ph-bold ph-arrow-right text-xs"></i>
+                                            </Link>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                                            <div className="p-3.5 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-base">📖</span>
+                                                    <span className="font-metadata-spec text-xs font-bold text-ink dark:text-night-text">Đọc Sách Hằng Ngày</span>
+                                                </div>
+                                                <p className="text-[11px] text-ink-muted dark:text-night-muted">Tích lũy giờ đọc sách nhận tới +15 Khoai mỗi ngày.</p>
+                                            </div>
+
+                                            <div className="p-3.5 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-base">💬</span>
+                                                    <span className="font-metadata-spec text-xs font-bold text-ink dark:text-night-text">Bình Luận & Đánh Giá</span>
+                                                </div>
+                                                <p className="text-[11px] text-ink-muted dark:text-night-muted">Góp ý, để lại cảm nhận nhận +10 Khoai.</p>
+                                            </div>
+
+                                            <div className="p-3.5 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-base">👑</span>
+                                                    <span className="font-metadata-spec text-xs font-bold text-ink dark:text-night-text">Thăng Hạng Thành Viên</span>
+                                                </div>
+                                                <p className="text-[11px] text-ink-muted dark:text-night-muted">Đạt mốc điểm cày nhận thưởng hàng trăm Khoai.</p>
+                                            </div>
                                         </div>
                                     </div>
                                 </>
@@ -1187,10 +1483,20 @@ export default function Profile() {
                                                 <i className="ph-bold ph-caret-right text-[10px]"></i>
                                                 <span className="text-wine dark:text-gold font-bold">Lịch sử giao dịch</span>
                                             </div>
-                                            <h1 className="font-display font-black text-2xl sm:text-3xl text-ink dark:text-night-text tracking-tight">
-                                                Lịch Sử Giao Dịch
+                                            <h1 className="font-display font-black text-2xl sm:text-3xl text-ink dark:text-night-text tracking-tight flex items-center gap-2">
+                                                <span>Lịch Sử Giao Dịch Khoai Tây</span>
+                                                <i className="ph-bold ph-clock-counter-clockwise text-wine dark:text-gold text-2xl"></i>
                                             </h1>
                                         </div>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => openRechargeModal(packages[0])}
+                                            className="self-start sm:self-auto px-4 py-2 rounded-xl bg-wine hover:bg-wine-dark text-white dark:bg-gold dark:hover:bg-gold-light dark:text-night-bg font-metadata-spec font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all"
+                                        >
+                                            <i className="ph-bold ph-plus-circle text-sm"></i>
+                                            <span>Nạp Thêm Khoai</span>
+                                        </button>
                                     </div>
 
                                     {/* Transactions List Card */}
@@ -1201,11 +1507,35 @@ export default function Profile() {
                                                     <i className="ph-bold ph-receipt"></i>
                                                 </span>
                                                 <div>
-                                                    <h3 className="font-display font-bold text-sm text-ink dark:text-night-text">Danh Sách Giao Dịch Gần Đây</h3>
-                                                    <p className="text-[11px] text-ink-muted dark:text-night-muted">Tất cả biến động số dư khoai tây và lượt thuê sách.</p>
+                                                    <h3 className="font-display font-bold text-sm text-ink dark:text-night-text">Danh Sách Biến Động Số Dư</h3>
+                                                    <p className="text-[11px] text-ink-muted dark:text-night-muted">Tất cả giao dịch nạp, thuê sách, gia hạn và thưởng điểm.</p>
                                                 </div>
                                             </div>
-                                            <span className="potato-badge text-xs">Tổng 5 giao dịch</span>
+
+                                            {/* Filters */}
+                                            <div className="flex items-center gap-1.5 text-xs font-metadata-spec font-bold">
+                                                {['all', 'topup', 'rent', 'reward'].map((f) => {
+                                                    const labels = {
+                                                        all: 'Tất Cả',
+                                                        topup: 'Nạp Khoai',
+                                                        rent: 'Thuê Sách',
+                                                        reward: 'Thưởng & Tặng'
+                                                    };
+                                                    return (
+                                                        <button
+                                                            key={f}
+                                                            type="button"
+                                                            onClick={() => setHistoryFilter(f)}
+                                                            className={`px-3 py-1 rounded-xl transition-colors ${historyFilter === f
+                                                                ? 'bg-wine text-white dark:bg-gold dark:text-night-bg'
+                                                                : 'bg-paper-200 dark:bg-night-surface text-ink-muted dark:text-night-muted hover:text-ink dark:hover:text-night-text'
+                                                                }`}
+                                                        >
+                                                            {labels[f]}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
                                         </div>
 
                                         <div className="overflow-x-auto -mx-2">
@@ -1213,37 +1543,68 @@ export default function Profile() {
                                                 <thead>
                                                     <tr className="border-b border-paper-border dark:border-night-border text-ink-muted dark:text-night-muted font-bold">
                                                         <th className="py-3 px-3">Mã GD</th>
-                                                        <th className="py-3 px-3">Loại Giao Dịch & Chi Tiết</th>
+                                                        <th className="py-3 px-3">Loại Giao Dịch & Nội Dung</th>
                                                         <th className="py-3 px-3">Thời Gian</th>
                                                         <th className="py-3 px-3 text-right">Biến Động</th>
                                                         <th className="py-3 px-3 text-center">Trạng Thái</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-paper-border dark:divide-night-border">
-                                                    {[
-                                                        { id: 'GD984321', title: 'Thuê sách: Atomic Habits', type: 'Thuê sách', time: '18/10/2026 14:32', amount: '-10 Khoai', isMinus: true, status: 'Thành công' },
-                                                        { id: 'GD984210', title: 'Điểm danh hằng ngày', type: 'Thưởng', time: '18/10/2026 08:15', amount: '+5 Khoai', isMinus: false, status: 'Thành công' },
-                                                        { id: 'GD982109', title: 'Nạp khoai: Gói Mọt Sách', type: 'Nạp khoai', time: '16/10/2026 19:40', amount: '+1.200 Khoai', isMinus: false, status: 'Thành công' },
-                                                        { id: 'GD979924', title: 'Thuê sách: Điện Biên Phủ 56 Ngày Đêm', type: 'Thuê sách', time: '15/10/2026 10:12', amount: '-10 Khoai', isMinus: true, status: 'Thành công' },
-                                                        { id: 'GD910022', title: 'Thưởng thăng hạng: Thợ Cày 🌱', type: 'Thưởng VIP', time: '15/01/2026 09:00', amount: '+50 Khoai', isMinus: false, status: 'Thành công' },
-                                                    ].map((tx, idx) => (
-                                                        <tr key={idx} className="hover:bg-paper dark:hover:bg-night-surface/50 transition-colors">
-                                                            <td className="py-3.5 px-3 font-mono font-bold text-ink-muted dark:text-night-muted">{tx.id}</td>
-                                                            <td className="py-3.5 px-3">
-                                                                <span className="font-bold text-ink dark:text-night-text block">{tx.title}</span>
-                                                                <span className="text-[10px] text-ink-muted dark:text-night-muted">{tx.type}</span>
-                                                            </td>
-                                                            <td className="py-3.5 px-3 text-ink-muted dark:text-night-muted">{tx.time}</td>
-                                                            <td className={`py-3.5 px-3 text-right font-black ${tx.isMinus ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'
-                                                                }`}>
-                                                                {tx.amount}
-                                                            </td>
-                                                            <td className="py-3.5 px-3 text-center">
-                                                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400 text-[10px] font-bold">
-                                                                    <i className="ph-bold ph-check-circle"></i> {tx.status}
-                                                                </span>
-                                                            </td>
-                                                        </tr>
+                                                    {(transactions && transactions.length > 0 ? (
+                                                        transactions.filter(tx => {
+                                                            if (historyFilter === 'all') return true;
+                                                            const type = (tx.type || '').toUpperCase();
+                                                            if (historyFilter === 'topup') return type.includes('TOPUP') || type.includes('NAP');
+                                                            if (historyFilter === 'rent') return type.includes('RENT') || type.includes('THUE');
+                                                            if (historyFilter === 'reward') return type.includes('REWARD') || type.includes('THUONG') || type.includes('TRANSFER') || type.includes('TANG');
+                                                            return true;
+                                                        }).map((tx, idx) => {
+                                                            const isMinus = (tx.amount < 0) || (tx.type && (tx.type.includes('RENT') || tx.type.includes('THUE')));
+                                                            const displayAmount = Math.abs(tx.amount || 0);
+                                                            return (
+                                                                <tr key={tx.transactionId || tx.id || idx} className="hover:bg-paper dark:hover:bg-night-surface/50 transition-colors">
+                                                                    <td className="py-3.5 px-3 font-mono font-bold text-ink-muted dark:text-night-muted">{tx.code || tx.transactionCode || `GD-${tx.transactionId || tx.id || idx + 100}`}</td>
+                                                                    <td className="py-3.5 px-3">
+                                                                        <span className="font-bold text-ink dark:text-night-text block">{tx.note || tx.description || tx.title || 'Giao dịch ví'}</span>
+                                                                        <span className="text-[10px] text-ink-muted dark:text-night-muted uppercase tracking-wider">{tx.type || 'GIAO DỊCH'}</span>
+                                                                    </td>
+                                                                    <td className="py-3.5 px-3 text-ink-muted dark:text-night-muted">{tx.createdAt ? tx.createdAt.replace('T', ' ').substring(0, 16) : 'Gần đây'}</td>
+                                                                    <td className={`py-3.5 px-3 text-right font-black ${isMinus ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                                                        {isMinus ? `-${displayAmount}` : `+${displayAmount}`} Khoai 🥔
+                                                                    </td>
+                                                                    <td className="py-3.5 px-3 text-center">
+                                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400 text-[10px] font-bold">
+                                                                            <i className="ph-bold ph-check-circle"></i> {tx.status || 'Thành công'}
+                                                                        </span>
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })
+                                                    ) : (
+                                                        [
+                                                            { code: 'GD984321', note: 'Thuê sách: Atomic Habits (7 ngày)', type: 'THUÊ SÁCH', time: 'Hôm nay 14:32', amount: -9, status: 'Thành công' },
+                                                            { code: 'GD984210', note: 'Điểm danh hằng ngày', type: 'THƯỞNG HẰNG NGÀY', time: 'Hôm nay 08:15', amount: 5, status: 'Thành công' },
+                                                            { code: 'GD982109', note: 'Nạp khoai: Gói Mọt Sách (+200 thưởng)', type: 'NẠP KHOAI', time: 'Hôm qua 19:40', amount: 1200, status: 'Thành công' },
+                                                            { code: 'GD979924', note: 'Thuê sách: Điện Biên Phủ 56 Ngày Đêm', type: 'THUÊ SÁCH', time: '15/10/2026', amount: -9, status: 'Thành công' },
+                                                            { code: 'GD910022', note: 'Thưởng thăng hạng: Thợ Cày 🌱', type: 'THƯỞNG VIP', time: '15/01/2026', amount: 50, status: 'Thành công' },
+                                                        ].map((tx, idx) => (
+                                                            <tr key={idx} className="hover:bg-paper dark:hover:bg-night-surface/50 transition-colors">
+                                                                <td className="py-3.5 px-3 font-mono font-bold text-ink-muted dark:text-night-muted">{tx.code}</td>
+                                                                <td className="py-3.5 px-3">
+                                                                    <span className="font-bold text-ink dark:text-night-text block">{tx.note}</span>
+                                                                    <span className="text-[10px] text-ink-muted dark:text-night-muted">{tx.type}</span>
+                                                                </td>
+                                                                <td className="py-3.5 px-3 text-ink-muted dark:text-night-muted">{tx.time}</td>
+                                                                <td className={`py-3.5 px-3 text-right font-black ${tx.amount < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                                                    {tx.amount > 0 ? `+${tx.amount}` : tx.amount} Khoai 🥔
+                                                                </td>
+                                                                <td className="py-3.5 px-3 text-center">
+                                                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400 text-[10px] font-bold">
+                                                                        <i className="ph-bold ph-check-circle"></i> {tx.status}
+                                                                    </span>
+                                                                </td>
+                            </tr>
+                                                        ))
                                                     ))}
                                                 </tbody>
                                             </table>
@@ -1256,6 +1617,527 @@ export default function Profile() {
 
                     </div>
                 </main>
+
+                {/* MODAL NẠP KHOAI VIETQR */}
+                {isRechargeModalOpen && selectedPkg && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
+                        <div className="relative w-full max-w-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border rounded-3xl shadow-2xl overflow-hidden my-6">
+                            {/* Modal Header */}
+                            <div className="px-6 py-4 bg-paper dark:bg-night-surface border-b border-paper-border dark:border-night-border flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-wine to-wine-light text-white flex items-center justify-center text-xl shadow-md">
+                                        <i className="ph-bold ph-qr-code"></i>
+                                    </div>
+                                    <div>
+                                        <h3 className="font-display font-black text-lg text-ink dark:text-night-text">Nạp Khoai Siêu Tốc (VietQR 24/7)</h3>
+                                        <p className="text-xs text-ink-muted dark:text-night-muted">Quét mã bằng app ngân hàng bất kỳ để nhận khoai tự động trong 30s</p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsRechargeModalOpen(false)}
+                                    className="w-8 h-8 rounded-full bg-paper-border/50 dark:bg-night-border text-ink-muted dark:text-night-muted hover:text-ink dark:hover:text-night-text flex items-center justify-center transition-colors"
+                                >
+                                    <i className="ph-bold ph-x text-base"></i>
+                                </button>
+                            </div>
+
+                            {/* Modal Body */}
+                            <div className="p-6 space-y-6">
+                                {/* Gói đã chọn & Chọn gói khác */}
+                                <div>
+                                    <div className="text-xs font-metadata-spec font-bold text-ink-muted dark:text-night-muted uppercase tracking-wider mb-2">
+                                        1. Chọn Gói Nạp Khoai
+                                    </div>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                                        {packages.map((pkg) => {
+                                            const isSelected = selectedPkg?.packageId === pkg.packageId || selectedPkg?.id === pkg.id;
+                                            return (
+                                                <button
+                                                    key={pkg.packageId || pkg.id}
+                                                    type="button"
+                                                    onClick={() => setSelectedPkg(pkg)}
+                                                    className={`p-2.5 rounded-2xl border text-left transition-all ${isSelected
+                                                        ? 'bg-wine/10 dark:bg-gold/15 border-wine dark:border-gold shadow-sm ring-1 ring-wine dark:ring-gold'
+                                                        : 'bg-paper dark:bg-night-surface border-paper-border dark:border-night-border hover:border-wine/50'
+                                                        }`}
+                                                >
+                                                    <div className="flex items-center justify-between text-xs font-black text-ink dark:text-night-text">
+                                                        <span>{pkg.potatoAmount?.toLocaleString()} 🥔</span>
+                                                        {pkg.bonusPotato > 0 && (
+                                                            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">+{pkg.bonusPotato}</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-[11px] font-bold text-wine dark:text-gold mt-1">
+                                                        {pkg.priceVnd?.toLocaleString('vi-VN')} đ
+                                                    </div>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Chi Tiết Thanh Toán */}
+                                <div>
+                                    <div className="text-xs font-metadata-spec font-bold text-ink-muted dark:text-night-muted uppercase tracking-wider mb-2">
+                                        2. Quét Mã QR Hoặc Chuyển Khoản
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-center">
+                                        {/* Cột QR */}
+                                        <div className="md:col-span-5 flex flex-col items-center">
+                                            <div className="p-3 bg-white rounded-2xl shadow-md border border-paper-border inline-block">
+                                                <img
+                                                    src={`https://api.vietqr.io/image/970422-0345678999-compact2.png?amount=${selectedPkg?.priceVnd || 200000}&addInfo=${encodeURIComponent(`HALM C${String(customer?.customerId || customer?.customer_id || 7).replace(/^C/i, '').padStart(5, '0')} NAP`)}&accountName=${encodeURIComponent('HALM BOOK CO LTD')}`}
+                                                    alt="VietQR HalmBook"
+                                                    onError={(e) => {
+                                                        e.target.onerror = null;
+                                                        e.target.src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(`HALM-NAP-C${String(customer?.customerId || customer?.customer_id || 7).replace(/^C/i, '').padStart(5, '0')}-${selectedPkg?.priceVnd || 200000}`)}`;
+                                                    }}
+                                                    className="w-48 h-48 sm:w-52 sm:h-52 object-contain"
+                                                />
+                                            </div>
+                                            <div className="mt-2 text-center text-[11px] text-ink-muted dark:text-night-muted font-metadata-spec flex items-center gap-1">
+                                                <i className="ph-fill ph-lightning text-amber-500"></i>
+                                                <span>Xử lý & cộng khoai tức thì</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Cột Thông Tin Chuyển Khoản */}
+                                        <div className="md:col-span-7 space-y-2.5 font-metadata-spec text-xs">
+                                            <div className="p-3 rounded-2xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border flex items-center justify-between">
+                                                <div>
+                                                    <span className="text-[10px] text-ink-muted dark:text-night-muted block">Ngân Hàng Thụ Hưởng</span>
+                                                    <span className="font-bold text-ink dark:text-night-text">MB Bank (Ngân Hàng Quân Đội)</span>
+                                                </div>
+                                                <span className="text-xs font-black text-blue-600 bg-blue-50 dark:bg-blue-950/40 px-2 py-1 rounded-lg">MB</span>
+                                            </div>
+
+                                            <div className="p-3 rounded-2xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border flex items-center justify-between">
+                                                <div>
+                                                    <span className="text-[10px] text-ink-muted dark:text-night-muted block">Số Tài Khoản</span>
+                                                    <span className="font-mono font-black text-sm text-ink dark:text-night-text">0345678999</span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => copyToClipboard('0345678999', 'Số tài khoản')}
+                                                    className="px-2.5 py-1 rounded-lg bg-wine/10 text-wine dark:bg-gold/15 dark:text-gold hover:opacity-80 transition-opacity font-bold flex items-center gap-1"
+                                                >
+                                                    <i className="ph-bold ph-copy"></i>
+                                                    <span>Chép</span>
+                                                </button>
+                                            </div>
+
+                                            <div className="p-3 rounded-2xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border flex items-center justify-between">
+                                                <div>
+                                                    <span className="text-[10px] text-ink-muted dark:text-night-muted block">Chủ Tài Khoản</span>
+                                                    <span className="font-bold text-ink dark:text-night-text uppercase">HALM BOOK CO LTD</span>
+                                                </div>
+                                                <i className="ph-bold ph-shield-check text-emerald-500 text-lg"></i>
+                                            </div>
+
+                                            <div className="p-3 rounded-2xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border flex items-center justify-between">
+                                                <div>
+                                                    <span className="text-[10px] text-ink-muted dark:text-night-muted block">Số Tiền Nạp</span>
+                                                    <span className="font-bold text-base text-wine dark:text-gold">
+                                                        {(selectedPkg?.priceVnd || 0).toLocaleString('vi-VN')} đ
+                                                    </span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => copyToClipboard(String(selectedPkg?.priceVnd || 0), 'Số tiền')}
+                                                    className="px-2.5 py-1 rounded-lg bg-wine/10 text-wine dark:bg-gold/15 dark:text-gold hover:opacity-80 transition-opacity font-bold flex items-center gap-1"
+                                                >
+                                                    <i className="ph-bold ph-copy"></i>
+                                                    <span>Chép</span>
+                                                </button>
+                                            </div>
+
+                                            <div className="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800/50 flex items-center justify-between">
+                                                <div>
+                                                    <span className="text-[10px] text-amber-700 dark:text-amber-400 font-bold block">Nội Dung Chuyển Khoản (Bắt buộc đúng)</span>
+                                                    <span className="font-mono font-black text-sm text-ink dark:text-night-text">
+                                                        {`HALM C${String(customer?.customerId || customer?.customer_id || 7).replace(/^C/i, '').padStart(5, '0')} NAP`}
+                                                    </span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => copyToClipboard(`HALM C${String(customer?.customerId || customer?.customer_id || 7).replace(/^C/i, '').padStart(5, '0')} NAP`, 'Nội dung chuyển khoản')}
+                                                    className="px-2.5 py-1 rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors font-bold flex items-center gap-1"
+                                                >
+                                                    <i className="ph-bold ph-copy"></i>
+                                                    <span>Chép</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Modal Footer */}
+                            <div className="px-6 py-4 bg-paper dark:bg-night-surface border-t border-paper-border dark:border-night-border flex flex-col sm:flex-row items-center justify-between gap-3">
+                                <div className="text-xs text-ink-muted dark:text-night-muted flex items-center gap-1.5">
+                                    <i className="ph-bold ph-info text-wine dark:text-gold"></i>
+                                    <span>Khoai nhận được: <b className="text-ink dark:text-night-text font-black">{((selectedPkg?.potatoAmount || 0) + (selectedPkg?.bonusPotato || 0)).toLocaleString()} 🥔</b></span>
+                                </div>
+                                <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsRechargeModalOpen(false)}
+                                        className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-border text-ink dark:text-night-text font-metadata-spec font-bold text-xs transition-colors"
+                                    >
+                                        Đóng
+                                    </button>
+                                    <button
+                                        type="button"
+                                        disabled={isSubmittingTopup}
+                                        onClick={handleConfirmTopup}
+                                        className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-gradient-to-r from-wine to-wine-light hover:opacity-95 text-white font-metadata-spec font-bold text-xs shadow-md transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                    >
+                                        {isSubmittingTopup ? (
+                                            <>
+                                                <i className="ph-bold ph-spinner animate-spin text-base"></i>
+                                                <span>Đang Kiểm Tra...</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <i className="ph-bold ph-check-circle text-base"></i>
+                                                <span>Tôi Đã Chuyển Khoản</span>
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* MODAL TẶNG KHOAI CHO BẠN BÈ */}
+                {isTransferModalOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
+                        <div className="relative w-full max-w-md bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border rounded-3xl shadow-2xl overflow-hidden my-6">
+                            {/* Modal Header */}
+                            <div className="px-6 py-4 bg-paper dark:bg-night-surface border-b border-paper-border dark:border-night-border flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 text-white flex items-center justify-center text-xl shadow-md">
+                                        <i className="ph-bold ph-paper-plane-tilt"></i>
+                                    </div>
+                                    <div>
+                                        <h3 className="font-display font-black text-lg text-ink dark:text-night-text">Tặng Khoai Bạn Đọc</h3>
+                                        <p className="text-xs text-ink-muted dark:text-night-muted">Gửi tặng khoai đọc sách tới bạn bè trong cộng đồng HALM</p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsTransferModalOpen(false)}
+                                    className="w-8 h-8 rounded-full bg-paper-border/50 dark:bg-night-border text-ink-muted dark:text-night-muted hover:text-ink dark:hover:text-night-text flex items-center justify-center transition-colors"
+                                >
+                                    <i className="ph-bold ph-x text-base"></i>
+                                </button>
+                            </div>
+
+                            {/* Modal Body */}
+                            <form onSubmit={handleTransferSubmit} className="p-6 space-y-4">
+                                {/* Số Dư Khả Dụng */}
+                                <div className="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xl">🥔</span>
+                                        <span className="text-xs font-metadata-spec text-amber-900 dark:text-amber-300 font-bold">Số Dư Hiện Tại Của Bạn:</span>
+                                    </div>
+                                    <span className="text-sm font-black text-amber-700 dark:text-amber-400">
+                                        {(customer?.potatoBalance ?? 0).toLocaleString()} Khoai
+                                    </span>
+                                </div>
+
+                                {/* Người Nhận */}
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-metadata-spec font-bold text-ink dark:text-night-text block">
+                                        Mã Bạn Đọc hoặc Email Người Nhận <span className="text-rose-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder="Ví dụ: C00008 hoặc ban@email.com"
+                                        value={transferForm.receiver}
+                                        onChange={(e) => setTransferForm({ ...transferForm, receiver: e.target.value })}
+                                        required
+                                        className="w-full px-3.5 py-2.5 rounded-xl border border-paper-border dark:border-night-border bg-paper dark:bg-night-surface text-ink dark:text-night-text text-xs font-metadata-spec focus:outline-none focus:border-wine dark:focus:border-gold transition-colors"
+                                    />
+                                </div>
+
+                                {/* Số Khoai Muốn Tặng */}
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-metadata-spec font-bold text-ink dark:text-night-text block">
+                                        Số Khoai Muốn Tặng <span className="text-rose-500">*</span>
+                                    </label>
+                                    <div className="relative">
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            max={customer?.potatoBalance ?? 0}
+                                            value={transferForm.amount}
+                                            onChange={(e) => setTransferForm({ ...transferForm, amount: e.target.value })}
+                                            required
+                                            className="w-full px-3.5 py-2.5 pr-14 rounded-xl border border-paper-border dark:border-night-border bg-paper dark:bg-night-surface text-ink dark:text-night-text text-xs font-metadata-spec focus:outline-none focus:border-wine dark:focus:border-gold transition-colors font-bold"
+                                        />
+                                        <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-ink-muted dark:text-night-muted">
+                                            Khoai 🥔
+                                        </span>
+                                    </div>
+
+                                    {/* Quick chips */}
+                                    <div className="flex items-center gap-1.5 pt-1">
+                                        {[10, 20, 50, 100].map((amt) => (
+                                            <button
+                                                key={amt}
+                                                type="button"
+                                                onClick={() => setTransferForm({ ...transferForm, amount: amt })}
+                                                className="px-2.5 py-1 rounded-lg bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border text-[11px] font-bold text-ink-muted dark:text-night-muted hover:text-ink dark:hover:text-night-text hover:border-wine transition-colors"
+                                            >
+                                                +{amt}
+                                            </button>
+                                        ))}
+                                        <button
+                                            type="button"
+                                            onClick={() => setTransferForm({ ...transferForm, amount: customer?.potatoBalance ?? 0 })}
+                                            className="px-2.5 py-1 rounded-lg bg-wine/10 dark:bg-gold/15 text-wine dark:text-gold text-[11px] font-bold hover:opacity-80 transition-opacity"
+                                        >
+                                            Tối Đa
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Lời Nhắn */}
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-metadata-spec font-bold text-ink dark:text-night-text block">
+                                        Lời Nhắn Gửi Tặng
+                                    </label>
+                                    <textarea
+                                        rows="2"
+                                        placeholder="Chúc bạn đọc sách vui vẻ!"
+                                        value={transferForm.note}
+                                        onChange={(e) => setTransferForm({ ...transferForm, note: e.target.value })}
+                                        className="w-full px-3.5 py-2.5 rounded-xl border border-paper-border dark:border-night-border bg-paper dark:bg-night-surface text-ink dark:text-night-text text-xs font-metadata-spec focus:outline-none focus:border-wine dark:focus:border-gold transition-colors resize-none"
+                                    ></textarea>
+                                </div>
+
+                                {/* Modal Actions */}
+                                <div className="pt-2 flex items-center justify-end gap-2.5">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsTransferModalOpen(false)}
+                                        className="px-4 py-2.5 rounded-xl border border-paper-border dark:border-night-border hover:bg-paper dark:hover:bg-night-surface text-ink dark:text-night-text font-metadata-spec font-bold text-xs transition-colors"
+                                    >
+                                        Hủy
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmittingTransfer || !transferForm.receiver || Number(transferForm.amount) <= 0 || Number(transferForm.amount) > (customer?.potatoBalance ?? 0)}
+                                        className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-wine to-wine-light hover:opacity-95 text-white font-metadata-spec font-bold text-xs shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50"
+                                    >
+                                        {isSubmittingTransfer ? (
+                                            <>
+                                                <i className="ph-bold ph-spinner animate-spin text-base"></i>
+                                                <span>Đang Xử Lý...</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <i className="ph-bold ph-paper-plane-tilt text-base"></i>
+                                                <span>Xác Nhận Tặng</span>
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )}
+
+                {/* MODAL ĐỔI MẬT KHẨU (2 BƯỚC + MẮT HIỂN THỊ MẬT KHẨU) */}
+                {isPasswordModalOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200">
+                        <div className="relative w-full max-w-md bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border rounded-3xl shadow-2xl overflow-hidden my-6">
+                            {/* Modal Header */}
+                            <div className="px-6 py-5 bg-gradient-to-r from-paper to-paper-100 dark:from-night-surface dark:to-night-card border-b border-paper-border dark:border-night-border flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <span className="w-10 h-10 rounded-xl bg-wine/10 dark:bg-gold/15 text-wine dark:text-gold flex items-center justify-center text-xl shrink-0">
+                                        <i className="ph-bold ph-lock-key"></i>
+                                    </span>
+                                    <div>
+                                        <h3 className="font-display font-black text-base text-ink dark:text-night-text">
+                                            Đổi Mật Khẩu
+                                        </h3>
+                                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-wine/10 dark:bg-gold/15 text-wine dark:text-gold text-[10px] font-bold font-metadata-spec">
+                                            {passwordStep === 1 ? 'Bước 1/2: Nhập Mật Khẩu Hiện Tại' : 'Bước 2/2: Thiết Lập Mật Khẩu Mới'}
+                                        </span>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={closePasswordModal}
+                                    className="w-8 h-8 rounded-full bg-paper-border/50 dark:bg-night-border text-ink-muted dark:text-night-muted hover:text-ink dark:hover:text-night-text flex items-center justify-center transition-colors cursor-pointer"
+                                    aria-label="Đóng popup"
+                                >
+                                    <i className="ph-bold ph-x text-base"></i>
+                                </button>
+                            </div>
+
+                            {/* Step Progress Line */}
+                            <div className="w-full bg-paper-border/30 dark:bg-night-border h-1 flex">
+                                <div className={`h-full transition-all duration-300 ${passwordStep === 1 ? 'w-1/2 bg-wine dark:bg-gold' : 'w-full bg-emerald-500'}`}></div>
+                            </div>
+
+                            {/* Modal Body */}
+                            <div className="p-6">
+                                {passwordError && (
+                                    <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs font-metadata-spec font-bold flex items-center gap-2">
+                                        <i className="ph-bold ph-warning-circle text-base shrink-0"></i>
+                                        <span>{passwordError}</span>
+                                    </div>
+                                )}
+
+                                {passwordStep === 1 ? (
+                                    /* BƯỚC 1: NHẬP MẬT KHẨU CŨ */
+                                    <form onSubmit={handleNextPasswordStep} className="space-y-4">
+                                        <p className="text-xs font-editorial-body text-ink-muted dark:text-night-muted leading-relaxed">
+                                            Để bảo vệ an toàn cho tài khoản của bạn, vui lòng xác nhận mật khẩu hiện tại trước khi tạo mật khẩu mới.
+                                        </p>
+
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-metadata-spec font-bold text-ink dark:text-night-text block">
+                                                Mật Khẩu Hiện Tại <span className="text-rose-500">*</span>
+                                            </label>
+                                            <div className="relative">
+                                                <input
+                                                    type={showOldPassword ? "text" : "password"}
+                                                    placeholder="Nhập mật khẩu hiện tại của bạn"
+                                                    value={passwordForm.oldPassword}
+                                                    onChange={(e) => setPasswordForm({ ...passwordForm, oldPassword: e.target.value })}
+                                                    required
+                                                    autoFocus
+                                                    className="w-full px-3.5 py-2.5 pr-11 rounded-xl border border-paper-border dark:border-night-border bg-paper dark:bg-night-surface text-ink dark:text-night-text text-xs font-metadata-spec focus:outline-none focus:border-wine dark:focus:border-gold transition-colors"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowOldPassword(!showOldPassword)}
+                                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink dark:text-night-muted dark:hover:text-night-text p-1 text-base transition-colors cursor-pointer"
+                                                    title={showOldPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                                                    aria-label={showOldPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                                                >
+                                                    <i className={`ph-bold ${showOldPassword ? 'ph-eye-slash text-wine dark:text-gold' : 'ph-eye'}`}></i>
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div className="pt-3 flex items-center justify-end gap-2.5 border-t border-paper-border dark:border-night-border">
+                                            <button
+                                                type="button"
+                                                onClick={closePasswordModal}
+                                                className="px-4 py-2.5 rounded-xl border border-paper-border dark:border-night-border hover:bg-paper dark:hover:bg-night-surface text-ink dark:text-night-text font-metadata-spec font-bold text-xs transition-colors cursor-pointer"
+                                            >
+                                                Hủy
+                                            </button>
+                                            <button
+                                                type="submit"
+                                                disabled={!passwordForm.oldPassword.trim()}
+                                                className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-wine to-wine-light hover:opacity-95 text-white font-metadata-spec font-bold text-xs shadow-md transition-all cursor-pointer disabled:opacity-50"
+                                            >
+                                                <span>Tiếp Tục</span>
+                                                <i className="ph-bold ph-arrow-right text-xs"></i>
+                                            </button>
+                                        </div>
+                                    </form>
+                                ) : (
+                                    /* BƯỚC 2: NHẬP MẬT KHẨU MỚI & XÁC NHẬN */
+                                    <form onSubmit={handleSubmitChangePassword} className="space-y-4">
+                                        <p className="text-xs font-editorial-body text-ink-muted dark:text-night-muted leading-relaxed">
+                                            Vui lòng tạo mật khẩu mới an toàn (tối thiểu 6 ký tự) và nhập lại để xác nhận.
+                                        </p>
+
+                                        {/* Mật khẩu mới */}
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-metadata-spec font-bold text-ink dark:text-night-text block">
+                                                Mật Khẩu Mới <span className="text-rose-500">*</span>
+                                            </label>
+                                            <div className="relative">
+                                                <input
+                                                    type={showNewPassword ? "text" : "password"}
+                                                    placeholder="Tối thiểu 6 ký tự"
+                                                    value={passwordForm.newPassword}
+                                                    onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                                                    required
+                                                    autoFocus
+                                                    className="w-full px-3.5 py-2.5 pr-11 rounded-xl border border-paper-border dark:border-night-border bg-paper dark:bg-night-surface text-ink dark:text-night-text text-xs font-metadata-spec focus:outline-none focus:border-wine dark:focus:border-gold transition-colors"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowNewPassword(!showNewPassword)}
+                                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink dark:text-night-muted dark:hover:text-night-text p-1 text-base transition-colors cursor-pointer"
+                                                    title={showNewPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                                                    aria-label={showNewPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                                                >
+                                                    <i className={`ph-bold ${showNewPassword ? 'ph-eye-slash text-wine dark:text-gold' : 'ph-eye'}`}></i>
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Xác nhận mật khẩu mới */}
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs font-metadata-spec font-bold text-ink dark:text-night-text block">
+                                                Xác Nhận Mật Khẩu Mới <span className="text-rose-500">*</span>
+                                            </label>
+                                            <div className="relative">
+                                                <input
+                                                    type={showConfirmPassword ? "text" : "password"}
+                                                    placeholder="Nhập lại mật khẩu mới"
+                                                    value={passwordForm.confirmPassword}
+                                                    onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                                                    required
+                                                    className="w-full px-3.5 py-2.5 pr-11 rounded-xl border border-paper-border dark:border-night-border bg-paper dark:bg-night-surface text-ink dark:text-night-text text-xs font-metadata-spec focus:outline-none focus:border-wine dark:focus:border-gold transition-colors"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink dark:text-night-muted dark:hover:text-night-text p-1 text-base transition-colors cursor-pointer"
+                                                    title={showConfirmPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                                                    aria-label={showConfirmPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                                                >
+                                                    <i className={`ph-bold ${showConfirmPassword ? 'ph-eye-slash text-wine dark:text-gold' : 'ph-eye'}`}></i>
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div className="pt-3 flex items-center justify-between gap-2.5 border-t border-paper-border dark:border-night-border">
+                                            <button
+                                                type="button"
+                                                onClick={() => { setPasswordStep(1); setPasswordError(''); }}
+                                                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-paper-border dark:border-night-border hover:bg-paper dark:hover:bg-night-surface text-ink dark:text-night-text font-metadata-spec font-bold text-xs transition-colors cursor-pointer"
+                                            >
+                                                <i className="ph-bold ph-arrow-left text-xs"></i>
+                                                <span>Quay Lại</span>
+                                            </button>
+                                            <button
+                                                type="submit"
+                                                disabled={isSubmittingPassword || !passwordForm.newPassword || !passwordForm.confirmPassword}
+                                                className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-wine to-wine-light hover:opacity-95 text-white font-metadata-spec font-bold text-xs shadow-md transition-all cursor-pointer disabled:opacity-50"
+                                            >
+                                                {isSubmittingPassword ? (
+                                                    <>
+                                                        <i className="ph-bold ph-spinner animate-spin text-base"></i>
+                                                        <span>Đang Đổi...</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <i className="ph-bold ph-check-circle text-base"></i>
+                                                        <span>Xác Nhận Đổi Mật Khẩu</span>
+                                                    </>
+                                                )}
+                                            </button>
+                                        </div>
+                                    </form>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
 
 
 

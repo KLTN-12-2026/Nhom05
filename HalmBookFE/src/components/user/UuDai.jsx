@@ -327,9 +327,9 @@ export default function OffersEnd() {
           <div className="w-full max-w-[1520px] mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
             
             {/* Logo */}
-            <a href="testhome/tc.html" className="flex items-center gap-3 group shrink-0" aria-label="HALM BOOK Homepage">
+            <a href="/trangchu" className="flex items-center gap-3 group shrink-0" aria-label="HALM BOOK Homepage">
               <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg bg-wine flex items-center justify-center text-white shadow-md group-hover:scale-105 transition-transform">
-                <img src="testhome/img/icon-removebg-preview.png" alt="Logo" className="w-8 h-8 object-contain" onError={(e) => { e.currentTarget.src = './image/LOGO HALM BOOK/logo.png'; }} />
+                <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" onError={(e) => { e.currentTarget.src = './image/LOGO HALM BOOK/logo.png'; }} />
               </div>
               <div className="flex flex-col">
                 <span className="font-display font-black text-xl sm:text-2xl tracking-tight text-ink dark:text-night-text leading-tight group-hover:text-wine dark:group-hover:text-gold transition-colors">HALM BOOK</span>
@@ -339,7 +339,7 @@ export default function OffersEnd() {
 
             {/* Navigation Links */}
             <nav className="hidden lg:flex items-center gap-7 text-xs font-bold tracking-wider uppercase text-ink/80 dark:text-night-muted">
-              <a href="testhome/tc.html" className="hover:text-wine dark:hover:text-gold transition-colors">Trang Chủ</a>
+              <a href="/trangchu" className="hover:text-wine dark:hover:text-gold transition-colors">Trang Chủ</a>
               <a href="offers.html" className="text-wine dark:text-gold font-black transition-colors relative after:content-[''] after:absolute after:-bottom-1 after:left-0 after:w-full after:h-0.5 after:bg-wine dark:after:bg-gold">Ưu Đãi</a>
               <a href="tiers.html" className="hover:text-wine dark:hover:text-gold transition-colors">Gói Hội Viên</a>
               <a href="my-books.html" className="hover:text-wine dark:hover:text-gold transition-colors">Tủ Sách</a>
@@ -387,7 +387,7 @@ export default function OffersEnd() {
               <span className="text-xs font-metadata-spec font-bold text-gold flex items-center gap-1">{khoaiBalance.toLocaleString('vi-VN')} Khoai <i className="ph-fill ph-coins"></i></span>
             </div>
             <nav className="flex flex-col gap-2 font-bold text-xs uppercase tracking-wider">
-              <a href="testhome/tc.html" className="py-1.5 text-ink dark:text-night-text hover:text-wine">Trang Chủ</a>
+              <a href="/trangchu" className="py-1.5 text-ink dark:text-night-text hover:text-wine">Trang Chủ</a>
               <a href="offers.html" className="py-1.5 text-wine dark:text-gold">Ưu Đãi Đặc Quyền</a>
               <a href="tiers.html" className="py-1.5 text-ink dark:text-night-text hover:text-wine">Gói Hội Viên</a>
               <a href="my-books.html" className="py-1.5 text-ink dark:text-night-text hover:text-wine">Tủ Sách</a>
@@ -726,29 +726,29 @@ export default function OffersEnd() {
                 <div>
                   <div className="w-full bg-[#fbf8f2] dark:bg-night-surface/70 rounded-xl p-3 pt-6 pb-2.5 mb-3 flex items-end justify-center gap-3 sm:gap-3.5 min-h-[145px] border border-paper-border/60 dark:border-night-border/60 relative">
                     <div className="combo-book-item flex flex-col items-center group/book cursor-pointer"
-                         onMouseEnter={(e) => handleBookEnter(e, {title: 'Điện Biên Phủ — Lịch Sử & Ký Ức', author: 'Đại tướng Võ Nguyên Giáp', category: 'Lịch Sử Quân Sự', rating: '★ 5.0', pages: '368 trang', price: '130 Khoai', summary: 'Tái hiện toàn cảnh chiến dịch Điện Biên Phủ lừng lẫy năm châu, chấn động địa cầu...', cover: 'testhome/img/dbp.jfif'})}
+                         onMouseEnter={(e) => handleBookEnter(e, {title: 'Điện Biên Phủ — Lịch Sử & Ký Ức', author: 'Đại tướng Võ Nguyên Giáp', category: 'Lịch Sử Quân Sự', rating: '★ 5.0', pages: '368 trang', price: '130 Khoai', summary: 'Tái hiện toàn cảnh chiến dịch Điện Biên Phủ lừng lẫy năm châu, chấn động địa cầu...', cover: 'https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=400&q=80'})}
                          onMouseLeave={handleBookLeave}
-                         onMouseMove={(e) => handleBookEnter(e, {title: 'Điện Biên Phủ — Lịch Sử & Ký Ức', author: 'Đại tướng Võ Nguyên Giáp', category: 'Lịch Sử Quân Sự', rating: '★ 5.0', pages: '368 trang', price: '130 Khoai', summary: 'Tái hiện toàn cảnh chiến dịch Điện Biên Phủ lừng lẫy năm châu, chấn động địa cầu...', cover: 'testhome/img/dbp.jfif'})}>
+                         onMouseMove={(e) => handleBookEnter(e, {title: 'Điện Biên Phủ — Lịch Sử & Ký Ức', author: 'Đại tướng Võ Nguyên Giáp', category: 'Lịch Sử Quân Sự', rating: '★ 5.0', pages: '368 trang', price: '130 Khoai', summary: 'Tái hiện toàn cảnh chiến dịch Điện Biên Phủ lừng lẫy năm châu, chấn động địa cầu...', cover: 'https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=400&q=80'})}>
                       <div className="book-cover-wrapper w-16 sm:w-20 aspect-[2/3] rounded shadow-md overflow-hidden bg-paper-200 border border-black/10 group-hover/book:shadow-xl transition-shadow">
-                        <img src="testhome/img/dbp.jfif" alt="Điện Biên Phủ" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = 'https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=400&q=80'; }} />
+                        <img src="https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=400&q=80" alt="Điện Biên Phủ" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = 'https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=400&q=80'; }} />
                       </div>
                       <span className="text-[10px] font-bold text-ink dark:text-night-text mt-1.5 truncate max-w-[70px] sm:max-w-[80px] text-center">Điện Biên Phủ</span>
                     </div>
 
                     <div className="combo-book-item flex flex-col items-center group/book -translate-y-1 cursor-pointer"
-                         onMouseEnter={(e) => handleBookEnter(e, {title: 'Nhân Chứng Lịch Sử: Thành Cổ Quảng Trị', author: 'Nhiều Tác Giả', category: 'Lịch Sử & Ký Ức', rating: '★ 4.9', pages: '280 trang', price: '135 Khoai', summary: 'Khúc tráng ca bất tử về 81 ngày đêm máu lửa bảo vệ Thành Cổ...', cover: 'testhome/img/thanhco.jfif'})}
+                         onMouseEnter={(e) => handleBookEnter(e, {title: 'Nhân Chứng Lịch Sử: Thành Cổ Quảng Trị', author: 'Nhiều Tác Giả', category: 'Lịch Sử & Ký Ức', rating: '★ 4.9', pages: '280 trang', price: '135 Khoai', summary: 'Khúc tráng ca bất tử về 81 ngày đêm máu lửa bảo vệ Thành Cổ...', cover: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=400&q=80'})}
                          onMouseLeave={handleBookLeave}>
                       <div className="book-cover-wrapper w-20 sm:w-24 aspect-[2/3] rounded shadow-lg overflow-hidden bg-paper-200 border border-black/10 group-hover/book:shadow-2xl transition-shadow">
-                        <img src="testhome/img/thanhco.jfif" alt="Thành Cổ Quảng Trị" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = 'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=400&q=80'; }} />
+                        <img src="https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=400&q=80" alt="Thành Cổ Quảng Trị" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = 'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=400&q=80'; }} />
                       </div>
                       <span className="text-[10px] font-bold text-ink dark:text-night-text mt-1.5 truncate max-w-[70px] sm:max-w-[85px] text-center">Thành Cổ</span>
                     </div>
 
                     <div className="combo-book-item flex flex-col items-center group/book cursor-pointer"
-                         onMouseEnter={(e) => handleBookEnter(e, {title: 'Khúc Ca Tiến Công', author: 'Nguyễn Đình Thi', category: 'Văn Học Cách Mạng', rating: '★ 4.8', pages: '310 trang', price: '120 Khoai', summary: 'Tuyển tập những bài thơ, trường ca và khúc tráng ca hào hùng rực lửa...', cover: 'testhome/img/tiencong.jfif'})}
+                         onMouseEnter={(e) => handleBookEnter(e, {title: 'Khúc Ca Tiến Công', author: 'Nguyễn Đình Thi', category: 'Văn Học Cách Mạng', rating: '★ 4.8', pages: '310 trang', price: '120 Khoai', summary: 'Tuyển tập những bài thơ, trường ca và khúc tráng ca hào hùng rực lửa...', cover: 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=400&q=80'})}
                          onMouseLeave={handleBookLeave}>
                       <div className="book-cover-wrapper w-16 sm:w-20 aspect-[2/3] rounded shadow-md overflow-hidden bg-paper-200 border border-black/10 group-hover/book:shadow-xl transition-shadow">
-                        <img src="testhome/img/tiencong.jfif" alt="Khúc Ca Tiến Công" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=400&q=80'; }} />
+                        <img src="https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=400&q=80" alt="Khúc Ca Tiến Công" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.src = 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=400&q=80'; }} />
                       </div>
                       <span className="text-[10px] font-bold text-ink dark:text-night-text mt-1.5 truncate max-w-[70px] sm:max-w-[80px] text-center">Tiến Công</span>
                     </div>
@@ -1246,7 +1246,7 @@ export default function OffersEnd() {
               <div className="lg:col-span-2 space-y-4">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg bg-wine flex items-center justify-center text-white shadow-md">
-                    <img src="testhome/img/icon-removebg-preview.png" alt="Logo" className="w-7 h-7 object-contain" onError={(e) => { e.currentTarget.src = './image/LOGO HALM BOOK/logo.png'; }} />
+                    <img src="/logo.png" alt="Logo" className="w-7 h-7 object-contain" onError={(e) => { e.currentTarget.src = './image/LOGO HALM BOOK/logo.png'; }} />
                   </div>
                   <span className="font-display font-black text-2xl tracking-tight text-ink dark:text-night-text">HALM BOOK</span>
                 </div>
@@ -1262,11 +1262,11 @@ export default function OffersEnd() {
               <div className="space-y-3">
                 <h4 className="font-display font-black text-xs uppercase tracking-wider text-ink dark:text-night-text">Khám Phá</h4>
                 <ul className="space-y-2 text-xs font-semibold text-ink-muted dark:text-night-muted font-metadata-spec">
-                  <li><a href="testhome/tc.html#trending-section" className="hover:text-wine dark:hover:text-gold transition-colors">Sách Thịnh Hành</a></li>
-                  <li><a href="testhome/tc.html#children-section" className="hover:text-wine dark:hover:text-gold transition-colors">Sách Thiếu Nhi</a></li>
-                  <li><a href="testhome/tc.html#literature-section" className="hover:text-wine dark:hover:text-gold transition-colors">Văn Học & Truyện Dài</a></li>
-                  <li><a href="testhome/tc.html#selfgrowth-section" className="hover:text-wine dark:hover:text-gold transition-colors">Phát Triển Bản Thân</a></li>
-                  <li><a href="testhome/tc.html#topic-section" className="hover:text-wine dark:hover:text-gold transition-colors">Chủ Đề Cảm Hứng</a></li>
+                  <li><a href="/trangchu#trending-section" className="hover:text-wine dark:hover:text-gold transition-colors">Sách Thịnh Hành</a></li>
+                  <li><a href="/trangchu#children-section" className="hover:text-wine dark:hover:text-gold transition-colors">Sách Thiếu Nhi</a></li>
+                  <li><a href="/trangchu#literature-section" className="hover:text-wine dark:hover:text-gold transition-colors">Văn Học & Truyện Dài</a></li>
+                  <li><a href="/trangchu#selfgrowth-section" className="hover:text-wine dark:hover:text-gold transition-colors">Phát Triển Bản Thân</a></li>
+                  <li><a href="/trangchu#topic-section" className="hover:text-wine dark:hover:text-gold transition-colors">Chủ Đề Cảm Hứng</a></li>
                 </ul>
               </div>
               <div className="space-y-3">
@@ -1308,7 +1308,7 @@ export default function OffersEnd() {
             <div className="bg-gradient-to-r from-wine to-wine-light text-white px-5 py-3.5 flex justify-between items-center shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-full bg-white p-0.5 shrink-0">
-                  <img src="testhome/img/icon_chatbot.png" alt="Bot" className="w-full h-full rounded-full object-cover" onError={(e) => { e.currentTarget.src = './image/LOGO HALM BOOK/logo.png'; }} />
+                  <img src="/logo.png" alt="Bot" className="w-full h-full rounded-full object-cover" onError={(e) => { e.currentTarget.src = './image/LOGO HALM BOOK/logo.png'; }} />
                 </div>
                 <div>
                   <div className="font-display font-bold text-sm tracking-wide leading-tight">Trợ lý ảo HALM BOOK</div>
@@ -1329,7 +1329,7 @@ export default function OffersEnd() {
               {showChatWelcome && (
                 <div id="chat-welcome" className="text-center py-6 space-y-3">
                   <div className="w-14 h-14 mx-auto rounded-full bg-wine/20 border border-wine/40 p-1 flex items-center justify-center">
-                    <img src="testhome/img/icon_chatbot.png" alt="Bot" className="w-full h-full rounded-full object-cover" onError={(e) => { e.currentTarget.src = './image/LOGO HALM BOOK/logo.png'; }} />
+                    <img src="/logo.png" alt="Bot" className="w-full h-full rounded-full object-cover" onError={(e) => { e.currentTarget.src = './image/LOGO HALM BOOK/logo.png'; }} />
                   </div>
                   <h4 className="font-display font-black text-base text-white">Xin chào độc giả!</h4>
                   <p className="font-editorial-body text-xs text-night-muted leading-relaxed">Tôi là trợ lý AI của HALM BOOK. Bạn muốn tư vấn gói đọc sách nào phù hợp nhất hôm nay?</p>
@@ -1369,7 +1369,7 @@ export default function OffersEnd() {
           </div>
 
           <button onClick={() => setChatOpen(!chatOpen)} className="w-14 h-14 rounded-full bg-wine hover:bg-wine-dark text-white p-1 shadow-2xl flex items-center justify-center transition-transform hover:scale-105" aria-label="Mở trợ lý ảo AI">
-            <img src="testhome/img/icon_chatbot.png" alt="Chatbot" className="w-full h-full rounded-full object-cover" onError={(e) => { e.currentTarget.src = './image/LOGO HALM BOOK/logo.png'; }} />
+            <img src="/logo.png" alt="Chatbot" className="w-full h-full rounded-full object-cover" onError={(e) => { e.currentTarget.src = './image/LOGO HALM BOOK/logo.png'; }} />
           </button>
         </div>
 

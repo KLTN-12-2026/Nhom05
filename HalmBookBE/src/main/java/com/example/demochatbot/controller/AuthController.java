@@ -60,11 +60,6 @@ public class AuthController {
         return ResponseEntity.ok(userInfo);
     }
 
-    @GetMapping("/encode")
-    public String encodePassword(@RequestParam String rawPassword) {
-        return new BCryptPasswordEncoder().encode(rawPassword);
-    }
-
     /**
      * FIX: Đăng nhập bằng username/password:
      * - Xác thực qua AuthenticationManager

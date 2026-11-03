@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import logo from "@/assets/images/logo.png";
 import { clearAuthSession } from "@/services/authToken";
 import axiosInstance from "@/services/axiosClient";
+import { getCurrentCustomer } from "@/services/customerService";
 import { triggerAirplaneBannerAnimation } from "./helicopterAnimation";
 import { isDarkMode, applyTheme } from "@/utils/theme";
 
@@ -29,6 +30,7 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
   ));
   const [searchText, setSearchText] = useState("");
   const [cartCount, setCartCount] = useState(0);
+  const [customer, setCustomer] = useState(null);
   const isHomePage = location.pathname === "/trangchu";
   const sectionHref = (id) => isHomePage ? `#${id}` : `/trangchu#${id}`;
 
@@ -80,6 +82,44 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
       window.removeEventListener("halm-cart-updated", fetchCartCount);
     };
   }, [location.pathname]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchCustomer = () => {
+      getCurrentCustomer()
+        .then((data) => {
+          if (isMounted) setCustomer(data);
+        })
+        .catch((error) => {
+          if (isMounted) {
+            setCustomer(null);
+            console.error("Không thể tải thông tin tài khoản trên header:", error);
+          }
+        });
+    };
+
+    fetchCustomer();
+
+    // Lắng nghe sự kiện cập nhật số dư khoai thời gian thực
+    const handlePotatoUpdated = (event) => {
+      if (event?.detail) {
+        setCustomer((prev) => ({
+          ...prev,
+          potatoBalance: event.detail.potatoBalance ?? event.detail.balance ?? prev?.potatoBalance,
+        }));
+      } else {
+        fetchCustomer();
+      }
+    };
+
+    window.addEventListener("halm-potato-updated", handlePotatoUpdated);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener("halm-potato-updated", handlePotatoUpdated);
+    };
+  }, []);
 
   useEffect(() => {
     const closeAccountMenu = (event) => {
@@ -139,7 +179,15 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
           border-bottom: 1px solid rgba(212, 175, 55, 0.55) !important;
           box-shadow: 0 5px 20px -5px rgba(0, 0, 0, 0.65) !important;
           color: #f5f2e8 !important;
-          transition: transform 0.38s cubic-bezier(0.16, 1, 0.3, 1), padding 0.3s ease, background 0.4s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+          padding-top: 0.875rem !important;
+          padding-bottom: 0.875rem !important;
+          min-height: 72px;
+          transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+        #navbar.halm-home-header.scrolled {
+          padding-top: 0.875rem !important;
+          padding-bottom: 0.875rem !important;
+          box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.75) !important;
         }
         #airplane-effects-canvas {
           position: absolute;
@@ -417,6 +465,33 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
         @media (max-width: 639px) {
           #navbar.halm-home-header .header-desktop-search { display: none; }
         }
+
+        /* Đảm bảo Footer luôn đồng bộ Dark Mode 100% trên toàn bộ các màn hình */
+        html.dark footer {
+          background-color: #111210 !important;
+          border-color: #2C2E29 !important;
+          color: #EDE9DF !important;
+        }
+        html.dark footer section h2 {
+          color: #D4AF37 !important;
+          border-color: #2C2E29 !important;
+        }
+        html.dark footer ul,
+        html.dark footer p,
+        html.dark footer .space-y-2\.5 {
+          color: #96938B !important;
+        }
+        html.dark footer a:hover,
+        html.dark footer button:hover {
+          color: #D4AF37 !important;
+        }
+        html.dark footer .bg-white {
+          background-color: #181916 !important;
+          border-color: rgba(212, 175, 55, 0.3) !important;
+        }
+        html.dark footer .border-t {
+          border-color: #2C2E29 !important;
+        }
       `}</style>
       <nav id="navbar" className="halm-home-header header-transition font-nunito fixed top-0 z-50 w-full border-b py-4">
         <div id="airplane-stage-layer" className="pointer-events-none fixed inset-0 z-[1] overflow-hidden" aria-hidden="true">
@@ -488,10 +563,26 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
             </button>
             <div id="avatar-menu-wrapper" className="relative hidden items-center lg:flex">
               <button id="avatar-menu-button" type="button" onClick={() => setIsAccountMenuOpen((current) => !current)} className="home-header-control flex h-11 items-center gap-2 rounded-full px-2.5 transition-colors" aria-label="Mở menu tài khoản" aria-expanded={isAccountMenuOpen}>
-                <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[#D6B64C] bg-gradient-to-br from-[#F2DCA0] to-[#DBB867] text-[#654321] shadow-inner"><i className="ph-fill ph-user text-xl"></i></span>
+                <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border border-[#D6B64C] bg-gradient-to-br from-[#F2DCA0] to-[#DBB867] text-[#654321] shadow-inner">
+                  {customer?.avatar || customer?.avatarUrl ? (
+                    <img
+                      src={customer.avatar || customer.avatarUrl}
+                      alt={customer.customerName || "Avatar tài khoản"}
+                      className="h-full w-full object-cover"
+                      onError={(event) => {
+                        event.currentTarget.onerror = null;
+                        event.currentTarget.src = HEADER_LOGO;
+                      }}
+                    />
+                  ) : (
+                    <i className="ph-fill ph-user text-xl"></i>
+                  )}
+                </span>
                 <i id="avatar-caret-icon" className="ph-bold ph-caret-down text-xs transition-transform"></i>
               </button>
               <div id="avatar-dropdown-menu" className={`avatar-dropdown ${isAccountMenuOpen ? "" : "hidden"} absolute right-0 top-full z-50 mt-3 w-72 rounded-2xl border p-2.5 text-xs`}>
+                <Link to="/canhan?tab=wallet" onClick={() => setIsAccountMenuOpen(false)} className="avatar-dropdown-item flex items-center justify-between rounded-xl px-3 py-2.5 font-bold text-[#D4AF37] transition-colors"><span className="flex items-center gap-2"><i className="ph-fill ph-wallet text-base"></i>Ví Khoai Tây</span><span className="rounded-full bg-[#D4AF37]/20 px-2 py-0.5 text-[11px] font-black text-[#D4AF37]">{(customer?.potatoBalance ?? 0).toLocaleString()} 🥔</span></Link>
+                <Link to="/nhiemvu" onClick={() => setIsAccountMenuOpen(false)} className="avatar-dropdown-item flex items-center justify-between rounded-xl px-3 py-2.5 font-semibold transition-colors"><span className="flex items-center gap-2"><i className="ph-bold ph-target text-base text-amber-500"></i>Nhiệm vụ & Điểm danh</span><span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">Streak 🔥</span></Link>
                 <Link to="/canhan" onClick={() => setIsAccountMenuOpen(false)} className="avatar-dropdown-item flex items-center gap-2 rounded-xl px-3 py-2.5 font-semibold transition-colors"><i className="ph-bold ph-user-circle text-base"></i>Thông tin cá nhân</Link>
                 <Link to="/tusachcn" onClick={() => setIsAccountMenuOpen(false)} className="avatar-dropdown-item flex items-center gap-2 rounded-xl px-3 py-2.5 font-semibold transition-colors"><i className="ph-bold ph-books text-base"></i>Tủ sách của tôi</Link>
                 <Link to="/hang" onClick={() => setIsAccountMenuOpen(false)} className="avatar-dropdown-item flex items-center gap-2 rounded-xl px-3 py-2.5 font-semibold transition-colors"><i className="ph-bold ph-trophy text-base"></i>Hạng thành viên</Link>
@@ -515,6 +606,8 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
             <button type="button" onClick={handleSearch} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#D4AF37]" aria-label="Tìm kiếm"><i className="ph-bold ph-magnifying-glass"></i></button>
           </form>
           <nav className="grid grid-cols-2 gap-2 text-xs font-bold text-[#F4F2EC]" aria-label="Điều hướng di động">
+            <Link to="/canhan?tab=wallet" onClick={() => setIsMobileMenuOpen(false)} className="col-span-2 rounded-lg px-2 py-2 font-bold text-[#D4AF37] hover:bg-[#D4AF37]/10 flex items-center justify-between border border-[#D4AF37]/40 bg-[#111210]"><span>Ví Khoai Tây</span><span>{(customer?.potatoBalance ?? 0).toLocaleString()} 🥔</span></Link>
+            <Link to="/nhiemvu" onClick={() => setIsMobileMenuOpen(false)} className="col-span-2 rounded-lg px-2 py-2 font-bold text-amber-500 hover:bg-amber-500/10 flex items-center justify-between border border-amber-500/30 bg-[#111210]"><span>Nhiệm vụ & Điểm danh</span><span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">Streak 🔥</span></Link>
             {SECTIONS.map(([id, label]) => <a key={id} href={sectionHref(id)} onClick={() => setIsMobileMenuOpen(false)} className="rounded-lg px-2 py-2 hover:bg-[#D4AF37]/10 hover:text-[#D4AF37]">{label}</a>)}
             <Link to="/canhan" onClick={() => setIsMobileMenuOpen(false)} className="rounded-lg px-2 py-2 hover:bg-[#D4AF37]/10 hover:text-[#D4AF37]">Cá nhân</Link>
             <Link to="/tusachcn" onClick={() => setIsMobileMenuOpen(false)} className="rounded-lg px-2 py-2 hover:bg-[#D4AF37]/10 hover:text-[#D4AF37]">Tủ sách</Link>

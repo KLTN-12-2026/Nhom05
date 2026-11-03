@@ -424,19 +424,27 @@ const DB = {
     loadBooksFromApi: async function() {
         const token = sessionStorage.getItem('token') || localStorage.getItem('token');
         if (!token) return;
+        // Chỉ gọi API quản trị khi đang truy cập trang Quản Trị
+        if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/admin')) {
+            return;
+        }
         try {
-            const response = await fetch('http://localhost:8082/api/admin/books?page=0&size=1000', {
+            const response = await fetch('/api/admin/books?page=0&size=1000', {
                 headers: { Authorization: `Bearer ${token}` }
             });
+            if (response.status === 401 || response.status === 403) {
+                // Không phải quyền Admin, bỏ qua âm thầm
+                return;
+            }
             if (!response.ok) {
-                throw new Error(`API sách trả về HTTP ${response.status}`);
+                return;
             }
             const payload = await response.json();
             const books = Array.isArray(payload) ? payload : (payload.content || []);
             localStorage.setItem(DB_KEYS.BOOKS, JSON.stringify(books));
             this.emitChange();
         } catch (error) {
-            console.error('Không thể tải dữ liệu sách quản trị từ API.', error);
+            // Không spam console lỗi
         }
     },
 
