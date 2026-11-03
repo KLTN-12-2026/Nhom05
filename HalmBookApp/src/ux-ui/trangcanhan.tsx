@@ -20,8 +20,237 @@ import {
   View,
 } from 'react-native';
 import { useAppNavigation, useAppThemeStyles } from './navigation';
+import MembershipModal, {
+  CustomerTierSummaryDto,
+  DEFAULT_TIERS_LIST,
+  TierDto,
+} from './MembershipModal';
 
+<<<<<<< Updated upstream
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://172.31.99.157:8082';
+=======
+const resolvePrimaryApiUrl = (): string => {
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL.replace(/\/+$/, '');
+  }
+  const debuggerHost = Constants.expoConfig?.hostUri;
+  const host = debuggerHost
+    ? debuggerHost.split(':')[0]
+    : Platform.OS === 'android'
+      ? '10.0.2.2'
+      : 'localhost';
+  return `http://${host}:8082`;
+};
+
+const API_BASE_URL = resolvePrimaryApiUrl();
+
+const CANDIDATE_API_URLS = Array.from(
+  new Set([
+    API_BASE_URL,
+    'http://localhost:8082',
+    'http://127.0.0.1:8082',
+    'http://10.0.2.2:8082',
+  ])
+);
+
+async function apiRequestWithFallback<T = any>(
+  path: string,
+  config: AxiosRequestConfig = {}
+) {
+  let lastError: any = null;
+  for (const baseUrl of CANDIDATE_API_URLS) {
+    try {
+      return await axios.request<T>({
+        ...config,
+        url: `${baseUrl}${path}`,
+        timeout: config.timeout ?? 8000,
+      });
+    } catch (err: any) {
+      lastError = err;
+      // Nếu máy chủ đã phản hồi HTTP status (400, 401, 404, 500...), không cần thử IP khác
+      if (err?.response) {
+        throw err;
+      }
+    }
+  }
+  throw lastError;
+}
+
+type LangCode = 'vi' | 'en';
+
+const TRANSLATIONS = {
+  vi: {
+    loading: 'Đang tải...',
+    defaultReader: 'Độc giả HALM',
+    defaultTier: 'Thành viên',
+    notUpdated: 'Chưa cập nhật',
+    myProfileBtn: 'Trang cá nhân',
+    topUpBtn: 'Nạp khoai',
+    potatoAvailable: 'Khoai đang có',
+    readingStreak: 'Chuỗi ngày đọc',
+    potatoEarned: 'Khoai tích lũy',
+    tierPrefix: 'Hạng',
+    menuDailyTasks: 'Nhiệm vụ hằng ngày',
+    dailyTasksModalTitle: 'Nhiệm vụ hằng ngày',
+    menuTransactions: 'Lịch sử giao dịch',
+    menuHelp: 'Trung tâm trợ giúp',
+    menuChangePassword: 'Đổi mật khẩu',
+    menuNotifications: 'Cài đặt thông báo',
+    menuAbout: 'Thông tin về HALM',
+    menuLanguage: 'Ngôn ngữ',
+    logoutBtn: 'Đăng xuất',
+    profileModalTitle: 'Thông tin cá nhân',
+    fieldName: 'Họ tên',
+    fieldUsername: 'Tên đăng nhập',
+    fieldEmail: 'Email',
+    fieldPhone: 'Số điện thoại',
+    fieldGender: 'Giới tính',
+    fieldDob: 'Ngày sinh (DD/MM/YYYY)',
+    fieldAddress: 'Địa chỉ',
+    genderMale: 'Nam',
+    genderFemale: 'Nữ',
+    editProfileBtn: 'Thay đổi thông tin',
+    saveProfileBtn: 'Lưu thay đổi',
+    cancelBtn: 'Hủy',
+    viewAvatar: 'Xem ảnh đại diện',
+    changeAvatar: 'Thay đổi ảnh đại diện',
+    alertErrorTitle: 'Lỗi',
+    alertSuccessTitle: 'Thành công',
+    alertUpdateErrorTitle: 'Lỗi cập nhật',
+    errNameEmpty: 'Họ tên không được để trống.',
+    errEmailEmpty: 'Email không được để trống.',
+    errSessionExpired: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
+    msgProfileUpdated: 'Cập nhật thông tin cá nhân thành công!',
+    helpModalTitle: 'Trung tâm trợ giúp',
+    aiChatTitle: 'Chat với trợ lý AI',
+    aiChatSub: 'Phản hồi lập tức 24/7',
+    reportAndHelp: 'Báo cáo & Trợ giúp',
+    callPhone: 'Gọi điện',
+    faqHeading: 'Các vấn đề thường gặp',
+    faqs: [
+      'Làm sao để lấy lại mật khẩu?',
+      'Cách thanh toán bằng khoai tây?',
+      'Truyện bị lỗi font chữ?',
+      'Nâng cấp hạng thành viên như thế nào?',
+    ],
+    notifModalTitle: 'Cài đặt thông báo',
+    notifMasterTitle: 'HALM Thông báo',
+    notifMasterSub: 'Nhận thông báo từ ứng dụng',
+    notifPromo: 'Thông báo ưu đãi',
+    notifExpire: 'Sách sắp hết hạn',
+    notifAds: 'Quảng cáo & Sự kiện',
+    aboutModalTitle: 'Thông tin HALM',
+    aboutVersion: 'Phiên bản 1.0.0 (Cập nhật: 18/09/2026)',
+    aboutSlogan: '"Sách là ánh sáng, tri thức là sức mạnh"',
+    aboutDesc:
+      'HALM Book là nền tảng đọc truyện và tiểu thuyết hàng đầu, mang đến cho người dùng trải nghiệm đọc mượt mà, kho tàng sách khổng lồ cùng với các tính năng cộng đồng thú vị.',
+    pwdModalTitle: 'Đổi mật khẩu',
+    pwdStep1Desc:
+      'Vui lòng nhập mật khẩu hiện tại của bạn để xác thực trước khi đổi mật khẩu mới.',
+    pwdCurrentPlaceholder: 'Mật khẩu hiện tại',
+    pwdContinueBtn: 'TIẾP TỤC',
+    pwdStep2DescPrefix: 'Mật khẩu hiện tại chính xác. Vui lòng tạo mật khẩu mới cho tài khoản',
+    pwdNewPlaceholder: 'Mật khẩu mới (tối thiểu 6 ký tự)',
+    pwdConfirmPlaceholder: 'Xác nhận mật khẩu mới',
+    pwdSaveBtn: 'LƯU MẬT KHẨU',
+    errEnterOldPwd: 'Vui lòng nhập mật khẩu hiện tại.',
+    errWrongOldPwd: 'Mật khẩu hiện tại không chính xác. Vui lòng kiểm tra lại.',
+    errVerifyServer: 'Không thể kết nối đến máy chủ để xác thực mật khẩu. Vui lòng thử lại.',
+    errFillNewPwd: 'Vui lòng điền đầy đủ mật khẩu mới.',
+    errConfirmMismatch: 'Mật khẩu xác nhận không trùng khớp.',
+    errMinLength: 'Mật khẩu mới phải có ít nhất 6 ký tự.',
+    errSameAsOld: 'Mật khẩu mới không được trùng với mật khẩu hiện tại.',
+    errNoAccountIdentifier:
+      'Không tìm thấy định danh tài khoản. Vui lòng đăng nhập lại trước khi đổi mật khẩu.',
+    msgPwdChanged: 'Đổi mật khẩu thành công!',
+  },
+  en: {
+    loading: 'Loading...',
+    defaultReader: 'HALM Reader',
+    defaultTier: 'Member',
+    notUpdated: 'Not updated',
+    myProfileBtn: 'My Profile',
+    topUpBtn: 'Top Up Potatoes',
+    potatoAvailable: 'Available Potatoes',
+    readingStreak: 'Reading Streak',
+    potatoEarned: 'Total Potatoes',
+    tierPrefix: 'Tier',
+    menuDailyTasks: 'Daily Tasks',
+    dailyTasksModalTitle: 'Daily Tasks & Missions',
+    menuTransactions: 'Transaction History',
+    menuHelp: 'Help Center',
+    menuChangePassword: 'Change Password',
+    menuNotifications: 'Notification Settings',
+    menuAbout: 'About HALM',
+    menuLanguage: 'Language',
+    logoutBtn: 'Log Out',
+    profileModalTitle: 'Personal Information',
+    fieldName: 'Full Name',
+    fieldUsername: 'Username',
+    fieldEmail: 'Email',
+    fieldPhone: 'Phone Number',
+    fieldGender: 'Gender',
+    fieldDob: 'Date of Birth (DD/MM/YYYY)',
+    fieldAddress: 'Address',
+    genderMale: 'Male',
+    genderFemale: 'Female',
+    editProfileBtn: 'Edit Information',
+    saveProfileBtn: 'Save Changes',
+    cancelBtn: 'Cancel',
+    viewAvatar: 'View Avatar',
+    changeAvatar: 'Change Avatar',
+    alertErrorTitle: 'Error',
+    alertSuccessTitle: 'Success',
+    alertUpdateErrorTitle: 'Update Failed',
+    errNameEmpty: 'Full name cannot be empty.',
+    errEmailEmpty: 'Email cannot be empty.',
+    errSessionExpired: 'Your session has expired. Please log in again.',
+    msgProfileUpdated: 'Personal information updated successfully!',
+    helpModalTitle: 'Help Center',
+    aiChatTitle: 'Chat with AI Assistant',
+    aiChatSub: 'Instant 24/7 response',
+    reportAndHelp: 'Report & Support',
+    callPhone: 'Call',
+    faqHeading: 'Frequently Asked Questions',
+    faqs: [
+      'How do I recover my password?',
+      'How to pay with potatoes?',
+      'What if a book has font issues?',
+      'How do I upgrade my membership tier?',
+    ],
+    notifModalTitle: 'Notification Settings',
+    notifMasterTitle: 'HALM Notifications',
+    notifMasterSub: 'Receive notifications from the app',
+    notifPromo: 'Promotions & Offers',
+    notifExpire: 'Expiring Books',
+    notifAds: 'Events & Announcements',
+    aboutModalTitle: 'About HALM',
+    aboutVersion: 'Version 1.0.0 (Updated: 18/09/2026)',
+    aboutSlogan: '"Books are light, knowledge is power"',
+    aboutDesc:
+      'HALM Book is a leading novel and book reading platform, offering a smooth reading experience, a massive library, and engaging community features.',
+    pwdModalTitle: 'Change Password',
+    pwdStep1Desc:
+      'Please enter your current password to verify your identity before setting a new password.',
+    pwdCurrentPlaceholder: 'Current password',
+    pwdContinueBtn: 'CONTINUE',
+    pwdStep2DescPrefix: 'Current password verified. Please create a new password for account',
+    pwdNewPlaceholder: 'New password (at least 6 characters)',
+    pwdConfirmPlaceholder: 'Confirm new password',
+    pwdSaveBtn: 'SAVE PASSWORD',
+    errEnterOldPwd: 'Please enter your current password.',
+    errWrongOldPwd: 'Current password is incorrect. Please check again.',
+    errVerifyServer: 'Unable to connect to server to verify password. Please try again.',
+    errFillNewPwd: 'Please fill in both new password fields.',
+    errConfirmMismatch: 'Confirmation password does not match.',
+    errMinLength: 'New password must be at least 6 characters.',
+    errSameAsOld: 'New password must be different from your current password.',
+    errNoAccountIdentifier:
+      'Account identifier not found. Please log in again before changing password.',
+    msgPwdChanged: 'Password changed successfully!',
+  },
+};
+>>>>>>> Stashed changes
 
 const formatDateForDisplay = (dateVal: any): string => {
   if (!dateVal) return '';
@@ -81,13 +310,20 @@ const decodeJwtPayload = (token: string): Record<string, any> | null => {
 
 export default function Toi() {
   const themeStyles = useAppThemeStyles(styles);
-  const { navigate, logout, isDarkMode } = useAppNavigation();
+  const { navigate, logout, isDarkMode, setUserAvatarUrl, setUserInitial } = useAppNavigation();
 
   // Trạng thái hiển thị các Modal chức năng con
   const [showHelp, setShowHelp] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
+
+  // [GIẢI THÍCH CODE]: Quản lý Modal Hạng thành viên & Dữ liệu API Backend (/api/home/membership)
+  const [showDailyTasks, setShowDailyTasks] = useState(false);
+  const [showTierModal, setShowTierModal] = useState(false);
+  const [tierSummary, setTierSummary] = useState<CustomerTierSummaryDto | null>(null);
+  const [allTiers, setAllTiers] = useState<TierDto[]>(DEFAULT_TIERS_LIST);
+  const [isCheckingIn, setIsCheckingIn] = useState(false);
 
   // Trạng thái cho Đổi mật khẩu (2 bước)
   const [passwordStep, setPasswordStep] = useState(1);
@@ -178,6 +414,7 @@ export default function Toi() {
         console.warn('Lỗi khi gọi /api/home/customer/info:', err.message);
       }
 
+<<<<<<< Updated upstream
       // 2. Lấy thông tin tài khoản (username) từ /api/auth/me
       let currentUsername = '';
       try {
@@ -190,6 +427,44 @@ export default function Toi() {
         }
       } catch (err: any) {
         console.warn('Lỗi khi gọi /api/auth/me:', err.message);
+=======
+      // 3. [GIẢI THÍCH CODE]: Lấy thông tin Hạng thành viên & Điểm cày XP từ Backend (/api/home/membership/my-tier)
+      let tierSummaryData: CustomerTierSummaryDto | null = null;
+      try {
+        const tierRes = await apiRequestWithFallback<CustomerTierSummaryDto>(
+          '/api/home/membership/my-tier',
+          {
+            method: 'GET',
+            headers,
+            timeout: 8000,
+          }
+        );
+        if (tierRes.data) {
+          tierSummaryData = tierRes.data;
+          setTierSummary(tierSummaryData);
+          if (tierSummaryData.allTiers && tierSummaryData.allTiers.length > 0) {
+            setAllTiers(tierSummaryData.allTiers);
+          }
+        }
+      } catch (err: any) {
+        console.warn('Lỗi khi tải thông tin /api/home/membership/my-tier:', err.message);
+      }
+
+      // 4. [GIẢI THÍCH CODE]: Lấy danh sách 4 cấp bậc hội viên từ /api/home/membership/tiers
+      try {
+        const tiersListRes = await apiRequestWithFallback<TierDto[]>(
+          '/api/home/membership/tiers',
+          {
+            method: 'GET',
+            timeout: 8000,
+          }
+        );
+        if (Array.isArray(tiersListRes.data) && tiersListRes.data.length > 0) {
+          setAllTiers(tiersListRes.data);
+        }
+      } catch (err: any) {
+        console.warn('Lỗi khi tải danh sách /api/home/membership/tiers:', err.message);
+>>>>>>> Stashed changes
       }
 
       if (customerData) {
@@ -201,10 +476,10 @@ export default function Toi() {
         const addressVal = customerData.address || '';
         const avatarVal = customerData.avatarUrl || customerData.avatar || '';
         const custIdVal = customerData.customer_id || '';
-        const potatoVal = customerData.potatoBalance ?? 0;
-        const totalPotatoVal = customerData.totalPotatoEarned ?? 0;
-        const tierVal = customerData.membershipTier?.tierName || 'Thành viên';
-        const streakVal = customerData.streakDays ?? 0;
+        const potatoVal = tierSummaryData?.potatoBalance ?? customerData.potatoBalance ?? 0;
+        const totalPotatoVal = tierSummaryData?.totalPoints ?? customerData.totalPotatoEarned ?? 0;
+        const tierVal = tierSummaryData?.currentTier?.tierName || customerData.membershipTier?.tierName || 'Thợ Cày';
+        const streakVal = tierSummaryData?.streakDays ?? customerData.streakDays ?? 0;
 
         setUserInfo({
           name: nameVal,
@@ -221,6 +496,13 @@ export default function Toi() {
           tierName: tierVal,
           streakDays: streakVal,
         });
+
+        // [GIẢI THÍCH CODE]: Đồng bộ avatar và chữ cái đầu vào NavigationContext và AsyncStorage
+        setUserAvatarUrl?.(avatarVal);
+        const nextInitial = (nameVal || currentUsername || 'H').charAt(0).toUpperCase();
+        setUserInitial?.(nextInitial);
+        AsyncStorage.setItem('userAvatarUrl', avatarVal).catch(() => {});
+        AsyncStorage.setItem('userInitial', nextInitial).catch(() => {});
 
         setEditForm({
           name: nameVal,
@@ -253,6 +535,46 @@ export default function Toi() {
   useEffect(() => {
     fetchUserData(true);
   }, [fetchUserData]);
+
+  // [GIẢI THÍCH CODE]: Điểm danh đọc sách hằng ngày theo API Backend (/api/home/membership/checkin-streak)
+  const handleDailyCheckin = async () => {
+    if (isCheckingIn) return;
+    try {
+      setIsCheckingIn(true);
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        Alert.alert('Yêu cầu đăng nhập', 'Vui lòng đăng nhập để điểm danh nhận quà!');
+        return;
+      }
+
+      const res = await apiRequestWithFallback('/api/home/membership/checkin-streak', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        timeout: 8000,
+      });
+
+      if (res.data?.success) {
+        Alert.alert(
+          '🎉 Điểm Danh Thành Công!',
+          res.data.message ||
+            `Nhận +${res.data.earnedPotato} Khoai Tây và +20 Điểm cày XP 🔥. Chuỗi ngày đọc: ${res.data.streakDays} ngày!`
+        );
+        fetchUserData(false);
+      } else {
+        Alert.alert('Điểm Danh Đọc Sách', res.data?.message || 'Hôm nay bạn đã điểm danh rồi!');
+      }
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        'Không thể thực hiện điểm danh. Vui lòng kiểm tra lại kết nối!';
+      Alert.alert('Thông báo', msg);
+    } finally {
+      setIsCheckingIn(false);
+    }
+  };
 
   const handleOpenProfile = () => {
     setEditForm({
@@ -321,6 +643,11 @@ export default function Toi() {
           dob: updated.birthday ? formatDateForDisplay(updated.birthday) : prev.dob,
         }));
       }
+
+      // [GIẢI THÍCH CODE]: Cập nhật chữ cái đầu khi đổi họ tên
+      const updatedInitial = (nameVal || 'H').charAt(0).toUpperCase();
+      setUserInitial?.(updatedInitial);
+      AsyncStorage.setItem('userInitial', updatedInitial).catch(() => {});
 
       setIsEditingProfile(false);
       Alert.alert('Thành công', 'Cập Nhập Thông Tin Thành Công');
@@ -625,18 +952,123 @@ export default function Toi() {
           </View>
         </View>
 
+<<<<<<< Updated upstream
         {/* Hạng thành viên */}
         <TouchableOpacity style={themeStyles.tierCard}>
           <View style={themeStyles.tierInfo}>
             <Ionicons name="medal" size={24} color="#f1c40f" />
             <Text style={themeStyles.tierTitle}>Hạng: {userInfo.tierName}</Text>
+=======
+        {/* [GIẢI THÍCH CODE]: Thanh Hạng Thành Viên Tương Tác - Chạm vào để xem chi tiết lộ trình & đặc quyền */}
+        <TouchableOpacity
+          style={themeStyles.tierCardEnhanced}
+          onPress={() => setShowTierModal(true)}
+          activeOpacity={0.8}
+        >
+          <View style={themeStyles.tierCardTopRow}>
+            <View style={themeStyles.tierBadgeCircle}>
+              <Text style={themeStyles.tierBadgeEmoji}>
+                {tierSummary?.currentTier?.badgeIcon || '🌱'}
+              </Text>
+            </View>
+            <View style={themeStyles.tierCardMainInfo}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={themeStyles.tierCardName}>
+                  {tierSummary?.currentTier?.tierName || displayTier}
+                </Text>
+                <View style={themeStyles.tierDiscountPill}>
+                  <Text style={themeStyles.tierDiscountText}>
+                    Giảm {tierSummary?.discountPercent ?? 0}%
+                  </Text>
+                </View>
+              </View>
+              <Text style={themeStyles.tierCardSub}>
+                {tierSummary?.isMaxTier
+                  ? '👑 Cấp bậc Hoàng Gia Tối Thượng'
+                  : `Tiến độ lên ${tierSummary?.nextTier?.tierName || 'hạng kế'}: ${Math.round(tierSummary?.overallProgressPercent || 0)}%`}
+              </Text>
+            </View>
+            <View style={themeStyles.tierArrowBtn}>
+              <Ionicons name="chevron-forward" size={20} color="#888" />
+            </View>
           </View>
-          <Ionicons name="chevron-forward" size={20} color="#888" />
+
+          {/* Thanh mini progress nếu chưa đạt max tier */}
+          {!tierSummary?.isMaxTier && (
+            <View style={themeStyles.miniProgressBarTrack}>
+              <View
+                style={[
+                  themeStyles.miniProgressBarFill,
+                  { width: `${Math.min(100, Math.max(5, tierSummary?.overallProgressPercent || 0))}%` },
+                ]}
+              />
+            </View>
+          )}
+
+          <View style={themeStyles.tierCardFooter}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Ionicons name="shield-checkmark" size={14} color="#27ae60" />
+              <Text style={themeStyles.tierCardFooterText}>Bảo lưu vĩnh viễn</Text>
+            </View>
+            <Text style={themeStyles.tierCardActionHint}>Xem quyền lợi & Lộ trình ❯</Text>
+>>>>>>> Stashed changes
+          </View>
         </TouchableOpacity>
 
+<<<<<<< Updated upstream
         {/* Danh sách các Menu chức năng */}
         <View style={themeStyles.menuSection}>
           <TouchableOpacity style={themeStyles.menuItem} onPress={() => setShowHelp(true)}>
+=======
+        {/* [GIẢI THÍCH CODE]: Thanh Điểm Danh Nhanh Ngay Tại Trang Cá Nhân */}
+        <View style={themeStyles.quickCheckinBar}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+            <Ionicons name="flame" size={22} color="#e67e22" />
+            <View style={{ marginLeft: 8 }}>
+              <Text style={themeStyles.quickCheckinTitle}>Điểm danh đọc sách</Text>
+              <Text style={themeStyles.quickCheckinSub}>
+                Chuỗi {tierSummary?.streakDays ?? userInfo.streakDays} ngày liên tiếp
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={[
+              themeStyles.quickCheckinBtn,
+              tierSummary?.hasCheckedInToday && themeStyles.quickCheckinBtnDone,
+            ]}
+            onPress={handleDailyCheckin}
+            disabled={isCheckingIn || tierSummary?.hasCheckedInToday}
+            activeOpacity={0.8}
+          >
+            {isCheckingIn ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={themeStyles.quickCheckinBtnText}>
+                {tierSummary?.hasCheckedInToday ? 'Đã điểm danh ✅' : 'Điểm danh +5 🥔'}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Danh sách Menu */}
+        <View style={themeStyles.menuSection}>
+          {/* [GIẢI THÍCH CODE]: Mục Menu Nhiệm Vụ Hằng Ngày */}
+          <TouchableOpacity
+            style={themeStyles.menuItem}
+            onPress={() => setShowDailyTasks(true)}
+          >
+            <View style={[themeStyles.menuIconBox, { backgroundColor: '#fff9e6' }]}>
+              <Ionicons name="calendar-outline" size={20} color="#f39c12" />
+            </View>
+            <Text style={themeStyles.menuItemText}>{t.menuDailyTasks}</Text>
+            <Ionicons name="chevron-forward" size={20} color="#ccc" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={themeStyles.menuItem}
+            onPress={() => navigate('transactions')}
+          >
+>>>>>>> Stashed changes
             <View style={[themeStyles.menuIconBox, { backgroundColor: '#e8f4fd' }]}>
               <Ionicons name="help-buoy" size={20} color="#3498db" />
             </View>
@@ -1130,6 +1562,19 @@ export default function Toi() {
         </View>
       </Modal>
 
+<<<<<<< Updated upstream
+=======
+      {/* 5. [GIẢI THÍCH CODE]: Modal Hạng Thành Viên & Đặc Quyền Độc Giả */}
+      <MembershipModal
+        visible={showTierModal}
+        onClose={() => setShowTierModal(false)}
+        summary={tierSummary}
+        allTiers={allTiers}
+        isCheckingIn={isCheckingIn}
+        onCheckinStreak={handleDailyCheckin}
+        lang={lang}
+      />
+>>>>>>> Stashed changes
     </View>
   );
 }
@@ -1173,6 +1618,244 @@ const styles = StyleSheet.create({
   tierCard: { flexDirection: 'row', backgroundColor: '#fff', marginHorizontal: 20, marginBottom: 25, borderRadius: 12, padding: 15, justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: '#f1f2f6' },
   tierInfo: { flexDirection: 'row', alignItems: 'center' },
   tierTitle: { fontSize: 15, fontWeight: '700', color: '#1a1a1a', marginLeft: 10 },
+
+  // Tier Card Enhanced
+  tierCardEnhanced: {
+    backgroundColor: '#fff',
+    marginHorizontal: 20,
+    marginBottom: 12,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#f1f2f6',
+    shadowColor: '#1a1a1a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  tierCardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  tierBadgeCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#fff9e6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#f9e79f',
+  },
+  tierBadgeEmoji: {
+    fontSize: 24,
+  },
+  tierCardMainInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  tierCardName: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1a1a1a',
+  },
+  tierDiscountPill: {
+    backgroundColor: '#ebf5fb',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#aed6f1',
+  },
+  tierDiscountText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2980b9',
+  },
+  tierCardSub: {
+    fontSize: 12,
+    color: '#7f8c8d',
+    marginTop: 3,
+  },
+  tierArrowBtn: {
+    padding: 4,
+  },
+  miniProgressBarTrack: {
+    height: 6,
+    backgroundColor: '#f0f3f4',
+    borderRadius: 3,
+    marginTop: 12,
+    overflow: 'hidden',
+  },
+  miniProgressBarFill: {
+    height: '100%',
+    backgroundColor: '#f39c12',
+    borderRadius: 3,
+  },
+  tierCardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f8f9f9',
+  },
+  tierCardFooterText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#27ae60',
+  },
+  tierCardActionHint: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2c3a7a',
+  },
+
+  // Quick Checkin Bar
+  quickCheckinBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    marginHorizontal: 20,
+    marginBottom: 20,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#f1f2f6',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  quickCheckinTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1a1a1a',
+  },
+  quickCheckinSub: {
+    fontSize: 11,
+    color: '#7f8c8d',
+    marginTop: 2,
+  },
+  quickCheckinBtn: {
+    backgroundColor: '#e67e22',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  quickCheckinBtnDone: {
+    backgroundColor: '#27ae60',
+  },
+  quickCheckinBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  // Daily Tasks Modal Styles
+  dailyTaskHeaderCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#f1f2f6',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  dailyTaskFlameCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#fff4eb',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dailyTaskStreakTitle: {
+    fontSize: 13,
+    color: '#7f8c8d',
+    fontWeight: '600',
+  },
+  dailyTaskStreakValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#e67e22',
+    marginTop: 2,
+  },
+  dailyTaskCheckinBtn: {
+    backgroundColor: '#e67e22',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  dailyTaskCheckinBtnDone: {
+    backgroundColor: '#27ae60',
+  },
+  dailyTaskCheckinBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  dailyTaskItemCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#f1f2f6',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  dailyTaskIconRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  dailyTaskIconBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dailyTaskItemTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1a1a1a',
+  },
+  dailyTaskItemReward: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#e67e22',
+    marginTop: 3,
+  },
+  dailyTaskItemDesc: {
+    fontSize: 12,
+    color: '#7f8c8d',
+    lineHeight: 17,
+    marginTop: 4,
+  },
+  dailyTaskActionBtn: {
+    backgroundColor: '#2c3a7a',
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    alignSelf: 'flex-start',
+    marginTop: 12,
+  },
+  dailyTaskActionBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
 
   // Menu Section
   menuSection: { backgroundColor: '#fff', borderRadius: 15, marginHorizontal: 20, paddingHorizontal: 15, paddingVertical: 5 },

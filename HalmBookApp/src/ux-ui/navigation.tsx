@@ -46,6 +46,14 @@ export interface NavigationContextValue {
   setIsLoggedIn?: (val: boolean) => void;
   // showLoginAlert: Hàm hiển thị popup thông báo với dòng nút 'Đăng nhập ngay'
   showLoginAlert: (message: string) => void;
+
+  // ============================================================================
+  // [GIẢI THÍCH CODE]: Ảnh đại diện và chữ cái đầu đồng bộ cho các màn được chỉ định
+  // ============================================================================
+  userAvatarUrl?: string;
+  setUserAvatarUrl?: (url: string) => void;
+  userInitial?: string;
+  setUserInitial?: (initial: string) => void;
 }
 
 export const NavigationContext = createContext<NavigationContextValue | null>(null);

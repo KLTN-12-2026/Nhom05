@@ -240,7 +240,7 @@ interface TrangChuProps {
 }
 
 export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: TrangChuProps) {
-  const { navigate, setFooterVisible, isLoggedIn, showLoginAlert } = useAppNavigation();
+  const { navigate, setFooterVisible, isLoggedIn, showLoginAlert, userAvatarUrl, userInitial } = useAppNavigation();
   const [selectedPreviewBook, setSelectedPreviewBook] = useState<HomeBookItem | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const scrollOffset = useRef(0);
@@ -646,9 +646,14 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
               {!isLoggedIn ? (
                 // Icon kiểu account cho khách vãng lai
                 <Ionicons name="person-outline" size={22} color={isDarkMode ? '#fff' : '#1a1a1a'} />
+              ) : userAvatarUrl ? (
+                // [GIẢI THÍCH CODE]: Ảnh đại diện đồng bộ giống trang cá nhân
+                <Image source={{ uri: userAvatarUrl }} style={styles.avatarImg} />
               ) : (
-                // Avatar khi đã đăng nhập
-                <Text style={styles.avatarText}>A</Text>
+                // [GIẢI THÍCH CODE]: Chữ cái đầu hiển thị trên nền #2c3a7a giống hệt trang cá nhân
+                <View style={styles.avatarLetterCircle}>
+                  <Text style={styles.avatarText}>{userInitial || 'H'}</Text>
+                </View>
               )}
             </TouchableOpacity>
           </View>
@@ -1038,8 +1043,22 @@ const getStyles = (isDark: boolean) => {
       justifyContent: 'center',
       alignItems: 'center',
       marginLeft: 10,
+      overflow: 'hidden',
     },
-    avatarText: { fontSize: 20, fontWeight: '900', color: '#1a1a1a' },
+    avatarImg: {
+      width: 45,
+      height: 45,
+      borderRadius: 25,
+    },
+    avatarLetterCircle: {
+      width: 45,
+      height: 45,
+      borderRadius: 25,
+      backgroundColor: '#2c3a7a',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    avatarText: { fontSize: 20, fontWeight: '900', color: '#fff' },
 
     carouselContainer: { paddingLeft: 15, paddingRight: 5 },
     bannerCard: {

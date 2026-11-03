@@ -51,6 +51,9 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isFooterVisible, setIsFooterVisible] = useState(true);
   const [homeRefreshKey, setHomeRefreshKey] = useState(0);
+  // [GIẢI THÍCH CODE]: Quản lý ảnh đại diện & chữ cái đầu đồng bộ cho các màn được chỉ định
+  const [userAvatarUrl, setUserAvatarUrl] = useState<string>('');
+  const [userInitial, setUserInitial] = useState<string>('H');
 
   // ============================================================================
   // [GIẢI THÍCH CODE]: Quản lý bản thông báo yêu cầu đăng nhập
@@ -103,9 +106,11 @@ export default function App() {
     let isMounted = true;
     const initApp = async () => {
       try {
-        await AsyncStorage.multiRemove(['userToken', 'userRole', 'savedRoutes']);
+        await AsyncStorage.multiRemove(['userToken', 'userRole', 'savedRoutes', 'userAvatarUrl', 'userInitial']);
         if (isMounted) {
           setIsLoggedIn(false);
+          setUserAvatarUrl('');
+          setUserInitial('H');
           setRoutes([{ name: 'home' }]);
         }
       } catch (err) {
@@ -190,8 +195,16 @@ export default function App() {
     setRoutes((current) => current.length > 1 ? current.slice(0, -1) : [{ name: 'home' }]);
   };
 
-  // [GIẢI THÍCH CODE]: Khi đăng nhập thành công, cập nhật isLoggedIn = true và về Trang chủ
-  const finishLogin = () => {
+  // [GIẢI THÍCH CODE]: Khi đăng nhập thành công, cập nhật isLoggedIn = true, nạp avatar và về Trang chủ
+  const finishLogin = async () => {
+    try {
+      const [savedAvatar, savedInitial] = await Promise.all([
+        AsyncStorage.getItem('userAvatarUrl'),
+        AsyncStorage.getItem('userInitial'),
+      ]);
+      if (savedAvatar) setUserAvatarUrl(savedAvatar);
+      if (savedInitial) setUserInitial(savedInitial);
+    } catch {}
     setIsLoggedIn(true);
     setRoutes([{ name: 'home' }]);
   };
@@ -208,8 +221,10 @@ export default function App() {
   // [GIẢI THÍCH CODE]: Khi đăng xuất, xóa token và đưa người dùng về Trang chủ làm khách vãng lai
   const logout = async () => {
     try {
-      await AsyncStorage.multiRemove(['userToken', 'userRole', 'savedRoutes']);
+      await AsyncStorage.multiRemove(['userToken', 'userRole', 'savedRoutes', 'userAvatarUrl', 'userInitial']);
       setIsLoggedIn(false);
+      setUserAvatarUrl('');
+      setUserInitial('H');
       setRoutes([{ name: 'home' }]);
     } catch {
       Alert.alert('Không thể đăng xuất', 'Đã xảy ra lỗi khi xóa thông tin đăng nhập.');
@@ -241,6 +256,10 @@ export default function App() {
     showLoginAlert,
     isFooterVisible,
     setFooterVisible: setIsFooterVisible,
+    userAvatarUrl,
+    setUserAvatarUrl,
+    userInitial,
+    setUserInitial,
   };
   const showSharedHeader = SCREENS_WITH_SHARED_HEADER.includes(currentRoute.name);
   const toggleDarkMode = () => setIsDarkMode((current) => !current);
@@ -333,6 +352,7 @@ export default function App() {
                 onToggleDarkMode={toggleDarkMode}
                 blurTarget={blurTargetRef}
                 compact={['offers', 'upload', 'bookshelf'].includes(currentRoute.name)}
+                currentScreen={currentRoute.name}
               />
             )}
             <BlurTargetView

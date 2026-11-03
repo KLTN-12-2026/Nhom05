@@ -14,6 +14,7 @@ WebBrowser.maybeCompleteAuthSession();
 // Client ID Google OAuth (đồng bộ với Web Frontend HalmBookFE)
 const GOOGLE_CLIENT_ID =
   process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
+  process.env.EXPO_GOOGLE_CLIENT_ID ||
   '994619857768-6ipg7lvdn9voai235f4e7gdtheuclds4.apps.googleusercontent.com';
 import { useAppNavigation, useAppThemeStyles } from './navigation';
 
@@ -127,6 +128,23 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
 
       await AsyncStorage.setItem('userToken', token);
       if (role) await AsyncStorage.setItem('userRole', role);
+
+      // [GIẢI THÍCH CODE]: Lấy avatar & họ tên từ DB để đồng bộ cho các màn được chỉ định
+      try {
+        const custRes = await axiosAppInstance.get('/api/home/customer/info', {
+          headers: { Authorization: `Bearer ${token}` },
+          timeout: 4000,
+        });
+        if (custRes.data) {
+          const avatar = custRes.data.avatarUrl || custRes.data.avatar || '';
+          const name = custRes.data.customerName || '';
+          const initial = (name || 'H').charAt(0).toUpperCase();
+          if (avatar) await AsyncStorage.setItem('userAvatarUrl', avatar);
+          await AsyncStorage.setItem('userInitial', initial);
+        }
+      } catch (custErr) {
+        // Bỏ qua nếu mạng yếu
+      }
 
       showSuccess('Đăng nhập Google thành công! Chào mừng bạn đến với HALM BOOK.', onLoginSuccess);
     } catch (error: any) {
@@ -251,6 +269,27 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
       // 4. LƯU TRỮ VĨNH VIỄN VÀO ĐIỆN THOẠI
       await AsyncStorage.setItem('userToken', token);
       if (role) await AsyncStorage.setItem('userRole', role);
+
+      // [GIẢI THÍCH CODE]: Lấy avatar & họ tên từ DB để đồng bộ cho các màn được chỉ định
+      try {
+        const custRes = await axiosAppInstance.get('/api/home/customer/info', {
+          headers: { Authorization: `Bearer ${token}` },
+          timeout: 4000,
+        });
+        if (custRes.data) {
+          const avatar = custRes.data.avatarUrl || custRes.data.avatar || '';
+          const name = custRes.data.customerName || userVal;
+          const initial = (name || userVal || 'H').charAt(0).toUpperCase();
+          if (avatar) await AsyncStorage.setItem('userAvatarUrl', avatar);
+          await AsyncStorage.setItem('userInitial', initial);
+        } else {
+          const initial = (userVal || 'H').charAt(0).toUpperCase();
+          await AsyncStorage.setItem('userInitial', initial);
+        }
+      } catch (custErr) {
+        const initial = (userVal || 'H').charAt(0).toUpperCase();
+        await AsyncStorage.setItem('userInitial', initial);
+      }
 
       showSuccess('Đăng nhập thành công! Chào mừng bạn đến với HALM BOOK.', onLoginSuccess);
 
@@ -499,15 +538,7 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
                 </TouchableOpacity>
               </View>
 
-              {/* [GIẢI THÍCH CODE]: Lựa chọn tiếp tục duyệt ứng dụng với tư cách khách vãng lai */}
-              <TouchableOpacity
-                style={{ marginTop: 14, alignItems: 'center' }}
-                onPress={() => goBack()}
-              >
-                <Text style={[themeStyles.mutedText, { fontSize: 13 }]}>
-                  Khám phá trước với tư cách <Text style={{ color: '#1473E6', fontWeight: 'bold' }}>Khách vãng lai</Text>
-                </Text>
-              </TouchableOpacity>
+
             </View>
           )}
 
