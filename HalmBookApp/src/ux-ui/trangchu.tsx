@@ -22,6 +22,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BookData, useAppNavigation } from './navigation';
 import { getBookCoverSource } from './bookCovers';
+import { getBookChapterLabel } from './bookContentService';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 
 const { width, height } = Dimensions.get('window');
 
@@ -68,7 +70,7 @@ const mapBookDtoToItem = (item: any, index: number): HomeBookItem => {
   const price = item.rent_price !== undefined ? item.rent_price : item.price;
   const rating = item.rating ? String(item.rating) : '5.0';
   const reads = item.read_count ? `${item.read_count}` : '1.2K';
-  const chapter = item.total_pages ? `${item.total_pages} trang` : (item.chapter || `Tác giả: ${author}`);
+  const chapter = getBookChapterLabel({ ...item, id, book_id: item.book_id || id, title, author });
 
   return {
     id,
@@ -275,7 +277,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
       id: 'cat-van-hoc',
       name: 'Kho Văn Học & Tiểu Thuyết',
       icon: 'book-outline',
-      books: books.filter(b => b.category_id === 1 || (b.category_name && b.category_name.toLowerCase().includes('tiểu thuyết'))),
+      books: books.filter(b => b.category_id === 4 || (b.category_name && (b.category_name.toLowerCase().includes('tiểu thuyết') || b.category_name.toLowerCase().includes('tình cảm')))),
     },
     {
       id: 'cat-hien-thuc',
@@ -299,7 +301,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
       id: 'cat-kinh-dien',
       name: 'Danh Tác Kinh Điển',
       icon: 'ribbon-outline',
-      books: books.filter(b => b.category_id === 4 || (b.category_name && b.category_name.toLowerCase().includes('kinh điển'))),
+      books: books.filter(b => b.category_id === 1 || (b.category_name && b.category_name.toLowerCase().includes('kinh điển'))),
     },
   ], [books]);
 
@@ -435,6 +437,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
           )}
         </View>
         <Text style={styles.novelTitle} numberOfLines={2}>{novel.title}</Text>
+        <Text style={styles.novelChapter} numberOfLines={1}>{novel.chapter || novel.author}</Text>
       </TouchableOpacity>
     );
   };
@@ -533,7 +536,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
   return (
     <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: isDarkMode ? BRAND.black : '#fff' }]}>
       <Animated.View style={[styles.container, { backgroundColor: animatedBg }]}>
-      <StatusBar translucent={false} backgroundColor={isDarkMode ? '#1F2228' : '#5a8b82'} barStyle={isDarkMode ? "light-content" : "dark-content"} />
+      <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'} />
       
       {/* TRUNG TÂM HIỆU ỨNG DARK MODE */}
       <DarkModeBackgroundEffects visible={isDarkMode} />

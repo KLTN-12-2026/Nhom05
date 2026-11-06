@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurTargetView } from 'expo-blur';
-import { ComponentType, useEffect, useRef, useState } from 'react';
-import { Alert, BackHandler, View } from 'react-native';
+import { ComponentRef, ComponentType, useEffect, useRef, useState } from 'react';
+import { Alert, BackHandler, Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import ChatBotScreen, { ChatMessage } from './src/ux-ui/chatbot';
 import BookDetailScreen from './src/ux-ui/chitietsach';
@@ -38,13 +38,33 @@ const SCREENS_WITH_SHARED_HEADER: AppScreen[] = [
 
 const LoginLogoutWithSuccess = LoginLogout as ComponentType<{ onLoginSuccess: () => void }>;
 
+// Quản lý cờ phiên làm việc: Sống trong RAM của tiến trình app hiện tại
+const isSessionActive = () => {
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.sessionStorage) {
+    return window.sessionStorage.getItem('halm_session_active') === 'true';
+  }
+  return (globalThis as any).__HALM_SESSION_ACTIVE__ === true;
+};
+
+const setSessionActive = (active: boolean) => {
+  (globalThis as any).__HALM_SESSION_ACTIVE__ = active;
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.sessionStorage) {
+    if (active) {
+      window.sessionStorage.setItem('halm_session_active', 'true');
+    } else {
+      window.sessionStorage.removeItem('halm_session_active');
+    }
+  }
+};
+
 export default function App() {
   const [routes, setRoutes] = useState<ScreenRoute[]>([{ name: 'auth' }]);
   const [isReady, setIsReady] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isFooterVisible, setIsFooterVisible] = useState(true);
   const [homeRefreshKey, setHomeRefreshKey] = useState(0);
-  const blurTargetRef = useRef<any>(null);
+
+  const blurTargetRef = useRef<ComponentRef<typeof View> | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
@@ -54,11 +74,25 @@ export default function App() {
     },
   ]);
 
-  // Khôi phục phiên đăng nhập và vị trí màn hình trước khi reload trong Expo
+  // Khôi phục phiên làm việc: Reload trong cùng phiên thì giữ lại, tắt app chạy phiên mới thì bắt buộc login
   useEffect(() => {
     let isMounted = true;
     const restoreSession = async () => {
       try {
+        const sessionActive = isSessionActive();
+
+        // Nếu đây là phiên chạy mới (Fresh launch / Mở app từ đầu)
+        if (!sessionActive) {
+          // Xóa token cũ và vị trí màn hình cũ để đảm bảo đăng nhập mới cấp token chuẩn từ MySQL
+          await AsyncStorage.multiRemove(['userToken', 'userRole', 'savedRoutes']);
+          if (isMounted) {
+            setRoutes([{ name: 'auth' }]);
+            setIsReady(true);
+          }
+          return;
+        }
+
+        // Nếu là reload trong cùng phiên làm việc (FE & BE vẫn đang chạy liên tục)
         const token = await AsyncStorage.getItem('userToken');
         if (token && isMounted) {
           const savedRoutesStr = await AsyncStorage.getItem('savedRoutes');
@@ -71,9 +105,12 @@ export default function App() {
             }
           }
           setRoutes([{ name: 'home' }]);
+        } else if (isMounted) {
+          setRoutes([{ name: 'auth' }]);
         }
       } catch (err) {
         console.warn('Lỗi khôi phục session Expo:', err);
+        if (isMounted) setRoutes([{ name: 'auth' }]);
       } finally {
         if (isMounted) setIsReady(true);
       }
@@ -110,12 +147,17 @@ export default function App() {
     setRoutes([{ name }]);
   };
 
+  const lastBackPressTime = useRef(0);
   const goBack = () => {
+    const now = Date.now();
+    if (now - lastBackPressTime.current < 450) return;
+    lastBackPressTime.current = now;
     setIsFooterVisible(true);
-    setRoutes((current) => current.length > 1 ? current.slice(0, -1) : current);
+    setRoutes((current) => (current.length > 1 ? current.slice(0, -1) : current));
   };
 
   const finishLogin = () => {
+    setSessionActive(true);
     const nextRoutes: ScreenRoute[] = [{ name: 'home' }];
     setRoutes(nextRoutes);
     AsyncStorage.setItem('savedRoutes', JSON.stringify(nextRoutes)).catch(() => {});
@@ -124,7 +166,7 @@ export default function App() {
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
       if (routes.length <= 1) return false;
-      setRoutes((current) => current.length > 1 ? current.slice(0, -1) : current);
+      goBack();
       return true;
     });
     return () => subscription.remove();
@@ -132,6 +174,7 @@ export default function App() {
 
   const logout = async () => {
     try {
+      setSessionActive(false);
       await AsyncStorage.multiRemove(['userToken', 'userRole', 'savedRoutes']);
       setRoutes([{ name: 'auth' }]);
     } catch {
@@ -209,7 +252,7 @@ export default function App() {
       screen = <HalmBookHistory />;
       break;
     case 'reader':
-      screen = <ManHinhDoc onBack={goBack} />;
+      screen = <ManHinhDoc onBack={goBack} book={currentRoute.book} />;
       break;
     case 'payment':
       screen = <ThanhToan />;
@@ -228,7 +271,14 @@ export default function App() {
         <BookDetailScreen
           book={currentRoute.book}
           onBack={goBack}
-          onStartReading={() => navigate('reader')}
+          onStartReading={(initialChapterIndex) =>
+            navigate('reader', {
+              ...currentRoute.book,
+              id: currentRoute.book?.id || 'book-1',
+              title: currentRoute.book?.title || 'Đọc sách',
+              initialChapterIndex: typeof initialChapterIndex === 'number' ? initialChapterIndex : 0,
+            })
+          }
         />
       ) : null;
       break;
