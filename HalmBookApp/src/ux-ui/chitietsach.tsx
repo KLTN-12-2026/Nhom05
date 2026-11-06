@@ -28,6 +28,7 @@ import {
 } from 'react-native';
 import { getBookCoverSource } from './bookCovers';
 import { useAppNavigation } from './navigation';
+import { getBookRealChapters, getBookChapterLabel } from './bookContentService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -246,7 +247,7 @@ interface BookDetailProps {
     desc?: string;
   };
   onBack: () => void;
-  onStartReading: () => void;
+  onStartReading: (initialChapterIndex?: number) => void;
 }
 
 interface ChapterItem {
@@ -284,33 +285,23 @@ const getFeaturedQuote = (book: any): { quote: string; source: string } | null =
 
 // Hiển thị số chương chính xác theo từng cuốn sách
 const getBookChapterDisplay = (book: any, chaptersList: ChapterItem[]): string => {
-  if (book?.total_chapters && typeof book.total_chapters === 'number') {
-    return `${book.total_chapters} chương`;
-  }
-  if (book?.chapter && typeof book.chapter === 'string') {
-    const raw = book.chapter.trim();
-    if (!raw.toLowerCase().includes('tác giả')) {
-      return raw;
-    }
-  }
-  if (book?.pages || book?.total_pages) {
-    return `${book.pages || book.total_pages} trang`;
-  }
-  if (chaptersList.length > 0) {
-    return `${chaptersList.length} chương`;
-  }
-  return 'Chưa cập nhật';
+  return getBookChapterLabel(book);
 };
 
-// Danh sách chương thật từ Database (nếu chưa có thì để rỗng)
+// Danh sách chương thật từ Database / Tác phẩm số hoá
 const getBookChapters = (book: any): ChapterItem[] => {
-  if (Array.isArray(book?.chapters) && book.chapters.length > 0) {
-    return book.chapters.map((c: any, index: number) => ({
-      id: c.id || index + 1,
-      chapterNum: String(index + 1).padStart(2, '0'),
-      title: c.title || `Chương ${index + 1}`,
-      readTime: c.readTime || `${8 + (index % 5) * 2} phút`,
-    }));
+  const realList = getBookRealChapters(book);
+  if (realList && realList.length > 0) {
+    return realList.map((c: any, index: number) => {
+      const wordCount = (c.content?.join(' ') || '').split(/\s+/).length;
+      const minutes = Math.max(3, Math.round(wordCount / 180));
+      return {
+        id: c.id || index + 1,
+        chapterNum: String(index + 1).padStart(2, '0'),
+        title: c.title || `Chương ${index + 1}`,
+        readTime: `${minutes} phút`,
+      };
+    });
   }
   return [];
 };
@@ -321,6 +312,7 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
   const [isSaved, setIsSaved] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [savedChapter, setSavedChapter] = useState<{ chapterNum: number; title: string } | null>(null);
+  const [showAllChapters, setShowAllChapters] = useState(false);
   const scrollOffset = useRef(0);
 
   // Đảm bảo footer luôn hiển thị khi vừa mở màn hình chi tiết sách
@@ -375,7 +367,7 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
   const chapterDisplay = useMemo(() => getBookChapterDisplay(book, chapters), [book, chapters]);
 
   const handleContinueReading = () => {
-    onStartReading();
+    onStartReading(savedChapter ? Math.max(0, savedChapter.chapterNum - 1) : 0);
   };
 
   return (
@@ -510,7 +502,7 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
               themeStyles.btnReadPrimary,
               savedChapter ? themeStyles.btnReadPrimaryCompact : null,
             ]}
-            onPress={onStartReading}
+            onPress={() => onStartReading(0)}
             activeOpacity={0.88}
           >
             <BookOpen size={16} color="#ffffff" />
@@ -566,7 +558,7 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
 
           {chapters.length > 0 ? (
             <View style={themeStyles.chaptersCardBox}>
-              {chapters.slice(0, 3).map((chap) => {
+              {(showAllChapters ? chapters : chapters.slice(0, 5)).map((chap) => {
                 const isCurrentChapter = savedChapter?.chapterNum === chap.id;
                 return (
                   <TouchableOpacity
@@ -576,7 +568,7 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
                       isCurrentChapter && themeStyles.chapterRowActive,
                     ]}
                     activeOpacity={0.7}
-                    onPress={onStartReading}
+                    onPress={() => onStartReading(chap.id - 1)}
                   >
                     <View style={themeStyles.chapterLeftCol}>
                       {/* Badge số thứ tự chương */}
@@ -626,6 +618,24 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
                   </TouchableOpacity>
                 );
               })}
+
+              {chapters.length > 5 && (
+                <TouchableOpacity
+                  style={{
+                    paddingVertical: 12,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderTopWidth: 1,
+                    borderTopColor: isDarkMode ? '#222630' : '#e2e8f0',
+                  }}
+                  activeOpacity={0.8}
+                  onPress={() => setShowAllChapters(!showAllChapters)}
+                >
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: isDarkMode ? '#D8B36A' : '#4f46e5' }}>
+                    {showAllChapters ? '▲ Thu gọn danh sách chương' : `▼ Xem toàn bộ ${chapters.length} chương tác phẩm`}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           ) : (
             <View style={themeStyles.emptyBox}>

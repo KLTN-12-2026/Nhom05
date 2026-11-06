@@ -1,29 +1,99 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Platform, StatusBar } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import {
+  StyleSheet,
+  Text,
+  View,
+  ScrollView,
+  TouchableOpacity,
+  Platform,
+  Image,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppNavigation, useAppThemeStyles } from './navigation';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getBookCoverSource } from './bookCovers';
 
-// Mock Data
-const DANG_DOC = [
-  { id: '1', title: 'Kiếm Đạo Độc Tôn', chapter: 'Chương 142/500', progress: 28 },
-  { id: '2', title: 'Toàn Cầu Băng Phong: Ta Chế Tạo Phòng An Toàn', chapter: 'Chương 45/300', progress: 15 },
-  { id: '3', title: 'Bỏ làm simp chúa, ta có trong tay...', chapter: 'Chương 330/335', progress: 98 },
-];
-
-const DA_DOC = [
-  { id: '4', title: 'Đấu Phá Thương Khung', total: '1641 Chương' },
-  { id: '5', title: 'Võ Luyện Đỉnh Phong', total: '3000 Chương' },
-  { id: '6', title: 'Thiên Đạo Đồ Thư Quán', total: '1024 Chương' },
-];
+interface ShelfBook {
+  id: string;
+  title: string;
+  author?: string;
+  chapter?: string;
+  chapterNum?: number;
+  progress?: number;
+  img_url?: string;
+}
 
 export default function TuSach() {
   const themeStyles = useAppThemeStyles(styles);
   const [activeTab, setActiveTab] = useState<'dangdoc' | 'dadoc'>('dangdoc');
   const { navigate, isDarkMode } = useAppNavigation();
 
+  const [readingList, setReadingList] = useState<ShelfBook[]>([]);
+  const [completedList, setCompletedList] = useState<ShelfBook[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadShelf = async () => {
+      try {
+        const keys = await AsyncStorage.getAllKeys();
+        const progressKeys = keys.filter(k => k.startsWith('@halm_reading_progress_'));
+        
+        if (progressKeys.length > 0) {
+          const pairs = await AsyncStorage.multiGet(progressKeys);
+          const reading: ShelfBook[] = [];
+          const completed: ShelfBook[] = [];
+
+          for (const [k, v] of pairs) {
+            if (!v) continue;
+            try {
+              const bookId = k.replace('@halm_reading_progress_', '');
+              const parsed = JSON.parse(v);
+              const item: ShelfBook = {
+                id: bookId,
+                title: parsed.title || parsed.bookTitle || `Tác phẩm ${bookId}`,
+                author: parsed.author || 'HALM BOOK',
+                chapter: parsed.chapterTitle || (parsed.chapterNum ? `Chương ${parsed.chapterNum}` : 'Đang đọc'),
+                progress: parsed.progress || Math.min(100, Math.max(10, (parsed.chapterNum || 1) * 15)),
+                img_url: parsed.img_url,
+              };
+              if (item.progress && item.progress >= 100) {
+                completed.push(item);
+              } else {
+                reading.push(item);
+              }
+            } catch {}
+          }
+
+          if (isMounted) {
+            setReadingList(reading);
+            setCompletedList(completed);
+          }
+        } else {
+          if (isMounted) {
+            setReadingList([]);
+            setCompletedList([]);
+          }
+        }
+      } catch {
+        if (isMounted) {
+          setReadingList([]);
+          setCompletedList([]);
+        }
+      }
+    };
+
+    loadShelf();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const currentList = activeTab === 'dangdoc' ? readingList : completedList;
+
   return (
     <View style={themeStyles.container}>
-      <StatusBar translucent backgroundColor="transparent" barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'} />
       
       {/* Header */}
       <View style={themeStyles.header}>
@@ -33,25 +103,28 @@ export default function TuSach() {
         </TouchableOpacity>
       </View>
 
-      {/* Tabs Chuyển Đổi (Neo-brutalism style) */}
+      {/* Tabs Chuyển Đổi */}
       <View style={themeStyles.tabContainer}>
         <TouchableOpacity 
           style={[themeStyles.tabBtn, activeTab === 'dangdoc' && themeStyles.tabBtnActive]} 
           onPress={() => setActiveTab('dangdoc')}
         >
-          <Text style={[themeStyles.tabText, activeTab === 'dangdoc' && themeStyles.tabTextActive]}>Sách đang đọc</Text>
+          <Text style={[themeStyles.tabText, activeTab === 'dangdoc' && themeStyles.tabTextActive]}>
+            Sách đang đọc ({readingList.length})
+          </Text>
         </TouchableOpacity>
         
         <TouchableOpacity 
           style={[themeStyles.tabBtn, activeTab === 'dadoc' && themeStyles.tabBtnActive]} 
           onPress={() => setActiveTab('dadoc')}
         >
-          <Text style={[themeStyles.tabText, activeTab === 'dadoc' && themeStyles.tabTextActive]}>Sách đã đọc</Text>
+          <Text style={[themeStyles.tabText, activeTab === 'dadoc' && themeStyles.tabTextActive]}>
+            Sách đã đọc ({completedList.length})
+          </Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView style={themeStyles.scrollContainer} showsVerticalScrollIndicator={false}>
-        
         {/* Box Thống kê */}
         <View style={themeStyles.statsCard}>
           <View style={themeStyles.statsHeader}>
@@ -59,239 +132,210 @@ export default function TuSach() {
           </View>
           <View style={themeStyles.statsBody}>
             <View style={themeStyles.statItem}>
-              <Text style={themeStyles.statValue}>{DANG_DOC.length}</Text>
+              <Text style={themeStyles.statValue}>{readingList.length}</Text>
               <Text style={themeStyles.statLabel}>Đang đọc</Text>
             </View>
             <View style={themeStyles.statDivider} />
             <View style={themeStyles.statItem}>
-              <Text style={themeStyles.statValue}>{DA_DOC.length}</Text>
+              <Text style={themeStyles.statValue}>{completedList.length}</Text>
               <Text style={themeStyles.statLabel}>Đã hoàn thành</Text>
             </View>
           </View>
         </View>
 
-        {/* ===================== BẢNG TRÁI: ĐANG ĐỌC ===================== */}
-        {activeTab === 'dangdoc' && (
+        {currentList.length === 0 ? (
+          <View style={themeStyles.emptyContainer}>
+            <Ionicons name="library-outline" size={54} color={isDarkMode ? '#555' : '#aaa'} />
+            <Text style={themeStyles.emptyText}>
+              {activeTab === 'dangdoc'
+                ? 'Bạn chưa có cuốn sách nào đang đọc'
+                : 'Bạn chưa hoàn thành cuốn sách nào'}
+            </Text>
+            <TouchableOpacity
+              style={themeStyles.exploreBtn}
+              onPress={() => navigate('home')}
+            >
+              <Text style={themeStyles.exploreBtnText}>Khám phá sách ngay</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
           <View style={themeStyles.listContainer}>
-            {DANG_DOC.map((item) => (
-              <TouchableOpacity key={item.id} style={themeStyles.bookCard} activeOpacity={0.8} onPress={() => navigate('bookDetail', { id: item.id, title: item.title, chapter: item.chapter })}>
-                <View style={themeStyles.bookCover}>
-                  <Text style={themeStyles.mockCoverText}>Ảnh</Text>
-                </View>
-                
-                <View style={themeStyles.bookInfo}>
-                  <Text style={themeStyles.bookTitle} numberOfLines={2}>{item.title}</Text>
-                  <Text style={themeStyles.bookChapter}>Tiến độ: {item.chapter}</Text>
+            {currentList.map((item) => {
+              const cover = getBookCoverSource(item.id, item.img_url);
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={themeStyles.bookCard}
+                  activeOpacity={0.8}
+                  onPress={() => navigate('bookDetail', item as any)}
+                >
+                  <View style={themeStyles.bookCover}>
+                    {cover ? (
+                      <Image source={cover} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                    ) : (
+                      <Text style={themeStyles.mockCoverText}>Ảnh</Text>
+                    )}
+                  </View>
                   
-                  {/* Thanh tiến độ */}
-                  <View style={themeStyles.progressContainer}>
-                    <View style={themeStyles.progressBarBg}>
-                      <View style={[themeStyles.progressBarFill, { width: `${item.progress}%` }]} />
+                  <View style={themeStyles.bookInfo}>
+                    <Text style={themeStyles.bookTitle} numberOfLines={2}>{item.title}</Text>
+                    <Text style={themeStyles.bookChapter}>{item.chapter || item.author}</Text>
+                    
+                    {/* Thanh tiến độ */}
+                    <View style={themeStyles.progressContainer}>
+                      <View style={themeStyles.progressBarBg}>
+                        <View style={[themeStyles.progressBarFill, { width: `${item.progress || 20}%` }]} />
+                      </View>
+                      <Text style={themeStyles.progressText}>{item.progress || 20}%</Text>
                     </View>
-                    <Text style={themeStyles.progressText}>{item.progress}%</Text>
+                    
+                    {/* Buttons */}
+                    <View style={themeStyles.actionRow}>
+                      <TouchableOpacity
+                        style={themeStyles.continueBtn}
+                        onPress={() =>
+                          navigate('reader', {
+                            ...item,
+                            initialChapterIndex:
+                              typeof item.chapterNum === 'number'
+                                ? Math.max(0, item.chapterNum - 1)
+                                : 0,
+                          } as any)
+                        }
+                      >
+                        <Text style={themeStyles.continueBtnText}>Đọc tiếp</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                  
-                  {/* Buttons */}
-                  <View style={themeStyles.actionRow}>
-                    <TouchableOpacity style={themeStyles.returnBtn}>
-                      <Ionicons name="return-down-back" size={14} color="#1a1a1a" style={{ marginRight: 4 }} />
-                      <Text style={themeStyles.returnBtnText}>Trả sách</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={themeStyles.continueBtn} onPress={() => navigate('reader')}>
-                      <Text style={themeStyles.continueBtnText}>Đọc tiếp</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         )}
-
-        {/* ===================== BẢNG PHẢI: ĐÃ ĐỌC ===================== */}
-        {activeTab === 'dadoc' && (
-          <View style={themeStyles.listContainer}>
-            {DA_DOC.map((item) => (
-              <TouchableOpacity key={item.id} style={themeStyles.bookCard} activeOpacity={0.8} onPress={() => navigate('bookDetail', { id: item.id, title: item.title, chapter: item.total })}>
-                <View style={themeStyles.bookCover}>
-                  <Text style={themeStyles.mockCoverText}>Ảnh</Text>
-                </View>
-                <View style={themeStyles.bookInfo}>
-                  <Text style={themeStyles.bookTitle} numberOfLines={2}>{item.title}</Text>
-                  <Text style={themeStyles.bookChapter}>Đã đọc xong: {item.total}</Text>
-                  
-                  <View style={themeStyles.statusBox}>
-                    <Ionicons name="checkmark-done-circle" size={16} color="#27ae60" />
-                    <Text style={themeStyles.statusText}>Hoàn thành</Text>
-                  </View>
-                  
-                  {/* Buttons */}
-                  <View style={themeStyles.actionRow}>
-                    <TouchableOpacity style={themeStyles.rateBtn}>
-                      <Ionicons name="star" size={14} color="#1a1a1a" style={{ marginRight: 4 }} />
-                      <Text style={themeStyles.rateBtnText}>Đánh giá</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={themeStyles.readAgainBtn} onPress={() => navigate('reader')}>
-                      <Ionicons name="refresh" size={14} color="#2c3a7a" style={{ marginRight: 4 }} />
-                      <Text style={themeStyles.readAgainBtnText}>Đọc lại</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-
       </ScrollView>
-
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fcf3e8' }, // Màu da nhẹ
-  
-  // Header
+  container: { flex: 1, backgroundColor: '#fdfbf7' },
   header: {
     flexDirection: 'row',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     alignItems: 'center',
     paddingTop: 15,
-    paddingBottom: 15,
-    backgroundColor: '#fcf3e8',
-  },
-  headerTitle: { fontSize: 22, fontWeight: '900', color: '#1a1a1a' },
-  headerIcon: { position: 'absolute', right: 20, bottom: 15 },
-
-  // Tabs
-  tabContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#fcf3e8',
     paddingHorizontal: 20,
     paddingBottom: 15,
+    backgroundColor: '#fff',
+    borderBottomWidth: 2,
+    borderBottomColor: '#1a1a1a',
+  },
+  headerTitle: { fontSize: 20, fontWeight: '900', color: '#1a1a1a' },
+  headerIcon: { padding: 4 },
+  tabContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    backgroundColor: '#fdfbf7',
+    gap: 12,
   },
   tabBtn: {
     flex: 1,
+    paddingVertical: 10,
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: '#1a1a1a',
+    borderRadius: 12,
     alignItems: 'center',
-    paddingVertical: 12,
-    borderWidth: 2, borderColor: '#1a1a1a',
-    backgroundColor: '#fff',
-    marginHorizontal: 5,
-    borderRadius: 12,
-    shadowColor: '#000', shadowOffset: { width: 2, height: 2 }, shadowOpacity: 1, shadowRadius: 0, elevation: 3,
   },
-  tabBtnActive: { backgroundColor: '#ffde59', shadowOffset: { width: 4, height: 4 } }, // Tab đang chọn bật to hơn
-  tabText: { fontSize: 14, fontWeight: '700', color: '#1a1a1a' },
-  tabTextActive: { fontWeight: '900' },
-
-  scrollContainer: { flex: 1 },
-  listContainer: { paddingHorizontal: 15, paddingBottom: 20 },
-
-  // Thống kê
+  tabBtnActive: {
+    backgroundColor: '#5a8b82',
+    borderColor: '#1a1a1a',
+  },
+  tabText: { fontSize: 13, fontWeight: '800', color: '#1a1a1a' },
+  tabTextActive: { color: '#fff' },
+  scrollContainer: { flex: 1, paddingHorizontal: 20 },
   statsCard: {
-    marginHorizontal: 20,
-    marginTop: 10,
-    marginBottom: 20,
     backgroundColor: '#fff',
-    borderRadius: 12,
-    borderWidth: 2, borderColor: '#1a1a1a',
-    shadowColor: '#000', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0, elevation: 6,
+    borderWidth: 2,
+    borderColor: '#1a1a1a',
+    borderRadius: 16,
+    marginBottom: 20,
     overflow: 'hidden',
   },
-  statsHeader: { backgroundColor: '#3498db', paddingVertical: 10, alignItems: 'center', borderBottomWidth: 2, borderBottomColor: '#1a1a1a' },
-  statsHeaderText: { fontSize: 15, fontWeight: '900', color: '#fff' },
-  statsBody: { flexDirection: 'row', padding: 15 },
+  statsHeader: {
+    backgroundColor: '#5a8b82',
+    paddingVertical: 8,
+    paddingHorizontal: 15,
+    borderBottomWidth: 2,
+    borderBottomColor: '#1a1a1a',
+  },
+  statsHeaderText: { fontSize: 12, fontWeight: '900', color: '#fff', textTransform: 'uppercase' },
+  statsBody: { flexDirection: 'row', paddingVertical: 15 },
   statItem: { flex: 1, alignItems: 'center' },
-  statValue: { fontSize: 24, fontWeight: '900', color: '#1a1a1a' },
-  statLabel: { fontSize: 12, fontWeight: '700', color: '#636e72', marginTop: 4 },
-  statDivider: { width: 2, backgroundColor: '#1a1a1a', marginHorizontal: 15 },
-
-  // Book Card Layout (Neo-brutalism)
+  statValue: { fontSize: 22, fontWeight: '900', color: '#1a1a1a' },
+  statLabel: { fontSize: 11, fontWeight: '700', color: '#666', marginTop: 2 },
+  statDivider: { width: 2, backgroundColor: '#1a1a1a' },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 20,
+  },
+  emptyText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#888',
+    marginTop: 14,
+    textAlign: 'center',
+  },
+  exploreBtn: {
+    marginTop: 20,
+    backgroundColor: '#5a8b82',
+    borderWidth: 2,
+    borderColor: '#1a1a1a',
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+  },
+  exploreBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+  listContainer: { paddingBottom: 30 },
   bookCard: {
     flexDirection: 'row',
     backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: '#1a1a1a',
+    borderRadius: 14,
     padding: 12,
-    borderRadius: 12,
     marginBottom: 15,
-    alignItems: 'center',
-    borderWidth: 2, borderColor: '#1a1a1a',
-    shadowColor: '#000', shadowOffset: { width: 4, height: 4 }, shadowOpacity: 1, shadowRadius: 0, elevation: 6,
   },
   bookCover: {
-    width: 70, height: 100,
-    backgroundColor: '#ddd',
+    width: 75,
+    height: 105,
+    backgroundColor: '#e0dcd3',
+    borderWidth: 1.5,
+    borderColor: '#1a1a1a',
     borderRadius: 8,
-    borderWidth: 1.5, borderColor: '#1a1a1a',
-    justifyContent: 'center', alignItems: 'center',
-    marginRight: 15
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
   },
-  mockCoverText: { fontSize: 13, color: '#1a1a1a', fontWeight: '900' },
-  bookInfo: { flex: 1, justifyContent: 'center' },
-  bookTitle: { fontSize: 16, fontWeight: '900', color: '#1a1a1a', marginBottom: 6 },
-  bookChapter: { fontSize: 13, fontWeight: '600', color: '#636e72', marginBottom: 8 },
-
-  // Progress
-  progressContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  progressBarBg: { flex: 1, height: 8, backgroundColor: '#eee', borderRadius: 4, marginRight: 10, borderWidth: 1, borderColor: '#1a1a1a', overflow: 'hidden' },
-  progressBarFill: { height: '100%', backgroundColor: '#f39c12' },
-  progressText: { fontSize: 12, fontWeight: '900', color: '#1a1a1a' },
-  
-  actionRow: { flexDirection: 'row', justifyContent: 'flex-start', marginTop: 5 },
-  
-  // Buttons
+  mockCoverText: { fontSize: 12, color: '#888', fontWeight: 'bold' },
+  bookInfo: { flex: 1, marginLeft: 12, justifyContent: 'space-between' },
+  bookTitle: { fontSize: 14, fontWeight: '800', color: '#1a1a1a' },
+  bookChapter: { fontSize: 12, fontWeight: '600', color: '#666', marginTop: 2 },
+  progressContainer: { flexDirection: 'row', alignItems: 'center', marginVertical: 6, gap: 8 },
+  progressBarBg: { flex: 1, height: 8, backgroundColor: '#eee', borderWidth: 1, borderColor: '#1a1a1a', borderRadius: 4, overflow: 'hidden' },
+  progressBarFill: { height: '100%', backgroundColor: '#5a8b82' },
+  progressText: { fontSize: 11, fontWeight: '800', color: '#1a1a1a' },
+  actionRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 4 },
   continueBtn: {
-    backgroundColor: '#f39c12',
-    paddingVertical: 8, paddingHorizontal: 15,
+    backgroundColor: '#5a8b82',
+    paddingHorizontal: 16,
+    paddingVertical: 7,
     borderRadius: 8,
-    borderWidth: 1.5, borderColor: '#1a1a1a',
-    shadowColor: '#000', shadowOffset: { width: 2, height: 2 }, shadowOpacity: 1, shadowRadius: 0,
+    borderWidth: 1.5,
+    borderColor: '#1a1a1a',
   },
-  continueBtnText: { color: '#1a1a1a', fontSize: 13, fontWeight: '900' },
-  
-  returnBtn: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#e1e8f0',
-    paddingVertical: 8, paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1.5, borderColor: '#1a1a1a',
-    marginRight: 10,
-    shadowColor: '#000', shadowOffset: { width: 2, height: 2 }, shadowOpacity: 1, shadowRadius: 0,
-  },
-  returnBtnText: { color: '#1a1a1a', fontSize: 13, fontWeight: '800' },
-
-  // Status (Đã đọc)
-  statusBox: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  statusText: { fontSize: 13, fontWeight: '800', color: '#27ae60', marginLeft: 4 },
-  
-  rateBtn: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#ffde59',
-    paddingVertical: 8, paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1.5, borderColor: '#1a1a1a',
-    marginRight: 10,
-    shadowColor: '#000', shadowOffset: { width: 2, height: 2 }, shadowOpacity: 1, shadowRadius: 0,
-  },
-  rateBtnText: { color: '#1a1a1a', fontSize: 13, fontWeight: '800' },
-
-  readAgainBtn: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#e8f4fd',
-    paddingVertical: 8, paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1.5, borderColor: '#1a1a1a',
-    shadowColor: '#000', shadowOffset: { width: 2, height: 2 }, shadowOpacity: 1, shadowRadius: 0,
-  },
-  readAgainBtnText: { color: '#1a1a1a', fontSize: 13, fontWeight: '800' },
-
-  // Bottom Navigation
-  bottomNav: {
-    position: 'absolute',
-    bottom: 0, left: 0, right: 0,
-    flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center',
-    backgroundColor: '#fff', borderTopWidth: 2, borderTopColor: '#1a1a1a',
-    paddingVertical: 10, paddingBottom: Platform.OS === 'ios' ? 25 : 10,
-  },
-  navItem: { flex: 1, alignItems: 'center', justifyContent: 'center', height: 48 },
-  navText: { fontSize: 10, fontWeight: '800', color: '#8f9bb3', marginTop: 4 },
-  navActiveText: { color: '#2c3a7a', fontWeight: '900' },
+  continueBtnText: { color: '#fff', fontSize: 12, fontWeight: '800' },
 });
