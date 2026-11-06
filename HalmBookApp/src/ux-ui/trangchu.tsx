@@ -22,6 +22,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BookData, useAppNavigation } from './navigation';
 import { getBookCoverSource } from './bookCovers';
+import { getBookChapterLabel } from './bookContentService';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 
 const { width, height } = Dimensions.get('window');
@@ -69,7 +70,7 @@ const mapBookDtoToItem = (item: any, index: number): HomeBookItem => {
   const price = item.rent_price !== undefined ? item.rent_price : item.price;
   const rating = item.rating ? String(item.rating) : '5.0';
   const reads = item.read_count ? `${item.read_count}` : '1.2K';
-  const chapter = item.total_pages ? `${item.total_pages} trang` : (item.chapter || `Tác giả: ${author}`);
+  const chapter = getBookChapterLabel({ ...item, id, book_id: item.book_id || id, title, author });
 
   return {
     id,
@@ -240,7 +241,11 @@ interface TrangChuProps {
 }
 
 export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: TrangChuProps) {
+<<<<<<< HEAD
   const { navigate, setFooterVisible, isLoggedIn, showLoginAlert, userAvatarUrl, userInitial, lang } = useAppNavigation();
+=======
+  const { navigate, setFooterVisible } = useAppNavigation();
+>>>>>>> origin/main
   const [selectedPreviewBook, setSelectedPreviewBook] = useState<HomeBookItem | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const scrollOffset = useRef(0);
@@ -276,7 +281,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
       id: 'cat-van-hoc',
       name: lang === 'en' ? 'Literature & Novels' : 'Kho Văn Học & Tiểu Thuyết',
       icon: 'book-outline',
-      books: books.filter(b => b.category_id === 1 || (b.category_name && b.category_name.toLowerCase().includes('tiểu thuyết'))),
+      books: books.filter(b => b.category_id === 4 || (b.category_name && (b.category_name.toLowerCase().includes('tiểu thuyết') || b.category_name.toLowerCase().includes('tình cảm')))),
     },
     {
       id: 'cat-hien-thuc',
@@ -300,7 +305,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
       id: 'cat-kinh-dien',
       name: lang === 'en' ? 'Classic Masterpieces' : 'Danh Tác Kinh Điển',
       icon: 'ribbon-outline',
-      books: books.filter(b => b.category_id === 4 || (b.category_name && b.category_name.toLowerCase().includes('kinh điển'))),
+      books: books.filter(b => b.category_id === 1 || (b.category_name && b.category_name.toLowerCase().includes('kinh điển'))),
     },
   ], [books]);
 
@@ -436,6 +441,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
           )}
         </View>
         <Text style={styles.novelTitle} numberOfLines={2}>{novel.title}</Text>
+        <Text style={styles.novelChapter} numberOfLines={1}>{novel.chapter || novel.author}</Text>
       </TouchableOpacity>
     );
   };
@@ -603,6 +609,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
                 color={isDarkMode ? '#161920' : '#1a1a1a'}
               />
             </TouchableOpacity>
+<<<<<<< HEAD
             {/* ============================================================================
                 [GIẢI THÍCH CODE]: Nút Giỏ hàng ở góc màn hình Trang chủ
                 Khi chưa đăng nhập (!isLoggedIn), nhấn vào giỏ hàng sẽ yêu cầu đăng nhập luôn,
@@ -655,6 +662,13 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
                   <Text style={styles.avatarText}>{userInitial || 'H'}</Text>
                 </View>
               )}
+=======
+            <TouchableOpacity style={styles.darkModeToggle} onPress={() => navigate('cart')}>
+              <Ionicons name="cart-outline" size={22} color={isDarkMode ? BRAND.bg : '#1a1a1a'} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.avatarBtn} onPress={() => navigate('profile')}>
+              <Text style={styles.avatarText}>A</Text>
+>>>>>>> origin/main
             </TouchableOpacity>
           </View>
           <ScrollView 
@@ -697,6 +711,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
               key={idx}
               style={styles.toolbarItem}
               activeOpacity={0.8}
+<<<<<<< HEAD
               onPress={() => {
                 // ============================================================================
                 // [GIẢI THÍCH CODE]: Chặn khách vãng lai khi nhấn vào 'Đã Lưu' (tủ sách) ở toolbar
@@ -708,6 +723,9 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
                 }
                 navigate(item.screen as any);
               }}
+=======
+              onPress={() => navigate(item.screen as any)}
+>>>>>>> origin/main
             >
               <View style={[
                 styles.toolbarIconBox,
@@ -1043,22 +1061,8 @@ const getStyles = (isDark: boolean) => {
       justifyContent: 'center',
       alignItems: 'center',
       marginLeft: 10,
-      overflow: 'hidden',
     },
-    avatarImg: {
-      width: 45,
-      height: 45,
-      borderRadius: 25,
-    },
-    avatarLetterCircle: {
-      width: 45,
-      height: 45,
-      borderRadius: 25,
-      backgroundColor: '#2c3a7a',
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    avatarText: { fontSize: 20, fontWeight: '900', color: '#fff' },
+    avatarText: { fontSize: 20, fontWeight: '900', color: '#1a1a1a' },
 
     carouselContainer: { paddingLeft: 15, paddingRight: 5 },
     bannerCard: {

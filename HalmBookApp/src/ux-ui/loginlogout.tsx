@@ -1,22 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useAppNavigation, useAppThemeStyles } from './navigation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import Constants from 'expo-constants';
-import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import * as WebBrowser from 'expo-web-browser';
-import * as Linking from 'expo-linking';
-
-// Đảm bảo hoàn tất phiên xác thực trên nền tảng web nếu được redirect
-WebBrowser.maybeCompleteAuthSession();
-
-// Client ID Google OAuth (đồng bộ với Web Frontend HalmBookFE)
-const GOOGLE_CLIENT_ID =
-  process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
-  process.env.EXPO_GOOGLE_CLIENT_ID ||
-  '994619857768-6ipg7lvdn9voai235f4e7gdtheuclds4.apps.googleusercontent.com';
-import { useAppNavigation, useAppThemeStyles } from './navigation';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 // ----------------------------------------------------
 // CẤU HÌNH KẾT NỐI (ĐIỂM MÙ LOCALHOST)
@@ -25,8 +13,6 @@ import { useAppNavigation, useAppThemeStyles } from './navigation';
 const debuggerHost = Constants.expoConfig?.hostUri;
 const localhost = debuggerHost ? debuggerHost.split(':')[0] : 'localhost';
 const API_BASE_URL = `http://${localhost}:8082`;
-// const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL
-// ?? (Platform.OS === 'android' ? 'http://10.0.2.2:8082' : 'http://localhost:8082');
 
 const axiosAppInstance = axios.create({
   baseURL: API_BASE_URL,
@@ -41,29 +27,18 @@ interface AuthProps {
 
 export default function Auth({ onLoginSuccess }: AuthProps) {
   const themeStyles = useAppThemeStyles(styles);
+<<<<<<< HEAD
   const { isDarkMode, goBack, lang } = useAppNavigation();
+=======
+  const { isDarkMode } = useAppNavigation();
+>>>>>>> origin/main
   const [currentScreen, setCurrentScreen] = useState<ScreenState>('login');
   const [successMessage, setSuccessMessage] = useState('');
   const [isLoginSubmitting, setIsLoginSubmitting] = useState(false);
-  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
   const transitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => () => {
     if (transitionTimer.current) clearTimeout(transitionTimer.current);
-  }, []);
-
-  // [GIẢI THÍCH CODE]: Nạp Google Identity Services (GSI) giống hệt Web HalmBookFE khi chạy trên trình duyệt
-  useEffect(() => {
-    if (Platform.OS === 'web' && typeof document !== 'undefined') {
-      if (!document.getElementById('google-gsi-client')) {
-        const script = document.createElement('script');
-        script.id = 'google-gsi-client';
-        script.src = 'https://accounts.google.com/gsi/client';
-        script.async = true;
-        script.defer = true;
-        document.head.appendChild(script);
-      }
-    }
   }, []);
 
   const showSuccess = (message: string, onComplete: () => void) => {
@@ -95,144 +70,8 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
   const [resetPassword, setResetPassword] = useState('');
   const [resetConfirmPassword, setResetConfirmPassword] = useState('');
 
-  // ============================================================================
-  // [GIẢI THÍCH CODE]: SERVICE XỬ LÝ ĐĂNG NHẬP GOOGLE BẰNG API BACKEND CÓ SẴN
-  // 1. Phía Backend Spring Boot có API: POST /api/auth/google
-  //    - Nhận body JSON: SocialLoginRequest { token: "<access_token>" }
-  //    - Backend AuthServiceImpl: Gọi Google UserInfo API:
-  //      https://www.googleapis.com/oauth2/v3/userinfo?access_token=<token>
-  //    - Tự động lấy email, tên, ảnh đại diện, lưu/tìm trong database
-  //    - Trả về: AuthResponse { systemToken, account, customer, role }
-  // 2. Phía Mobile App:
-  //    - Dùng WebBrowser.openAuthSessionAsync mở luồng Google OAuth2 (Implicit Flow)
-  //    - Google trả về URL chứa fragment '#access_token=ya29...'
-  //    - Trích xuất `access_token` và gửi thẳng lên API /api/auth/google của Backend
-  //    - Lấy JWT token từ `systemToken` lưu vào AsyncStorage
-  //    - Kích hoạt onLoginSuccess chuyển vào màn hình chính
-  // ============================================================================
-  // Gửi Google access_token về Backend xác thực giống HalmBookFE
-  const sendGoogleTokenToBackend = async (accessToken: string) => {
-    try {
-      const response = await axiosAppInstance.post('/api/auth/google', {
-        token: accessToken,
-      });
-
-      const token = response.data?.systemToken || response.data?.token;
-      const role = response.data?.role;
-
-      if (typeof token !== 'string' || !token) {
-        Alert.alert('Đăng nhập thất bại', 'Phản hồi từ máy chủ không có mã xác thực JWT.');
-        setIsGoogleSubmitting(false);
-        return;
-      }
-
-      await AsyncStorage.setItem('userToken', token);
-      if (role) await AsyncStorage.setItem('userRole', role);
-
-      // [GIẢI THÍCH CODE]: Lấy avatar & họ tên từ DB để đồng bộ cho các màn được chỉ định
-      try {
-        const custRes = await axiosAppInstance.get('/api/home/customer/info', {
-          headers: { Authorization: `Bearer ${token}` },
-          timeout: 4000,
-        });
-        if (custRes.data) {
-          const avatar = custRes.data.avatarUrl || custRes.data.avatar || '';
-          const name = custRes.data.customerName || '';
-          const initial = (name || 'H').charAt(0).toUpperCase();
-          if (avatar) await AsyncStorage.setItem('userAvatarUrl', avatar);
-          await AsyncStorage.setItem('userInitial', initial);
-        }
-      } catch (custErr) {
-        // Bỏ qua nếu mạng yếu
-      }
-
-      showSuccess('Đăng nhập Google thành công! Chào mừng bạn đến với HALM BOOK.', onLoginSuccess);
-    } catch (error: any) {
-      console.error('Lỗi Backend xác thực Google:', error);
-      const errorMsg = error.response?.data || error.message || 'Xác thực Google thất bại ở máy chủ.';
-      Alert.alert('Đăng nhập thất bại', typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
-    } finally {
-      setIsGoogleSubmitting(false);
-    }
-  };
-
-  // ============================================================================
-  // [GIẢI THÍCH CODE]: SERVICE XỬ LÝ ĐĂNG NHẬP GOOGLE BẰNG API BACKEND CÓ SẴN
-  // 1. Phía Backend Spring Boot có API: POST /api/auth/google
-  //    - Nhận body JSON: SocialLoginRequest { token: "<access_token>" }
-  //    - Backend AuthServiceImpl: Gọi Google UserInfo API để lấy email, name, avatar
-  //    - Trả về: AuthResponse { systemToken, account, customer, role }
-  // 2. Phía Client:
-  //    - Khi chạy Web: dùng Google Identity Services (GSI popup) giống hệt HalmBookFE
-  //    - Khi chạy Mobile: dùng WebBrowser.openAuthSessionAsync
-  // ============================================================================
-  const handleGoogleLogin = async () => {
-    if (isLoginSubmitting || isGoogleSubmitting) return;
-    setIsGoogleSubmitting(true);
-
-    // --- CÁCH 1: NẾU ĐANG CHẠY TRÊN WEB (Áp dụng đúng cơ chế của HalmBookFE) ---
-    if (Platform.OS === 'web' && typeof (window as any)?.google?.accounts?.oauth2 !== 'undefined') {
-      try {
-        const client = (window as any).google.accounts.oauth2.initTokenClient({
-          client_id: GOOGLE_CLIENT_ID,
-          scope: 'openid email profile',
-          callback: async (tokenResponse: any) => {
-            if (tokenResponse?.error) {
-              setIsGoogleSubmitting(false);
-              Alert.alert('Đăng nhập Google thất bại', tokenResponse.error_description || tokenResponse.error);
-              return;
-            }
-            if (tokenResponse?.access_token) {
-              await sendGoogleTokenToBackend(tokenResponse.access_token);
-            } else {
-              setIsGoogleSubmitting(false);
-            }
-          },
-        });
-        client.requestAccessToken({ prompt: 'select_account' });
-        return;
-      } catch (webErr) {
-        console.warn('Lỗi GSI web popup, chuyển sang fallback WebBrowser:', webErr);
-      }
-    }
-
-    // --- CÁCH 2: NẾU ĐANG CHẠY TRÊN MOBILE APP (Dùng WebBrowser Session) ---
-    try {
-      const redirectUrl = Linking.createURL('google-auth');
-      const authUrl =
-        `https://accounts.google.com/o/oauth2/v2/auth?` +
-        `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}` +
-        `&redirect_uri=${encodeURIComponent(redirectUrl)}` +
-        `&response_type=token` +
-        `&scope=${encodeURIComponent('openid email profile')}` +
-        `&prompt=select_account`;
-
-      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
-
-      if (result.type === 'success' && result.url) {
-        const tokenMatch = result.url.match(/[#?&]access_token=([^&]+)/);
-        const accessToken = tokenMatch ? decodeURIComponent(tokenMatch[1]) : null;
-
-        if (!accessToken) {
-          Alert.alert('Đăng nhập thất bại', 'Không nhận được access token từ Google.');
-          setIsGoogleSubmitting(false);
-          return;
-        }
-
-        await sendGoogleTokenToBackend(accessToken);
-      } else {
-        setIsGoogleSubmitting(false);
-      }
-    } catch (error: any) {
-      console.error('Lỗi khi đăng nhập Google:', error);
-      const errorMsg = error.response?.data || error.message || 'Xác thực Google thất bại ở máy chủ.';
-      Alert.alert('Đăng nhập Google thất bại', typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
-      setIsGoogleSubmitting(false);
-    }
-  };
-
   // ----------------------------------------------------
-    // SERVICE 1 : ĐĂNG NHẬP
+  // SERVICE 1 : ĐĂNG NHẬP
   // ----------------------------------------------------
   const handleLogin = async () => {
     // 1. Tiền xử lý: Dọn dẹp khoảng trắng
@@ -269,27 +108,7 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
       // 4. LƯU TRỮ VĨNH VIỄN VÀO ĐIỆN THOẠI
       await AsyncStorage.setItem('userToken', token);
       if (role) await AsyncStorage.setItem('userRole', role);
-
-      // [GIẢI THÍCH CODE]: Lấy avatar & họ tên từ DB để đồng bộ cho các màn được chỉ định
-      try {
-        const custRes = await axiosAppInstance.get('/api/home/customer/info', {
-          headers: { Authorization: `Bearer ${token}` },
-          timeout: 4000,
-        });
-        if (custRes.data) {
-          const avatar = custRes.data.avatarUrl || custRes.data.avatar || '';
-          const name = custRes.data.customerName || userVal;
-          const initial = (name || userVal || 'H').charAt(0).toUpperCase();
-          if (avatar) await AsyncStorage.setItem('userAvatarUrl', avatar);
-          await AsyncStorage.setItem('userInitial', initial);
-        } else {
-          const initial = (userVal || 'H').charAt(0).toUpperCase();
-          await AsyncStorage.setItem('userInitial', initial);
-        }
-      } catch (custErr) {
-        const initial = (userVal || 'H').charAt(0).toUpperCase();
-        await AsyncStorage.setItem('userInitial', initial);
-      }
+      if (userVal) await AsyncStorage.setItem('username', userVal);
 
       showSuccess('Đăng nhập thành công! Chào mừng bạn đến với HALM BOOK.', onLoginSuccess);
 
@@ -439,7 +258,7 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
       style={themeStyles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'} />
+      <StatusBar {...({ translucent: true, backgroundColor: "transparent" } as any)} barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
 
       {/* Background Trang trí */}
       <View style={themeStyles.bgCircleTop} />
@@ -454,6 +273,7 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
           {/* ===================== MÀN HÌNH ĐĂNG NHẬP ===================== */}
           {currentScreen === 'login' && (
             <View style={themeStyles.formContainer}>
+<<<<<<< HEAD
               {/* ============================================================================
                   [GIẢI THÍCH CODE]: Nút quay lại dành cho khách vãng lai
                   Nếu khách chưa muốn đăng nhập lúc này, có thể nhấn nút quay lại để về Trang chủ
@@ -467,6 +287,9 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
                 <Ionicons name="arrow-back" size={24} color={isDarkMode ? '#fff' : '#1a1a1a'} />
               </TouchableOpacity>
               <Text style={themeStyles.authTitle}>{lang === 'en' ? 'Sign In' : 'Đăng nhập'}</Text>
+=======
+              <Text style={themeStyles.authTitle}>Đăng nhập</Text>
+>>>>>>> origin/main
 
               <View style={themeStyles.inputGroup}>
                 <Ionicons name="person-outline" size={20} color="#888" style={themeStyles.inputIcon} />
@@ -510,23 +333,7 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
               </View>
 
               <View style={themeStyles.socialLogins}>
-                                {/* ============================================================================
-                    [GIẢI THÍCH CODE]: Nút đăng nhập bằng Google
-                    Nhấn vào sẽ mở Google OAuth lấy access_token gửi lên API /api/auth/google của Backend
-                    ============================================================================ */}
-                <TouchableOpacity
-                  style={themeStyles.socialBtn}
-                  onPress={handleGoogleLogin}
-                  disabled={isLoginSubmitting || isGoogleSubmitting}
-                  accessibilityRole="button"
-                  accessibilityLabel="Đăng nhập bằng Google"
-                >
-                  {isGoogleSubmitting ? (
-                    <ActivityIndicator size="small" color="#DB4437" />
-                  ) : (
-                    <Ionicons name="logo-google" size={22} color="#DB4437" />
-                  )}
-                </TouchableOpacity>
+                <TouchableOpacity style={themeStyles.socialBtn}><Ionicons name="logo-google" size={22} color="#DB4437" /></TouchableOpacity>
                 <TouchableOpacity style={themeStyles.socialBtn}><Ionicons name="logo-facebook" size={22} color="#1877F2" /></TouchableOpacity>
                 <TouchableOpacity style={themeStyles.socialBtn}><Ionicons name="logo-apple" size={22} color="#000" /></TouchableOpacity>
               </View>
@@ -537,8 +344,6 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
                   <Text style={themeStyles.boldLinkText}>{lang === 'en' ? 'Sign up now' : 'Đăng ký ngay'}</Text>
                 </TouchableOpacity>
               </View>
-
-
             </View>
           )}
 

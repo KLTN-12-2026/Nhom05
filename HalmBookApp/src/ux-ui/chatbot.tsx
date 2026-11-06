@@ -1,3 +1,4 @@
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, BookOpen, Bot, Image as ImageIcon, Mic, MoreVertical, Send } from 'lucide-react-native';
 import { useRef, useState } from 'react';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
@@ -6,7 +7,6 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   StatusBar,
   StyleSheet, Text,
   TextInput,

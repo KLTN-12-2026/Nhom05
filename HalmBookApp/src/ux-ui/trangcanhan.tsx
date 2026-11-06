@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios, { AxiosRequestConfig } from 'axios';
+import axios from 'axios';
 import Constants from 'expo-constants';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { ComponentRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -21,52 +21,33 @@ import {
   View,
 } from 'react-native';
 import { useAppNavigation, useAppThemeStyles } from './navigation';
-import MembershipModal, {
-  CustomerTierSummaryDto,
-  DEFAULT_TIERS_LIST,
-  TierDto,
-} from './MembershipModal';
 
-const resolvePrimaryApiUrl = (): string => {
-  if (process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL.replace(/\/+$/, '');
-  }
-  const debuggerHost = Constants.expoConfig?.hostUri;
-  const host = debuggerHost
-    ? debuggerHost.split(':')[0]
-    : Platform.OS === 'android'
-      ? '10.0.2.2'
-      : 'localhost';
-  return `http://${host}:8082`;
-};
+const debuggerHost = Constants.expoConfig?.hostUri;
+const localhost = debuggerHost ? debuggerHost.split(':')[0] : 'localhost';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || `http://${localhost}:8082`;
 
-const API_BASE_URL = resolvePrimaryApiUrl();
+const CANDIDATE_API_URLS = [
+  process.env.EXPO_PUBLIC_API_URL,
+  `http://${localhost}:8082`,
+  'http://localhost:8082',
+  'http://127.0.0.1:8082',
+  'http://10.0.2.2:8082',
+].filter(Boolean) as string[];
 
-const CANDIDATE_API_URLS = Array.from(
-  new Set([
-    API_BASE_URL,
-    'http://localhost:8082',
-    'http://127.0.0.1:8082',
-    'http://10.0.2.2:8082',
-  ])
-);
-
-async function apiRequestWithFallback<T = any>(
-  path: string,
-  config: AxiosRequestConfig = {}
-) {
+async function fetchWithCandidateFallback(path: string, options: any = {}) {
   let lastError: any = null;
-  for (const baseUrl of CANDIDATE_API_URLS) {
+  const urls = CANDIDATE_API_URLS.filter((url, idx, arr) => arr.indexOf(url) === idx);
+  for (const baseUrl of urls) {
     try {
-      return await axios.request<T>({
-        ...config,
+      const res = await axios({
+        ...options,
         url: `${baseUrl}${path}`,
-        timeout: config.timeout ?? 8000,
+        timeout: options.timeout || 4000,
       });
+      return { data: res.data, baseUrl };
     } catch (err: any) {
       lastError = err;
-      // Nếu máy chủ đã phản hồi HTTP status (400, 401, 404, 500...), không cần thử IP khác
-      if (err?.response) {
+      if (err.response) {
         throw err;
       }
     }
@@ -74,6 +55,7 @@ async function apiRequestWithFallback<T = any>(
   throw lastError;
 }
 
+<<<<<<< HEAD
 type LangCode = 'vi' | 'en';
 
 const TRANSLATIONS = {
@@ -317,6 +299,8 @@ const TRANSLATIONS = {
   },
 };
 
+=======
+>>>>>>> origin/main
 const formatDateForDisplay = (dateVal: any): string => {
   if (!dateVal) return '';
   try {
@@ -375,20 +359,17 @@ const decodeJwtPayload = (token: string): Record<string, any> | null => {
 
 export default function Toi() {
   const themeStyles = useAppThemeStyles(styles);
+<<<<<<< HEAD
   const { navigate, logout, isDarkMode, setUserAvatarUrl, setUserInitial, lang, setLang } = useAppNavigation();
+=======
+  const { navigate, logout, isDarkMode } = useAppNavigation();
+>>>>>>> origin/main
 
   // Trạng thái hiển thị các Modal chức năng con
   const [showHelp, setShowHelp] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
-
-  // [GIẢI THÍCH CODE]: Quản lý Modal Hạng thành viên & Dữ liệu API Backend (/api/home/membership)
-  const [showDailyTasks, setShowDailyTasks] = useState(false);
-  const [showTierModal, setShowTierModal] = useState(false);
-  const [tierSummary, setTierSummary] = useState<CustomerTierSummaryDto | null>(null);
-  const [allTiers, setAllTiers] = useState<TierDto[]>(DEFAULT_TIERS_LIST);
-  const [isCheckingIn, setIsCheckingIn] = useState(false);
 
   // Trạng thái cho Đổi mật khẩu (2 bước)
   const [passwordStep, setPasswordStep] = useState(1);
@@ -568,72 +549,58 @@ export default function Toi() {
         Authorization: `Bearer ${token}`,
       };
 
-      // 1. Lấy thông tin khách hàng từ DB
+      // Tải trước username từ JWT token hoặc AsyncStorage để không bị hiển thị trống
+      const jwtPayload = decodeJwtPayload(token);
+      const savedUsername = (await AsyncStorage.getItem('username')) || jwtPayload?.sub || '';
+      
+      const cachedProfileStr = await AsyncStorage.getItem('cachedUserProfile');
+      if (cachedProfileStr) {
+        try {
+          const cached = JSON.parse(cachedProfileStr);
+          if (cached && typeof cached === 'object') {
+            setUserInfo((prev) => ({ ...prev, ...cached }));
+          }
+        } catch {}
+      } else if (savedUsername) {
+        setUserInfo((prev) => ({
+          ...prev,
+          username: savedUsername,
+          name: prev.name === 'Đang tải...' ? savedUsername : prev.name,
+        }));
+      }
+
+      // 1. Lấy thông tin khách hàng từ DB qua candidate fallback
       let customerData: any = null;
       try {
-        const res = await axios.get(`${API_BASE_URL}/api/home/customer/info`, {
+        const res = await fetchWithCandidateFallback('/api/home/customer/info', {
+          method: 'GET',
           headers,
-          timeout: 8000,
+          timeout: 4000,
         });
-        if (res.data) {
+        if (res?.data) {
           customerData = res.data;
         }
       } catch (err: any) {
-        console.warn('Lỗi khi gọi /api/home/customer/info:', err.message);
+        if (err?.response?.status === 401) {
+          console.warn('Phiên đăng nhập đã hết hạn (401). Đang chuyển hướng đăng nhập lại.');
+          await AsyncStorage.multiRemove(['userToken', 'userRole', 'savedRoutes', 'cachedUserProfile']);
+          Alert.alert(
+            'Phiên đăng nhập hết hạn',
+            'Tài khoản của bạn đã hết hạn đăng nhập hoặc không hợp lệ. Vui lòng đăng nhập lại.',
+            [{ text: 'Đăng nhập', onPress: () => logout() }]
+          );
+          logout();
+          return;
+        }
+        if (err?.response?.status === 404) {
+          // Tài khoản hợp lệ nhưng chưa có hồ sơ khách hàng -> xử lý êm dịu, không log warn đỏ
+          customerData = null;
+        } else {
+          console.warn('Lỗi khi gọi /api/home/customer/info:', err?.message || err);
+        }
       }
 
-      // 2. Lấy thông tin tài khoản (username) từ /api/auth/me
-      let currentUsername = '';
-      try {
-        const meRes = await apiRequestWithFallback('/api/auth/me', {
-          method: 'GET',
-          headers,
-          timeout: 8000,
-        });
-        if (meRes.data?.username) {
-          currentUsername = meRes.data.username;
-        }
-      } catch (err: any) {
-        console.warn('Lỗi khi gọi /api/auth/me:', err.message);
-      }
-
-      // 3. [GIẢI THÍCH CODE]: Lấy thông tin Hạng thành viên & Điểm cày XP từ Backend (/api/home/membership/my-tier)
-      let tierSummaryData: CustomerTierSummaryDto | null = null;
-      try {
-        const tierRes = await apiRequestWithFallback<CustomerTierSummaryDto>(
-          '/api/home/membership/my-tier',
-          {
-            method: 'GET',
-            headers,
-            timeout: 8000,
-          }
-        );
-        if (tierRes.data) {
-          tierSummaryData = tierRes.data;
-          setTierSummary(tierSummaryData);
-          if (tierSummaryData.allTiers && tierSummaryData.allTiers.length > 0) {
-            setAllTiers(tierSummaryData.allTiers);
-          }
-        }
-      } catch (err: any) {
-        console.warn('Lỗi khi tải thông tin /api/home/membership/my-tier:', err.message);
-      }
-
-      // 4. [GIẢI THÍCH CODE]: Lấy danh sách 4 cấp bậc hội viên từ /api/home/membership/tiers
-      try {
-        const tiersListRes = await apiRequestWithFallback<TierDto[]>(
-          '/api/home/membership/tiers',
-          {
-            method: 'GET',
-            timeout: 8000,
-          }
-        );
-        if (Array.isArray(tiersListRes.data) && tiersListRes.data.length > 0) {
-          setAllTiers(tiersListRes.data);
-        }
-      } catch (err: any) {
-        console.warn('Lỗi khi tải danh sách /api/home/membership/tiers:', err.message);
-      }
+      const currentUsername = savedUsername || customerData?.customerName || '';
 
       if (customerData) {
         const nameVal = customerData.customerName || currentUsername || 'Độc giả HALM';
@@ -644,11 +611,12 @@ export default function Toi() {
         const addressVal = customerData.address || '';
         const avatarVal = customerData.avatarUrl || customerData.avatar || '';
         const custIdVal = customerData.customer_id || '';
-        const potatoVal = tierSummaryData?.potatoBalance ?? customerData.potatoBalance ?? 0;
-        const totalPotatoVal = tierSummaryData?.totalPoints ?? customerData.totalPotatoEarned ?? 0;
-        const tierVal = tierSummaryData?.currentTier?.tierName || customerData.membershipTier?.tierName || 'Thợ Cày';
-        const streakVal = tierSummaryData?.streakDays ?? customerData.streakDays ?? 0;
+        const potatoVal = customerData.potatoBalance ?? 0;
+        const totalPotatoVal = customerData.totalPotatoEarned ?? 0;
+        const tierVal = customerData.membershipTier?.tierName || 'Thành viên';
+        const streakVal = customerData.streakDays ?? 0;
 
+<<<<<<< HEAD
         // [GIẢI THÍCH CODE]: Tự động thông báo chúc mừng khi đạt được hạng mới (Cao Thủ Cày, Lão Nông, Đại Điền Chủ)
         if (custIdVal && tierVal && tierVal !== 'Thợ Cày') {
           AsyncStorage.getItem(`@halm_celebrated_tier_${custIdVal}`).then((savedTier) => {
@@ -665,6 +633,9 @@ export default function Toi() {
         }
 
         setUserInfo({
+=======
+        const nextProfile = {
+>>>>>>> origin/main
           name: nameVal,
           username: currentUsername || custIdVal,
           email: emailVal,
@@ -678,14 +649,9 @@ export default function Toi() {
           totalPotatoEarned: totalPotatoVal,
           tierName: tierVal,
           streakDays: streakVal,
-        });
-
-        // [GIẢI THÍCH CODE]: Đồng bộ avatar và chữ cái đầu vào NavigationContext và AsyncStorage
-        setUserAvatarUrl?.(avatarVal);
-        const nextInitial = (nameVal || currentUsername || 'H').charAt(0).toUpperCase();
-        setUserInitial?.(nextInitial);
-        AsyncStorage.setItem('userAvatarUrl', avatarVal).catch(() => {});
-        AsyncStorage.setItem('userInitial', nextInitial).catch(() => {});
+        };
+        setUserInfo(nextProfile);
+        AsyncStorage.setItem('cachedUserProfile', JSON.stringify(nextProfile)).catch(() => {});
 
         setEditForm({
           name: nameVal,
@@ -695,17 +661,33 @@ export default function Toi() {
           dob: dobVal,
           address: addressVal,
         });
-      } else if (currentUsername) {
-        setUserInfo((prev) => ({
-          ...prev,
-          username: currentUsername,
-          name: prev.name === 'Đang tải...' ? currentUsername : prev.name,
-        }));
       } else {
-        setUserInfo((prev) => ({
-          ...prev,
-          name: 'Độc giả HALM',
-        }));
+        // Tài khoản chưa có hồ sơ trong bảng customer -> thiết lập thông tin ban đầu từ username
+        const nameVal = currentUsername || 'Độc giả HALM';
+        const fallbackProfile = {
+          name: nameVal,
+          username: currentUsername,
+          email: '',
+          phone: '',
+          gender: 'Nam',
+          dob: '',
+          address: '',
+          avatarUrl: '',
+          customerId: currentUsername || 'Chưa cập nhật',
+          potatoBalance: 0,
+          totalPotatoEarned: 0,
+          tierName: 'Thành viên mới',
+          streakDays: 0,
+        };
+        setUserInfo((prev) => ({ ...prev, ...fallbackProfile }));
+        setEditForm({
+          name: nameVal,
+          email: '',
+          phone: '',
+          gender: 'Nam',
+          dob: '',
+          address: '',
+        });
       }
     } catch (error) {
       console.error('Lỗi khi tải dữ liệu trang cá nhân từ database:', error);
@@ -719,6 +701,7 @@ export default function Toi() {
     fetchUserData(true);
   }, [fetchUserData]);
 
+<<<<<<< HEAD
   // [GIẢI THÍCH CODE]: Điểm danh đọc sách hằng ngày theo API Backend (/api/home/membership/checkin-streak)
   const handleDailyCheckin = async () => {
     if (isCheckingIn) return;
@@ -781,6 +764,8 @@ export default function Toi() {
     }
   };
 
+=======
+>>>>>>> origin/main
   const handleOpenProfile = () => {
     setEditForm({
       name: userInfo.name !== 'Đang tải...' ? userInfo.name : '',
@@ -823,40 +808,45 @@ export default function Toi() {
         gender: editForm.gender === 'Nam',
       };
 
-      const parsedBirthday = parseDateToApi(editForm.dob);
+      const parsedBirthday = parseDateToApi(editForm.dob) || parseDateToApi(userInfo.dob);
       if (parsedBirthday) {
         payload.birthday = parsedBirthday;
       }
 
-      const response = await axios.put(`${API_BASE_URL}/api/home/customer/edit`, payload, {
+      const res = await fetchWithCandidateFallback('/api/home/customer/edit', {
+        method: 'PUT',
+        data: payload,
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        timeout: 10000,
+        timeout: 8000,
       });
 
-      const updated = response.data;
+      const updated = res?.data;
       if (updated) {
-        setUserInfo((prev) => ({
-          ...prev,
-          name: updated.customerName || prev.name,
-          email: updated.email || prev.email,
-          phone: updated.phoneNumber || prev.phone,
-          address: updated.address || prev.address,
+        const nextProfile = {
+          ...userInfo,
+          name: updated.customerName || nameVal,
+          email: updated.email || emailVal,
+          phone: updated.phoneNumber || editForm.phone.trim(),
+          address: updated.address || editForm.address.trim(),
           gender: updated.gender === false ? 'Nữ' : 'Nam',
-          dob: updated.birthday ? formatDateForDisplay(updated.birthday) : prev.dob,
-        }));
+          dob: updated.birthday ? formatDateForDisplay(updated.birthday) : editForm.dob,
+        };
+        setUserInfo(nextProfile);
+        AsyncStorage.setItem('cachedUserProfile', JSON.stringify(nextProfile)).catch(() => {});
       }
-
-      // [GIẢI THÍCH CODE]: Cập nhật chữ cái đầu khi đổi họ tên
-      const updatedInitial = (nameVal || 'H').charAt(0).toUpperCase();
-      setUserInitial?.(updatedInitial);
-      AsyncStorage.setItem('userInitial', updatedInitial).catch(() => {});
 
       setIsEditingProfile(false);
       Alert.alert(t.alertSuccessTitle, t.msgProfileUpdated);
     } catch (error: any) {
+      if (error?.response?.status === 401) {
+        await AsyncStorage.multiRemove(['userToken', 'userRole', 'savedRoutes', 'cachedUserProfile']);
+        Alert.alert('Phiên đăng nhập hết hạn', 'Vui lòng đăng nhập lại.', [{ text: 'Đăng nhập', onPress: () => logout() }]);
+        logout();
+        return;
+      }
       const errorMsg = error.response?.data || error.message || 'Không thể cập nhật thông tin.';
       Alert.alert(t.alertUpdateErrorTitle, typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
     } finally {
@@ -913,11 +903,12 @@ export default function Toi() {
       // 1. Thử xác thực mật khẩu cũ bằng username qua API /api/auth/login
       if (loginId) {
         try {
-          const res = await axios.post(`${API_BASE_URL}/api/auth/login`, {
-            username: loginId,
-            password: trimmedOld,
+          const res = await fetchWithCandidateFallback('/api/auth/login', {
+            method: 'POST',
+            data: { username: loginId, password: trimmedOld },
+            timeout: 5000,
           });
-          if (res.status === 200 && res.data?.token) {
+          if (res?.data?.token) {
             isValid = true;
           }
         } catch { }
@@ -926,11 +917,12 @@ export default function Toi() {
       // 2. Nếu username chưa được, thử xác thực bằng email qua API /api/auth/login
       if (!isValid && emailId && emailId !== loginId) {
         try {
-          const res = await axios.post(`${API_BASE_URL}/api/auth/login`, {
-            username: emailId,
-            password: trimmedOld,
+          const res = await fetchWithCandidateFallback('/api/auth/login', {
+            method: 'POST',
+            data: { username: emailId, password: trimmedOld },
+            timeout: 5000,
           });
-          if (res.status === 200 && res.data?.token) {
+          if (res?.data?.token) {
             isValid = true;
           }
         } catch { }
@@ -1015,33 +1007,31 @@ export default function Toi() {
       // Endpoint: /api/password/reset-password
       // Body: { email, newPassword }
       // Backend sẽ tìm Customer theo email, lấy Account liên kết, mã hóa BCrypt mật khẩu mới và lưu vào MySQL.
-      const resetRes = await axios.post(
-        `${API_BASE_URL}/api/password/reset-password`,
-        {
+      const resetRes = await fetchWithCandidateFallback('/api/password/reset-password', {
+        method: 'POST',
+        data: {
           email: emailToUse,
           newPassword: trimmedNew,
         },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          timeout: 10000,
-        }
-      );
-
-      if (resetRes.status !== 200) {
-        throw new Error(resetRes.data || 'Không thể lưu mật khẩu vào cơ sở dữ liệu.');
-      }
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        timeout: 8000,
+      });
 
       // Đăng nhập lại để cập nhật token mới vào AsyncStorage
       const loginId = usernameToUse || emailToUse;
       if (loginId) {
         try {
-          const loginRes = await axios.post(`${API_BASE_URL}/api/auth/login`, {
-            username: loginId,
-            password: trimmedNew,
+          const loginRes = await fetchWithCandidateFallback('/api/auth/login', {
+            method: 'POST',
+            data: {
+              username: loginId,
+              password: trimmedNew,
+            },
+            timeout: 5000,
           });
-          if (loginRes.data?.token) {
+          if (loginRes?.data?.token) {
             await AsyncStorage.setItem('userToken', loginRes.data.token);
             if (loginRes.data?.role) {
               await AsyncStorage.setItem('userRole', loginRes.data.role);
@@ -1140,8 +1130,13 @@ export default function Toi() {
         <View style={themeStyles.statsCard}>
           <View style={themeStyles.statItem}>
             <Text style={themeStyles.statIcon}>🥔</Text>
+<<<<<<< HEAD
             <Text style={themeStyles.statValue}>{userInfo.potatoBalance.toLocaleString(lang === 'en' ? 'en-US' : 'vi-VN')}</Text>
             <Text style={themeStyles.statLabel}>{t.potatoAvailable}</Text>
+=======
+            <Text style={themeStyles.statValue}>{(userInfo.potatoBalance ?? 0).toLocaleString('vi-VN')}</Text>
+            <Text style={themeStyles.statLabel}>Khoai đang có</Text>
+>>>>>>> origin/main
           </View>
           <View style={themeStyles.statDivider} />
           <View style={themeStyles.statItem}>
@@ -1157,6 +1152,7 @@ export default function Toi() {
           </View>
         </View>
 
+<<<<<<< HEAD
         {/* [GIẢI THÍCH CODE]: Thanh Hạng Thành Viên Tương Tác - Chạm vào để xem chi tiết lộ trình & đặc quyền */}
         <TouchableOpacity
           style={themeStyles.tierCardEnhanced}
@@ -1215,9 +1211,18 @@ export default function Toi() {
             <Text style={themeStyles.tierCardActionHint}>
               {lang === 'en' ? 'View Perks & Roadmap ❯' : 'Xem quyền lợi & Lộ trình ❯'}
             </Text>
+=======
+        {/* Hạng thành viên */}
+        <TouchableOpacity style={themeStyles.tierCard}>
+          <View style={themeStyles.tierInfo}>
+            <Ionicons name="medal" size={24} color="#f1c40f" />
+            <Text style={themeStyles.tierTitle}>Hạng: {userInfo.tierName}</Text>
+>>>>>>> origin/main
           </View>
+          <Ionicons name="chevron-forward" size={20} color="#888" />
         </TouchableOpacity>
 
+<<<<<<< HEAD
         {/* [GIẢI THÍCH CODE]: Thanh Điểm Danh Nhanh Ngay Tại Trang Cá Nhân */}
         <View style={themeStyles.quickCheckinBar}>
           <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
@@ -1255,27 +1260,15 @@ export default function Toi() {
         </View>
 
         {/* Danh sách Menu */}
+=======
+        {/* Danh sách các Menu chức năng */}
+>>>>>>> origin/main
         <View style={themeStyles.menuSection}>
-          {/* [GIẢI THÍCH CODE]: Mục Menu Nhiệm Vụ Hằng Ngày */}
-          <TouchableOpacity
-            style={themeStyles.menuItem}
-            onPress={() => setShowDailyTasks(true)}
-          >
-            <View style={[themeStyles.menuIconBox, { backgroundColor: '#fff9e6' }]}>
-              <Ionicons name="calendar-outline" size={20} color="#f39c12" />
-            </View>
-            <Text style={themeStyles.menuItemText}>{t.menuDailyTasks}</Text>
-            <Ionicons name="chevron-forward" size={20} color="#ccc" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={themeStyles.menuItem}
-            onPress={() => setShowHelp(true)}
-          >
+          <TouchableOpacity style={themeStyles.menuItem} onPress={() => setShowHelp(true)}>
             <View style={[themeStyles.menuIconBox, { backgroundColor: '#e8f4fd' }]}>
               <Ionicons name="help-buoy" size={20} color="#3498db" />
             </View>
-            <Text style={themeStyles.menuItemText}>{t.menuHelp}</Text>
+            <Text style={themeStyles.menuItemText}>Trung tâm trợ giúp</Text>
             <Ionicons name="chevron-forward" size={20} color="#ccc" />
           </TouchableOpacity>
 
@@ -1760,6 +1753,7 @@ export default function Toi() {
         </View>
       </Modal>
 
+<<<<<<< HEAD
       {/* 5. [GIẢI THÍCH CODE]: Modal Hạng Thành Viên & Đặc Quyền Độc Giả */}
       <MembershipModal
         visible={showTierModal}
@@ -2046,6 +2040,8 @@ export default function Toi() {
           </ScrollView>
         </View>
       </Modal>
+=======
+>>>>>>> origin/main
     </View>
   );
 }
@@ -2090,6 +2086,7 @@ const styles = StyleSheet.create({
   tierInfo: { flexDirection: 'row', alignItems: 'center' },
   tierTitle: { fontSize: 15, fontWeight: '700', color: '#1a1a1a', marginLeft: 10 },
 
+<<<<<<< HEAD
   // Tier Card Enhanced
   tierCardEnhanced: {
     backgroundColor: '#fff',
@@ -2520,6 +2517,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
+=======
+>>>>>>> origin/main
   // Menu Section
   menuSection: { backgroundColor: '#fff', borderRadius: 15, marginHorizontal: 20, paddingHorizontal: 15, paddingVertical: 5 },
   menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#f1f2f6' },
@@ -2608,4 +2607,5 @@ const styles = StyleSheet.create({
   softInputWrapper: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f1f4f8', borderRadius: 14, marginBottom: 15, paddingHorizontal: 15, height: 55, borderWidth: 1, borderColor: '#e1e8f0' },
   softPasswordInput: { flex: 1, paddingVertical: 15, fontSize: 15, color: '#1a1a1a', fontWeight: '500' }
 });
+
 
