@@ -15,7 +15,7 @@ export default function ThanhToan() {
   const themeStyles = useAppThemeStyles(styles);
   const [selectedMethod, setSelectedMethod] = useState('qr');
   const [promoCode, setPromoCode] = useState('');
-  const { navigate, goBack, isDarkMode } = useAppNavigation();
+  const { navigate, goBack, isDarkMode, lang } = useAppNavigation();
 
   const getMethodName = () => {
     return PAYMENT_METHODS.find(m => m.id === selectedMethod)?.title || '';
@@ -31,8 +31,8 @@ export default function ThanhToan() {
           <Ionicons name="arrow-back" size={28} color="#1a1a1a" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={themeStyles.headerTitle}>Chọn hình thức thanh toán</Text>
-          <Text style={themeStyles.headerSubtitle}>An toàn - Nhanh chóng - Bảo mật</Text>
+          <Text style={themeStyles.headerTitle}>{lang === 'en' ? 'Select Payment Method' : 'Chọn hình thức thanh toán'}</Text>
+          <Text style={themeStyles.headerSubtitle}>{lang === 'en' ? 'Safe - Fast - Secure' : 'An toàn - Nhanh chóng - Bảo mật'}</Text>
         </View>
       </View>
 
@@ -73,14 +73,14 @@ export default function ThanhToan() {
         <View style={themeStyles.summaryContainer}>
           {/* Header màu vàng */}
           <View style={themeStyles.summaryHeader}>
-            <Text style={themeStyles.summaryHeaderText}>Thông tin thanh toán</Text>
+            <Text style={themeStyles.summaryHeaderText}>{lang === 'en' ? 'Payment Summary' : 'Thông tin thanh toán'}</Text>
           </View>
           
           <View style={themeStyles.summaryBody}>
             <View style={themeStyles.summaryRow}>
-              <Text style={themeStyles.summaryLabel}>Sản phẩm</Text>
+              <Text style={themeStyles.summaryLabel}>{lang === 'en' ? 'Product' : 'Sản phẩm'}</Text>
               <View style={themeStyles.productBadge}>
-                <Text style={themeStyles.productBadgeText}>Gói Khoai 20K 🥔</Text>
+                <Text style={themeStyles.productBadgeText}>{lang === 'en' ? '20K Potato Pack 🥔' : 'Gói Khoai 20K 🥔'}</Text>
                 <Ionicons name="chevron-down" size={14} color="#1a1a1a" style={{ marginLeft: 4 }} />
               </View>
             </View>
@@ -88,17 +88,17 @@ export default function ThanhToan() {
             <View style={themeStyles.dividerDashed} />
 
             <View style={themeStyles.summaryRow}>
-              <Text style={themeStyles.summaryLabel}>Tạm tính</Text>
+              <Text style={themeStyles.summaryLabel}>{lang === 'en' ? 'Subtotal' : 'Tạm tính'}</Text>
               <Text style={themeStyles.summaryValue}>20.000đ</Text>
             </View>
 
             <View style={themeStyles.summaryRow}>
-              <Text style={themeStyles.summaryLabel}>Hình thức thanh toán</Text>
+              <Text style={themeStyles.summaryLabel}>{lang === 'en' ? 'Payment Method' : 'Hình thức thanh toán'}</Text>
               <Text style={[themeStyles.summaryValue, { flex: 1, textAlign: 'right', marginLeft: 20 }]}>{getMethodName()}</Text>
             </View>
 
             <View style={themeStyles.summaryRow}>
-              <Text style={themeStyles.summaryLabel}>Giảm giá</Text>
+              <Text style={themeStyles.summaryLabel}>{lang === 'en' ? 'Discount' : 'Giảm giá'}</Text>
               <Text style={themeStyles.summaryValue}>0</Text>
             </View>
 
@@ -106,20 +106,20 @@ export default function ThanhToan() {
             <View style={themeStyles.promoContainer}>
               <TextInput 
                 style={themeStyles.promoInput} 
-                placeholder="Nhập mã khuyến mại" 
+                placeholder={lang === 'en' ? 'Enter promo code' : 'Nhập mã khuyến mại'} 
                 placeholderTextColor="#a4b0be"
                 value={promoCode}
                 onChangeText={setPromoCode}
               />
               <TouchableOpacity style={themeStyles.promoBtn}>
-                <Text style={themeStyles.promoBtnText}>Áp dụng</Text>
+                <Text style={themeStyles.promoBtnText}>{lang === 'en' ? 'Apply' : 'Áp dụng'}</Text>
               </TouchableOpacity>
             </View>
 
             <View style={themeStyles.dividerSolid} />
 
             <View style={themeStyles.summaryRow}>
-              <Text style={themeStyles.totalLabel}>TỔNG</Text>
+              <Text style={themeStyles.totalLabel}>{lang === 'en' ? 'TOTAL' : 'TỔNG'}</Text>
               <Text style={themeStyles.totalValue}>20.000đ</Text>
             </View>
           </View>
@@ -131,7 +131,7 @@ export default function ThanhToan() {
       {/* Nút THANH TOÁN dính dưới đáy */}
       <View style={themeStyles.bottomBar}>
         <TouchableOpacity style={themeStyles.payBtn} onPress={() => navigate('transactions')}>
-          <Text style={themeStyles.payBtnText}>THANH TOÁN</Text>
+          <Text style={themeStyles.payBtnText}>{lang === 'en' ? 'PAY NOW' : 'THANH TOÁN'}</Text>
         </TouchableOpacity>
       </View>
       

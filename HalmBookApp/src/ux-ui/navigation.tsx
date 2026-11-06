@@ -29,6 +29,8 @@ export interface BookData {
   rating?: string;
 }
 
+export type AppLanguage = 'vi' | 'en';
+
 export interface NavigationContextValue {
   navigate: (screen: AppScreen, book?: BookData) => void;
   navigateTab: (screen: AppScreen) => void;
@@ -37,6 +39,12 @@ export interface NavigationContextValue {
   isDarkMode: boolean;
   isFooterVisible?: boolean;
   setFooterVisible?: (visible: boolean) => void;
+
+  // ============================================================================
+  // [GIẢI THÍCH CODE]: Quản lý ngôn ngữ toàn cục ứng dụng (vi / en)
+  // ============================================================================
+  lang: AppLanguage;
+  setLang: (lang: AppLanguage) => void;
 
   // ============================================================================
   // [GIẢI THÍCH CODE]: Trạng thái đăng nhập và bản thông báo dành cho khách vãng lai

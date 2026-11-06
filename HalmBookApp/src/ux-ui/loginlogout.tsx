@@ -41,7 +41,7 @@ interface AuthProps {
 
 export default function Auth({ onLoginSuccess }: AuthProps) {
   const themeStyles = useAppThemeStyles(styles);
-  const { isDarkMode, goBack } = useAppNavigation();
+  const { isDarkMode, goBack, lang } = useAppNavigation();
   const [currentScreen, setCurrentScreen] = useState<ScreenState>('login');
   const [successMessage, setSuccessMessage] = useState('');
   const [isLoginSubmitting, setIsLoginSubmitting] = useState(false);
@@ -430,7 +430,7 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
   const renderHeader = () => (
     <View style={themeStyles.headerContainer}>
       <Text style={themeStyles.logoText}>HALM <Text style={{ color: '#9b51e0' }}>BOOK</Text></Text>
-      <Text style={themeStyles.sloganText}>Khám phá thế giới qua từng trang sách</Text>
+      <Text style={themeStyles.sloganText}>{lang === 'en' ? 'Discover the world through every page' : 'Khám phá thế giới qua từng trang sách'}</Text>
     </View>
   );
 
@@ -466,13 +466,13 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
               >
                 <Ionicons name="arrow-back" size={24} color={isDarkMode ? '#fff' : '#1a1a1a'} />
               </TouchableOpacity>
-              <Text style={themeStyles.authTitle}>Đăng nhập</Text>
+              <Text style={themeStyles.authTitle}>{lang === 'en' ? 'Sign In' : 'Đăng nhập'}</Text>
 
               <View style={themeStyles.inputGroup}>
                 <Ionicons name="person-outline" size={20} color="#888" style={themeStyles.inputIcon} />
                 <TextInput
                   style={themeStyles.input}
-                  placeholder="Tên đăng nhập"
+                  placeholder={lang === 'en' ? 'Username' : 'Tên đăng nhập'}
                   placeholderTextColor="#a4b0be"
                   value={loginUsername} // Gắn dây diện lấy dữ liệu
                   onChangeText={setLoginUsername} // Gắn sự kiện thay đổi
@@ -484,7 +484,7 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
                 <Ionicons name="lock-closed-outline" size={20} color="#888" style={themeStyles.inputIcon} />
                 <TextInput
                   style={themeStyles.input}
-                  placeholder="Mật khẩu"
+                  placeholder={lang === 'en' ? 'Password' : 'Mật khẩu'}
                   placeholderTextColor="#a4b0be"
                   secureTextEntry
                   value={loginPassword}
@@ -494,18 +494,18 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
 
               <View style={themeStyles.formActions}>
                 <TouchableOpacity onPress={() => setCurrentScreen('forgot')}>
-                  <Text style={themeStyles.linkText}>Quên mật khẩu?</Text>
+                  <Text style={themeStyles.linkText}>{lang === 'en' ? 'Forgot password?' : 'Quên mật khẩu?'}</Text>
                 </TouchableOpacity>
               </View>
 
               {/* BẮN SỰ KIỆN: Gắn hàm handleLogin vào nút bấm */}
               <TouchableOpacity style={themeStyles.btnSubmit} onPress={handleLogin} disabled={isLoginSubmitting}>
-                <Text style={themeStyles.btnSubmitText}>{isLoginSubmitting ? 'Đang đăng nhập...' : 'Here We Go'}</Text>
+                <Text style={themeStyles.btnSubmitText}>{isLoginSubmitting ? (lang === 'en' ? 'Signing in...' : 'Đang đăng nhập...') : 'Here We Go'}</Text>
               </TouchableOpacity>
 
               <View style={themeStyles.dividerBox}>
                 <View style={themeStyles.dividerLine} />
-                <Text style={themeStyles.dividerText}>Hoặc đăng nhập bằng</Text>
+                <Text style={themeStyles.dividerText}>{lang === 'en' ? 'Or sign in with' : 'Hoặc đăng nhập bằng'}</Text>
                 <View style={themeStyles.dividerLine} />
               </View>
 
@@ -532,9 +532,9 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
               </View>
 
               <View style={themeStyles.switchFormText}>
-                <Text style={themeStyles.mutedText}>Chưa có tài khoản? </Text>
+                <Text style={themeStyles.mutedText}>{lang === 'en' ? "Don't have an account? " : 'Chưa có tài khoản? '}</Text>
                 <TouchableOpacity onPress={() => setCurrentScreen('register')}>
-                  <Text style={themeStyles.boldLinkText}>Đăng ký ngay</Text>
+                  <Text style={themeStyles.boldLinkText}>{lang === 'en' ? 'Sign up now' : 'Đăng ký ngay'}</Text>
                 </TouchableOpacity>
               </View>
 
@@ -545,7 +545,7 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
           {/* ===================== MÀN HÌNH ĐĂNG KÝ ===================== */}
           {currentScreen === 'register' && (
             <View style={themeStyles.formContainer}>
-              <Text style={themeStyles.authTitle}>Đăng ký</Text>
+              <Text style={themeStyles.authTitle}>{lang === 'en' ? 'Sign Up' : 'Đăng ký'}</Text>
 
               <View style={themeStyles.inputGroup}>
                 <Ionicons name="person-outline" size={20} color="#888" style={themeStyles.inputIcon} />
@@ -602,7 +602,7 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
               </TouchableOpacity>
 
               <View style={[themeStyles.switchFormText, { marginTop: 20 }]}>
-                <Text style={themeStyles.mutedText}>Đã có tài khoản? </Text>
+                <Text style={themeStyles.mutedText}>{lang === 'en' ? 'Already have an account? ' : 'Đã có tài khoản? '}</Text>
                 <TouchableOpacity onPress={() => setCurrentScreen('login')}>
                   <Text style={themeStyles.boldLinkText}>Đăng nhập</Text>
                 </TouchableOpacity>

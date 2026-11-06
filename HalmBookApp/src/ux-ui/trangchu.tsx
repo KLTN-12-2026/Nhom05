@@ -240,7 +240,7 @@ interface TrangChuProps {
 }
 
 export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: TrangChuProps) {
-  const { navigate, setFooterVisible, isLoggedIn, showLoginAlert, userAvatarUrl, userInitial } = useAppNavigation();
+  const { navigate, setFooterVisible, isLoggedIn, showLoginAlert, userAvatarUrl, userInitial, lang } = useAppNavigation();
   const [selectedPreviewBook, setSelectedPreviewBook] = useState<HomeBookItem | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const scrollOffset = useRef(0);
@@ -274,31 +274,31 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
   const shelfCategories = useMemo(() => [
     {
       id: 'cat-van-hoc',
-      name: 'Kho Văn Học & Tiểu Thuyết',
+      name: lang === 'en' ? 'Literature & Novels' : 'Kho Văn Học & Tiểu Thuyết',
       icon: 'book-outline',
       books: books.filter(b => b.category_id === 1 || (b.category_name && b.category_name.toLowerCase().includes('tiểu thuyết'))),
     },
     {
       id: 'cat-hien-thuc',
-      name: 'Văn Học Hiện Thực',
+      name: lang === 'en' ? 'Realism Literature' : 'Văn Học Hiện Thực',
       icon: 'library-outline',
       books: books.filter(b => b.category_id === 5 || (b.category_name && b.category_name.toLowerCase().includes('hiện thực'))),
     },
     {
       id: 'cat-phong-su',
-      name: 'Phóng Sự & Xã Hội',
+      name: lang === 'en' ? 'Reportage & Society' : 'Phóng Sự & Xã Hội',
       icon: 'newspaper-outline',
       books: books.filter(b => b.category_id === 3 || (b.category_name && b.category_name.toLowerCase().includes('phóng sự'))),
     },
     {
       id: 'cat-lich-su',
-      name: 'Lịch Sử & Hồi Ký',
+      name: lang === 'en' ? 'History & Memoirs' : 'Lịch Sử & Hồi Ký',
       icon: 'hourglass-outline',
       books: books.filter(b => b.category_id === 2 || (b.category_name && (b.category_name.toLowerCase().includes('lịch sử') || b.category_name.toLowerCase().includes('hồi ký')))),
     },
     {
       id: 'cat-kinh-dien',
-      name: 'Danh Tác Kinh Điển',
+      name: lang === 'en' ? 'Classic Masterpieces' : 'Danh Tác Kinh Điển',
       icon: 'ribbon-outline',
       books: books.filter(b => b.category_id === 4 || (b.category_name && b.category_name.toLowerCase().includes('kinh điển'))),
     },
@@ -453,7 +453,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
         </View>
         <Text style={styles.discoveryTitle} numberOfLines={2}>{categoryName}</Text>
         <View style={styles.discoveryButton}>
-          <Text style={styles.discoveryBtnText}>Khám phá</Text>
+          <Text style={styles.discoveryBtnText}>{lang === 'en' ? 'Explore' : 'Khám phá'}</Text>
           <Ionicons name="arrow-forward" size={13} color={isDarkMode ? '#D8B36A' : '#8B4A3C'} />
         </View>
       </TouchableOpacity>
@@ -483,7 +483,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
   const toolbarData = [
     {
       icon: 'trophy',
-      label: 'Xếp Hạng',
+      label: lang === 'en' ? 'Ranking' : 'Xếp Hạng',
       screen: 'transactions',
       bgLight: '#FEF3C7',
       iconLight: '#D97706',
@@ -494,7 +494,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
     },
     {
       icon: 'bookmarks',
-      label: 'Đã Lưu',
+      label: lang === 'en' ? 'Saved' : 'Đã Lưu',
       screen: 'bookshelf',
       bgLight: '#EEF2FF',
       iconLight: '#6366F1',
@@ -505,7 +505,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
     },
     {
       icon: 'newspaper',
-      label: 'Bảng Tin',
+      label: lang === 'en' ? 'News' : 'Bảng Tin',
       screen: 'dmHome',
       bgLight: '#ECFDF5',
       iconLight: '#059669',
@@ -516,7 +516,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
     },
     {
       icon: 'gift',
-      label: 'Ưu Đãi',
+      label: lang === 'en' ? 'Offers' : 'Ưu Đãi',
       screen: 'offers',
       bgLight: '#FFF1F2',
       iconLight: '#E11D48',
@@ -585,7 +585,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
               <Ionicons name="search" size={18} color={isDarkMode ? BRAND.bg : '#fff'} style={{ marginRight: 8 }} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Tìm kiếm truyện..."
+                placeholder={lang === 'en' ? 'Search books...' : 'Tìm kiếm truyện...'}
                 placeholderTextColor={isDarkMode ? '#a1a1aa' : '#ccc'}
                 onFocus={() => navigate('search')}
               />
@@ -612,7 +612,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
               style={styles.darkModeToggle}
               onPress={() => {
                 if (!isLoggedIn) {
-                  showLoginAlert('Bạn phải đăng nhập để dùng chức năng giỏ hàng');
+                  showLoginAlert(lang === 'en' ? 'Please log in to use cart feature' : 'Bạn phải đăng nhập để dùng chức năng giỏ hàng');
                   return;
                 }
                 navigate('cart');
@@ -641,7 +641,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
               }}
               activeOpacity={0.8}
               accessibilityRole="button"
-              accessibilityLabel={!isLoggedIn ? 'Đăng nhập tài khoản' : 'Trang cá nhân'}
+              accessibilityLabel={!isLoggedIn ? (lang === 'en' ? 'Log in' : 'Đăng nhập tài khoản') : (lang === 'en' ? 'Profile' : 'Trang cá nhân')}
             >
               {!isLoggedIn ? (
                 // Icon kiểu account cho khách vãng lai
@@ -703,7 +703,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
                 // Hiển thị thông báo yêu cầu đăng nhập kèm dòng 'Đăng nhập ngay'
                 // ============================================================================
                 if (item.screen === 'bookshelf' && !isLoggedIn) {
-                  showLoginAlert('Bạn phải đăng nhập để dùng chức năng tủ sách');
+                  showLoginAlert(lang === 'en' ? 'Please log in to use bookshelf feature' : 'Bạn phải đăng nhập để dùng chức năng tủ sách');
                   return;
                 }
                 navigate(item.screen as any);
@@ -730,23 +730,23 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
         <View style={styles.section}>
           <View style={[styles.sectionTitleBox, { backgroundColor: isDarkMode ? '#2C2216' : '#FEF3C7', borderColor: isDarkMode ? '#45351E' : '#FDE68A' }]}>
             <Ionicons name="sparkles" size={16} color={isDarkMode ? '#FBBF24' : '#D97706'} style={{marginRight: 6}} />
-            <Text style={[styles.sectionTitleText, { color: isDarkMode ? '#FBBF24' : '#92400E' }]}>Khuyến Khích Đọc</Text>
+            <Text style={[styles.sectionTitleText, { color: isDarkMode ? '#FBBF24' : '#92400E' }]}>{lang === 'en' ? 'Recommended Reads' : 'Khuyến Khích Đọc'}</Text>
           </View>
           {isLoading ? (
             <View style={styles.statusBox}>
               <ActivityIndicator size="small" color={isDarkMode ? '#D8B36A' : '#5a8b82'} />
-              <Text style={styles.statusText}>Đang tải dữ liệu sách...</Text>
+              <Text style={styles.statusText}>{lang === 'en' ? 'Loading book data...' : 'Đang tải dữ liệu sách...'}</Text>
             </View>
           ) : errorMessage ? (
             <View style={styles.statusBox}>
               <Text style={styles.statusErrorText}>{errorMessage}</Text>
               <TouchableOpacity style={styles.retryBtn} onPress={() => fetchBooks()}>
-                <Text style={styles.retryBtnText}>Thử lại</Text>
+                <Text style={styles.retryBtnText}>{lang === 'en' ? 'Retry' : 'Thử lại'}</Text>
               </TouchableOpacity>
             </View>
           ) : books.length === 0 ? (
             <View style={styles.statusBox}>
-              <Text style={styles.statusEmptyText}>Chưa có sách nào trong kho lưu trữ</Text>
+              <Text style={styles.statusEmptyText}>{lang === 'en' ? 'No books available in library' : 'Chưa có sách nào trong kho lưu trữ'}</Text>
             </View>
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList}>
@@ -758,12 +758,12 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
         <View style={styles.section}>
           <View style={[styles.sectionTitleBox, { backgroundColor: isDarkMode ? '#132822' : '#ECFDF5', borderColor: isDarkMode ? '#1F473C' : '#D1FAE5' }]}>
             <Ionicons name="flash" size={16} color={isDarkMode ? '#34D399' : '#059669'} style={{marginRight: 6}} />
-            <Text style={[styles.sectionTitleText, { color: isDarkMode ? '#34D399' : '#065F46' }]}>Mới Cập Nhật</Text>
+            <Text style={[styles.sectionTitleText, { color: isDarkMode ? '#34D399' : '#065F46' }]}>{lang === 'en' ? 'Recently Updated' : 'Mới Cập Nhật'}</Text>
           </View>
           {isLoading ? (
             <View style={styles.statusBox}>
               <ActivityIndicator size="small" color={isDarkMode ? '#D8B36A' : '#5a8b82'} />
-              <Text style={styles.statusText}>Đang tải dữ liệu sách...</Text>
+              <Text style={styles.statusText}>{lang === 'en' ? 'Loading book data...' : 'Đang tải dữ liệu sách...'}</Text>
             </View>
           ) : errorMessage ? (
             <View style={styles.statusBox}>
@@ -771,7 +771,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
             </View>
           ) : books.length === 0 ? (
             <View style={styles.statusBox}>
-              <Text style={styles.statusEmptyText}>Chưa có sách mới cập nhật</Text>
+              <Text style={styles.statusEmptyText}>{lang === 'en' ? 'No recently updated books' : 'Chưa có sách mới cập nhật'}</Text>
             </View>
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList}>
@@ -783,13 +783,13 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
         <View style={styles.section}>
           <View style={[styles.sectionTitleBox, { backgroundColor: badgeColors[3] }]}>
             <Ionicons name="podium" size={18} color="#1a1a1a" style={{marginRight: 6}} />
-            <Text style={[styles.sectionTitleText, { color: '#1a1a1a' }]}>Bảng Xếp Hạng</Text>
+            <Text style={[styles.sectionTitleText, { color: '#1a1a1a' }]}>{lang === 'en' ? 'Leaderboard' : 'Bảng Xếp Hạng'}</Text>
           </View>
           
           {isLoading ? (
             <View style={styles.statusBox}>
               <ActivityIndicator size="small" color={isDarkMode ? '#D8B36A' : '#5a8b82'} />
-              <Text style={styles.statusText}>Đang tải bảng xếp hạng...</Text>
+              <Text style={styles.statusText}>{lang === 'en' ? 'Loading leaderboard...' : 'Đang tải bảng xếp hạng...'}</Text>
             </View>
           ) : errorMessage ? (
             <View style={styles.statusBox}>
@@ -797,21 +797,21 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
             </View>
           ) : books.length === 0 ? (
             <View style={styles.statusBox}>
-              <Text style={styles.statusEmptyText}>Chưa có dữ liệu bảng xếp hạng</Text>
+              <Text style={styles.statusEmptyText}>{lang === 'en' ? 'No ranking data available' : 'Chưa có dữ liệu bảng xếp hạng'}</Text>
             </View>
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList} snapToInterval={315} decelerationRate="fast">
               <View style={styles.rankPage}>
                 <View style={styles.rankPageHeader}>
-                  <Text style={styles.rankPageTitle}>🏆 Top Tuần</Text>
-                  <Text style={styles.rankPageMore}>Xem thêm ›</Text>
+                  <Text style={styles.rankPageTitle}>{lang === 'en' ? '🏆 Weekly Top' : '🏆 Top Tuần'}</Text>
+                  <Text style={styles.rankPageMore}>{lang === 'en' ? 'See more ›' : 'Xem thêm ›'}</Text>
                 </View>
                 {books.slice(0, 5).map((novel, index) => renderRankItem(novel, index))}
               </View>
               <View style={styles.rankPage}>
                 <View style={styles.rankPageHeader}>
-                  <Text style={styles.rankPageTitle}>🔥 Top Tháng</Text>
-                  <Text style={styles.rankPageMore}>Xem thêm ›</Text>
+                  <Text style={styles.rankPageTitle}>{lang === 'en' ? '🔥 Monthly Top' : '🔥 Top Tháng'}</Text>
+                  <Text style={styles.rankPageMore}>{lang === 'en' ? 'See more ›' : 'Xem thêm ›'}</Text>
                 </View>
                 {books.slice(0, 5).reverse().map((novel, index) => renderRankItem(novel, index))}
               </View>
@@ -823,7 +823,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
         <View style={styles.sectionHeaderContainer}>
           <View style={[styles.sectionTitleBox, { backgroundColor: isDarkMode ? '#1C1F38' : '#EEF2FF', borderColor: isDarkMode ? '#31355E' : '#E0E7FF' }]}>
             <Ionicons name="library" size={16} color={isDarkMode ? '#A5B4FC' : '#6366F1'} style={{marginRight: 6}} />
-            <Text style={[styles.sectionTitleText, { color: isDarkMode ? '#A5B4FC' : '#4338CA' }]}>Danh Mục Thể Loại</Text>
+            <Text style={[styles.sectionTitleText, { color: isDarkMode ? '#A5B4FC' : '#4338CA' }]}>{lang === 'en' ? 'Book Categories' : 'Danh Mục Thể Loại'}</Text>
           </View>
         </View>
 
@@ -850,7 +850,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
 
         <View style={styles.footerBranding}>
           <Text style={styles.footerBrandTitle}>HALM <Text style={{ color: isDarkMode ? '#A99BCB' : '#9b51e0' }}>Book</Text></Text>
-          <Text style={styles.footerBrandSlogan}>Sách là ánh sáng!</Text>
+          <Text style={styles.footerBrandSlogan}>{lang === 'en' ? 'Books are light!' : 'Sách là ánh sáng!'}</Text>
         </View>
 
       </ScrollView>
@@ -884,7 +884,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
             <View style={styles.popupHeader}>
               <View style={styles.popupBadge}>
                 <Ionicons name="information-circle" size={15} color={isDarkMode ? '#D8B36A' : '#8B4A3C'} />
-                <Text style={styles.popupBadgeText}>Thông tin tác phẩm</Text>
+                <Text style={styles.popupBadgeText}>{lang === 'en' ? 'Book Information' : 'Thông tin tác phẩm'}</Text>
               </View>
               <TouchableOpacity
                 style={styles.popupCloseBtn}
@@ -937,7 +937,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
                 <View style={styles.popupRatingRow}>
                   <Ionicons name="star" size={13} color="#FBBF24" />
                   <Text style={styles.popupRatingText}>{selectedPreviewBook?.rating || '5.0'}</Text>
-                  <Text style={styles.popupReadsText}>• {selectedPreviewBook?.reads || '1.2K'} lượt đọc</Text>
+                  <Text style={styles.popupReadsText}>• {selectedPreviewBook?.reads || '1.2K'} {lang === 'en' ? 'reads' : 'lượt đọc'}</Text>
                 </View>
               </View>
             </View>
@@ -963,7 +963,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
                 }
               }}
             >
-              <Text style={styles.popupActionBtnText}>Xem chi tiết sách</Text>
+              <Text style={styles.popupActionBtnText}>{lang === 'en' ? 'View Book Details' : 'Xem chi tiết sách'}</Text>
               <Ionicons name="arrow-forward" size={16} color={isDarkMode ? '#12151B' : '#ffffff'} />
             </TouchableOpacity>
           </TouchableOpacity>

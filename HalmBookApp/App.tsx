@@ -11,7 +11,7 @@ import GioHang from './src/ux-ui/giohang';
 import LoginLogout from './src/ux-ui/loginlogout';
 import HalmBookHistory from './src/ux-ui/lsgiaodich';
 import ManHinhDoc from './src/ux-ui/manhinhdoc';
-import { AppScreen, BookData, NavigationContext } from './src/ux-ui/navigation';
+import { AppLanguage, AppScreen, BookData, NavigationContext } from './src/ux-ui/navigation';
 import ThanhToan from './src/ux-ui/PTThanhtoan';
 import SharedHeader from './src/ux-ui/sharedheader';
 import TheLoai from './src/ux-ui/theloai';
@@ -54,6 +54,22 @@ export default function App() {
   // [GIẢI THÍCH CODE]: Quản lý ảnh đại diện & chữ cái đầu đồng bộ cho các màn được chỉ định
   const [userAvatarUrl, setUserAvatarUrl] = useState<string>('');
   const [userInitial, setUserInitial] = useState<string>('H');
+
+  // [GIẢI THÍCH CODE]: Quản lý ngôn ngữ toàn cục ứng dụng (vi / en)
+  const [lang, setLangState] = useState<AppLanguage>('vi');
+
+  useEffect(() => {
+    AsyncStorage.getItem('appLanguage').then((saved) => {
+      if (saved === 'vi' || saved === 'en') {
+        setLangState(saved as AppLanguage);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const setLang = (newLang: AppLanguage) => {
+    setLangState(newLang);
+    AsyncStorage.setItem('appLanguage', newLang).catch(() => {});
+  };
 
   // ============================================================================
   // [GIẢI THÍCH CODE]: Quản lý bản thông báo yêu cầu đăng nhập
@@ -138,23 +154,23 @@ export default function App() {
   const navigate = (name: AppScreen, book?: BookData) => {
     if (!isLoggedIn) {
       if (name === 'upload') {
-        showLoginAlert('Bạn phải đăng nhập mới dùng được chức năng uploadfile');
+        showLoginAlert(lang === 'en' ? 'Please log in to use upload file feature' : 'Bạn phải đăng nhập mới dùng được chức năng uploadfile');
         return;
       }
       if (name === 'bookshelf') {
-        showLoginAlert('Bạn phải đăng nhập để dùng chức năng tủ sách');
+        showLoginAlert(lang === 'en' ? 'Please log in to use bookshelf feature' : 'Bạn phải đăng nhập để dùng chức năng tủ sách');
         return;
       }
       if (name === 'profile') {
-        showLoginAlert('Bạn phải đăng nhập để dùng chức năng trang cá nhân');
+        showLoginAlert(lang === 'en' ? 'Please log in to use profile feature' : 'Bạn phải đăng nhập để dùng chức năng trang cá nhân');
         return;
       }
       if (name === 'cart') {
-        showLoginAlert('Bạn phải đăng nhập để dùng chức năng giỏ hàng');
+        showLoginAlert(lang === 'en' ? 'Please log in to use cart feature' : 'Bạn phải đăng nhập để dùng chức năng giỏ hàng');
         return;
       }
       if (name === 'payment') {
-        showLoginAlert('Bạn phải đăng nhập để thanh toán');
+        showLoginAlert(lang === 'en' ? 'Please log in to proceed to payment' : 'Bạn phải đăng nhập để thanh toán');
         return;
       }
     }
@@ -169,19 +185,19 @@ export default function App() {
   const navigateTab = (name: AppScreen) => {
     if (!isLoggedIn) {
       if (name === 'upload') {
-        showLoginAlert('Bạn phải đăng nhập mới dùng được chức năng uploadfile');
+        showLoginAlert(lang === 'en' ? 'Please log in to use upload file feature' : 'Bạn phải đăng nhập mới dùng được chức năng uploadfile');
         return;
       }
       if (name === 'bookshelf') {
-        showLoginAlert('Bạn phải đăng nhập để dùng chức năng tủ sách');
+        showLoginAlert(lang === 'en' ? 'Please log in to use bookshelf feature' : 'Bạn phải đăng nhập để dùng chức năng tủ sách');
         return;
       }
       if (name === 'profile') {
-        showLoginAlert('Bạn phải đăng nhập để dùng chức năng trang cá nhân');
+        showLoginAlert(lang === 'en' ? 'Please log in to use profile feature' : 'Bạn phải đăng nhập để dùng chức năng trang cá nhân');
         return;
       }
       if (name === 'cart') {
-        showLoginAlert('Bạn phải đăng nhập để dùng chức năng giỏ hàng');
+        showLoginAlert(lang === 'en' ? 'Please log in to use cart feature' : 'Bạn phải đăng nhập để dùng chức năng giỏ hàng');
         return;
       }
     }
@@ -260,6 +276,8 @@ export default function App() {
     setUserAvatarUrl,
     userInitial,
     setUserInitial,
+    lang,
+    setLang,
   };
   const showSharedHeader = SCREENS_WITH_SHARED_HEADER.includes(currentRoute.name);
   const toggleDarkMode = () => setIsDarkMode((current) => !current);
@@ -382,6 +400,7 @@ export default function App() {
           onClose={closeAuthModal}
           onLogin={handleModalLoginPress}
           isDarkMode={isDarkMode}
+          lang={lang}
         />
       </NavigationContext.Provider>
     </SafeAreaProvider>

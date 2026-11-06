@@ -316,7 +316,7 @@ const getBookChapters = (book: any): ChapterItem[] => {
 };
 
 export default function BookDetailScreen({ book, onBack, onStartReading }: BookDetailProps) {
-  const { isDarkMode, setFooterVisible } = useAppNavigation();
+  const { isDarkMode, setFooterVisible, lang } = useAppNavigation();
   const themeStyles = useMemo(() => getThemedStyles(isDarkMode), [isDarkMode]);
   const [isSaved, setIsSaved] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
@@ -441,7 +441,7 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
 
             {/* Tác giả cho xuống dòng riêng biệt */}
             <View style={themeStyles.authorContainer}>
-              <Text style={themeStyles.authorLabel}>Tác giả:</Text>
+              <Text style={themeStyles.authorLabel}>{lang === 'en' ? 'Author:' : 'Tác giả:'}</Text>
               <Text style={themeStyles.authorValue}>{authorName}</Text>
             </View>
 
@@ -466,7 +466,7 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
             <View style={themeStyles.statsRow}>
               <View style={themeStyles.statBadgeReads}>
                 <Eye size={13} color={isDarkMode ? '#38BDF8' : '#0284c7'} />
-                <Text style={themeStyles.statBadgeReadsText}>{book.reads || '15.2K'} lượt đọc</Text>
+                <Text style={themeStyles.statBadgeReadsText}>{book.reads || '15.2K'} {lang === 'en' ? 'reads' : 'lượt đọc'}</Text>
               </View>
               <View style={themeStyles.statBadgeChapters}>
                 <BookOpen size={13} color={isDarkMode ? '#34D399' : '#059669'} />
@@ -515,7 +515,7 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
             activeOpacity={0.88}
           >
             <BookOpen size={16} color="#ffffff" />
-            <Text style={themeStyles.btnReadPrimaryText}>Đọc Từ Đầu</Text>
+            <Text style={themeStyles.btnReadPrimaryText}>{lang === 'en' ? 'Read from Start' : 'Đọc Từ Đầu'}</Text>
           </TouchableOpacity>
 
           {/* Nút Thêm Tủ */}
@@ -547,11 +547,11 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
         {/* Ô THỨ BA: TRÍCH ĐOẠN NỔI BẬT (CHỈ HIỂN THỊ KHI CÓ DỮ LIỆU TỪ DB) */}
         {featuredQuote && (
           <View style={themeStyles.sectionContainer}>
-            <Text style={themeStyles.sectionTitle}>Trích Đoạn Tiêu Biểu</Text>
+            <Text style={themeStyles.sectionTitle}>{lang === 'en' ? 'Featured Excerpt' : 'Trích Đoạn Tiêu Biểu'}</Text>
             <View style={themeStyles.quoteBox}>
               <View style={themeStyles.quoteHeaderRow}>
                 <Quote size={18} color={isDarkMode ? '#D4AF37' : '#d97706'} />
-                <Text style={themeStyles.quoteHeaderTitle}>Lời vàng tác phẩm</Text>
+                <Text style={themeStyles.quoteHeaderTitle}>{lang === 'en' ? 'Golden Words' : 'Lời vàng tác phẩm'}</Text>
               </View>
               <Text style={themeStyles.quoteContentText}>{featuredQuote.quote}</Text>
               <Text style={themeStyles.quoteSourceText}>{featuredQuote.source}</Text>
@@ -562,7 +562,7 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
         {/* Ô THỨ TƯ: DANH SÁCH CHƯƠNG */}
         <View style={themeStyles.sectionContainer}>
           <View style={themeStyles.sectionHeaderRow}>
-            <Text style={themeStyles.sectionTitle}>Danh Sách Chương</Text>
+            <Text style={themeStyles.sectionTitle}>{lang === 'en' ? 'Chapter List' : 'Danh Sách Chương'}</Text>
           </View>
 
           {chapters.length > 0 ? (
@@ -616,7 +616,7 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
                           </Text>
                           {isCurrentChapter && (
                             <View style={themeStyles.currentReadingPill}>
-                              <Text style={themeStyles.currentReadingPillText}>Đang đọc</Text>
+                              <Text style={themeStyles.currentReadingPillText}>{lang === 'en' ? 'Reading' : 'Đang đọc'}</Text>
                             </View>
                           )}
                         </View>
@@ -630,7 +630,7 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
             </View>
           ) : (
             <View style={themeStyles.emptyBox}>
-              <Text style={themeStyles.emptyText}>Chưa có danh sách chương cho cuốn sách này.</Text>
+              <Text style={themeStyles.emptyText}>{lang === 'en' ? 'No chapter list available for this book.' : 'Chưa có danh sách chương cho cuốn sách này.'}</Text>
             </View>
           )}
         </View>

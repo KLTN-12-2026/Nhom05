@@ -14,7 +14,7 @@ const MOCK_CART = [
 
 export default function GioHang() {
   const themeStyles = useAppThemeStyles(styles);
-  const { navigate, goBack, isDarkMode, isLoggedIn, showLoginAlert } = useAppNavigation();
+  const { navigate, goBack, isDarkMode, isLoggedIn, showLoginAlert, lang } = useAppNavigation();
   const [cartItems, setCartItems] = useState(
     MOCK_CART.map(item => ({ ...item, checked: false }))
   );
@@ -46,7 +46,7 @@ export default function GioHang() {
         <TouchableOpacity style={themeStyles.headerBackBtn} onPress={goBack}>
           <Ionicons name="chevron-back" size={28} color="#1a1a1a" />
         </TouchableOpacity>
-        <Text style={themeStyles.headerTitle}>Giỏ Hàng Của Tôi</Text>
+        <Text style={themeStyles.headerTitle}>{lang === 'en' ? 'My Cart' : 'Giỏ Hàng Của Tôi'}</Text>
         <TouchableOpacity style={themeStyles.headerIcon}>
           <Ionicons name="trash-outline" size={24} color="#e74c3c" />
         </TouchableOpacity>
@@ -99,11 +99,11 @@ export default function GioHang() {
                 size={22} 
                 color={isAllSelected ? "#2c3a7a" : "#888"} 
               />
-              <Text style={themeStyles.selectAllText}>Tất cả</Text>
+              <Text style={themeStyles.selectAllText}>{lang === 'en' ? 'Select All' : 'Tất cả'}</Text>
             </TouchableOpacity>
             
             <View style={themeStyles.priceContainer}>
-              <Text style={themeStyles.totalLabel}>Tổng tiền ({selectedCount} mục):</Text>
+              <Text style={themeStyles.totalLabel}>{lang === 'en' ? `Total (${selectedCount} items):` : `Tổng tiền (${selectedCount} mục):`}</Text>
               <Text style={themeStyles.totalPrice}>{totalPrice} 🥔</Text>
             </View>
           </View>
@@ -113,7 +113,7 @@ export default function GioHang() {
             {selectedCount === 1 && (
               <TouchableOpacity style={themeStyles.trialBtn} onPress={() => navigate('reader')}>
                 <Ionicons name="book-outline" size={18} color="#2c3a7a" style={{ marginRight: 6 }} />
-                <Text style={themeStyles.trialBtnText}>Đọc thử</Text>
+                <Text style={themeStyles.trialBtnText}>{lang === 'en' ? 'Preview' : 'Đọc thử'}</Text>
               </TouchableOpacity>
             )}
             
@@ -127,7 +127,7 @@ export default function GioHang() {
               style={themeStyles.rentBtn}
               onPress={() => {
                 if (!isLoggedIn) {
-                  showLoginAlert('Bạn phải đăng nhập để thanh toán');
+                  showLoginAlert(lang === 'en' ? 'Please log in to proceed to checkout' : 'Bạn phải đăng nhập để thanh toán');
                   return;
                 }
                 navigate('payment');
@@ -137,7 +137,7 @@ export default function GioHang() {
               accessibilityLabel="Thanh toán thuê sách"
             >
               <Ionicons name="cart-outline" size={20} color="#fff" style={{ marginRight: 6 }} />
-              <Text style={themeStyles.rentBtnText}>Thuê sách ngay</Text>
+              <Text style={themeStyles.rentBtnText}>{lang === 'en' ? 'Rent Now' : 'Thuê sách ngay'}</Text>
             </TouchableOpacity>
           </View>
           

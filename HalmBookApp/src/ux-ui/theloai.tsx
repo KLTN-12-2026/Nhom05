@@ -40,7 +40,7 @@ const GENRES = [
 export default function TheLoai() {
   const themeStyles = useAppThemeStyles(styles);
   const [filterVisible, setFilterVisible] = useState(false);
-  const { navigate, isDarkMode } = useAppNavigation();
+  const { navigate, isDarkMode, lang } = useAppNavigation();
   
   // States cho bộ lọc
   const [activeStatus, setActiveStatus] = useState('Tất cả');
@@ -54,7 +54,7 @@ export default function TheLoai() {
       {/* Header */}
       <View style={themeStyles.header}>
         <View style={{ width: 24 }} /> {/* Spacer */}
-        <Text style={themeStyles.headerTitle}>Danh Sách Truyện</Text>
+        <Text style={themeStyles.headerTitle}>{lang === 'en' ? 'Book List' : 'Danh Sách Truyện'}</Text>
         <TouchableOpacity onPress={() => setFilterVisible(true)}>
           <Icon name="filter-outline" size={24} color="#1a1a1a" />
         </TouchableOpacity>
@@ -63,14 +63,14 @@ export default function TheLoai() {
       {/* Lịch sử lọc hiện tại (Filter Tags) */}
       <View style={themeStyles.filterTagsContainer}>
         <View style={themeStyles.filterTag}>
-          <Text style={themeStyles.filterTagText}>Trạng thái: {activeStatus}</Text>
+          <Text style={themeStyles.filterTagText}>{lang === 'en' ? 'Status: ' : 'Trạng thái: '}{activeStatus}</Text>
         </View>
         <View style={themeStyles.filterTag}>
-          <Text style={themeStyles.filterTagText}>Xếp theo: {activeSort}</Text>
+          <Text style={themeStyles.filterTagText}>{lang === 'en' ? 'Sort by: ' : 'Xếp theo: '}{activeSort}</Text>
         </View>
         {activeGenre ? (
           <View style={themeStyles.filterTag}>
-            <Text style={themeStyles.filterTagText}>Thể loại: {activeGenre}</Text>
+            <Text style={themeStyles.filterTagText}>{lang === 'en' ? 'Genre: ' : 'Thể loại: '}{activeGenre}</Text>
           </View>
         ) : null}
       </View>
@@ -79,7 +79,7 @@ export default function TheLoai() {
         
         {/* Top truyện lướt ngang nổi bật của chuyên mục */}
         <View style={themeStyles.topHighlightSection}>
-          <Text style={themeStyles.sectionTitle}>🔥 Đề Cử Hôm Nay</Text>
+          <Text style={themeStyles.sectionTitle}>{lang === 'en' ? '🔥 Featured Today' : '🔥 Đề Cử Hôm Nay'}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 15 }}>
             {NOVELS.slice(0, 4).map((n, i) => (
               <TouchableOpacity key={i} style={themeStyles.highlightCard} onPress={() => navigate('bookDetail', { id: n.id, title: n.title, chapter: n.chapter })}>
@@ -111,12 +111,12 @@ export default function TheLoai() {
               <View style={themeStyles.sheetHandle} />
             </View>
             
-            <Text style={themeStyles.sheetTitle}>Lọc truyện</Text>
+            <Text style={themeStyles.sheetTitle}>{lang === 'en' ? 'Filter Books' : 'Lọc truyện'}</Text>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
               
               {/* Trạng thái */}
-              <Text style={themeStyles.filterGroupTitle}>Trạng thái</Text>
+              <Text style={themeStyles.filterGroupTitle}>{lang === 'en' ? 'Status' : 'Trạng thái'}</Text>
               <View style={themeStyles.filterOptionsGroup}>
                 {['Tất cả', 'Đang ra', 'Hoàn thành'].map(st => (
                   <TouchableOpacity 
@@ -132,7 +132,7 @@ export default function TheLoai() {
               </View>
 
               {/* Xếp theo */}
-              <Text style={themeStyles.filterGroupTitle}>Xếp theo</Text>
+              <Text style={themeStyles.filterGroupTitle}>{lang === 'en' ? 'Sort by' : 'Xếp theo'}</Text>
               <View style={themeStyles.filterOptionsGroup}>
                 {['Ngày cập nhật', 'Lượt xem', 'Truyện mới'].map(sort => (
                   <TouchableOpacity 
@@ -148,7 +148,7 @@ export default function TheLoai() {
               </View>
 
               {/* Thể loại */}
-              <Text style={themeStyles.filterGroupTitle}>Thể loại</Text>
+              <Text style={themeStyles.filterGroupTitle}>{lang === 'en' ? 'Categories' : 'Thể loại'}</Text>
               <View style={themeStyles.filterOptionsGroup}>
                 {GENRES.map(genre => (
                   <TouchableOpacity 
@@ -167,10 +167,10 @@ export default function TheLoai() {
             {/* Hai nút hành động */}
             <View style={themeStyles.sheetActions}>
               <TouchableOpacity style={themeStyles.cancelBtn} onPress={() => setFilterVisible(false)}>
-                <Text style={themeStyles.cancelBtnText}>Hủy</Text>
+                <Text style={themeStyles.cancelBtnText}>{lang === 'en' ? 'Cancel' : 'Hủy'}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={themeStyles.confirmBtn} onPress={() => setFilterVisible(false)}>
-                <Text style={themeStyles.confirmBtnText}>Xác nhận</Text>
+                <Text style={themeStyles.confirmBtnText}>{lang === 'en' ? 'Confirm' : 'Xác nhận'}</Text>
               </TouchableOpacity>
             </View>
           </View>
