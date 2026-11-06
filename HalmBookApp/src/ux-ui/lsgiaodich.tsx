@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, Modal, StyleSheet, StatusBar } from 'react-native';
 import { Coins, Search, Filter, Calendar, FileText, BookOpen, CheckCircle, RotateCcw, Star, RefreshCw, Sparkles, X, CreditCard, MapPin, Bookmark, ShieldCheck, Clock, AlertCircle } from 'lucide-react-native';
 import { useAppNavigation, useAppThemeStyles } from './navigation';
@@ -56,7 +57,7 @@ export default function HalmBookHistory() {
 
   return (
     <View style={themeStyles.container}>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={isDarkMode ? '#101319' : '#f9f9f9'} />
+      <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'} />
 
       <ScrollView style={themeStyles.mainScroll} contentContainerStyle={themeStyles.mainContent}>
         <View style={themeStyles.summaryCard}>
@@ -207,7 +208,7 @@ export default function HalmBookHistory() {
               <View style={{flexDirection: 'row', alignItems: 'center'}}><Star size={24} color="#1a1a1a" /><Text style={themeStyles.modalTitle}>Đánh giá sách</Text></View>
               <TouchableOpacity onPress={() => setRatingModal(null)}><X size={24} color="#1a1a1a" /></TouchableOpacity>
             </View>
-            <Text style={themeStyles.modalMessage}>Bạn đánh giá thế nào về cuốn <Text style={{fontWeight: '900', color: '#1a1a1a'}}>"{ratingModal?.title}"</Text>?</Text>
+            <Text style={themeStyles.modalMessage}>Bạn đánh giá thế nào về cuốn <Text style={{fontWeight: '900', color: '#1a1a1a'}}>&quot;{ratingModal?.title}&quot;</Text>?</Text>
             <View style={themeStyles.starRow}>
               {[1, 2, 3, 4, 5].map((star) => (
                 <TouchableOpacity key={star} onPress={() => setRatingStars(star)} activeOpacity={0.8}>

@@ -1,5 +1,6 @@
 package com.example.demochatbot.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -38,5 +39,6 @@ public class MembershipTier {
     private String description;
 
     @OneToMany(mappedBy = "membershipTier")
+    @JsonIgnore
     private List<Customer> customers;
 }

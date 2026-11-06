@@ -56,6 +56,20 @@ public class CartServiceImpl implements CartService {
                 });
     }
 
+    private int resolveRentalDays(String planKey) {
+        if (planKey == null || planKey.trim().isEmpty()) {
+            return 7;
+        }
+        if ("forever".equalsIgnoreCase(planKey)) {
+            return 99999;
+        }
+        try {
+            return Integer.parseInt(planKey.trim());
+        } catch (NumberFormatException e) {
+            return 7;
+        }
+    }
+
     @Override
     @Transactional
     public void addToCart(AddToCartRequest request) {
@@ -74,12 +88,13 @@ public class CartServiceImpl implements CartService {
         }
 
         Optional<Cart_Item> existingItem = cartItemRepository.findByCartIdAndBookId(cart.getCart_id(), book.getBook_id());
+        String planKey = request.getPlanKey() == null || request.getPlanKey().trim().isEmpty()
+                ? "7" : request.getPlanKey();
+
         if (existingItem.isPresent()) {
-            String planKey = request.getPlanKey() == null || request.getPlanKey().trim().isEmpty()
-                    ? "7" : request.getPlanKey();
             Cart_Item item = existingItem.get();
             item.setPlanKey(planKey);
-            item.setRentalDays("forever".equals(planKey) ? 99999 : Integer.valueOf(planKey));
+            item.setRentalDays(resolveRentalDays(planKey));
             item.setSelectedPrice(request.getPrice() != null ? request.getPrice() : book.getRent_price());
             cartItemRepository.save(item);
             return;
@@ -88,10 +103,8 @@ public class CartServiceImpl implements CartService {
         Cart_Item newItem = new Cart_Item();
         newItem.setCart(cart);
         newItem.setBook(book);
-        String planKey = request.getPlanKey() == null || request.getPlanKey().trim().isEmpty()
-                ? "7" : request.getPlanKey();
         newItem.setPlanKey(planKey);
-        newItem.setRentalDays("forever".equals(planKey) ? 99999 : Integer.valueOf(planKey));
+        newItem.setRentalDays(resolveRentalDays(planKey));
         newItem.setSelectedPrice(request.getPrice() != null ? request.getPrice() : book.getRent_price());
         cartItemRepository.save(newItem);
     }

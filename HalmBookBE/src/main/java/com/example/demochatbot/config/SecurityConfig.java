@@ -52,8 +52,8 @@ public class SecurityConfig {
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        // Cho phép các nguồn Frontend phổ biến (cả http và https với port 5173 của Vite)
-        configuration.setAllowedOrigins(Arrays.asList("http://localhost:5173", "http://localhost:3000", "https://localhost:5173"));
+        // Cho phép các nguồn Frontend và Mobile App trên mạng LAN
+        configuration.setAllowedOriginPatterns(Arrays.asList("*"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("Authorization", "Cache-Control", "Content-Type", "Accept", "X-Requested-With", "Origin"));
         configuration.setExposedHeaders(Arrays.asList("Authorization"));
@@ -80,9 +80,11 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**", "/api/password/**").permitAll()
                         .requestMatchers("/api/chat").permitAll()
                         .requestMatchers("/api/home/**").permitAll()
+                        .requestMatchers("/api/admin/**", "/admin/**").hasAnyAuthority("ROLE_ADMIN", "ADMIN")
+                        .requestMatchers("/uploads/**").permitAll()
 
                         // 3. FIX: Dùng hasAnyAuthority hỗ trợ cả ROLE_ADMIN lẫn ADMIN để tránh xung đột tiền tố
-                        .requestMatchers("/admin/**").hasAnyAuthority("ROLE_ADMIN", "ADMIN")
+
                         .requestMatchers("/user/**").hasAnyAuthority("ROLE_USER", "USER", "ROLE_ADMIN", "ADMIN")
 
                         .anyRequest().authenticated()
@@ -96,5 +98,4 @@ public class SecurityConfig {
 
         return http.build();
     }
-
 }

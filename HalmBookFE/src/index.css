@@ -21,6 +21,13 @@
   --page-scrollbar-thumb-hover: #d4af37;
 }
 
+html.dark,
+body.dark,
+.dark body {
+  background-color: #111210;
+  color: #ede9df;
+}
+
 html,
 body,
 #root {
@@ -78,6 +85,34 @@ textarea,
   --color-brand-secondary: #fde047;
   --color-brand-bg: #fefdf8;
   --color-brand-black: #1a1a1a;
+
+  --color-paper-50: #FAF8F5;
+  --color-paper-100: #F5F2EB;
+  --color-paper-200: #EAE5D9;
+  --color-paper: #F7F4EE;
+  --color-paper-surface: #FFFEFA;
+  --color-paper-border: #E3DDD0;
+
+  --color-ink-50: #F5F5F4;
+  --color-ink-300: #A8A6A1;
+  --color-ink-muted: #66645E;
+  --color-ink: #1E1F1D;
+  --color-ink-pure: #111210;
+
+  --color-wine: #8E3038;
+  --color-wine-light: #A83B46;
+  --color-wine-dark: #6F252C;
+
+  --color-gold: #B8860B;
+  --color-gold-light: #D4AF37;
+
+  --color-night: #111210;
+  --color-night-bg: #111210;
+  --color-night-surface: #181916;
+  --color-night-card: #20221E;
+  --color-night-border: #2C2E29;
+  --color-night-text: #EDE9DF;
+  --color-night-muted: #96938B;
 
   --font-heading: "Fredoka", sans-serif;
   --font-body: "Quicksand", sans-serif;

@@ -19,7 +19,11 @@ interface FooterProps {
 }
 
 export default function Footer({ activeNav, floating = false, visible = true }: FooterProps) {
-  const { navigateTab, isDarkMode } = useAppNavigation();
+  // ============================================================================
+  // [GIẢI THÍCH CODE]: Lấy trạng thái `isLoggedIn` và hàm `showLoginAlert` từ navigation
+  // để kiểm tra xem người dùng hiện tại có phải khách vãng lai hay không.
+  // ============================================================================
+  const { navigateTab, isDarkMode, isLoggedIn, showLoginAlert } = useAppNavigation();
   const insets = useSafeAreaInsets();
   const animTranslateY = useRef(new Animated.Value(0)).current;
 
@@ -32,6 +36,32 @@ export default function Footer({ activeNav, floating = false, visible = true }: 
       tension: 50,
     }).start();
   }, [visible]);
+
+  // ============================================================================
+  // [GIẢI THÍCH CODE]: Xử lý sự kiện khi nhấn vào từng tab ở Footer
+  // Nếu là khách vãng lai (!isLoggedIn):
+  //  - Nhấn 'upload' -> thông báo: "Bạn phải đăng nhập mới dùng được chức năng uploadfile"
+  //  - Nhấn 'bookshelf' (Tủ sách) -> thông báo: "Bạn phải đăng nhập để dùng chức năng tủ sách"
+  //  - Nhấn 'profile' (Trang cá nhân) -> thông báo: "Bạn phải đăng nhập để dùng chức năng trang cá nhân"
+  // Bản thông báo sẽ hiển thị kèm nút "Đăng nhập ngay" để điều hướng sang màn đăng nhập.
+  // ============================================================================
+  const handleTabPress = (tabId: (typeof PRIMARY_TABS)[number]['id']) => {
+    if (!isLoggedIn) {
+      if (tabId === 'upload') {
+        showLoginAlert('Bạn phải đăng nhập mới dùng được chức năng uploadfile');
+        return;
+      }
+      if (tabId === 'bookshelf') {
+        showLoginAlert('Bạn phải đăng nhập để dùng chức năng tủ sách');
+        return;
+      }
+      if (tabId === 'profile') {
+        showLoginAlert('Bạn phải đăng nhập để dùng chức năng trang cá nhân');
+        return;
+      }
+    }
+    navigateTab(tabId);
+  };
 
   return (
     <Animated.View
@@ -52,7 +82,7 @@ export default function Footer({ activeNav, floating = false, visible = true }: 
             <TouchableOpacity
               key={tab.id}
               style={[styles.navItem, isActive && styles.navItemActive, isDarkMode && isActive && styles.navItemActiveDark]}
-              onPress={() => navigateTab(tab.id)}
+              onPress={() => handleTabPress(tab.id)}
               activeOpacity={0.7}
               accessibilityRole="button"
               accessibilityLabel={tab.title}

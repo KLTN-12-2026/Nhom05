@@ -1,5 +1,6 @@
 package com.example.demochatbot.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -26,6 +27,7 @@ public class Order_Item {
 
     @ManyToOne
     @JoinColumn(name = "orders_id" , referencedColumnName = "orders_id")
+    @JsonIgnore
     private Orders orders;
 
     @ManyToOne

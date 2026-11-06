@@ -10,6 +10,7 @@ import {
   StatusBar,
 } from "react-native";
 import { useAppNavigation, useAppThemeStyles } from './navigation';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 
 type Book = {
   id: number;
@@ -150,7 +151,7 @@ export default function SearchScreen() {
 
   return (
     <View style={themeStyles.safe}>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'} />
 
       <FlatList
         data={results}

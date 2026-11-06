@@ -2,6 +2,7 @@ import React from "react";
 import { ScrollView, StatusBar, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useAppNavigation, useAppThemeStyles } from './navigation';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 
 type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
 type Offer = { id:string; title:string; description:string; price:string; oldPrice?:string; tag?:string; icon:IconName; color:string; action:string };
@@ -90,7 +91,7 @@ export default function OffersScreen() {
   const s = useAppThemeStyles(baseStyles);
 
   return <View style={s.safe}>
-    <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} backgroundColor={isDarkMode ? '#101319' : '#fff'}/>
+    <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'}/>
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.content}>
       <View style={s.hero}>
         <View style={s.deal}><MaterialCommunityIcons name="lightning-bolt" size={15} color="#E88800"/><Text style={s.dealText}>Deal Hời - Chốt Ngay!</Text></View>

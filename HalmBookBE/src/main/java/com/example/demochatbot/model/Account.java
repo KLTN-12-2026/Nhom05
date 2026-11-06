@@ -1,6 +1,7 @@
 package com.example.demochatbot.model;
 
 import com.example.demochatbot.enums.Role;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -28,6 +29,7 @@ public class Account {
     private String status = "ACTIVE";
 
     @OneToOne(mappedBy = "account" ,cascade = CascadeType.ALL)
+    @JsonIgnore
     private Customer customer;
 
     @Enumerated(EnumType.STRING)

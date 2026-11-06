@@ -12,7 +12,7 @@ import {
   Quote,
   Star as StarIcon,
 } from 'lucide-react-native';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -379,6 +379,7 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
 
       {/* HIỆU ỨNG BẦU TRỜI SAO VÀ SAO BĂNG ĐỒNG BỘ TRANG CHỦ APP */}
       <DarkModeBackgroundEffects visible={isDarkMode} />
+
 
       {/* Header Điều Hướng */}
       <View style={themeStyles.header}>

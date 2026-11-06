@@ -1,15 +1,16 @@
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import type { RefObject } from 'react';
+import type { ComponentRef, RefObject } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppNavigation } from './navigation';
 
 interface SharedHeaderProps {
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
-  blurTarget: RefObject<View | null>;
+  blurTarget: RefObject<ComponentRef<typeof View> | null>;
   compact?: boolean;
+  currentScreen?: string;
 }
 
 export default function SharedHeader({
@@ -17,8 +18,11 @@ export default function SharedHeader({
   onToggleDarkMode,
   blurTarget,
   compact = false,
+  currentScreen,
 }: SharedHeaderProps) {
-  const { navigate, navigateTab } = useAppNavigation();
+  const { navigate, navigateTab, isLoggedIn, showLoginAlert, userAvatarUrl, userInitial } = useAppNavigation();
+  // [GIẢI THÍCH CODE]: Chỉ áp dụng avatar giống trang cá nhân trên tủ sách, ưu đãi và uploadfile
+  const isProfileAvatarScreen = ['offers', 'upload', 'bookshelf'].includes(currentScreen || '');
   const foreground = isDarkMode ? '#F5F1E8' : '#11131A';
 
   return (
@@ -53,21 +57,55 @@ export default function SharedHeader({
               <MaterialCommunityIcons name="bell-outline" size={23} color={foreground} />
               <View style={styles.notice} />
             </TouchableOpacity>
+            {/* ============================================================================
+                [GIẢI THÍCH CODE]: Nút Giỏ hàng ở Header dùng chung
+                Khi chưa đăng nhập (!isLoggedIn), nhấn vào giỏ hàng sẽ yêu cầu đăng nhập luôn,
+                hiển thị thông báo "Bạn phải đăng nhập để dùng chức năng giỏ hàng" kèm nút "Đăng nhập ngay".
+                ============================================================================ */}
             <TouchableOpacity
               style={styles.actionButton}
-              onPress={() => navigate('cart')}
+              onPress={() => {
+                if (!isLoggedIn) {
+                  showLoginAlert('Bạn phải đăng nhập để dùng chức năng giỏ hàng');
+                  return;
+                }
+                navigate('cart');
+              }}
               accessibilityRole="button"
               accessibilityLabel="Giỏ hàng"
             >
               <Ionicons name="cart-outline" size={23} color={foreground} />
             </TouchableOpacity>
+            {/* ============================================================================
+                [GIẢI THÍCH CODE]: Khách vãng lai nhấn vào icon trang cá nhân ở header
+                Hiển thị thông báo: "Bạn phải đăng nhập để dùng chức năng trang cá nhân"
+                kèm dòng nút "Đăng nhập ngay" để điều hướng sang màn đăng nhập.
+                ============================================================================ */}
             <TouchableOpacity
               style={styles.avatar}
-              onPress={() => navigateTab('profile')}
+              onPress={() => {
+                if (!isLoggedIn) {
+                  showLoginAlert('Bạn phải đăng nhập để dùng chức năng trang cá nhân');
+                  return;
+                }
+                navigateTab('profile');
+              }}
               accessibilityRole="button"
               accessibilityLabel="Trang cá nhân"
             >
-              <MaterialCommunityIcons name="account" size={24} color="#9147DF" />
+              {isProfileAvatarScreen && isLoggedIn ? (
+                userAvatarUrl ? (
+                  // [GIẢI THÍCH CODE]: Hiển thị ảnh avatar đồng bộ trang cá nhân cho ưu đãi, tủ sách, uploadfile
+                  <Image source={{ uri: userAvatarUrl }} style={styles.avatarImage} />
+                ) : (
+                  // [GIẢI THÍCH CODE]: Chữ cái đầu hiển thị trên nền #2c3a7a giống hệt trang cá nhân
+                  <View style={styles.avatarLetterCircle}>
+                    <Text style={styles.avatarText}>{userInitial || 'H'}</Text>
+                  </View>
+                )
+              ) : (
+                <MaterialCommunityIcons name="account" size={24} color="#9147DF" />
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -153,6 +191,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#F2E8FF',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
+  avatarLetterCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#2c3a7a',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '900',
   },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   searchBox: {

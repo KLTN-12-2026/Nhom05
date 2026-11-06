@@ -20,7 +20,7 @@ import java.util.Map;
 @Service
 public class AuthServiceImpl implements AuthService {
 
-    @Autowired // LỖI ẨN SỐ 2: Đã bổ sung Autowired để không bị NullPointerException
+    @Autowired
     private JwtTokenProvider tokenProvider;
 
     @Autowired
@@ -37,13 +37,20 @@ public class AuthServiceImpl implements AuthService {
         int newNumber = 1;
         if (lastId != null && !lastId.isEmpty()) {
             try {
-                int lastNumber = Integer.parseInt(lastId.substring(1));
-                newNumber = lastNumber + 1;
+                String digits = lastId.replaceAll("\\D+", "");
+                if (!digits.isEmpty()) {
+                    newNumber = Integer.parseInt(digits) + 1;
+                }
             } catch (NumberFormatException e) {
                 System.out.printf("Loi dinh dang id khach hang !" + lastId);
             }
         }
-            return String.format("id#C%05d", newNumber);
+        String candidate = String.format("id#C%05d", newNumber);
+        while (customerRepository.existsById(candidate)) {
+            newNumber++;
+            candidate = String.format("id#C%05d", newNumber);
+        }
+        return candidate;
     }
 
     @Transactional
@@ -70,7 +77,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
-    @Transactional // Đảm bảo nếu lỗi giữa chừng thì không bị lưu rác vào database
+    @Transactional
     public AuthResponse processGoogleLogin(String accessToken) {
         RestTemplate restTemplate = new RestTemplate();
         String googleApiUrl = "https://www.googleapis.com/oauth2/v3/userinfo?access_token=" + accessToken;
@@ -86,20 +93,16 @@ public class AuthServiceImpl implements AuthService {
             String name = (String) payload.get("name");
             String picture = (String) payload.get("picture");
 
-            // Tìm Customer theo email
             Customer customer = customerRepository.findByEmail(email).orElse(null);
 
-            // CHỈ KHAI BÁO, KHÔNG KHỞI TẠO VỎ RỖNG
             Account account;
 
             if (customer == null) {
-                // TẠO MỚI HOÀN TOÀN (Làm y hệt cách bạn viết trong hàm register)
                 account = new Account();
                 account.setUsername(email.split("@")[0]);
                 account.setProvider("GOOGLE");
                 account.setRole(Role.USER);
 
-                // Lưu Account trước để lấy thực thể
                 Account savedAccount = accountRepository.save(account);
 
                 customer = new Customer();
@@ -109,28 +112,18 @@ public class AuthServiceImpl implements AuthService {
                 customer.setEmail(email);
                 customer.setAccount(savedAccount);
 
-                // Lưu Customer sau
                 customerRepository.save(customer);
-
-                // Trả biến account về đúng thực thể đã lưu
                 account = savedAccount;
             } else {
-                // TÀI KHOẢN ĐÃ TỒN TẠI
-                // Đảo ngược logic sai: Phải lấy account TỪ customer (đã có trong DB)
                 account = customer.getAccount();
-
                 if (account == null) {
                     throw new RuntimeException("Dữ liệu lỗi: Customer có tồn tại nhưng mất liên kết với Account");
                 }
-
-                // Cập nhật Avatar mới và lưu lại
                 customer.setAvatar(picture);
                 customerRepository.save(customer);
             }
 
-            // Tạo Token bằng username để đồng nhất với AuthController, không bị vô hiệu hóa khi đổi email
             String jwtToken = tokenProvider.generateToken(account.getUsername(), String.valueOf(account.getRole()));
-
             return new AuthResponse(jwtToken, account, customer, String.valueOf(account.getRole()));
 
         } catch (Exception e) {
@@ -143,7 +136,6 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public AuthResponse processFacebookLogin(String accessToken) {
         RestTemplate restTemplate = new RestTemplate();
-        // Gọi Graph API của FB, yêu cầu trả về id, name, email, và ảnh size lớn
         String facebookApiUrl = "https://graph.facebook.com/me?fields=id,name,email,picture.type(large)&access_token=" + accessToken;
 
         try {
@@ -157,13 +149,11 @@ public class AuthServiceImpl implements AuthService {
             String fbId = (String) payload.get("id");
             String name = (String) payload.get("name");
 
-            // BẪY CHÍ MẠNG: Xử lý trường hợp không có email (đăng ký bằng SĐT)
             String email = (String) payload.get("email");
             if (email == null || email.isEmpty()) {
-                email = fbId + "@facebook.halmbook.com"; // Tạo email giả để hệ thống không sập
+                email = fbId + "@facebook.halmbook.com";
             }
 
-            // Bóc tách URL ảnh (JSON của FB bị lồng: picture -> data -> url)
             String picture = "";
             Map<String, Object> pictureObj = (Map<String, Object>) payload.get("picture");
             if (pictureObj != null && pictureObj.containsKey("data")) {
@@ -171,7 +161,6 @@ public class AuthServiceImpl implements AuthService {
                 picture = (String) dataObj.get("url");
             }
 
-            // Logic lưu DB giống hệt Google
             Customer customer = customerRepository.findByEmail(email).orElse(null);
             Account account;
 
@@ -200,7 +189,6 @@ public class AuthServiceImpl implements AuthService {
                 customerRepository.save(customer);
             }
 
-            // Tạo Token bằng username để đồng nhất với AuthController, không bị vô hiệu hóa khi đổi email
             String jwtToken = tokenProvider.generateToken(account.getUsername(), String.valueOf(account.getRole()));
             return new AuthResponse(jwtToken, account, customer, String.valueOf(account.getRole()));
 

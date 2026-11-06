@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Platform, StatusBar } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppNavigation, useAppThemeStyles } from './navigation';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 
 // Mock data cho Giỏ hàng
 const MOCK_CART = [
@@ -13,7 +14,7 @@ const MOCK_CART = [
 
 export default function GioHang() {
   const themeStyles = useAppThemeStyles(styles);
-  const { navigate, goBack, isDarkMode } = useAppNavigation();
+  const { navigate, goBack, isDarkMode, isLoggedIn, showLoginAlert } = useAppNavigation();
   const [cartItems, setCartItems] = useState(
     MOCK_CART.map(item => ({ ...item, checked: false }))
   );
@@ -38,7 +39,7 @@ export default function GioHang() {
 
   return (
     <View style={themeStyles.container}>
-      <StatusBar translucent backgroundColor="transparent" barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'} />
       
       {/* Header giống các trang khác */}
       <View style={themeStyles.header}>
@@ -116,7 +117,25 @@ export default function GioHang() {
               </TouchableOpacity>
             )}
             
-            <TouchableOpacity style={themeStyles.rentBtn} onPress={() => navigate('payment')}>
+            {/* ============================================================================
+                [GIẢI THÍCH CODE]: Nút thanh toán (Thuê sách ngay) trong giỏ hàng
+                - Khách vãng lai khi nhấn thanh toán: hiển thị thông báo "Bạn phải đăng nhập để thanh toán"
+                  kèm dòng nút "Đăng nhập ngay" để điều hướng sang màn hình đăng nhập.
+                - Người dùng đã đăng nhập: chuyển sang màn hình thanh toán ('payment').
+                ============================================================================ */}
+            <TouchableOpacity
+              style={themeStyles.rentBtn}
+              onPress={() => {
+                if (!isLoggedIn) {
+                  showLoginAlert('Bạn phải đăng nhập để thanh toán');
+                  return;
+                }
+                navigate('payment');
+              }}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Thanh toán thuê sách"
+            >
               <Ionicons name="cart-outline" size={20} color="#fff" style={{ marginRight: 6 }} />
               <Text style={themeStyles.rentBtnText}>Thuê sách ngay</Text>
             </TouchableOpacity>
