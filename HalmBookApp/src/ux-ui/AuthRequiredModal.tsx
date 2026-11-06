@@ -15,6 +15,7 @@ interface AuthRequiredModalProps {
   onClose: () => void;
   onLogin: () => void;
   isDarkMode?: boolean;
+  lang?: 'vi' | 'en';
 }
 
 /**
@@ -40,6 +41,7 @@ export default function AuthRequiredModal({
   onClose,
   onLogin,
   isDarkMode = false,
+  lang = 'vi',
 }: AuthRequiredModalProps) {
   if (!visible) return null;
 
@@ -64,7 +66,7 @@ export default function AuthRequiredModal({
 
           {/* Tiêu đề thông báo */}
           <Text style={[styles.title, isDarkMode && styles.titleDark]}>
-            Yêu cầu đăng nhập
+            {lang === 'en' ? 'Login Required' : 'Yêu cầu đăng nhập'}
           </Text>
 
           {/* Dòng mô tả chi tiết lý do cần đăng nhập */}
@@ -80,10 +82,10 @@ export default function AuthRequiredModal({
               onPress={onLogin}
               activeOpacity={0.85}
               accessibilityRole="button"
-              accessibilityLabel="Đăng nhập ngay"
+              accessibilityLabel={lang === 'en' ? 'Log in now' : 'Đăng nhập ngay'}
             >
               <Ionicons name="log-in-outline" size={20} color="#fff" style={{ marginRight: 6 }} />
-              <Text style={styles.loginBtnText}>Đăng nhập ngay</Text>
+              <Text style={styles.loginBtnText}>{lang === 'en' ? 'Log In Now' : 'Đăng nhập ngay'}</Text>
             </TouchableOpacity>
 
             {/* Nút đóng / Để sau nếu khách vãng lai chưa muốn đăng nhập lúc này */}
@@ -92,10 +94,10 @@ export default function AuthRequiredModal({
               onPress={onClose}
               activeOpacity={0.7}
               accessibilityRole="button"
-              accessibilityLabel="Để sau"
+              accessibilityLabel={lang === 'en' ? 'Later' : 'Để sau'}
             >
               <Text style={[styles.cancelBtnText, isDarkMode && styles.cancelBtnTextDark]}>
-                Để sau
+                {lang === 'en' ? 'Later' : 'Để sau'}
               </Text>
             </TouchableOpacity>
           </View>

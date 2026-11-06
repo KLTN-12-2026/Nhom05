@@ -23,7 +23,7 @@ export default function Footer({ activeNav, floating = false, visible = true }: 
   // [GIẢI THÍCH CODE]: Lấy trạng thái `isLoggedIn` và hàm `showLoginAlert` từ navigation
   // để kiểm tra xem người dùng hiện tại có phải khách vãng lai hay không.
   // ============================================================================
-  const { navigateTab, isDarkMode, isLoggedIn, showLoginAlert } = useAppNavigation();
+  const { navigateTab, isDarkMode, isLoggedIn, showLoginAlert, lang } = useAppNavigation();
   const insets = useSafeAreaInsets();
   const animTranslateY = useRef(new Animated.Value(0)).current;
 
@@ -48,15 +48,15 @@ export default function Footer({ activeNav, floating = false, visible = true }: 
   const handleTabPress = (tabId: (typeof PRIMARY_TABS)[number]['id']) => {
     if (!isLoggedIn) {
       if (tabId === 'upload') {
-        showLoginAlert('Bạn phải đăng nhập mới dùng được chức năng uploadfile');
+        showLoginAlert(lang === 'en' ? 'Please log in to use upload file feature' : 'Bạn phải đăng nhập mới dùng được chức năng uploadfile');
         return;
       }
       if (tabId === 'bookshelf') {
-        showLoginAlert('Bạn phải đăng nhập để dùng chức năng tủ sách');
+        showLoginAlert(lang === 'en' ? 'Please log in to use bookshelf feature' : 'Bạn phải đăng nhập để dùng chức năng tủ sách');
         return;
       }
       if (tabId === 'profile') {
-        showLoginAlert('Bạn phải đăng nhập để dùng chức năng trang cá nhân');
+        showLoginAlert(lang === 'en' ? 'Please log in to use profile feature' : 'Bạn phải đăng nhập để dùng chức năng trang cá nhân');
         return;
       }
     }
@@ -85,7 +85,7 @@ export default function Footer({ activeNav, floating = false, visible = true }: 
               onPress={() => handleTabPress(tab.id)}
               activeOpacity={0.7}
               accessibilityRole="button"
-              accessibilityLabel={tab.title}
+              accessibilityLabel={lang === 'en' ? (tab.id === 'home' ? 'Home' : tab.id === 'offers' ? 'Offers' : tab.id === 'upload' ? 'Upload' : tab.id === 'bookshelf' ? 'Bookshelf' : 'Profile') : tab.title}
               accessibilityState={{ selected: isActive }}
             >
               <Ionicons

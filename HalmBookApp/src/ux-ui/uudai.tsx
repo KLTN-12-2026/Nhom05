@@ -34,6 +34,7 @@ const books: Offer[] = [
 ];
 
 function Card({ item }:{ item:Offer }) {
+  const { lang } = useAppNavigation();
   const { navigate } = useAppNavigation();
   const s = useAppThemeStyles(baseStyles);
 
@@ -47,7 +48,18 @@ function Card({ item }:{ item:Offer }) {
       <Text style={s.price}>{item.price}</Text>
     </View>
     <TouchableOpacity style={s.button} onPress={() => navigate(item.id === 'u1' ? 'upload' : 'payment')}>
-      <Text style={s.buttonText}>{item.action}</Text>
+      <Text style={s.buttonText}>
+        {lang === 'en'
+          ? (item.action === 'Xác Thực Ngay' ? 'Verify Now'
+            : item.action === 'Đổi Khoai Ngay' ? 'Redeem Now'
+            : item.action === 'Sử Dụng Ngay' ? 'Use Now'
+            : item.action === 'Tìm Hiểu Thêm' ? 'Learn More'
+            : item.action === 'Nâng Cấp Gói' ? 'Upgrade'
+            : item.action === 'Mua Combo' ? 'Buy Combo'
+            : item.action === 'Mua Sách' ? 'Buy Book'
+            : item.action)
+          : item.action}
+      </Text>
     </TouchableOpacity>
   </View>;
 }
@@ -68,41 +80,41 @@ function Section({ title, color, icon, data }:{ title:string; color:string; icon
 }
 
 function Challenges() {
-  const { navigate } = useAppNavigation();
+  const { navigate, lang } = useAppNavigation();
   const s = useAppThemeStyles(baseStyles);
   const items = [
     { title:"Chiến Thần Tốc Độ", text:"Đọc hết 1 cuốn sách trong 3 ngày, nhận voucher giảm 5%.", value:"-5%", icon:"lightning-bolt" as IconName },
     { title:"Một Sách Chăm Chỉ", text:"Duy trì chuỗi đọc sách 7 ngày liên tiếp để nhận thưởng.", value:"+10 🥔", icon:"fire" as IconName },
   ];
   return <View style={s.section}>
-    <View style={s.sectionHead}><View style={[s.label,{backgroundColor:"#FF777B"}]}><MaterialCommunityIcons name="medal" size={16} color="#fff"/><Text style={[s.labelText,{color:"#fff"}]}>Ưu Đãi Thử Thách Đọc Sách</Text></View></View>
+    <View style={s.sectionHead}><View style={[s.label,{backgroundColor:"#FF777B"}]}><MaterialCommunityIcons name="medal" size={16} color="#fff"/><Text style={[s.labelText,{color:"#fff"}]}>{lang === 'en' ? 'Reading Challenge Perks' : 'Ưu Đãi Thử Thách Đọc Sách'}</Text></View></View>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.row}>
       {items.map(x=><View key={x.title} style={s.challenge}>
         <MaterialCommunityIcons name={x.icon} size={40} color="#FF595C"/><Text style={s.cardTitle}>{x.title}</Text><Text style={s.desc}>{x.text}</Text>
         <View style={s.priceBox}><Text style={s.price}>{x.value}</Text></View>
-        <TouchableOpacity style={s.button} onPress={() => navigate('bookshelf')}><Text style={s.buttonText}>Tham Gia Ngay</Text></TouchableOpacity>
+        <TouchableOpacity style={s.button} onPress={() => navigate('bookshelf')}><Text style={s.buttonText}>{lang === 'en' ? 'Join Now' : 'Tham Gia Ngay'}</Text></TouchableOpacity>
       </View>)}
     </ScrollView>
   </View>;
 }
 
 export default function OffersScreen() {
-  const { navigate, isDarkMode } = useAppNavigation();
+  const { navigate, isDarkMode, lang } = useAppNavigation();
   const s = useAppThemeStyles(baseStyles);
 
   return <View style={s.safe}>
     <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'}/>
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.content}>
       <View style={s.hero}>
-        <View style={s.deal}><MaterialCommunityIcons name="lightning-bolt" size={15} color="#E88800"/><Text style={s.dealText}>Deal Hời - Chốt Ngay!</Text></View>
-        <Text style={s.heroTitle}>Ngập Tràn Ưu Đãi</Text>
-        <Text style={s.heroTitle}>Tiêu <Text style={{color:"#9147DF"}}>Khoai</Text> Thả Ga 🥔</Text>
-        <Text style={s.heroSub}>Mở khóa vô vàn đặc quyền hấp dẫn chỉ dành riêng cho độc giả của HALM BOOK.</Text>
+        <View style={s.deal}><MaterialCommunityIcons name="lightning-bolt" size={15} color="#E88800"/><Text style={s.dealText}>{lang === 'en' ? 'Hot Deal - Grab Now!' : 'Deal Hời - Chốt Ngay!'}</Text></View>
+        <Text style={s.heroTitle}>{lang === 'en' ? 'Exclusive Offers' : 'Ngập Tràn Ưu Đãi'}</Text>
+        <Text style={s.heroTitle}>{lang === 'en' ? 'Spend ' : 'Tiêu '}<Text style={{color:"#9147DF"}}>{lang === 'en' ? 'Potatoes' : 'Khoai'}</Text>{lang === 'en' ? ' Freely 🥔' : ' Thả Ga 🥔'}</Text>
+        <Text style={s.heroSub}>{lang === 'en' ? 'Unlock exciting perks reserved exclusively for HALM BOOK readers.' : 'Mở khóa vô vàn đặc quyền hấp dẫn chỉ dành riêng cho độc giả của HALM BOOK.'}</Text>
       </View>
-      <Section title="Giảm Giá Gói Cước Đặc Quyền" color="#F58BD4" icon="crown" data={member}/>
-      <Section title="Tiện Ích Upload Dữ Liệu" color="#BDE4FF" icon="cloud-upload" data={upload}/>
-      <Section title="Combo Siêu Tiết Kiệm" color="#FFD065" icon="layers" data={combo}/>
-      <Section title="Sách Lẻ Giảm Sâu" color="#38D8E7" icon="book" data={books}/>
+      <Section title={lang === 'en' ? 'Membership Discounts' : 'Giảm Giá Gói Cước Đặc Quyền'} color="#F58BD4" icon="crown" data={member}/>
+      <Section title={lang === 'en' ? 'Upload Utilities' : 'Tiện Ích Upload Dữ Liệu'} color="#BDE4FF" icon="cloud-upload" data={upload}/>
+      <Section title={lang === 'en' ? 'Super Saver Combos' : 'Combo Siêu Tiết Kiệm'} color="#FFD065" icon="layers" data={combo}/>
+      <Section title={lang === 'en' ? 'Deep Book Discounts' : 'Sách Lẻ Giảm Sâu'} color="#38D8E7" icon="book" data={books}/>
       <Challenges/>
     </ScrollView>
   </View>;

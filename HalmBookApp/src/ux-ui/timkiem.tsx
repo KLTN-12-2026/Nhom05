@@ -76,7 +76,7 @@ const CATEGORIES = [
 
 export default function SearchScreen() {
   const themeStyles = useAppThemeStyles(styles);
-  const { navigate, goBack, isDarkMode } = useAppNavigation();
+  const { navigate, goBack, isDarkMode, lang } = useAppNavigation();
   const [keyword, setKeyword] = useState("");
   const [recent, setRecent] = useState([
     "Nhà giả kim",
@@ -112,7 +112,7 @@ export default function SearchScreen() {
         <Text style={themeStyles.bookTitle}>{item.title}</Text>
         <Text style={themeStyles.author}>{item.author}</Text>
         <Text style={themeStyles.rating}>
-          ⭐ {item.rating} ({item.reviews} đánh giá)
+          ⭐ {item.rating} ({item.reviews} {lang === 'en' ? 'reviews)' : 'đánh giá)'}
         </Text>
         <Text style={themeStyles.description} numberOfLines={2}>
           {item.description}
@@ -121,7 +121,7 @@ export default function SearchScreen() {
         <View style={themeStyles.rowBottom}>
           <Text style={themeStyles.categoryTag}>{item.category}</Text>
           <View style={themeStyles.priceBox}>
-            <Text style={themeStyles.priceLabel}>Giá thuê</Text>
+            <Text style={themeStyles.priceLabel}>{lang === 'en' ? 'Rental price' : 'Giá thuê'}</Text>
             <Text style={themeStyles.price}>
               {item.price.toLocaleString("vi-VN")}đ
             </Text>
@@ -139,7 +139,7 @@ export default function SearchScreen() {
             reads: item.reviews,
           })}
         >
-          <Text style={themeStyles.detailText}>Xem chi tiết</Text>
+          <Text style={themeStyles.detailText}>{lang === 'en' ? 'View details' : 'Xem chi tiết'}</Text>
         </TouchableOpacity>
       </View>
 
@@ -166,8 +166,8 @@ export default function SearchScreen() {
                 <Text style={themeStyles.back}>←</Text>
               </TouchableOpacity>
               <View>
-                <Text style={themeStyles.title}>Tìm kiếm</Text>
-                <Text style={themeStyles.subtitle}>Khám phá những cuốn sách hay</Text>
+                <Text style={themeStyles.title}>{lang === 'en' ? 'Search' : 'Tìm kiếm'}</Text>
+                <Text style={themeStyles.subtitle}>{lang === 'en' ? 'Discover great books' : 'Khám phá những cuốn sách hay'}</Text>
               </View>
             </View>
 
@@ -177,7 +177,7 @@ export default function SearchScreen() {
                 style={themeStyles.input}
                 value={keyword}
                 onChangeText={setKeyword}
-                placeholder="Tìm kiếm sách, tác giả, thể loại..."
+                placeholder={lang === 'en' ? 'Search books, authors, genres...' : 'Tìm kiếm sách, tác giả, thể loại...'}
                 placeholderTextColor="#8A92A6"
                 returnKeyType="search"
               />
@@ -189,9 +189,9 @@ export default function SearchScreen() {
             </View>
 
             <View style={themeStyles.sectionHeader}>
-              <Text style={themeStyles.sectionTitle}>◷  Tìm kiếm gần đây</Text>
+              <Text style={themeStyles.sectionTitle}>{lang === 'en' ? '◷  Recent Searches' : '◷  Tìm kiếm gần đây'}</Text>
               <TouchableOpacity onPress={() => setRecent([])}>
-                <Text style={themeStyles.clear}>Xóa tất cả</Text>
+                <Text style={themeStyles.clear}>{lang === 'en' ? 'Clear all' : 'Xóa tất cả'}</Text>
               </TouchableOpacity>
             </View>
 
@@ -208,9 +208,9 @@ export default function SearchScreen() {
             </View>
 
             <View style={themeStyles.sectionHeader}>
-              <Text style={themeStyles.sectionTitle}>🔥  Thể loại phổ biến</Text>
+              <Text style={themeStyles.sectionTitle}>{lang === 'en' ? '🔥  Popular Genres' : '🔥  Thể loại phổ biến'}</Text>
               <TouchableOpacity onPress={() => navigate('categories')}>
-                <Text style={themeStyles.more}>Xem tất cả →</Text>
+                <Text style={themeStyles.more}>{lang === 'en' ? 'See all →' : 'Xem tất cả →'}</Text>
               </TouchableOpacity>
             </View>
 

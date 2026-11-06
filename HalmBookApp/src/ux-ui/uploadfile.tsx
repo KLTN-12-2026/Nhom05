@@ -12,7 +12,7 @@ const UPLOAD_HISTORY = [
 
 export default function UploadFile() {
   const themeStyles = useAppThemeStyles(styles);
-  const { navigate, isDarkMode } = useAppNavigation();
+  const { navigate, isDarkMode, lang } = useAppNavigation();
 
   return (
     <View style={themeStyles.container}>
@@ -36,8 +36,8 @@ export default function UploadFile() {
             <Text style={{ fontSize: 70 }}>🥔</Text>
           </View>
           
-          <Text style={themeStyles.title}>Tải Lên Tệp</Text>
-          <Text style={themeStyles.subtitle}>Upload File của bạn và trải nghiệm hệ sinh thái tuyệt vời mà tôi mang lại</Text>
+          <Text style={themeStyles.title}>{lang === 'en' ? 'Upload Files' : 'Tải Lên Tệp'}</Text>
+          <Text style={themeStyles.subtitle}>{lang === 'en' ? 'Upload your files and experience our wonderful reading ecosystem' : 'Upload File của bạn và trải nghiệm hệ sinh thái tuyệt vời mà tôi mang lại'}</Text>
           
           {/* Nút Upload màu xanh giống nút Here We Go */}
           <TouchableOpacity style={themeStyles.uploadBtn}>
@@ -57,9 +57,9 @@ export default function UploadFile() {
         {/* Lịch sử Upload */}
         <View style={themeStyles.historySection}>
           <View style={themeStyles.historyHeader}>
-            <Text style={themeStyles.historyTitle}>Sách đã tải lên</Text>
+            <Text style={themeStyles.historyTitle}>{lang === 'en' ? 'Uploaded Books' : 'Sách đã tải lên'}</Text>
             <TouchableOpacity>
-              <Text style={themeStyles.historyMore}>Xem tất cả</Text>
+              <Text style={themeStyles.historyMore}>{lang === 'en' ? 'View all' : 'Xem tất cả'}</Text>
             </TouchableOpacity>
           </View>
 
@@ -71,7 +71,7 @@ export default function UploadFile() {
               
               <View style={themeStyles.bookInfo}>
                 <Text style={themeStyles.bookTitle} numberOfLines={2}>{item.title}</Text>
-                <Text style={themeStyles.bookChapter}>Tiến độ: {item.progress}%</Text>
+                <Text style={themeStyles.bookChapter}>{lang === 'en' ? 'Progress: ' : 'Tiến độ: '}{item.progress}%</Text>
                 
                 {/* Thanh tiến độ (Giống bên Tủ sách) */}
                 <View style={themeStyles.progressContainer}>
@@ -83,12 +83,12 @@ export default function UploadFile() {
                 {/* Trạng thái */}
                 <View style={themeStyles.fileStatusBox}>
                   <Ionicons name="checkmark-done-circle" size={16} color="#27ae60" />
-                  <Text style={themeStyles.fileStatus}>{item.status}</Text>
+                  <Text style={themeStyles.fileStatus}>{lang === 'en' ? 'Completed' : item.status}</Text>
                 </View>
               </View>
 
               <TouchableOpacity style={themeStyles.continueBtn} onPress={() => navigate('reader')}>
-                <Text style={themeStyles.continueBtnText}>Đọc tiếp</Text>
+                <Text style={themeStyles.continueBtnText}>{lang === 'en' ? 'Read' : 'Đọc tiếp'}</Text>
               </TouchableOpacity>
             </View>
           ))}
