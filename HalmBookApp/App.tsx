@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurTargetView } from 'expo-blur';
 import { ComponentRef, ComponentType, useEffect, useRef, useState } from 'react';
-import { Alert, BackHandler, View } from 'react-native';
+import { Alert, BackHandler, Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import ChatBotScreen, { ChatMessage } from './src/ux-ui/chatbot';
 import BookDetailScreen from './src/ux-ui/chitietsach';
@@ -21,7 +21,6 @@ import TrangChu from './src/ux-ui/trangchu';
 import TuSach from './src/ux-ui/tusach';
 import UploadFile from './src/ux-ui/uploadfile';
 import UuDai from './src/ux-ui/uudai';
-import AuthRequiredModal from './src/ux-ui/AuthRequiredModal';
 
 interface ScreenRoute {
   name: AppScreen;
@@ -39,51 +38,31 @@ const SCREENS_WITH_SHARED_HEADER: AppScreen[] = [
 
 const LoginLogoutWithSuccess = LoginLogout as ComponentType<{ onLoginSuccess: () => void }>;
 
+// Quản lý cờ phiên làm việc: Sống trong RAM của tiến trình app hiện tại
+const isSessionActive = () => {
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.sessionStorage) {
+    return window.sessionStorage.getItem('halm_session_active') === 'true';
+  }
+  return (globalThis as any).__HALM_SESSION_ACTIVE__ === true;
+};
+
+const setSessionActive = (active: boolean) => {
+  (globalThis as any).__HALM_SESSION_ACTIVE__ = active;
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.sessionStorage) {
+    if (active) {
+      window.sessionStorage.setItem('halm_session_active', 'true');
+    } else {
+      window.sessionStorage.removeItem('halm_session_active');
+    }
+  }
+};
+
 export default function App() {
-  // ============================================================================
-  // [GIẢI THÍCH CODE]: MỚI CHẠY LÊN MẶC ĐỊNH LÀ MÀN TRANG CHỦ CHƯA ĐĂNG NHẬP
-  // - routes khởi tạo là [{ name: 'home' }] -> vào ngay Trang chủ
-  // - isLoggedIn khởi tạo là false -> khách vãng lai (chưa đăng nhập)
-  // ============================================================================
-  const [routes, setRoutes] = useState<ScreenRoute[]>([{ name: 'home' }]);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [routes, setRoutes] = useState<ScreenRoute[]>([{ name: 'auth' }]);
   const [isReady, setIsReady] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isFooterVisible, setIsFooterVisible] = useState(true);
   const [homeRefreshKey, setHomeRefreshKey] = useState(0);
-  // [GIẢI THÍCH CODE]: Quản lý ảnh đại diện & chữ cái đầu đồng bộ cho các màn được chỉ định
-  const [userAvatarUrl, setUserAvatarUrl] = useState<string>('');
-  const [userInitial, setUserInitial] = useState<string>('H');
-
-  // ============================================================================
-  // [GIẢI THÍCH CODE]: Quản lý bản thông báo yêu cầu đăng nhập
-  // Khi khách vãng lai nhấn uploadfile, trang cá nhân, tủ sách hoặc thanh toán,
-  // modal này sẽ bật lên hiển thị dòng thông báo kèm nút "Đăng nhập ngay"
-  // ============================================================================
-  const [authModal, setAuthModal] = useState<{
-    visible: boolean;
-    message: string;
-  }>({
-    visible: false,
-    message: '',
-  });
-
-  const showLoginAlert = (message: string) => {
-    setAuthModal({
-      visible: true,
-      message,
-    });
-  };
-
-  const closeAuthModal = () => {
-    setAuthModal({ visible: false, message: '' });
-  };
-
-  const handleModalLoginPress = () => {
-    closeAuthModal();
-    // [GIẢI THÍCH CODE]: Nhấn "Đăng nhập ngay" -> chuyển sang màn hình đăng nhập
-    navigate('auth');
-  };
 
   const blurTargetRef = useRef<ComponentRef<typeof View> | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
@@ -95,35 +74,62 @@ export default function App() {
     },
   ]);
 
-  // ============================================================================
-  // [GIẢI THÍCH CODE]: KHỞI TẠO ỨNG DỤNG MẶC ĐỊNH LÀ KHÁCH VÃNG LAI TẠI TRANG CHỦ
-  // Khi mới chạy ứng dụng lên, xóa các token/phiên cũ lưu trong máy để đảm bảo:
-  // 1. Luôn mở màn hình Trang chủ ('home')
-  // 2. Luôn ở trạng thái Chưa đăng nhập (isLoggedIn = false)
-  // 3. Khách muốn đăng nhập sẽ bấm vào icon account ở góc hoặc nút "Đăng nhập ngay"
-  // ============================================================================
+  // Khôi phục phiên làm việc: Reload trong cùng phiên thì giữ lại, tắt app chạy phiên mới thì bắt buộc login
   useEffect(() => {
     let isMounted = true;
-    const initApp = async () => {
+    const restoreSession = async () => {
       try {
-        await AsyncStorage.multiRemove(['userToken', 'userRole', 'savedRoutes', 'userAvatarUrl', 'userInitial']);
-        if (isMounted) {
-          setIsLoggedIn(false);
-          setUserAvatarUrl('');
-          setUserInitial('H');
+        const sessionActive = isSessionActive();
+
+        // Nếu đây là phiên chạy mới (Fresh launch / Mở app từ đầu)
+        if (!sessionActive) {
+          // Xóa token cũ và vị trí màn hình cũ để đảm bảo đăng nhập mới cấp token chuẩn từ MySQL
+          await AsyncStorage.multiRemove(['userToken', 'userRole', 'savedRoutes']);
+          if (isMounted) {
+            setRoutes([{ name: 'auth' }]);
+            setIsReady(true);
+          }
+          return;
+        }
+
+        // Nếu là reload trong cùng phiên làm việc (FE & BE vẫn đang chạy liên tục)
+        const token = await AsyncStorage.getItem('userToken');
+        if (token && isMounted) {
+          const savedRoutesStr = await AsyncStorage.getItem('savedRoutes');
+          if (savedRoutesStr) {
+            const parsed = JSON.parse(savedRoutesStr);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setRoutes(parsed);
+              setIsReady(true);
+              return;
+            }
+          }
           setRoutes([{ name: 'home' }]);
+        } else if (isMounted) {
+          setRoutes([{ name: 'auth' }]);
         }
       } catch (err) {
-        console.warn('Lỗi khởi tạo app:', err);
+        console.warn('Lỗi khôi phục session Expo:', err);
+        if (isMounted) setRoutes([{ name: 'auth' }]);
       } finally {
         if (isMounted) setIsReady(true);
       }
     };
-    initApp();
+    restoreSession();
     return () => {
       isMounted = false;
     };
   }, []);
+
+  // Tự động lưu lại vị trí màn hình hiện tại để khi reload Expo vẫn giữ nguyên
+  useEffect(() => {
+    if (!isReady) return;
+    if (routes.length > 0 && routes[routes.length - 1].name !== 'auth') {
+      AsyncStorage.setItem('savedRoutes', JSON.stringify(routes)).catch(() => {});
+    } else {
+      AsyncStorage.removeItem('savedRoutes').catch(() => {});
+    }
+  }, [routes, isReady]);
 
   const currentRoute = routes[routes.length - 1];
   const activeTabRoute = [...routes].reverse().find((route) =>
@@ -131,101 +137,46 @@ export default function App() {
   );
   const activeNav = activeTabRoute?.name ?? 'home';
 
-  // ============================================================================
-  // [GIẢI THÍCH CODE]: Hàm điều hướng `navigate`
-  // Tự động chặn khách vãng lai nếu cố gắng mở các màn hình yêu cầu tài khoản
-  // ============================================================================
   const navigate = (name: AppScreen, book?: BookData) => {
-    if (!isLoggedIn) {
-      if (name === 'upload') {
-        showLoginAlert('Bạn phải đăng nhập mới dùng được chức năng uploadfile');
-        return;
-      }
-      if (name === 'bookshelf') {
-        showLoginAlert('Bạn phải đăng nhập để dùng chức năng tủ sách');
-        return;
-      }
-      if (name === 'profile') {
-        showLoginAlert('Bạn phải đăng nhập để dùng chức năng trang cá nhân');
-        return;
-      }
-      if (name === 'cart') {
-        showLoginAlert('Bạn phải đăng nhập để dùng chức năng giỏ hàng');
-        return;
-      }
-      if (name === 'payment') {
-        showLoginAlert('Bạn phải đăng nhập để thanh toán');
-        return;
-      }
-    }
     setIsFooterVisible(true);
     setRoutes((current) => [...current, { name, book }]);
   };
 
-  // ============================================================================
-  // [GIẢI THÍCH CODE]: Hàm chuyển tab Footer `navigateTab`
-  // Tự động chặn khách vãng lai khi nhấn vào các tab upload, tủ sách, trang cá nhân
-  // ============================================================================
   const navigateTab = (name: AppScreen) => {
-    if (!isLoggedIn) {
-      if (name === 'upload') {
-        showLoginAlert('Bạn phải đăng nhập mới dùng được chức năng uploadfile');
-        return;
-      }
-      if (name === 'bookshelf') {
-        showLoginAlert('Bạn phải đăng nhập để dùng chức năng tủ sách');
-        return;
-      }
-      if (name === 'profile') {
-        showLoginAlert('Bạn phải đăng nhập để dùng chức năng trang cá nhân');
-        return;
-      }
-      if (name === 'cart') {
-        showLoginAlert('Bạn phải đăng nhập để dùng chức năng giỏ hàng');
-        return;
-      }
-    }
     setIsFooterVisible(true);
     setRoutes([{ name }]);
   };
 
+  const lastBackPressTime = useRef(0);
   const goBack = () => {
+    const now = Date.now();
+    if (now - lastBackPressTime.current < 450) return;
+    lastBackPressTime.current = now;
     setIsFooterVisible(true);
-    // Nếu ngăn xếp chỉ còn 1 trang (ví dụ màn auth), quay về màn home
-    setRoutes((current) => current.length > 1 ? current.slice(0, -1) : [{ name: 'home' }]);
+    setRoutes((current) => (current.length > 1 ? current.slice(0, -1) : current));
   };
 
-  // [GIẢI THÍCH CODE]: Khi đăng nhập thành công, cập nhật isLoggedIn = true, nạp avatar và về Trang chủ
-  const finishLogin = async () => {
-    try {
-      const [savedAvatar, savedInitial] = await Promise.all([
-        AsyncStorage.getItem('userAvatarUrl'),
-        AsyncStorage.getItem('userInitial'),
-      ]);
-      if (savedAvatar) setUserAvatarUrl(savedAvatar);
-      if (savedInitial) setUserInitial(savedInitial);
-    } catch {}
-    setIsLoggedIn(true);
-    setRoutes([{ name: 'home' }]);
+  const finishLogin = () => {
+    setSessionActive(true);
+    const nextRoutes: ScreenRoute[] = [{ name: 'home' }];
+    setRoutes(nextRoutes);
+    AsyncStorage.setItem('savedRoutes', JSON.stringify(nextRoutes)).catch(() => {});
   };
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
       if (routes.length <= 1) return false;
-      setRoutes((current) => current.length > 1 ? current.slice(0, -1) : current);
+      goBack();
       return true;
     });
     return () => subscription.remove();
   }, [routes.length]);
 
-  // [GIẢI THÍCH CODE]: Khi đăng xuất, xóa token và đưa người dùng về Trang chủ làm khách vãng lai
   const logout = async () => {
     try {
-      await AsyncStorage.multiRemove(['userToken', 'userRole', 'savedRoutes', 'userAvatarUrl', 'userInitial']);
-      setIsLoggedIn(false);
-      setUserAvatarUrl('');
-      setUserInitial('H');
-      setRoutes([{ name: 'home' }]);
+      setSessionActive(false);
+      await AsyncStorage.multiRemove(['userToken', 'userRole', 'savedRoutes']);
+      setRoutes([{ name: 'auth' }]);
     } catch {
       Alert.alert('Không thể đăng xuất', 'Đã xảy ra lỗi khi xóa thông tin đăng nhập.');
     }
@@ -251,15 +202,8 @@ export default function App() {
     goBack,
     logout,
     isDarkMode,
-    isLoggedIn,
-    setIsLoggedIn,
-    showLoginAlert,
     isFooterVisible,
     setFooterVisible: setIsFooterVisible,
-    userAvatarUrl,
-    setUserAvatarUrl,
-    userInitial,
-    setUserInitial,
   };
   const showSharedHeader = SCREENS_WITH_SHARED_HEADER.includes(currentRoute.name);
   const toggleDarkMode = () => setIsDarkMode((current) => !current);
@@ -308,7 +252,7 @@ export default function App() {
       screen = <HalmBookHistory />;
       break;
     case 'reader':
-      screen = <ManHinhDoc onBack={goBack} />;
+      screen = <ManHinhDoc onBack={goBack} book={currentRoute.book} />;
       break;
     case 'payment':
       screen = <ThanhToan />;
@@ -327,7 +271,14 @@ export default function App() {
         <BookDetailScreen
           book={currentRoute.book}
           onBack={goBack}
-          onStartReading={() => navigate('reader')}
+          onStartReading={(initialChapterIndex) =>
+            navigate('reader', {
+              ...currentRoute.book,
+              id: currentRoute.book?.id || 'book-1',
+              title: currentRoute.book?.title || 'Đọc sách',
+              initialChapterIndex: typeof initialChapterIndex === 'number' ? initialChapterIndex : 0,
+            })
+          }
         />
       ) : null;
       break;
@@ -352,7 +303,6 @@ export default function App() {
                 onToggleDarkMode={toggleDarkMode}
                 blurTarget={blurTargetRef}
                 compact={['offers', 'upload', 'bookshelf'].includes(currentRoute.name)}
-                currentScreen={currentRoute.name}
               />
             )}
             <BlurTargetView
@@ -370,19 +320,6 @@ export default function App() {
             )}
           </View>
         )}
-
-        {/* ============================================================================
-            [GIẢI THÍCH CODE]: BẢN THÔNG BÁO YÊU CẦU ĐĂNG NHẬP
-            Hiển thị đè lên trên màn hình khi khách vãng lai nhấn uploadfile, trangcanhan,
-            tusach hoặc thanh toán giỏ hàng. Có dòng 'Đăng nhập ngay' để vào màn đăng nhập.
-            ============================================================================ */}
-        <AuthRequiredModal
-          visible={authModal.visible}
-          message={authModal.message}
-          onClose={closeAuthModal}
-          onLogin={handleModalLoginPress}
-          isDarkMode={isDarkMode}
-        />
       </NavigationContext.Provider>
     </SafeAreaProvider>
   );

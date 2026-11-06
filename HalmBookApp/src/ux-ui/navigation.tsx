@@ -27,6 +27,7 @@ export interface BookData {
   pages?: number;
   reads?: string;
   rating?: string;
+  initialChapterIndex?: number;
 }
 
 export interface NavigationContextValue {
