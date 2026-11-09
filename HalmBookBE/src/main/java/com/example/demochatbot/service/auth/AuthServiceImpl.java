@@ -69,8 +69,10 @@ public class AuthServiceImpl implements AuthService {
 
         Customer customer = new Customer();
         customer.setCustomer_id(genarateNextCustomerId());
-        customer.setCustomerName(savedAccount.getUsername());
+        customer.setCustomerName(request.getCustomerName());
         customer.setEmail(request.getEmail());
+        customer.setPhoneNumber(request.getPhoneNumber());
+        customer.setAddress(request.getAddress());
         customer.setAccount(savedAccount);
 
         customerRepository.save(customer);
@@ -80,9 +82,10 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     public AuthResponse processGoogleLogin(String accessToken) {
         RestTemplate restTemplate = new RestTemplate();
-        String googleApiUrl = "https://www.googleapis.com/oauth2/v3/userinfo?access_token=" + accessToken;
+        String googleUserInfoUrl = "https://www.googleapis.com/oauth2/v3/userinfo?access_token=" + accessToken;
+
         try {
-            ResponseEntity<Map> response = restTemplate.getForEntity(googleApiUrl, Map.class);
+            ResponseEntity<Map> response = restTemplate.getForEntity(googleUserInfoUrl, Map.class);
             Map<String, Object> payload = response.getBody();
 
             if (payload == null || !payload.containsKey("email")) {
@@ -94,7 +97,6 @@ public class AuthServiceImpl implements AuthService {
             String picture = (String) payload.get("picture");
 
             Customer customer = customerRepository.findByEmail(email).orElse(null);
-
             Account account;
 
             if (customer == null) {
@@ -102,6 +104,7 @@ public class AuthServiceImpl implements AuthService {
                 account.setUsername(email.split("@")[0]);
                 account.setProvider("GOOGLE");
                 account.setRole(Role.USER);
+                account.setStatus("ACTIVE");
 
                 Account savedAccount = accountRepository.save(account);
 
@@ -119,8 +122,19 @@ public class AuthServiceImpl implements AuthService {
                 if (account == null) {
                     throw new RuntimeException("Dữ liệu lỗi: Customer có tồn tại nhưng mất liên kết với Account");
                 }
+
+                // Kiểm tra xem tài khoản có bị khóa không
+                if ("LOCKED".equalsIgnoreCase(account.getStatus())) {
+                    throw new RuntimeException("Tài khoản hiện đang bị khóa, vui lòng gọi hotline để hỗ trợ.");
+                }
+
                 customer.setAvatar(picture);
                 customerRepository.save(customer);
+            }
+
+            // Kiểm tra lần cuối
+            if ("LOCKED".equalsIgnoreCase(account.getStatus())) {
+                throw new RuntimeException("Tài khoản hiện đang bị khóa, vui lòng gọi hotline để hỗ trợ.");
             }
 
             String jwtToken = tokenProvider.generateToken(account.getUsername(), String.valueOf(account.getRole()));
@@ -128,7 +142,7 @@ public class AuthServiceImpl implements AuthService {
 
         } catch (Exception e) {
             e.printStackTrace();
-            throw new RuntimeException("Lỗi giao tiếp với Google API: " + e.getMessage());
+            throw new RuntimeException(e.getMessage());
         }
     }
 
@@ -169,6 +183,7 @@ public class AuthServiceImpl implements AuthService {
                 account.setUsername(email.split("@")[0]);
                 account.setProvider("FACEBOOK");
                 account.setRole(Role.USER);
+                account.setStatus("ACTIVE");
 
                 Account savedAccount = accountRepository.save(account);
 
@@ -185,8 +200,18 @@ public class AuthServiceImpl implements AuthService {
                 account = customer.getAccount();
                 if (account == null) throw new RuntimeException("Dữ liệu lỗi: Customer mất liên kết Account");
 
+                // Kiểm tra xem tài khoản có bị khóa không
+                if ("LOCKED".equalsIgnoreCase(account.getStatus())) {
+                    throw new RuntimeException("Tài khoản hiện đang bị khóa, vui lòng gọi hotline để hỗ trợ.");
+                }
+
                 customer.setAvatar(picture);
                 customerRepository.save(customer);
+            }
+
+            // Kiểm tra lần cuối
+            if ("LOCKED".equalsIgnoreCase(account.getStatus())) {
+                throw new RuntimeException("Tài khoản hiện đang bị khóa, vui lòng gọi hotline để hỗ trợ.");
             }
 
             String jwtToken = tokenProvider.generateToken(account.getUsername(), String.valueOf(account.getRole()));
@@ -194,7 +219,7 @@ public class AuthServiceImpl implements AuthService {
 
         } catch (Exception e) {
             e.printStackTrace();
-            throw new RuntimeException("Lỗi giao tiếp với Facebook API: " + e.getMessage());
+            throw new RuntimeException(e.getMessage());
         }
     }
 }

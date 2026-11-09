@@ -4,6 +4,7 @@ import com.example.demochatbot.dto.TopupRequest;
 import com.example.demochatbot.dto.TransferRequest;
 import com.example.demochatbot.dto.WalletResponseDto;
 import com.example.demochatbot.model.Customer;
+import com.example.demochatbot.model.MembershipTier;
 import com.example.demochatbot.model.PotatoPackage;
 import com.example.demochatbot.model.PotatoTransaction;
 import com.example.demochatbot.repository.CustomerRepository;
@@ -54,6 +55,13 @@ public class PotatoServiceImpl implements PotatoService {
         if (customer == null) {
             throw new RuntimeException("Không tìm thấy thông tin khách hàng cho tài khoản ID: " + accountId);
         }
+
+        try {
+                MembershipTier updatedTier = tierService.calculateAndUpdateCustomerTier(customer);
+            if (updatedTier != null) {
+                customer.setMembershipTier(updatedTier);
+            }
+        } catch (Exception ignored) {}
 
         int balance = customer.getPotatoBalance() != null ? customer.getPotatoBalance() : 0;
         int totalEarned = customer.getTotalPotatoEarned() != null ? customer.getTotalPotatoEarned() : balance;

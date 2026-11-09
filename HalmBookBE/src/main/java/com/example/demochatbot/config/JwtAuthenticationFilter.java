@@ -1,4 +1,4 @@
-package com.example.demochatbot.config; // Hoặc package chứa cấu hình bảo mật của bạn
+package com.example.demochatbot.config;
 
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -19,9 +19,7 @@ import java.io.IOException;
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    // Tiêm "cỗ máy quét mã" của bạn vào đây
     private final JwtTokenProvider tokenProvider;
-    // Cần UserDetailsService để tải thông tin user từ Database (hoặc bộ nhớ) dựa trên email
     private final UserDetailsService userDetailsService;
 
     public JwtAuthenticationFilter(JwtTokenProvider tokenProvider, UserDetailsService userDetailsService) {
@@ -39,26 +37,45 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             // 1. Rút trích Token từ Request
             String jwt = getJwtFromRequest(request);
 
-            // 2. Nếu có Token và Token hợp lệ (sử dụng hàm bạn đã viết)
+            // 2. Nếu có Token và Token hợp lệ
             if (StringUtils.hasText(jwt) && tokenProvider.validateToken(jwt)) {
 
-                // 3. Lấy email từ Token
+                // 3. Lấy email/username từ Token
                 String email = tokenProvider.getEmailFromJWT(jwt);
 
-                // 4. Đối chiếu với Database để lấy thông tin chi tiết (quyền hạn, trạng thái khóa...)
+                // 4. Đối chiếu với Database để lấy thông tin chi tiết
                 UserDetails userDetails = userDetailsService.loadUserByUsername(email);
 
-                // 5. Đóng dấu chứng nhận hợp lệ
-                UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                        userDetails, null, userDetails.getAuthorities()
-                );
-                authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                if (userDetails != null) {
+                    // 4b. KIỂM TRA TRẠNG THÁI KHÓA TÀI KHOẢN:
+                    // Nếu tài khoản đã bị khóa bởi Quản trị viên (status = LOCKED):
+                    // Chặn ngay lập tức với HTTP 423 Locked để Frontend phát hiện và kích hoạt logout đếm ngược.
+                    if (!userDetails.isAccountNonLocked()) {
+                        String origin = request.getHeader("Origin");
+                        if (origin != null && !origin.isEmpty()) {
+                            response.setHeader("Access-Control-Allow-Origin", origin);
+                            response.setHeader("Access-Control-Allow-Credentials", "true");
+                            response.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+                            response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept, X-Requested-With, Origin");
+                        }
+                        response.setStatus(423); // 423 Locked
+                        response.setContentType("application/json;charset=UTF-8");
+                        response.getWriter().write("{\"error\":\"ACCOUNT_LOCKED\",\"message\":\"Tài khoản của bạn đã bị khóa bởi Quản trị viên!\"}");
+                        response.getWriter().flush();
+                        return;
+                    }
 
-                // 6. Lưu vào ngữ cảnh để các Controller (như ChatController) có thể gọi authentication.getName()
-                SecurityContextHolder.getContext().setAuthentication(authentication);
+                    // 5. Đóng dấu chứng nhận hợp lệ
+                    UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                            userDetails, null, userDetails.getAuthorities()
+                    );
+                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+
+                    // 6. Lưu vào ngữ cảnh để Controller có thể truy xuất
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                }
             }
         } catch (Exception ex) {
-            // Bắt lỗi không mong muốn để không làm sập luồng mạng
             logger.error("Không thể thiết lập xác thực người dùng trong security context", ex);
         }
 
@@ -66,7 +83,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
-    // Hàm phụ trợ để cắt bỏ chữ "Bearer " dư thừa
     private String getJwtFromRequest(HttpServletRequest request) {
         String bearerToken = request.getHeader("Authorization");
         if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {

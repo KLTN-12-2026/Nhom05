@@ -1,8 +1,8 @@
-@import url("https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Quicksand:wght@500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Quicksand:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700;800;900&display=swap");
 
 @import "tailwindcss";
 
-@custom-variant dark (&:is(.dark, .dark *));
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
   --brand-primary: #a78bfa;
@@ -12,6 +12,12 @@
   --page-scrollbar-track: #f7f4ee;
   --page-scrollbar-thumb: #a85a5e;
   --page-scrollbar-thumb-hover: #8e3038;
+  --font-display: "Plus Jakarta Sans", "Be Vietnam Pro", "Inter", sans-serif;
+  --font-outfit: "Plus Jakarta Sans", "Be Vietnam Pro", "Inter", sans-serif;
+  --font-ui: "Inter", sans-serif;
+  --font-metadata: "Roboto", sans-serif;
+  --font-editorial: "Open Sans", sans-serif;
+  --navbar-height: 85px;
 }
 
 :root.dark {
@@ -32,6 +38,11 @@ html,
 body,
 #root {
   min-height: 100%;
+}
+
+html,
+body {
+  overscroll-behavior-x: none;
 }
 
 html {
@@ -116,6 +127,9 @@ textarea,
 
   --font-heading: "Fredoka", sans-serif;
   --font-body: "Quicksand", sans-serif;
+  --font-display: "Plus Jakarta Sans", "Be Vietnam Pro", "Inter", sans-serif;
+  --font-outfit: "Plus Jakarta Sans", "Be Vietnam Pro", "Inter", sans-serif;
+  --font-sans: "Inter", sans-serif;
 
   --shadow-brutal: 4px 4px 0px 0px #1a1a1a;
   --shadow-brutal-lg: 8px 8px 0px 0px #1a1a1a;
@@ -169,3 +183,61 @@ textarea,
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Sidebar and stats text in dark mode - chống đen thui và hắt sáng 100% */
+html.dark .user-sidebar-box,
+html.dark [class*="user-sidebar-box"] {
+  background-color: #181916 !important;
+  border-color: #2C2E29 !important;
+}
+
+html.dark .user-sidebar-box *,
+html.dark [class*="user-sidebar-box"] * {
+  color: #EDE9DF !important;
+}
+
+html.dark .user-sidebar-box span.text-xs,
+html.dark [class*="user-sidebar-box"] span.text-xs,
+html.dark .user-sidebar-box span:last-child,
+html.dark [class*="user-sidebar-box"] span:last-child {
+  color: #9CA3AF !important;
+}
+
+html.dark .user-sidebar-card,
+html.dark [class*="user-sidebar-card"] {
+  background-color: #181916 !important;
+  border-color: #2C2E29 !important;
+}
+
+/* Khử triệt để hiện tượng hắt sáng và flash trắng khi chuyển đổi Light/Dark mode */
+html.dark {
+  color-scheme: dark;
+}
+html:not(.dark) {
+  color-scheme: light;
+}
+
+/* Chống hắt sáng cho các khối nền giấy/card khi ở Dark Mode */
+html.dark [class*="bg-paper-surface"],
+html.dark [class*="bg-paper-50"],
+html.dark [class*="bg-paper-100"] {
+  background-color: #181916 !important;
+  border-color: #2C2E29 !important;
+}
+
+html.dark [class*="text-ink"]:not([class*="text-ink-muted"]) {
+  color: #EDE9DF !important;
+}
+
+html.dark [class*="text-ink-muted"] {
+  color: #96938B !important;
+}
+
+/* Định nghĩa chắc chắn cho font hiển thị Plus Jakarta Sans / Be Vietnam Pro / Inter, chống lỗi font có chân và lỗi khoảng trắng dấu tiếng Việt */
+.font-display,
+.font-outfit {
+  font-family: "Plus Jakarta Sans", "Be Vietnam Pro", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+}
+
+
+

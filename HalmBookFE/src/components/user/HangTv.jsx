@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import UserLayout from './layout/UserLayout';
 import { isDarkMode, applyTheme } from '@/utils/theme';
 import { getMyTierSummary, checkinDailyStreak, getAllTiers } from '@/services/tierService';
 import { getCurrentCustomer } from '@/services/customerService';
-import { getTierInfo } from '@/utils/tierUtils';
+import { getTierInfo, formatCustomerId, getTierAvatarFrame, getTierBadgeClass } from '@/utils/tierUtils';
+import AvatarWithFrame from '@/components/common/AvatarWithFrame';
+import { clearAuthSession } from '@/services/authToken';
 
 const tiersTailwindConfig = {
     darkMode: 'class',
@@ -196,15 +198,16 @@ function getBotReply(userInput) {
         return <>HALM BOOK cam kết <strong>Bảo Lưu Vĩnh Viễn</strong> thứ hạng của bạn! Hạng không bao giờ bị hạ cấp theo thời gian hay chu kỳ năm.</>;
     }
     if (query.includes('khoai') || query.includes('số dư')) {
-        return <>Số dư hiện tại của bạn là <strong>350 Khoai Tây 🥔</strong>. Bạn có thể dùng Khoai để thuê sách hoặc tham gia các gói cước ưu đãi tại trang <Link to="/trangchu#trending-section" className="text-gold underline font-bold">Ưu Đãi</Link>.</>;
+        return <>Số dư hiện tại của bạn là <strong>350 Khoai Tây 🥔</strong>. Bạn có thể dùng Khoai để thuê sách hoặc tham gia các gói cước ưu đãi tại trang <Link to="/#trending-section" className="text-gold underline font-bold">Ưu Đãi</Link>.</>;
     }
     return 'Tôi có thể hỗ trợ bạn tìm hiểu về 4 cấp bậc thành viên (Thợ Cày 🌱, Cao Thủ Cày 🚜, Lão Nông 🌾, Đại Điền Chủ 🏰), điều kiện thăng hạng hoặc các nhiệm vụ nhận XP!';
 }
 
 
-const getCleanTierName = (tier) => getTierInfo(tier).name;
+const getCleanTierName = (tier, balance = 0, books = 0) => getTierInfo(tier, balance, books).name;
 
 export default function Tiers() {
+    const navigate = useNavigate();
     const [isDark, setIsDark] = useState(() => isDarkMode());
     const [stars, setStars] = useState([]);
     const [isScrolled, setIsScrolled] = useState(false);
@@ -392,13 +395,44 @@ export default function Tiers() {
     };
 
     const customerNameDisplay = customer?.customerName || tierSummary?.customerName || 'Độc Giả HALM';
-    const customerIdDisplay = customer?.customerId 
-        ? `id#C${String(customer.customerId).replace(/^C/i, '').padStart(5, '0')}`
-        : (customer?.customer_id 
-            ? `id#C${String(customer.customer_id).replace(/^C/i, '').padStart(5, '0')}`
-            : (tierSummary?.formattedMemberCode || 'id#C00007'));
+    const customerIdDisplay = formatCustomerId(customer?.customerId || customer?.customer_id || tierSummary?.customerId || tierSummary?.formattedMemberCode);
     const avatarSrc = customer?.avatar || customer?.avatarUrl || tierSummary?.avatarUrl;
     const potatoBalanceDisplay = customer?.potatoBalance ?? tierSummary?.potatoBalance ?? 0;
+
+    // Xác định chính xác cấp bậc thành viên thực tế của người dùng (1, 2, 3, 4)
+    const userTierLevel = (() => {
+        // Tự động thăng cấp nếu số dư khoai hoặc điểm cày đạt ngưỡng
+        const potato = Math.max(potatoBalanceDisplay, tierSummary?.totalPoints ?? 0);
+        if (potato >= 10000) return 4;
+        if (potato >= 2500) return 3;
+        if (potato >= 500) return 2;
+
+        const current = tierSummary?.currentTier;
+        if (current) {
+            if (typeof current === 'object' && current.tierId) {
+                return Number(current.tierId);
+            }
+            const name = typeof current === 'object' ? (current.tierName || '') : String(current);
+            const upper = name.toUpperCase();
+            if (upper.includes('ĐẠI ĐIỀN') || upper.includes('DAI DIEN') || upper.includes('TIER4') || upper.includes('IV') || upper.includes('TOI THUONG') || upper.includes('TỐI THƯỢNG')) return 4;
+            if (upper.includes('LÃO NÔNG') || upper.includes('LAO NONG') || upper.includes('TIER3') || upper.includes('III') || upper.includes('TINH HOA')) return 3;
+            if (upper.includes('CAO THỦ') || upper.includes('CAO THU') || upper.includes('TIER2') || upper.includes('II') || upper.includes('TRI THUC') || upper.includes('TRI THỨC')) return 2;
+            if (upper.includes('THỢ CÀY') || upper.includes('THO CAY') || upper.includes('TIER1') || upper.includes('I') || upper.includes('MAM DOC') || upper.includes('MẦM ĐỌC')) return 1;
+        }
+        const custTier = customer?.membershipTier;
+        if (custTier) {
+            if (typeof custTier === 'number') return custTier;
+            const upper = String(custTier).toUpperCase();
+            if (upper.includes('DAI_DIEN') || upper.includes('ĐẠI ĐIỀN') || upper.includes('DAI DIEN') || upper.includes('4')) return 4;
+            if (upper.includes('LAO_NONG') || upper.includes('LÃO NÔNG') || upper.includes('LAO NONG') || upper.includes('3')) return 3;
+            if (upper.includes('CAO_THU') || upper.includes('CAO THỦ') || upper.includes('CAO THU') || upper.includes('2')) return 2;
+            if (upper.includes('THO_CAY') || upper.includes('THỢ CÀY') || upper.includes('THO CAY') || upper.includes('1')) return 1;
+        }
+        return 1;
+    })();
+
+    // Lấy khung viền và huy hiệu avatar tương ứng với hạng thành viên
+    const avatarFrame = getTierAvatarFrame(userTierLevel);
 
     return (
         <>
@@ -422,31 +456,50 @@ export default function Tiers() {
             background-color: #F7F4EE;
             color: #1E1F1D;
             -webkit-font-smoothing: antialiased;
-            transition: background-color 0.4s ease, color 0.4s ease;
         }
 
-        .dark .tiers-page {
-            background-color: #111210;
-            color: #EDE9DF;
+        html.dark .tiers-page {
+            background-color: #111210 !important;
+            color: #EDE9DF !important;
         }
 
-        .tiers-page [class~="bg-paper"] { background-color: #F7F4EE; }
-        .tiers-page [class~="bg-paper-surface"] { background-color: #FFFEFA; }
-        .tiers-page [class~="bg-paper-200"] { background-color: #EAE5D9; }
-        .tiers-page [class~="bg-paper-200/70"] { background-color: rgb(234 229 217 / 0.7); }
-        .tiers-page [class~="bg-wine"] { background-color: #8E3038; }
-        .tiers-page [class~="bg-wine/10"] { background-color: rgb(142 48 56 / 0.1); }
-        .tiers-page [class~="bg-wine/20"] { background-color: rgb(142 48 56 / 0.2); }
-        .tiers-page [class~="bg-gold"] { background-color: #B8860B; }
-        .tiers-page [class~="bg-gold/5"] { background-color: rgb(184 134 11 / 0.05); }
-        .tiers-page [class~="bg-gold/10"] { background-color: rgb(184 134 11 / 0.1); }
-        .tiers-page [class~="bg-gold/15"] { background-color: rgb(184 134 11 / 0.15); }
-        .tiers-page [class~="bg-night-card"] { background-color: #20221E; }
-        .tiers-page [class~="bg-night-border"] { background-color: #2C2E29; }
+        /* Light Mode Specific Overrides */
+        html:not(.dark) .tiers-page [class~="bg-paper"] { background-color: #F7F4EE; }
+        html:not(.dark) .tiers-page [class~="bg-paper-surface"] { background-color: #FFFEFA; }
+        html:not(.dark) .tiers-page [class~="bg-paper-200"] { background-color: #EAE5D9; }
+        html:not(.dark) .tiers-page [class~="bg-paper-200/70"] { background-color: rgb(234 229 217 / 0.7); }
+        html:not(.dark) .tiers-page [class~="bg-wine"] { background-color: #8E3038; }
+        html:not(.dark) .tiers-page [class~="bg-wine/10"] { background-color: rgb(142 48 56 / 0.1); }
+        html:not(.dark) .tiers-page [class~="bg-wine/20"] { background-color: rgb(142 48 56 / 0.2); }
+        html:not(.dark) .tiers-page [class~="bg-gold"] { background-color: #B8860B; }
+        html:not(.dark) .tiers-page [class~="bg-gold/5"] { background-color: rgb(184 134 11 / 0.05); }
+        html:not(.dark) .tiers-page [class~="bg-gold/10"] { background-color: rgb(184 134 11 / 0.1); }
+        html:not(.dark) .tiers-page [class~="bg-gold/15"] { background-color: rgb(184 134 11 / 0.15); }
 
-        .tiers-page [class~="text-ink"] { color: #1E1F1D; }
-        .tiers-page [class~="text-ink/80"] { color: rgb(30 31 29 / 0.8); }
-        .tiers-page [class~="text-ink-muted"] { color: #66645E; }
+        html:not(.dark) .tiers-page [class~="text-ink"] { color: #1E1F1D; }
+        html:not(.dark) .tiers-page [class~="text-ink/80"] { color: rgb(30 31 29 / 0.8); }
+        html:not(.dark) .tiers-page [class~="text-ink-muted"] { color: #66645E; }
+        html:not(.dark) .tiers-page [class~="border-paper-border"] { border-color: #E3DDD0; }
+
+        /* Dark Mode Specific Overrides - Tuyệt đối không bị hắt sáng khi F5 */
+        html.dark .tiers-page [class*="bg-paper-surface"],
+        html.dark .tiers-page .user-sidebar-card,
+        html.dark .tiers-page .user-sidebar-box {
+            background-color: #181916 !important;
+            border-color: #2C2E29 !important;
+        }
+        html.dark .tiers-page [class*="bg-paper"]:not([class*="bg-paper-200"]) {
+            background-color: #111210 !important;
+        }
+        html.dark .tiers-page [class*="text-ink"]:not([class*="text-ink-muted"]) {
+            color: #EDE9DF !important;
+        }
+        html.dark .tiers-page [class*="text-ink-muted"] {
+            color: #96938B !important;
+        }
+        html.dark .tiers-page [class*="border-paper-border"] {
+            border-color: #2C2E29 !important;
+        }
         .tiers-page [class~="text-wine"] { color: #8E3038; }
         .tiers-page [class~="text-gold"] { color: #B8860B; }
         .tiers-page [class~="text-night-bg"] { color: #111210; }
@@ -496,6 +549,53 @@ export default function Tiers() {
         html.dark .tiers-page [class~="dark:bg-night-card"] { background-color: #20221E; }
         html.dark .tiers-page [class~="dark:bg-night-surface"] { background-color: #181916; }
         html.dark .tiers-page [class~="dark:bg-night-border"] { background-color: #2C2E29; }
+        html.dark .tiers-page [class*="user-sidebar-card"],
+        html.dark .tiers-page [class*="dark:bg-night-surface"],
+        html.dark .tiers-page [class*="dark:bg-[#181916]"] {
+            background-color: #181916 !important;
+            border-color: #2C2E29 !important;
+        }
+        html.dark .tiers-page [class*="user-sidebar-box"] {
+            background-color: #181916 !important;
+            border-color: #2C2E29 !important;
+        }
+        html.dark .tiers-page [class*="user-sidebar-card"] h2,
+        html.dark .tiers-page [class*="user-sidebar-card"] [class*="font-display"],
+        html.dark .tiers-page [class*="user-sidebar-box"] span.text-2xl,
+        html.dark .tiers-page [class*="user-sidebar-box"] span:first-child {
+            color: #EDE9DF !important;
+        }
+        html.dark .tiers-page [class*="user-sidebar-box"] span:last-child,
+        html.dark .tiers-page [class*="user-sidebar-card"] p {
+            color: #9CA3AF !important;
+        }
+        html.dark .tiers-page [class*="dark:border-night-border"],
+        html.dark .tiers-page [class*="dark:border-[#2C2E29]"] {
+            border-color: #2C2E29 !important;
+        }
+        html.dark .tiers-page [class*="dark:bg-[#242116]"] {
+            background-color: #242116 !important;
+        }
+        html.dark .tiers-page [class*="dark:border-[#52441D]"] {
+            border-color: #52441D !important;
+        }
+        html.dark .tiers-page [class~="bg-paper-surface"] {
+            background-color: #181916 !important;
+        }
+        html.dark .tiers-page [class~="bg-paper"] {
+            background-color: #181916 !important;
+        }
+        html.dark .tiers-page [class~="border-paper-border"] {
+            border-color: #2C2E29 !important;
+        }
+        html.dark .tiers-page [class~="text-ink"],
+        html.dark .tiers-page .text-ink {
+            color: #EDE9DF !important;
+        }
+        html.dark .tiers-page [class~="text-ink-muted"],
+        html.dark .tiers-page .text-ink-muted {
+            color: #9CA3AF !important;
+        }
         html.dark .tiers-page [class~="dark:text-gold"] { color: #B8860B; }
         html.dark .tiers-page [class~="dark:text-night-bg"] { color: #111210; }
         html.dark .tiers-page [class~="dark:text-night-muted"] { color: #96938B; }
@@ -775,132 +875,141 @@ export default function Tiers() {
 
 
                         {/* LEFT SIDEBAR - FIXED/STICKY CONTAINER */}
-                        <aside className="w-full lg:w-80 shrink-0 space-y-5 lg:sticky lg:top-24 lg:self-start">
+                        <aside className="w-full lg:w-80 shrink-0 space-y-4 lg:sticky lg:top-24 lg:self-start">
 
                             {/* 1. Profile Avatar Card */}
-                            <div className="rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-6 shadow-sm flex flex-col items-center text-center relative overflow-hidden group">
+                            <div className="rounded-3xl user-sidebar-card bg-paper-surface dark:bg-night-surface border border-paper-border dark:border-night-border p-6 shadow-sm flex flex-col items-center text-center relative overflow-hidden group">
+                                <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-36 h-36 bg-amber-500/10 rounded-full blur-2xl pointer-events-none"></div>
 
-                                <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-36 h-36 bg-wine/10 dark:bg-gold/10 rounded-full blur-2xl pointer-events-none"></div>
+                                {/* Avatar with Dynamic Tier Frame - Bo sát theo vòng cung tròn */}
+                                <AvatarWithFrame
+                                    avatarSrc={avatarSrc}
+                                    name={customerNameDisplay}
+                                    tier={tierSummary?.currentTier || customer?.membershipTier}
+                                    potatoBalance={potatoBalanceDisplay}
+                                    booksCount={tierSummary?.booksReadCount ?? 0}
+                                    size="lg"
+                                />
 
-                                <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-wine to-wine-light dark:from-gold dark:to-gold-light p-1 shadow-md mb-3.5 relative">
-                                    <div className="w-full h-full rounded-full bg-paper-surface dark:bg-night-surface flex items-center justify-center font-display font-black text-2xl text-wine dark:text-gold overflow-hidden">
-                                        {avatarSrc ? (
-                                            <img src={avatarSrc} alt="Avatar" className="w-full h-full object-cover rounded-full" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/logo.png'; }} />
-                                        ) : (
-                                            <span>{customerNameDisplay.charAt(0).toUpperCase()}</span>
-                                        )}
-                                    </div>
-                                    <span className="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-emerald-500 border-2 border-white dark:border-night-card flex items-center justify-center text-[10px] text-white" title="Trực tuyến">
-                                        <i className="ph-bold ph-check text-[9px]"></i>
-                                    </span>
-                                </div>
-
-                                <h2 className="font-display font-black text-lg text-ink dark:text-night-text leading-tight">
+                                <h2 className="font-display font-black text-2xl text-stone-900 dark:!text-[#EDE9DF] leading-tight">
                                     {customerNameDisplay}
                                 </h2>
-                                <p className="font-metadata-spec text-xs text-ink-muted dark:text-night-muted mt-0.5">
+                                <p className="font-metadata-spec text-xs text-stone-500 dark:!text-[#9CA3AF] mt-1">
                                     {customerIdDisplay}
                                 </p>
 
-                                <div className="mt-3.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25 text-xs font-metadata-spec font-bold" title="Hạng hiện tại">
-                                    <i className="ph-bold ph-plant text-emerald-600 dark:text-emerald-400"></i>
-                                    <span>{getCleanTierName(tierSummary?.currentTier).toUpperCase()}</span>
+                                <div className={`mt-3.5 inline-flex items-center gap-1.5 px-4 py-1 rounded-full text-xs font-metadata-spec font-bold ${getTierBadgeClass(tierSummary?.currentTier || customer?.membershipTier, potatoBalanceDisplay, tierSummary?.booksReadCount ?? 0)}`} title="Hạng hiện tại">
+                                    <i className={`ph-bold ${getTierInfo(tierSummary?.currentTier || customer?.membershipTier, potatoBalanceDisplay, tierSummary?.booksReadCount ?? 0).icon}`}></i>
+                                    <span>{getTierInfo(tierSummary?.currentTier || customer?.membershipTier, potatoBalanceDisplay, tierSummary?.booksReadCount ?? 0).name}</span>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-2 w-full pt-4 mt-4 border-t border-paper-border dark:border-night-border text-center">
-                                    <Link to="/canhan?tab=wallet" className="p-2.5 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-gold transition-colors">
-                                        <span className="block font-metadata-spec text-base font-black text-ink dark:text-night-text">{potatoBalanceDisplay.toLocaleString()}</span>
-                                        <span className="font-metadata-spec text-[10px] text-ink-muted dark:text-night-muted">Khoai Tích Lũy</span>
+                                {/* Divider */}
+                                <div className="w-full h-px bg-paper-border dark:bg-night-border my-5"></div>
+
+                                <div className="grid grid-cols-2 gap-3 w-full text-center">
+                                    <Link to="/canhan?tab=wallet" className="py-4 px-3 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-gold transition-colors flex flex-col justify-center">
+                                        <span className="block font-metadata-spec text-2xl font-black text-stone-900 dark:!text-[#EDE9DF]" style={{ color: isDark ? '#EDE9DF' : undefined }}>{potatoBalanceDisplay.toLocaleString()}</span>
+                                        <span className="font-metadata-spec text-xs text-stone-500 dark:!text-[#9CA3AF] mt-1" style={{ color: isDark ? '#9CA3AF' : undefined }}>Khoai Tích Lũy</span>
                                     </Link>
-                                    <Link to="/tusachcn" className="p-2.5 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-wine dark:hover:border-gold transition-colors">
-                                        <span className="block font-metadata-spec text-base font-black text-ink dark:text-night-text">
+                                    <Link to="/tusachcn" className="py-4 px-3 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-wine dark:hover:border-gold transition-colors flex flex-col justify-center">
+                                        <span className="block font-metadata-spec text-2xl font-black text-stone-900 dark:!text-[#EDE9DF]" style={{ color: isDark ? '#EDE9DF' : undefined }}>
                                             {tierSummary?.booksReadCount ?? 0}
                                         </span>
-                                        <span className="font-metadata-spec text-[10px] text-ink-muted dark:text-night-muted">Sách Trong Tủ</span>
+                                        <span className="font-metadata-spec text-xs text-stone-500 dark:!text-[#9CA3AF] mt-1" style={{ color: isDark ? '#9CA3AF' : undefined }}>Sách Trong Tủ</span>
                                     </Link>
                                 </div>
                             </div>
 
                             {/* 2. Navigation Menu Card - STRICT ORDER */}
-                            <div className="rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-3 shadow-sm space-y-1">
+                            <div className="rounded-3xl user-sidebar-card bg-paper-surface dark:bg-night-surface border border-paper-border dark:border-night-border p-3.5 shadow-sm space-y-1.5">
                                 {/* 1. Thông Tin Cá Nhân */}
                                 <Link
                                     to="/canhan"
-                                    className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface hover:text-ink dark:hover:text-night-text transition-colors"
+                                    className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-stone-300 hover:bg-paper-200 dark:hover:bg-stone-800/40 hover:text-ink dark:hover:text-white transition-colors"
                                 >
-                                    <i className="ph-bold ph-user text-base"></i>
+                                    <i className="ph-bold ph-user text-lg text-stone-400"></i>
                                     <span>Thông Tin Cá Nhân</span>
                                 </Link>
 
                                 {/* 2. Tủ Sách Cá Nhân */}
                                 <Link
                                     to="/tusachcn"
-                                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface hover:text-ink dark:hover:text-night-text transition-colors"
+                                    className="w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-stone-300 hover:bg-paper-200 dark:hover:bg-stone-800/40 hover:text-ink dark:hover:text-white transition-colors"
                                 >
-                                    <div className="flex items-center gap-3">
-                                        <i className="ph-bold ph-book-bookmark text-base"></i>
+                                    <div className="flex items-center gap-3.5">
+                                        <i className="ph-bold ph-book-bookmark text-lg text-stone-400"></i>
                                         <span>Tủ Sách Cá Nhân</span>
                                     </div>
-                                    <span className="potato-badge text-[11px] py-0 px-2">{tierSummary?.booksReadCount ?? 0} cuốn</span>
+                                    <span className="px-3 py-1 rounded-full bg-paper-200 dark:bg-[#242116] border border-paper-border dark:border-[#52441D] text-amber-600 dark:text-[#D8B44A] text-xs font-bold font-metadata-spec">{tierSummary?.booksReadCount ?? 0} cuốn</span>
                                 </Link>
 
-                                {/* 3. Hạng Thành Viên (ACTIVE) */}
+                                {/* 3. Hạng Thành Viên (ACTIVE TRÊN TRANG NÀY) - BỎ PILL ĐỂ TRÁNH CHẬT CHỘI */}
                                 <div
-                                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold bg-wine text-white dark:bg-gold dark:text-night-bg shadow-sm transition-colors cursor-default"
+                                    className="w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-metadata-spec font-black bg-[#C28807] text-[#111210] shadow-md transition-colors cursor-default"
                                 >
-                                    <div className="flex items-center gap-3">
-                                        <i className="ph-bold ph-trophy text-base"></i>
-                                        <span>Hạng Thành Viên</span>
+                                    <div className="flex items-center gap-3.5">
+                                        <i className="ph-bold ph-trophy text-lg text-[#111210]"></i>
+                                        <span className="font-bold text-sm">Hạng Thành Viên</span>
                                     </div>
-                                    <span className="potato-badge text-[11px] py-0.5 px-2 inline-flex items-center gap-1.5 whitespace-nowrap font-bold bg-white/20 text-white dark:bg-black/20 dark:text-night-bg border-white/30">
-                                        <i className="ph-bold ph-shield text-[12px] shrink-0"></i>
-                                        <span>{getCleanTierName(tierSummary?.currentTier)}</span>
-                                    </span>
+                                    <i className="ph-bold ph-caret-right text-xs text-[#111210]"></i>
                                 </div>
 
                                 {/* 3.5. Nhiệm Vụ Hằng Ngày */}
                                 <Link
                                     to="/nhiemvu"
-                                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface hover:text-ink dark:hover:text-night-text transition-colors"
+                                    className="w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-stone-300 hover:bg-paper-200 dark:hover:bg-stone-800/40 hover:text-ink dark:hover:text-white transition-colors"
                                 >
-                                    <div className="flex items-center gap-3">
-                                        <i className="ph-bold ph-target text-base text-amber-500"></i>
+                                    <div className="flex items-center gap-3.5">
+                                        <i className="ph-bold ph-target text-lg text-stone-400"></i>
                                         <span>Nhiệm Vụ Hằng Ngày</span>
                                     </div>
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold">Streak 🔥</span>
+                                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-paper-200 dark:bg-[#242116] border border-paper-border dark:border-[#52441D] text-amber-600 dark:text-[#D8B44A] text-xs font-bold">Streak 🔥</span>
                                 </Link>
 
                                 {/* 4. Ví Khoai Tây */}
                                 <Link
                                     to="/canhan?tab=wallet"
-                                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface hover:text-ink dark:hover:text-night-text transition-colors"
+                                    className="w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-stone-300 hover:bg-paper-200 dark:hover:bg-stone-800/40 hover:text-ink dark:hover:text-white transition-colors"
                                 >
-                                    <div className="flex items-center gap-3">
-                                        <i className="ph-bold ph-wallet text-base"></i>
+                                    <div className="flex items-center gap-3.5">
+                                        <i className="ph-bold ph-wallet text-lg text-stone-400"></i>
                                         <span>Ví Khoai Tây</span>
                                     </div>
-                                    <span className="potato-badge text-[11px] py-0 px-2">{potatoBalanceDisplay.toLocaleString()} 🥔</span>
+                                    <span className="px-3 py-1 rounded-full bg-paper-200 dark:bg-[#242116] border border-paper-border dark:border-[#52441D] text-amber-600 dark:text-[#D8B44A] text-xs font-bold font-metadata-spec">{potatoBalanceDisplay.toLocaleString()} 🥔</span>
                                 </Link>
 
                                 {/* 5. Lịch Sử Giao Dịch */}
                                 <Link
                                     to="/canhan?tab=history"
-                                    className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface hover:text-ink dark:hover:text-night-text transition-colors"
+                                    className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-stone-300 hover:bg-paper-200 dark:hover:bg-stone-800/40 hover:text-ink dark:hover:text-white transition-colors"
                                 >
-                                    <i className="ph-bold ph-clock-counter-clockwise text-base"></i>
+                                    <i className="ph-bold ph-clock-counter-clockwise text-lg text-stone-400"></i>
                                     <span>Lịch Sử Giao Dịch</span>
                                 </Link>
 
-                                <div className="my-1.5 border-t border-paper-border dark:border-night-border"></div>
+                                {/* 6. Khiếu Nại & Hỗ Trợ */}
+                                <Link
+                                    to="/canhan?tab=support"
+                                    className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-stone-300 hover:bg-paper-200 dark:hover:bg-stone-800/40 hover:text-ink dark:hover:text-white transition-colors"
+                                >
+                                    <i className="ph-bold ph-headset text-lg text-stone-400"></i>
+                                    <span>Khiếu Nại & Hỗ Trợ</span>
+                                </Link>
+
+                                <div className="my-2 border-t border-paper-border dark:border-[#2C2E29]"></div>
 
                                 {/* 6. Đăng Xuất */}
-                                <Link
-                                    to="/dangnhap"
-                                    className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors"
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        clearAuthSession();
+                                        window.location.assign('/');
+                                    }}
+                                    className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-metadata-spec font-bold text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
                                 >
-                                    <i className="ph-bold ph-sign-out text-base"></i>
+                                    <i className="ph-bold ph-sign-out text-lg text-rose-500"></i>
                                     <span>Đăng Xuất</span>
-                                </Link>
+                                </button>
                             </div>
 
                         </aside>
@@ -913,7 +1022,7 @@ export default function Tiers() {
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-paper-border dark:border-night-border">
                                 <div>
                                     <div className="flex items-center gap-2 text-xs font-metadata-spec text-ink-muted dark:text-night-muted mb-1">
-                                        <Link to="/trangchu" className="hover:underline">Trang chủ</Link>
+                                        <Link to="/" className="hover:underline">Trang chủ</Link>
                                         <i className="ph-bold ph-caret-right text-[10px]"></i>
                                         <span>Hội viên</span>
                                         <i className="ph-bold ph-caret-right text-[10px]"></i>
@@ -989,9 +1098,9 @@ export default function Tiers() {
                                             </div>
                                             <div className="flex items-baseline gap-3">
                                                 <h3 className="font-display font-black text-2xl sm:text-3xl tracking-tight text-white flex items-center gap-2">
-                                                    {getCleanTierName(tierSummary?.currentTier).toUpperCase()}
+                                                    {getCleanTierName(tierSummary?.currentTier, potatoBalanceDisplay, tierSummary?.booksReadCount).toUpperCase()}
                                                 </h3>
-                                                <span className="font-metadata-spec text-xs font-bold text-slate-400">TIER {tierSummary?.currentTier?.tierId || 'I'}</span>
+                                                <span className="font-metadata-spec text-xs font-bold text-slate-400">TIER {userTierLevel}</span>
                                             </div>
                                         </div>
 
@@ -999,7 +1108,7 @@ export default function Tiers() {
                                         <div className="flex items-end justify-between relative z-10 pt-3 border-t border-white/15">
                                             <div>
                                                 <span className="font-metadata-spec text-[9px] uppercase tracking-wider text-slate-400 block font-semibold">Chủ thẻ thành viên</span>
-                                                <span className="font-display font-black text-sm tracking-wide text-white uppercase">{tierSummary?.customerName || 'Độc Giả HALM'}</span>
+                                                <span className="font-display font-black text-sm tracking-wide text-white uppercase">{tierSummary?.customerName || customerNameDisplay}</span>
                                             </div>
                                             <div className="text-right">
                                                 <span className="font-metadata-spec text-[9px] uppercase tracking-wider text-slate-400 block font-semibold">Mã thành viên</span>
@@ -1017,7 +1126,7 @@ export default function Tiers() {
                                             <div>
                                                 <span className="font-metadata-spec text-xs font-bold uppercase tracking-wider text-ink-muted dark:text-night-muted">Hành trình thăng hạng</span>
                                                 <h3 className="font-display font-black text-xl text-ink dark:text-night-text mt-0.5 flex items-center gap-2">
-                                                    Mục tiêu kế tiếp: <span className="text-wine dark:text-gold">{tierSummary?.isMaxTier ? 'Cấp Bậc Tối Thượng' : getCleanTierName(tierSummary?.nextTier)}</span>
+                                                    Mục tiêu kế tiếp: <span className="text-wine dark:text-gold">{userTierLevel >= 4 ? 'Cấp Bậc Tối Thượng' : getCleanTierName(tierSummary?.nextTier || (userTierLevel === 3 ? 'Đại Điền Chủ' : (userTierLevel === 2 ? 'Lão Nông' : 'Cao Thủ Cày')))}</span>
                                                 </h3>
                                             </div>
                                             <span className="potato-badge text-xs font-bold">
@@ -1042,11 +1151,11 @@ export default function Tiers() {
                                             </div>
 
                                             <div className="flex items-center justify-between text-[11px] font-metadata-spec text-ink-muted dark:text-night-muted pt-1">
-                                                <span>{getCleanTierName(tierSummary?.currentTier)}</span>
+                                                <span>{getCleanTierName(tierSummary?.currentTier, potatoBalanceDisplay, tierSummary?.booksReadCount)}</span>
                                                 <span className="font-bold text-wine dark:text-gold">
-                                                    {tierSummary?.isMaxTier ? 'Đạt đỉnh cao danh dự!' : `Chỉ còn ${tierSummary?.booksRemainingForNext ?? 0} cuốn sách (hoặc ${tierSummary?.pointsRemainingForNext ?? 0} XP)`}
+                                                    {userTierLevel >= 4 ? 'Đạt đỉnh cao danh dự!' : `Chỉ còn ${tierSummary?.booksRemainingForNext ?? 0} cuốn sách (hoặc ${tierSummary?.pointsRemainingForNext ?? 0} XP)`}
                                                 </span>
-                                                <span>{tierSummary?.isMaxTier ? 'Đại Điền Chủ' : getCleanTierName(tierSummary?.nextTier)}</span>
+                                                <span>{userTierLevel >= 4 ? 'Đại Điền Chủ 👑' : getCleanTierName(tierSummary?.nextTier || (userTierLevel === 3 ? 'Đại Điền Chủ' : (userTierLevel === 2 ? 'Lão Nông' : 'Cao Thủ Cày')))}</span>
                                             </div>
                                         </div>
                                     </div>
@@ -1103,205 +1212,335 @@ export default function Tiers() {
                                 </div>
 
                                 {!isTiersCollapsed ? (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 transition-all">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 pt-5 transition-all">
 
+                                        {/* ========================================================
+                                            CẤP I • THỢ CÀY (MẦM ĐỌC)
+                                            ======================================================== */}
+                                        <div className={`rounded-2xl bg-paper-surface dark:bg-[#181916] ${
+                                            userTierLevel === 1
+                                                ? 'border-2 border-[#C28807] dark:border-[#D4AF37] shadow-[0_0_20px_rgba(212,175,55,0.25)] ring-2 ring-amber-400/30'
+                                                : 'border border-paper-border dark:border-[#2C2E29] shadow-sm'
+                                        } hover:border-[#C28807] dark:hover:border-[#D4AF37] hover:shadow-lg p-6 flex flex-col justify-between relative group transition-all duration-300`}>
 
-                                    <div className="rounded-2xl bg-paper-surface dark:bg-night-card border-2 border-emerald-500/50 shadow-md p-6 flex flex-col justify-between relative group hover:shadow-xl transition-all">
-
-                                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-metadata-spec font-black uppercase tracking-wider shadow whitespace-nowrap">
-                                            Hạng Hiện Tại
-                                        </div>
-
-                                        <div>
-
-                                            <div className="flex items-center justify-between mb-4 mt-1">
-                                                <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-2xl border border-emerald-500/20">
-                                                    🌱
+                                            {/* Badge định danh */}
+                                            {userTierLevel === 1 ? (
+                                                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-20 px-3.5 py-1 rounded-full bg-[#C28807] text-[#111210] text-[11px] font-metadata-spec font-black uppercase tracking-wider shadow-md border border-amber-300/40 whitespace-nowrap flex items-center gap-1.5">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-[#111210] animate-pulse"></span>
+                                                    <span>Hạng Hiện Tại 📍</span>
                                                 </div>
-                                                <span className="font-metadata-spec text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full">
-                                                    Cấp I • Mầm Đọc
-                                                </span>
+                                            ) : (
+                                                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-20 px-3 py-0.5 rounded-full bg-emerald-500/10 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 text-[10px] font-metadata-spec font-bold uppercase tracking-wider shadow-sm whitespace-nowrap flex items-center gap-1">
+                                                    <i className="ph-bold ph-check text-xs"></i>
+                                                    <span>Đã Mở Khóa</span>
+                                                </div>
+                                            )}
+
+                                            <div>
+                                                <div className="flex items-center justify-between mb-4 mt-1">
+                                                    <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-2xl border border-emerald-500/20 shadow-inner">
+                                                        🌱
+                                                    </div>
+                                                    <span className="font-metadata-spec text-xs font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+                                                        Cấp I • Mầm Đọc
+                                                    </span>
+                                                </div>
+
+                                                <h3 className="font-display font-black text-xl text-stone-900 dark:text-[#EDE9DF]">Thợ Cày</h3>
+                                                <p className="font-metadata-spec text-xs font-bold text-stone-500 dark:text-[#9CA3AF] mt-0.5">
+                                                    Yêu cầu: <span className="text-emerald-600 dark:text-emerald-400 font-black">Tạo tài khoản mới</span>
+                                                </p>
+
+                                                <div className="my-4 pt-3 border-t border-paper-border dark:border-[#2C2E29] space-y-2.5 text-xs font-editorial-body text-stone-700 dark:text-[#C5C2BA]">
+                                                    <div className="flex items-start gap-2">
+                                                        <i className="ph-bold ph-check text-emerald-600 dark:text-emerald-400 text-sm shrink-0 mt-0.5"></i>
+                                                        <span>Mượn và đọc toàn bộ kho sách mở tiêu chuẩn không giới hạn</span>
+                                                    </div>
+                                                    <div className="flex items-start gap-2">
+                                                        <i className="ph-bold ph-check text-emerald-600 dark:text-emerald-400 text-sm shrink-0 mt-0.5"></i>
+                                                        <span>Mở khóa <strong>Ví Khoai Tây</strong> tích lũy điểm thưởng & nhận thưởng đọc sách</span>
+                                                    </div>
+                                                    <div className="flex items-start gap-2">
+                                                        <i className="ph-bold ph-check text-emerald-600 dark:text-emerald-400 text-sm shrink-0 mt-0.5"></i>
+                                                        <span>Tặng <strong>3 lượt tải lên (Upload)</strong> tài liệu cá nhân miễn phí khởi điểm</span>
+                                                    </div>
+                                                    <div className="flex items-start gap-2">
+                                                        <i className="ph-bold ph-check text-emerald-600 dark:text-emerald-400 text-sm shrink-0 mt-0.5"></i>
+                                                        <span>Cam kết <strong>Bảo lưu vĩnh viễn</strong> cấp bậc, không lo bị giáng hạng</span>
+                                                    </div>
+                                                    <div className="flex items-start gap-2">
+                                                        <i className="ph-bold ph-check text-emerald-600 dark:text-emerald-400 text-sm shrink-0 mt-0.5"></i>
+                                                        <span>Tham gia cộng đồng đánh giá & nhận xét sách cùng độc giả HALM</span>
+                                                    </div>
+                                                </div>
                                             </div>
 
-                                            <h3 className="font-display font-black text-xl text-ink dark:text-night-text">Thợ Cày</h3>
-                                            <p className="font-metadata-spec text-xs font-bold text-ink-muted dark:text-night-muted mt-0.5">
-                                                Yêu cầu: <span className="text-ink dark:text-night-text font-black">Tạo tài khoản mới</span>
-                                            </p>
-
-                                            <div className="my-4 pt-3 border-t border-paper-border dark:border-night-border space-y-2.5 text-xs font-editorial-body text-ink/80 dark:text-night-muted">
-                                                <div className="flex items-start gap-2">
-                                                    <i className="ph-bold ph-check text-emerald-600 dark:text-emerald-400 text-sm shrink-0 mt-0.5"></i>
-                                                    <span>Thuê và đọc toàn bộ kho sách mở tiêu chuẩn</span>
-                                                </div>
-                                                <div className="flex items-start gap-2">
-                                                    <i className="ph-bold ph-check text-emerald-600 dark:text-emerald-400 text-sm shrink-0 mt-0.5"></i>
-                                                    <span>Mở khóa Ví Khoai Tây tích lũy điểm thưởng</span>
-                                                </div>
-                                                <div className="flex items-start gap-2">
-                                                    <i className="ph-bold ph-check text-emerald-600 dark:text-emerald-400 text-sm shrink-0 mt-0.5"></i>
-                                                    <span>Có thể khám phá và trải nghiệm toàn bộ hệ sinh thái của HALM BOOK</span>
-                                                </div>
-                                                <div className="flex items-start gap-2">
-                                                    <i className="ph-bold ph-check text-emerald-600 dark:text-emerald-400 text-sm shrink-0 mt-0.5"></i>
-                                                    <span>3 lượt Upload file free cho người mới</span>
-                                                </div>
-                                            </div>
+                                            {userTierLevel === 1 ? (
+                                                <button type="button" disabled className="w-full mt-4 py-2.5 px-4 rounded-xl bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-xs font-metadata-spec font-black cursor-default flex items-center justify-center gap-1.5 shadow-sm">
+                                                    <i className="ph-bold ph-check-circle text-sm"></i>
+                                                    <span>Đang Sử Dụng</span>
+                                                </button>
+                                            ) : (
+                                                <button type="button" disabled className="w-full mt-4 py-2.5 px-4 rounded-xl bg-paper-200/50 dark:bg-[#1E201B] text-stone-600 dark:text-stone-400 border border-paper-border dark:border-[#2C2E29] text-xs font-metadata-spec font-semibold cursor-default flex items-center justify-center gap-1.5">
+                                                    <i className="ph-bold ph-check"></i>
+                                                    <span>Đã Đạt Chuẩn</span>
+                                                </button>
+                                            )}
                                         </div>
 
-                                        <button type="button" disabled className="w-full mt-4 py-2.5 px-4 rounded-xl bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 text-xs font-metadata-spec font-bold cursor-default flex items-center justify-center gap-1.5">
-                                            <i className="ph-bold ph-check-circle"></i>
-                                            <span>Đang Sử Dụng</span>
-                                        </button>
+
+                                        {/* ========================================================
+                                            CẤP II • CAO THỦ CÀY (TRI THỨC)
+                                            ======================================================== */}
+                                        <div className={`rounded-2xl bg-paper-surface dark:bg-[#181916] ${
+                                            userTierLevel === 2
+                                                ? 'border-2 border-[#C28807] dark:border-[#D4AF37] shadow-[0_0_20px_rgba(212,175,55,0.25)] ring-2 ring-amber-400/30'
+                                                : userTierLevel > 2
+                                                ? 'border border-paper-border dark:border-[#2C2E29] shadow-sm'
+                                                : 'border-2 border-stone-400/40 dark:border-stone-600/50 shadow-sm'
+                                        } hover:border-[#C28807] dark:hover:border-[#D4AF37] hover:shadow-lg p-6 flex flex-col justify-between relative group transition-all duration-300`}>
+
+                                            {/* Badge định danh */}
+                                            {userTierLevel === 2 ? (
+                                                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-20 px-3.5 py-1 rounded-full bg-[#C28807] text-[#111210] text-[11px] font-metadata-spec font-black uppercase tracking-wider shadow-md border border-amber-300/40 whitespace-nowrap flex items-center gap-1.5">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-[#111210] animate-pulse"></span>
+                                                    <span>Hạng Hiện Tại 📍</span>
+                                                </div>
+                                            ) : userTierLevel > 2 ? (
+                                                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-20 px-3 py-0.5 rounded-full bg-emerald-500/10 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 text-[10px] font-metadata-spec font-bold uppercase tracking-wider shadow-sm whitespace-nowrap flex items-center gap-1">
+                                                    <i className="ph-bold ph-check text-xs"></i>
+                                                    <span>Đã Mở Khóa</span>
+                                                </div>
+                                            ) : (
+                                                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-20 px-3.5 py-1 rounded-full bg-stone-900 dark:bg-[#20221E] text-amber-500 dark:text-[#E5B842] text-[10px] font-metadata-spec font-black uppercase tracking-wider shadow-md border border-amber-400/30 whitespace-nowrap flex items-center gap-1">
+                                                    <span>🎯 Mục Tiêu Tiếp Theo</span>
+                                                </div>
+                                            )}
+
+                                            <div>
+                                                <div className="flex items-center justify-between mb-4 mt-1">
+                                                    <div className="w-12 h-12 rounded-2xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center text-2xl border border-blue-400/20 shadow-inner">
+                                                        🚜
+                                                    </div>
+                                                    <span className="font-metadata-spec text-xs font-bold text-blue-700 dark:text-blue-400 bg-blue-500/10 px-2.5 py-1 rounded-full border border-blue-500/20">
+                                                        Cấp II • Tri Thức
+                                                    </span>
+                                                </div>
+
+                                                <h3 className="font-display font-black text-xl text-stone-900 dark:text-[#EDE9DF]">Cao Thủ Cày</h3>
+                                                <p className="font-metadata-spec text-xs font-bold text-stone-500 dark:text-[#9CA3AF] mt-0.5">
+                                                    Yêu cầu: <span className="text-blue-600 dark:text-blue-400 font-black">Đọc 10 Cuốn</span> (hoặc 500 Khoai)
+                                                </p>
+
+                                                <div className="my-4 pt-3 border-t border-paper-border dark:border-[#2C2E29] space-y-2.5 text-xs font-editorial-body text-stone-700 dark:text-[#C5C2BA]">
+                                                    <div className="flex items-start gap-2">
+                                                        <i className="ph-bold ph-check text-blue-600 dark:text-blue-400 text-sm shrink-0 mt-0.5"></i>
+                                                        <span><strong className="text-stone-900 dark:text-[#EDE9DF] font-bold">Giảm trực tiếp 5%</strong> toàn bộ hóa đơn thuê & mua sách</span>
+                                                    </div>
+                                                    <div className="flex items-start gap-2">
+                                                        <i className="ph-bold ph-check text-blue-600 dark:text-blue-400 text-sm shrink-0 mt-0.5"></i>
+                                                        <span><strong>Huy hiệu Cao Thủ Bạc</strong> danh dự hiển thị cạnh tên tài khoản</span>
+                                                    </div>
+                                                    <div className="flex items-start gap-2">
+                                                        <i className="ph-bold ph-check text-blue-600 dark:text-blue-400 text-sm shrink-0 mt-0.5"></i>
+                                                        <span><strong>Đọc trước tác phẩm mới</strong> xuất bản sớm hơn cộng đồng 3 ngày</span>
+                                                    </div>
+                                                    <div className="flex items-start gap-2">
+                                                        <i className="ph-bold ph-check text-blue-600 dark:text-blue-400 text-sm shrink-0 mt-0.5"></i>
+                                                        <span>Hàng đợi hỗ trợ CSKH ưu tiên giải quyết khiếu nại trong 2 giờ</span>
+                                                    </div>
+                                                    <div className="flex items-start gap-2">
+                                                        <i className="ph-bold ph-check text-blue-600 dark:text-blue-400 text-sm shrink-0 mt-0.5"></i>
+                                                        <span>Tăng giới hạn <strong>10 lượt Upload tài liệu</strong> cá nhân mỗi tháng</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {userTierLevel === 2 ? (
+                                                <button type="button" disabled className="w-full mt-4 py-2.5 px-4 rounded-xl bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-xs font-metadata-spec font-black cursor-default flex items-center justify-center gap-1.5 shadow-sm">
+                                                    <i className="ph-bold ph-check-circle text-sm"></i>
+                                                    <span>Đang Sử Dụng</span>
+                                                </button>
+                                            ) : userTierLevel > 2 ? (
+                                                <button type="button" disabled className="w-full mt-4 py-2.5 px-4 rounded-xl bg-paper-200/50 dark:bg-[#1E201B] text-stone-600 dark:text-stone-400 border border-paper-border dark:border-[#2C2E29] text-xs font-metadata-spec font-semibold cursor-default flex items-center justify-center gap-1.5">
+                                                    <i className="ph-bold ph-check"></i>
+                                                    <span>Đã Đạt Chuẩn</span>
+                                                </button>
+                                            ) : (
+                                                <button type="button" onClick={() => openTierModal("tier2")} className="w-full mt-4 py-2.5 px-4 rounded-xl bg-paper-200 dark:bg-[#20221E] hover:bg-stone-900 hover:text-white dark:hover:bg-[#C28807] dark:hover:text-[#111210] text-stone-800 dark:text-[#EDE9DF] border border-paper-border dark:border-[#2C2E29] text-xs font-metadata-spec font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95">
+                                                    <span>Xem Lộ Trình Thăng Cấp</span>
+                                                    <i className="ph-bold ph-arrow-right"></i>
+                                                </button>
+                                            )}
+                                        </div>
+
+
+                                        {/* ========================================================
+                                            CẤP III • LÃO NÔNG (TINH HOA)
+                                            ======================================================== */}
+                                        <div className={`rounded-2xl bg-paper-surface dark:bg-[#181916] ${
+                                            userTierLevel === 3
+                                                ? 'border-2 border-[#C28807] dark:border-[#D4AF37] shadow-[0_0_20px_rgba(212,175,55,0.25)] ring-2 ring-amber-400/30'
+                                                : userTierLevel > 3
+                                                ? 'border border-paper-border dark:border-[#2C2E29] shadow-sm'
+                                                : userTierLevel === 2
+                                                ? 'border-2 border-stone-400/40 dark:border-stone-600/50 shadow-sm'
+                                                : 'border border-paper-border dark:border-[#2C2E29] shadow-sm'
+                                        } hover:border-[#C28807] dark:hover:border-[#D4AF37] hover:shadow-lg p-6 flex flex-col justify-between relative group transition-all duration-300`}>
+
+                                            {/* Badge định danh */}
+                                            {userTierLevel === 3 ? (
+                                                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-20 px-3.5 py-1 rounded-full bg-[#C28807] text-[#111210] text-[11px] font-metadata-spec font-black uppercase tracking-wider shadow-md border border-amber-300/40 whitespace-nowrap flex items-center gap-1.5">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-[#111210] animate-pulse"></span>
+                                                    <span>Hạng Hiện Tại 📍</span>
+                                                </div>
+                                            ) : userTierLevel > 3 ? (
+                                                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-20 px-3 py-0.5 rounded-full bg-emerald-500/10 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 text-[10px] font-metadata-spec font-bold uppercase tracking-wider shadow-sm whitespace-nowrap flex items-center gap-1">
+                                                    <i className="ph-bold ph-check text-xs"></i>
+                                                    <span>Đã Mở Khóa</span>
+                                                </div>
+                                            ) : userTierLevel === 2 ? (
+                                                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-20 px-3.5 py-1 rounded-full bg-stone-900 dark:bg-[#20221E] text-amber-500 dark:text-[#E5B842] text-[10px] font-metadata-spec font-black uppercase tracking-wider shadow-md border border-amber-400/30 whitespace-nowrap flex items-center gap-1">
+                                                    <span>🎯 Mục Tiêu Tiếp Theo</span>
+                                                </div>
+                                            ) : (
+                                                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-20 px-3.5 py-1 rounded-full bg-amber-500/10 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border border-amber-500/25 text-[10px] font-metadata-spec font-bold uppercase tracking-wider shadow-xs whitespace-nowrap flex items-center gap-1">
+                                                    <span>Phổ Biến Nhất ★</span>
+                                                </div>
+                                            )}
+
+                                            <div>
+                                                <div className="flex items-center justify-between mb-4 mt-1">
+                                                    <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center text-2xl border border-amber-500/20 shadow-inner">
+                                                        🌾
+                                                    </div>
+                                                    <span className="font-metadata-spec text-xs font-bold text-amber-700 dark:text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
+                                                        Cấp III • Tinh Hoa
+                                                    </span>
+                                                </div>
+
+                                                <h3 className="font-display font-black text-xl text-stone-900 dark:text-[#EDE9DF]">Lão Nông</h3>
+                                                <p className="font-metadata-spec text-xs font-bold text-stone-500 dark:text-[#9CA3AF] mt-0.5">
+                                                    Yêu cầu: <span className="text-amber-600 dark:text-amber-400 font-black">Đọc 50 Cuốn</span> (hoặc 2.500 Khoai)
+                                                </p>
+
+                                                <div className="my-4 pt-3 border-t border-paper-border dark:border-[#2C2E29] space-y-2.5 text-xs font-editorial-body text-stone-700 dark:text-[#C5C2BA]">
+                                                    <div className="flex items-start gap-2">
+                                                        <i className="ph-bold ph-check text-amber-600 dark:text-amber-400 text-sm shrink-0 mt-0.5"></i>
+                                                        <span><strong className="text-stone-900 dark:text-[#EDE9DF] font-bold">Giảm 10%</strong> toàn bộ chi phí thuê sách & dịch vụ đọc trọn đời</span>
+                                                    </div>
+                                                    <div className="flex items-start gap-2">
+                                                        <i className="ph-bold ph-check text-amber-600 dark:text-amber-400 text-sm shrink-0 mt-0.5"></i>
+                                                        <span><strong className="text-amber-600 dark:text-amber-400 font-bold">Miễn phí 1 cuốn sách mỗi tháng</strong> (trong 5 sách ban tuyển chọn chỉ định)</span>
+                                                    </div>
+                                                    <div className="flex items-start gap-2">
+                                                        <i className="ph-bold ph-check text-amber-600 dark:text-amber-400 text-sm shrink-0 mt-0.5"></i>
+                                                        <span><strong>Khung Avatar Tinh Hoa</strong> ánh kim hào quang rực rỡ độc quyền</span>
+                                                    </div>
+                                                    <div className="flex items-start gap-2">
+                                                        <i className="ph-bold ph-check text-amber-600 dark:text-amber-400 text-sm shrink-0 mt-0.5"></i>
+                                                        <span><strong>Đọc trước các tác phẩm mới</strong> xuất bản sớm hơn cộng đồng 7 ngày</span>
+                                                    </div>
+                                                    <div className="flex items-start gap-2">
+                                                        <i className="ph-bold ph-check text-amber-600 dark:text-amber-400 text-sm shrink-0 mt-0.5"></i>
+                                                        <span>Hotline & Email hỗ trợ độc giả VIP phản hồi nhanh trong 30 phút</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {userTierLevel === 3 ? (
+                                                <button type="button" disabled className="w-full mt-4 py-2.5 px-4 rounded-xl bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-xs font-metadata-spec font-black cursor-default flex items-center justify-center gap-1.5 shadow-sm">
+                                                    <i className="ph-bold ph-check-circle text-sm"></i>
+                                                    <span>Đang Sử Dụng</span>
+                                                </button>
+                                            ) : userTierLevel > 3 ? (
+                                                <button type="button" disabled className="w-full mt-4 py-2.5 px-4 rounded-xl bg-paper-200/50 dark:bg-[#1E201B] text-stone-600 dark:text-stone-400 border border-paper-border dark:border-[#2C2E29] text-xs font-metadata-spec font-semibold cursor-default flex items-center justify-center gap-1.5">
+                                                    <i className="ph-bold ph-check"></i>
+                                                    <span>Đã Đạt Chuẩn</span>
+                                                </button>
+                                            ) : (
+                                                <button type="button" onClick={() => openTierModal("tier3")} className="w-full mt-4 py-2.5 px-4 rounded-xl bg-paper-200 dark:bg-[#20221E] hover:bg-stone-900 hover:text-white dark:hover:bg-[#C28807] dark:hover:text-[#111210] text-stone-800 dark:text-[#EDE9DF] border border-paper-border dark:border-[#2C2E29] text-xs font-metadata-spec font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95">
+                                                    <span>Xem Lộ Trình Thăng Cấp</span>
+                                                    <i className="ph-bold ph-arrow-right"></i>
+                                                </button>
+                                            )}
+                                        </div>
+
+
+                                        {/* ========================================================
+                                            CẤP IV • ĐẠI ĐIỀN CHỦ (TỐI THƯỢNG) - KHUNG VIP HOÀNG GIA
+                                            ======================================================== */}
+                                        <div className={`rounded-2xl bg-paper-surface dark:bg-gradient-to-b dark:from-[#1E1C16] dark:to-[#181916] ${
+                                            userTierLevel === 4
+                                                ? 'border-2 border-[#C28807] dark:border-[#F59E0B] shadow-[0_0_25px_rgba(245,158,11,0.3)] ring-2 ring-amber-400/40'
+                                                : 'border border-amber-500/35 dark:border-amber-400/30 shadow-md'
+                                        } hover:border-[#F59E0B] hover:shadow-xl p-6 flex flex-col justify-between relative group transition-all duration-300`}>
+
+                                            {/* Badge Hoàng Gia VIP */}
+                                            {userTierLevel === 4 ? (
+                                                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-20 px-3.5 py-1 rounded-full bg-[#C28807] text-[#111210] text-[11px] font-metadata-spec font-black uppercase tracking-wider shadow-md border border-amber-300/40 whitespace-nowrap flex items-center gap-1.5">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-[#111210] animate-pulse"></span>
+                                                    <span>Hạng Hiện Tại 👑</span>
+                                                </div>
+                                            ) : userTierLevel === 3 ? (
+                                                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-20 px-3.5 py-1 rounded-full bg-stone-900 dark:bg-[#20221E] text-amber-500 dark:text-[#E5B842] text-[10px] font-metadata-spec font-black uppercase tracking-wider shadow-md border border-amber-400/30 whitespace-nowrap flex items-center gap-1">
+                                                    <span>🎯 Mục Tiêu Tối Thượng</span>
+                                                </div>
+                                            ) : (
+                                                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-20 px-3.5 py-1 rounded-full bg-amber-500/15 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-400/35 text-[10px] font-metadata-spec font-black uppercase tracking-wider shadow-sm whitespace-nowrap flex items-center gap-1">
+                                                    <span>Hoàng Gia VIP 👑</span>
+                                                </div>
+                                            )}
+
+                                            <div>
+                                                <div className="flex items-center justify-between mb-4 mt-1">
+                                                    <div className="w-12 h-12 rounded-2xl bg-amber-400/15 text-amber-500 dark:text-amber-400 flex items-center justify-center text-2xl border border-amber-400/30 shadow-inner">
+                                                        🏰
+                                                    </div>
+                                                    <span className="font-metadata-spec text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-400/10 px-2.5 py-1 rounded-full whitespace-nowrap border border-amber-400/25">
+                                                        Cấp IV • Tối Thượng
+                                                    </span>
+                                                </div>
+
+                                                <h3 className="font-display font-black text-xl text-stone-900 dark:text-[#EDE9DF]">Đại Điền Chủ</h3>
+                                                <p className="font-metadata-spec text-xs font-bold text-stone-500 dark:text-[#9CA3AF] mt-0.5">
+                                                    Yêu cầu: <span className="text-amber-600 dark:text-amber-400 font-black">Đọc 150 Cuốn</span> (hoặc 10.000 Khoai)
+                                                </p>
+
+                                                <div className="my-4 pt-3 border-t border-paper-border dark:border-[#2C2E29] space-y-2.5 text-xs font-editorial-body text-stone-700 dark:text-[#C5C2BA]">
+                                                    <div className="flex items-start gap-2">
+                                                        <i className="ph-bold ph-crown text-amber-500 dark:text-amber-400 text-sm shrink-0 mt-0.5"></i>
+                                                        <span><strong className="text-stone-900 dark:text-[#EDE9DF] font-bold">Giảm 20%</strong> toàn bộ dịch vụ và thuê sách trọn đời</span>
+                                                    </div>
+                                                    <div className="flex items-start gap-2">
+                                                        <i className="ph-bold ph-crown text-amber-500 dark:text-amber-400 text-sm shrink-0 mt-0.5"></i>
+                                                        <span><strong className="text-stone-900 dark:text-[#EDE9DF] font-bold">Thuê KHÔNG GIỚI HẠN</strong> toàn bộ kho sách VIP không cần tiền cọc</span>
+                                                    </div>
+                                                    <div className="flex items-start gap-2">
+                                                        <i className="ph-bold ph-crown text-amber-500 dark:text-amber-400 text-sm shrink-0 mt-0.5"></i>
+                                                        <span>Tặng <strong>hộp ấn phẩm sách bìa cứng mạ vàng</strong> độc quyền gửi tận nhà hàng năm</span>
+                                                    </div>
+                                                    <div className="flex items-start gap-2">
+                                                        <i className="ph-bold ph-crown text-amber-500 dark:text-amber-400 text-sm shrink-0 mt-0.5"></i>
+                                                        <span>Chuyên viên chăm sóc khách hàng VIP riêng biệt <strong>(1-on-1 VIP Concierge)</strong></span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {userTierLevel === 4 ? (
+                                                <button type="button" disabled className="w-full mt-4 py-2.5 px-4 rounded-xl bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-xs font-metadata-spec font-black cursor-default flex items-center justify-center gap-1.5 shadow-sm">
+                                                    <i className="ph-bold ph-check-circle text-sm"></i>
+                                                    <span>Đang Sử Dụng</span>
+                                                </button>
+                                            ) : (
+                                                <button type="button" onClick={() => openTierModal("tier4")} className="w-full mt-4 py-2.5 px-4 rounded-xl bg-amber-500/10 hover:bg-[#C28807] hover:text-[#111210] dark:bg-amber-400/10 dark:hover:bg-[#C28807] text-amber-700 dark:text-amber-300 border border-amber-400/30 text-xs font-metadata-spec font-black transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95">
+                                                    <span>Xem Chi Tiết Đặc Quyền</span>
+                                                    <i className="ph-bold ph-arrow-right"></i>
+                                                </button>
+                                            )}
+                                        </div>
+
                                     </div>
-
-
-                                    <div className="rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border hover:border-slate-400 dark:hover:border-slate-500 shadow-sm hover:shadow-xl p-6 flex flex-col justify-between relative group transition-all">
-
-                                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-slate-700 text-white text-[10px] font-metadata-spec font-black uppercase tracking-wider shadow whitespace-nowrap">
-                                            Mục Tiêu Tiếp Theo
-                                        </div>
-
-                                        <div>
-
-                                            <div className="flex items-center justify-between mb-4 mt-1">
-                                                <div className="w-12 h-12 rounded-2xl bg-slate-500/10 text-slate-700 dark:text-slate-300 flex items-center justify-center text-2xl border border-slate-400/30">
-                                                    🚜
-                                                </div>
-                                                <span className="font-metadata-spec text-xs font-bold text-slate-700 dark:text-slate-300 bg-slate-500/10 px-2.5 py-1 rounded-full">
-                                                    Cấp II • Tri Thức
-                                                </span>
-                                            </div>
-
-                                            <h3 className="font-display font-black text-xl text-ink dark:text-night-text">Cao Thủ Cày</h3>
-                                            <p className="font-metadata-spec text-xs font-bold text-ink-muted dark:text-night-muted mt-0.5">
-                                                Yêu cầu: <span className="text-wine dark:text-gold font-black">Đọc 10 Cuốn</span> (hoặc 500 Khoai)
-                                            </p>
-
-                                            <div className="my-4 pt-3 border-t border-paper-border dark:border-night-border space-y-2.5 text-xs font-editorial-body text-ink/80 dark:text-night-muted">
-                                                <div className="flex items-start gap-2">
-                                                    <i className="ph-bold ph-check text-slate-600 dark:text-slate-300 text-sm shrink-0 mt-0.5"></i>
-                                                    <span><strong className="text-ink dark:text-night-text font-bold">Giảm 5%</strong> phí thuê & mua mọi đầu sách</span>
-                                                </div>
-                                                <div className="flex items-start gap-2">
-                                                    <i className="ph-bold ph-check text-slate-600 dark:text-slate-300 text-sm shrink-0 mt-0.5"></i>
-                                                    <span>Huy hiệu Cao Thủ Bạc danh dự bên cạnh tên</span>
-                                                </div>
-                                                <div className="flex items-start gap-2">
-                                                    <i className="ph-bold ph-check text-slate-600 dark:text-slate-300 text-sm shrink-0 mt-0.5"></i>
-                                                    <span>Đọc trước các tác phẩm mới xuất bản trước 3 ngày</span>
-                                                </div>
-                                                <div className="flex items-start gap-2">
-                                                    <i className="ph-bold ph-check text-slate-600 dark:text-slate-300 text-sm shrink-0 mt-0.5"></i>
-                                                    <span>Ưu tiên hàng đợi hỗ trợ CSKH trong vòng 2 giờ</span>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <button type="button" onClick={() => openTierModal("tier2")} className="w-full mt-4 py-2.5 px-4 rounded-xl bg-paper-200 dark:bg-night-surface hover:bg-slate-800 hover:text-white dark:hover:bg-slate-700 text-ink dark:text-night-text border border-paper-border dark:border-night-border text-xs font-metadata-spec font-bold transition-colors flex items-center justify-center gap-1.5">
-                                            <span>Xem Lộ Trình Thăng Cấp</span>
-                                            <i className="ph-bold ph-arrow-right"></i>
-                                        </button>
-                                    </div>
-
-
-                                    <div className="rounded-2xl bg-paper-surface dark:bg-night-card border-2 border-gold/40 shadow-sm hover:shadow-xl p-6 flex flex-col justify-between relative group transition-all">
-
-                                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-gold text-white dark:text-night-bg text-[10px] font-metadata-spec font-black uppercase tracking-wider shadow whitespace-nowrap">
-                                            Phổ Biến Nhất ★
-                                        </div>
-
-                                        <div>
-
-                                            <div className="flex items-center justify-between mb-4 mt-1">
-                                                <div className="w-12 h-12 rounded-2xl bg-gold/15 text-gold flex items-center justify-center text-2xl border border-gold/30">
-                                                    🌾
-                                                </div>
-                                                <span className="font-metadata-spec text-xs font-bold text-gold bg-gold/10 px-2.5 py-1 rounded-full">
-                                                    Cấp III • Tinh Hoa
-                                                </span>
-                                            </div>
-
-                                            <h3 className="font-display font-black text-xl text-ink dark:text-night-text">Lão Nông</h3>
-                                            <p className="font-metadata-spec text-xs font-bold text-ink-muted dark:text-night-muted mt-0.5">
-                                                Yêu cầu: <span className="text-wine dark:text-gold font-black">Đọc 50 Cuốn</span> (hoặc 2.500 Khoai)
-                                            </p>
-
-                                            <div className="my-4 pt-3 border-t border-paper-border dark:border-night-border space-y-2.5 text-xs font-editorial-body text-ink/80 dark:text-night-muted">
-                                                <div className="flex items-start gap-2">
-                                                    <i className="ph-bold ph-check text-gold text-sm shrink-0 mt-0.5"></i>
-                                                    <span><strong className="text-ink dark:text-night-text font-bold">Giảm 10%</strong> toàn bộ chi phí thuê sách</span>
-                                                </div>
-                                                <div className="flex items-start gap-2">
-                                                    <i className="ph-bold ph-check text-gold text-sm shrink-0 mt-0.5"></i>
-                                                    <span><strong className="text-gold font-bold">Miễn phí 1 cuốn sách mỗi tháng</strong> (1 trong 5 sách do web cho phép)</span>
-                                                </div>
-                                                <div className="flex items-start gap-2">
-                                                    <i className="ph-bold ph-check text-gold text-sm shrink-0 mt-0.5"></i>
-                                                    <span>Khung Avatar Tinh Hoa hào quang vàng kim</span>
-                                                </div>
-                                                <div className="flex items-start gap-2">
-                                                    <i className="ph-bold ph-check text-gold text-sm shrink-0 mt-0.5"></i>
-                                                    <span>Đọc trước các tác phẩm mới xuất bản trước 7 ngày</span>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <button type="button" onClick={() => openTierModal("tier3")} className="w-full mt-4 py-2.5 px-4 rounded-xl bg-gold/10 hover:bg-gold hover:text-white dark:hover:text-night-bg text-gold border border-gold/30 text-xs font-metadata-spec font-bold transition-colors flex items-center justify-center gap-1.5">
-                                            <span>Xem Chi Tiết Đặc Quyền</span>
-                                            <i className="ph-bold ph-arrow-right"></i>
-                                        </button>
-                                    </div>
-
-
-                                    <div className="rounded-2xl bg-gradient-to-br from-night-card via-[#1c1813] to-night-surface border-2 border-gold text-night-text shadow-lg hover:shadow-2xl p-6 flex flex-col justify-between relative group transition-all">
-
-                                        <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-gradient-to-r from-amber-400 to-amber-600 text-night-bg text-[10px] font-metadata-spec font-black uppercase tracking-wider shadow whitespace-nowrap">
-                                            Hoàng Gia VIP 👑
-                                        </div>
-
-                                        <div>
-
-                                            <div className="flex items-center justify-between mb-4 mt-1">
-                                                <div className="w-12 h-12 rounded-2xl bg-amber-400/20 text-amber-300 flex items-center justify-center text-2xl border border-amber-400/40">
-                                                    🏰
-                                                </div>
-                                                <span className="font-metadata-spec text-[11px] font-bold text-amber-300 bg-amber-400/10 px-2.5 py-1 rounded-full whitespace-nowrap">
-                                                    Cấp IV • Tối Thượng
-                                                </span>
-                                            </div>
-
-                                            <h3 className="font-display font-black text-xl text-white">Đại Điền Chủ</h3>
-                                            <p className="font-metadata-spec text-xs font-bold text-amber-200/70 mt-0.5">
-                                                Yêu cầu: <span className="text-amber-300 font-black">Đọc 150 Cuốn</span> (hoặc 10.000 Khoai)
-                                            </p>
-
-                                            <div className="my-4 pt-3 border-t border-white/10 space-y-2.5 text-xs font-editorial-body text-slate-300">
-                                                <div className="flex items-start gap-2">
-                                                    <i className="ph-bold ph-crown text-amber-400 text-sm shrink-0 mt-0.5"></i>
-                                                    <span><strong className="text-amber-300 font-bold">Giảm 20%</strong> toàn bộ dịch vụ và thuê sách trọn đời</span>
-                                                </div>
-                                                <div className="flex items-start gap-2">
-                                                    <i className="ph-bold ph-crown text-amber-400 text-sm shrink-0 mt-0.5"></i>
-                                                    <span><strong className="text-white font-bold">Thuê KHÔNG GIỚI HẠN</strong> toàn bộ kho sách VIP</span>
-                                                </div>
-                                                <div className="flex items-start gap-2">
-                                                    <i className="ph-bold ph-crown text-amber-400 text-sm shrink-0 mt-0.5"></i>
-                                                    <span>Tặng ấn phẩm sách bìa cứng độc quyền tận nhà hàng năm</span>
-                                                </div>
-                                                <div className="flex items-start gap-2">
-                                                    <i className="ph-bold ph-crown text-amber-400 text-sm shrink-0 mt-0.5"></i>
-                                                    <span>Chuyên viên chăm sóc khách hàng VIP riêng biệt (1-on-1)</span>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <button type="button" onClick={() => openTierModal("tier4")} className="w-full mt-4 py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-night-bg text-xs font-metadata-spec font-black transition-all flex items-center justify-center gap-1.5 shadow-md">
-                                            <i className="ph-bold ph-sparkle"></i>
-                                            <span>Gia Nhập Giới Tinh Hoa</span>
-                                        </button>
-                                    </div>
-
-                                </div>
                                 ) : (
                                     <div className="p-4 rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border flex flex-wrap items-center justify-between gap-3 text-xs shadow-sm">
                                         <div className="flex flex-wrap items-center gap-3 font-bold">
@@ -1501,7 +1740,7 @@ export default function Tiers() {
                                             </div>
                                         </div>
 
-                                        <Link to="/trangchu" className="mt-3.5 w-full py-1.5 text-center rounded-lg bg-paper-200 dark:bg-night-surface hover:bg-wine hover:text-white dark:hover:bg-gold dark:hover:text-night-bg text-ink dark:text-night-text text-[11px] font-metadata-spec font-bold transition-colors">
+                                        <Link to="/" className="mt-3.5 w-full py-1.5 text-center rounded-lg bg-paper-200 dark:bg-night-surface hover:bg-wine hover:text-white dark:hover:bg-gold dark:hover:text-night-bg text-ink dark:text-night-text text-[11px] font-metadata-spec font-bold transition-colors">
                                             Đọc Sách Ngay
                                         </Link>
                                     </div>
@@ -1531,7 +1770,7 @@ export default function Tiers() {
                                             </div>
                                         </div>
 
-                                        <Link to="/trangchu" className="mt-3.5 w-full py-1.5 text-center rounded-lg bg-paper-200 dark:bg-night-surface hover:bg-wine hover:text-white dark:hover:bg-gold dark:hover:text-night-bg text-ink dark:text-night-text text-[11px] font-metadata-spec font-bold transition-colors">
+                                        <Link to="/" className="mt-3.5 w-full py-1.5 text-center rounded-lg bg-paper-200 dark:bg-night-surface hover:bg-wine hover:text-white dark:hover:bg-gold dark:hover:text-night-bg text-ink dark:text-night-text text-[11px] font-metadata-spec font-bold transition-colors">
                                             Đánh Giá Ngay
                                         </Link>
                                     </div>
@@ -1754,80 +1993,11 @@ export default function Tiers() {
                             <button type="button" onClick={closeTierModal} className="px-4 py-2 rounded-xl bg-paper-200 dark:bg-night-surface text-ink dark:text-night-text hover:bg-paper-border font-bold transition-colors">
                                 Đóng
                             </button>
-                            <Link to="/trangchu" className="px-4 py-2 rounded-xl bg-wine text-white dark:bg-gold dark:text-night-bg font-black hover:opacity-90 transition-opacity">
+                            <Link to="/" className="px-4 py-2 rounded-xl bg-wine text-white dark:bg-gold dark:text-night-bg font-black hover:opacity-90 transition-opacity">
                                 Khám Phá Sách Cày Cấp
                             </Link>
                         </div>
                     </div>
-                </div>
-
-                <div id="chatbot-container">
-                    <div id="chat-window" className={`chat-window ${isChatOpen ? 'show' : ''}`}>
-                        <div className="bg-gradient-to-r from-wine to-wine-light text-white px-5 py-3.5 flex justify-between items-center shrink-0">
-                            <div className="flex items-center gap-2.5">
-                                <div className="w-8 h-8 rounded-full bg-white p-0.5 shrink-0">
-                                    <img src="/logo.png" alt="Bot" className="w-full h-full rounded-full object-cover" onError={handleLogoError} />
-                                </div>
-                                <div>
-                                    <div className="font-display font-bold text-sm tracking-wide leading-tight">Trợ lý ảo HALM BOOK</div>
-                                    <div className="font-metadata-spec text-[10px] text-gold font-medium">Tư vấn hạng thành viên & khoai</div>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-2.5">
-                                <button id="refresh-chat" onClick={resetChat} className="hover:text-gold transition-colors" title="Làm mới hội thoại" aria-label="Làm mới hội thoại">
-                                    <i className="ph-bold ph-arrows-clockwise text-lg"></i>
-                                </button>
-                                <button id="close-chat" onClick={() => setIsChatOpen(false)} className="hover:text-gold transition-colors" title="Thu nhỏ" aria-label="Thu nhỏ cửa sổ chat">
-                                    <i className="ph-bold ph-x text-lg"></i>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="flex-grow overflow-y-auto p-4 flex flex-col relative text-night-text bg-[#181916] text-xs space-y-3" id="chat-body">
-                            <div id="chat-welcome" className={`text-center py-5 space-y-3 ${messages.length ? 'hidden' : ''}`}>
-                                <div className="w-12 h-12 mx-auto rounded-full bg-wine/20 border border-wine/40 p-1 flex items-center justify-center">
-                                    <img src="/logo.png" alt="Bot" className="w-full h-full rounded-full object-cover" onError={handleLogoError} />
-                                </div>
-                                <h4 className="font-display font-black text-sm text-white">Xin chào Alex Nguyễn!</h4>
-                                <p className="font-editorial-body text-xs text-night-muted leading-relaxed">
-                                    Tôi là trợ lý ảo HALM BOOK. Bạn muốn tìm hiểu quyền lợi của hạng nào hoặc cách thăng hạng nhanh nhất?
-                                </p>
-                                <div className="space-y-2 pt-1 text-left font-metadata-spec">
-                                    <button onClick={() => sendMessage("Làm sao để lên hạng Cao Thủ Cày 🚜?")} className="suggestion-btn w-full p-2.5 rounded-xl bg-night-card hover:bg-night-border border border-night-border text-xs text-white flex items-center justify-between transition-colors">
-                                        <span>Làm sao để lên hạng Cao Thủ Cày 🚜?</span>
-                                        <i className="ph-bold ph-arrow-right text-gold"></i>
-                                    </button>
-                                    <button onClick={() => sendMessage("Đặc quyền của Đại Điền Chủ 👑 là gì?")} className="suggestion-btn w-full p-2.5 rounded-xl bg-night-card hover:bg-night-border border border-night-border text-xs text-white flex items-center justify-between transition-colors">
-                                        <span>Đặc quyền của Đại Điền Chủ 👑 là gì?</span>
-                                        <i className="ph-bold ph-arrow-right text-gold"></i>
-                                    </button>
-                                    <button onClick={() => sendMessage("Hạng có bị giáng cấp theo năm không?")} className="suggestion-btn w-full p-2.5 rounded-xl bg-night-card hover:bg-night-border border border-night-border text-xs text-white flex items-center justify-between transition-colors">
-                                        <span>Hạng có bị giáng cấp theo năm không?</span>
-                                        <i className="ph-bold ph-arrow-right text-gold"></i>
-                                    </button>
-                                </div>
-                            </div>
-                            <div id="chat-messages" ref={messagesEndRef} className={`flex-col gap-3 ${messages.length ? '' : 'hidden'}`}>
-                                {messages.map((message) => (
-                                    <div key={message.id} className={message.sender === 'user' ? 'self-end bg-wine text-white max-w-[80%] rounded-2xl rounded-tr-sm px-3.5 py-2 text-xs font-metadata-spec' : 'self-start bg-night-card border border-night-border text-night-text max-w-[85%] rounded-2xl rounded-tl-sm px-3.5 py-2.5 text-xs font-editorial-body'}>
-                                        {message.content}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="p-3 bg-[#141512] border-t border-night-border shrink-0">
-                            <div className="relative flex items-center">
-                                <input type="text" id="chat-input" value={chatInput} onChange={(event) => setChatInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') sendMessage(); }} placeholder="Nhập câu hỏi của bạn..."
-                                    className="w-full bg-night-card text-white placeholder-night-muted text-xs rounded-xl pl-3.5 pr-10 py-3 border border-night-border focus:outline-none focus:border-wine transition-colors font-metadata-spec" />
-                                <button id="send-btn" onClick={() => sendMessage()} className="absolute right-2 text-gold hover:text-white p-1.5 transition-colors" aria-label="Gửi tin">
-                                    <i className="ph-bold ph-paper-plane-tilt text-lg"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    <button id="chat-toggle-btn" onClick={() => setIsChatOpen((current) => !current)} className="w-14 h-14 rounded-full bg-wine hover:bg-wine-dark text-white p-1 shadow-2xl flex items-center justify-center transition-transform hover:scale-105" aria-label="Mở trợ lý ảo AI">
-                        <img src="/logo.png" alt="Chatbot" className="w-full h-full rounded-full object-cover" onError={handleLogoError} />
-                    </button>
                 </div>
             </UserLayout>
         </>
