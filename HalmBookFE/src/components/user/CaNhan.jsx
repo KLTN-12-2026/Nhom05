@@ -1,12 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { Link, useLocation, useSearchParams, useNavigate } from 'react-router-dom';
 import UserLayout from './layout/UserLayout';
 import * as customerService from '@/services/customerService';
 import { getPotatoPackages, getPotatoTransactions, topupPotato, transferPotato } from '@/services/potatoService';
+import DB from '@/components/admin/js/db.js';
 import { getCustomerBookshelf } from '@/services/orderService';
 import StreakDiemDanh from './StreakDiemDanh';
 import { isDarkMode, applyTheme } from '@/utils/theme';
-import { getTierInfo } from '@/utils/tierUtils';
+import { getTierInfo, formatCustomerId, getTierAvatarFrame, getTierBadgeClass, getTierLevel } from '@/utils/tierUtils';
+import AvatarWithFrame from '@/components/common/AvatarWithFrame';
+import { uploadAvatar } from '@/services/userFeatureService';
+import { clearAuthSession, isTokenValid } from '@/services/authToken';
+import SupportTicketSection from './SupportTicketSection';
 
 const profileTailwindConfig = {
     darkMode: 'class',
@@ -62,20 +67,6 @@ const PROFILE_ASSETS = {
     tailwind: 'https://cdn.tailwindcss.com',
 };
 
-function getBotReply(userInput) {
-    const query = userInput.toLowerCase();
-    if (query.includes('hạng') || query.includes('thợ cày')) {
-        return <>Hạng hiện tại của bạn là <strong>THỢ CÀY 🌱</strong>. Để nâng lên các hạng cao hơn như Học Giả hay Quý Tộc Sách, bạn có thể tham gia các gói hội viên tại <Link to="/hang" className="text-gold underline">Gói Hội Viên</Link>.</>;
-    }
-    if (query.includes('chỉnh sửa') || query.includes('thay đổi') || query.includes('số điện thoại')) {
-        return <>Bạn có thể chỉnh sửa số điện thoại, địa chỉ và thông tin tại trang <Link to="/canhan" className="text-gold underline">Chỉnh Sửa Thông Tin</Link>.</>;
-    }
-    if (query.includes('khoai')) {
-        return <>Số dư ví hiện tại của bạn là <strong>350 Khoai Tây</strong>. Bạn có thể dùng Khoai để đổi quà, thuê sách hoặc tham gia các gói cước tại mục <Link to="/trangchu#trending-section" className="text-gold underline">Ưu Đãi</Link>.</>;
-    }
-    return 'Tôi có thể hỗ trợ bạn cập nhật thông tin cá nhân, kiểm tra số dư Khoai hoặc hướng dẫn nâng hạng hội viên!';
-}
-
 const DEFAULT_PACKAGES = [
     { packageId: 1, packageName: 'Gói Trải Nghiệm', priceVnd: 50000, potatoAmount: 50, bonusPotato: 0, bonusRate: 0, isHot: false, tag: 'Cơ Bản' },
     { packageId: 2, packageName: 'Gói Tiêu Chuẩn', priceVnd: 200000, potatoAmount: 200, bonusPotato: 20, bonusRate: 10, isHot: true, tag: 'Đề Xuất 🔥' },
@@ -83,13 +74,23 @@ const DEFAULT_PACKAGES = [
     { packageId: 4, packageName: 'Gói Đặc Quyền VIP', priceVnd: 1000000, potatoAmount: 1000, bonusPotato: 250, bonusRate: 25, isHot: false, tag: '+25% Thưởng VIP' },
 ];
 
+const DEFAULT_HISTORY_LIST = [
+    { code: 'GD984321', note: 'Thuê sách: Atomic Habits (7 ngày)', type: 'THUÊ SÁCH', time: 'Hôm nay 14:32', amount: -9, status: 'Thành công' },
+    { code: 'GD984210', note: 'Điểm danh hằng ngày', type: 'THƯỞNG HẰNG NGÀY', time: 'Hôm nay 08:15', amount: 5, status: 'Thành công' },
+    { code: 'GD982109', note: 'Nạp khoai: Gói Mọt Sách (+200 thưởng)', type: 'NẠP KHOAI', time: 'Hôm qua 19:40', amount: 1200, status: 'Thành công' },
+    { code: 'GD979924', note: 'Thuê sách: Điện Biên Phủ 56 Ngày Đêm', type: 'THUÊ SÁCH', time: '15/10/2026', amount: -9, status: 'Thành công' },
+    { code: 'GD910022', note: 'Thưởng thăng hạng: Thợ Cày 🌱', type: 'THƯỞNG VIP', time: '15/01/2026', amount: 50, status: 'Thành công' },
+    { code: 'GD889211', note: 'Thuê sách: Cây Cam Ngọt Của Tôi (14 ngày)', type: 'THUÊ SÁCH', time: '02/01/2026', amount: -15, status: 'Thành công' },
+    { code: 'GD875412', note: 'Nạp khoai: Gói Khởi Đầu (+10 thưởng)', type: 'NẠP KHOAI', time: '28/12/2025', amount: 110, status: 'Thành công' }
+];
 
+const normalizeSearch = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 
 export default function Profile() {
     const [searchParams, setSearchParams] = useSearchParams();
     const location = useLocation();
-    const urlTab = searchParams.get('tab') || (location.hash === '#tab-history' ? 'history' : null);
-    const [activeTab, setActiveTabState] = useState(() => urlTab || 'profile');
+    const currentTab = searchParams.get('tab') || (location.hash === '#tab-history' ? 'history' : 'profile');
+    const [activeTab, setActiveTabState] = useState(() => currentTab);
     const [isDark, setIsDark] = useState(() => isDarkMode());
     const [isScrollTopVisible, setIsScrollTopVisible] = useState(false);
     const [isChatOpen, setIsChatOpen] = useState(false);
@@ -98,10 +99,67 @@ export default function Profile() {
     const [stars, setStars] = useState([]);
     const [isEditing, setIsEditing] = useState(false);
     const [toast, setToast] = useState({ show: false, title: '', message: '' });
+    const avatarInputRef = useRef(null);
+    const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+
+    const handleAvatarFileSelected = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (!file.type.startsWith('image/')) {
+            showToast('Lỗi Tải Ảnh', 'Vui lòng chọn tệp định dạng hình ảnh (PNG, JPG, WEBP)!');
+            return;
+        }
+
+        if (file.size > 5 * 1024 * 1024) {
+            showToast('Lỗi Tải Ảnh', 'Dung lượng ảnh tối đa cho phép là 5MB!');
+            return;
+        }
+
+        try {
+            setIsUploadingAvatar(true);
+            showToast('Đang Tải Ảnh', 'Đang tải ảnh đại diện lên máy chủ Cloudinary...');
+            const res = await uploadAvatar(file);
+            if (res.avatarUrl) {
+                setCustomer(prev => ({
+                    ...prev,
+                    avatar: res.avatarUrl,
+                    avatarUrl: res.avatarUrl
+                }));
+                window.dispatchEvent(new CustomEvent('halm-auth-success'));
+                window.dispatchEvent(new CustomEvent('halm-avatar-updated', { detail: { avatarUrl: res.avatarUrl } }));
+                showToast('Thành Công', 'Đã cập nhật ảnh đại diện mới thành công! 🎉');
+            }
+        } catch (err) {
+            console.error('Lỗi khi tải ảnh đại diện:', err);
+            const msg = err.response?.data?.message || 'Không thể tải ảnh lên. Vui lòng thử lại!';
+            showToast('Lỗi Tải Ảnh', msg);
+        } finally {
+            setIsUploadingAvatar(false);
+            if (e.target) e.target.value = '';
+        }
+    };
+
+    // Đồng bộ tức thì tab khi URL thay đổi (từ sidebar, header hay back/forward)
+    useEffect(() => {
+        const targetTab = searchParams.get('tab') || (location.hash === '#tab-history' ? 'history' : 'profile');
+        setActiveTabState(targetTab);
+    }, [searchParams, location.hash]);
+
+    const handleSelectTab = (tab) => {
+        setActiveTabState(tab);
+        if (tab === 'profile') {
+            setSearchParams({});
+        } else {
+            setSearchParams({ tab });
+        }
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
 
     // State phục vụ Ví Khoai Tây & Lịch Sử Giao Dịch
     const [packages, setPackages] = useState(DEFAULT_PACKAGES);
     const [transactions, setTransactions] = useState([]);
+    const [bookshelf, setBookshelf] = useState([]);
     const [rentedCount, setRentedCount] = useState(0);
     const [isRechargeModalOpen, setIsRechargeModalOpen] = useState(false);
     const [selectedPkg, setSelectedPkg] = useState(null);
@@ -111,6 +169,9 @@ export default function Profile() {
     const [transferForm, setTransferForm] = useState({ receiver: '', amount: 10, note: '' });
     const [isSubmittingTransfer, setIsSubmittingTransfer] = useState(false);
     const [historyFilter, setHistoryFilter] = useState('all');
+    const [historySearchQuery, setHistorySearchQuery] = useState('');
+    const [historyCurrentPage, setHistoryCurrentPage] = useState(1);
+    const HISTORY_PER_PAGE = 5;
     const [dailyCheckinDone, setDailyCheckinDone] = useState(false);
 
     // State phục vụ Đổi Mật Khẩu (Popup 2 bước + Mắt hiển thị mật khẩu)
@@ -221,8 +282,17 @@ export default function Profile() {
         email: '',
         address: ''
     });
-    const [customer, setCustomer] = useState(null);
-    const [isLoading, setIsLoading] = useState(true);
+    const [customer, setCustomer] = useState(() => {
+        try {
+            const cached = localStorage.getItem("halm_customer_cache");
+            return cached ? JSON.parse(cached) : null;
+        } catch {
+            return null;
+        }
+    });
+    const [isLoading, setIsLoading] = useState(() => {
+        return !localStorage.getItem("halm_customer_cache");
+    });
     const [isSaving, setIsSaving] = useState(false);
     const navigate = useNavigate();
 
@@ -236,10 +306,49 @@ export default function Profile() {
             if (Array.isArray(pkgs) && pkgs.length > 0) {
                 setPackages(pkgs);
             }
-            if (Array.isArray(txs)) {
-                setTransactions(txs);
+
+            let combinedTxs = Array.isArray(txs) ? [...txs] : [];
+            const localTxs = (window.DB && typeof window.DB.getTransactions === 'function')
+                ? window.DB.getTransactions()
+                : (DB && typeof DB.getTransactions === 'function' ? DB.getTransactions() : []);
+
+            if (Array.isArray(localTxs) && localTxs.length > 0) {
+                const currentId = String(customer?.customerId || customer?.id || '');
+                const currentName = customer?.customerName || customer?.name || '';
+                const userLocal = localTxs.filter(t => 
+                    (currentId && String(t.userId) === currentId) || 
+                    (currentName && t.userName === currentName) ||
+                    (t.code && String(t.code).startsWith('#TX-'))
+                ).map(t => ({
+                    id: t.id,
+                    code: t.code,
+                    transactionCode: t.code,
+                    transactionId: t.id,
+                    type: t.type || 'NẠP KHOAI',
+                    note: t.type || `Nạp ${t.potatoes} Khoai`,
+                    amount: t.potatoes || 0,
+                    priceVnd: t.amount,
+                    status: t.status, // 'pending', 'approved', 'rejected'
+                    rejectReason: t.rejectReason,
+                    time: t.createdAt || 'Gần đây',
+                    createdAt: t.createdAt
+                }));
+
+                userLocal.forEach(lt => {
+                    const idx = combinedTxs.findIndex(ct => ct.code === lt.code || ct.id === lt.id || ct.transactionCode === lt.code);
+                    if (idx === -1) {
+                        combinedTxs.unshift(lt);
+                    } else {
+                        combinedTxs[idx] = { ...combinedTxs[idx], status: lt.status, rejectReason: lt.rejectReason };
+                    }
+                });
+            }
+
+            if (combinedTxs.length > 0) {
+                setTransactions(combinedTxs);
             }
             if (Array.isArray(books)) {
+                setBookshelf(books);
                 const active = books.filter(b => !b.expired && (b.remainingDays > 0 || b.remainingDays > 1000) && b.status === 'ACTIVE');
                 setRentedCount(active.length);
             }
@@ -249,11 +358,16 @@ export default function Profile() {
     };
 
     const fetchCustomerData = async (silent = false) => {
-        if (!silent) setIsLoading(true);
+        if (!silent && !customer) setIsLoading(true);
         try {
             const data = await customerService.getCurrentCustomer();
             if (data) {
                 setCustomer(data);
+                try {
+                    localStorage.setItem("halm_customer_cache", JSON.stringify(data));
+                } catch {
+                    // ignore
+                }
                 setProfileData({
                     customerName: data.customerName || '',
                     phoneNumber: data.phoneNumber || '',
@@ -262,26 +376,34 @@ export default function Profile() {
                     email: data.email || '',
                     address: data.address || '',
                 });
-            } else if (!silent) {
-                console.error("Không tìm thấy dữ liệu khách hàng !");
-                navigate('/dangnhap');
             }
         } catch (error) {
             console.error('Lỗi khi lấy thông tin khách hàng:', error);
-            if (!silent) {
-                setCustomer(null);
-                navigate('/dangnhap');
+            if (error?.response?.status === 401) {
+                if (!silent && !isTokenValid()) {
+                    clearAuthSession();
+                    setCustomer(null);
+                    navigate('/', { replace: true, state: { openLoginModal: true, loginMessage: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại!' } });
+                }
             }
         } finally {
-            if (!silent) {
-                setIsLoading(false);
-            }
+            setIsLoading(false);
         }
     };
 
     useEffect(() => {
-        fetchCustomerData();
-    }, [navigate]);
+        let isMounted = true;
+        fetchCustomerData().finally(() => {
+            if (isMounted) setIsLoading(false);
+        });
+        const timer = setTimeout(() => {
+            if (isMounted) setIsLoading(false);
+        }, 1200);
+        return () => {
+            isMounted = false;
+            clearTimeout(timer);
+        };
+    }, []);
 
     const handleCancelEdit = () => {
         setIsEditing(false);
@@ -336,17 +458,7 @@ export default function Profile() {
     const pendingTimers = useRef(new Set());
     const starsInitialized = useRef(false);
 
-    useEffect(() => {
-        if (urlTab && urlTab !== activeTab) {
-            setActiveTabState(urlTab);
-        }
-    }, [urlTab]);
 
-    const handleSelectTab = (tab) => {
-        setActiveTabState(tab);
-        setSearchParams({ tab });
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    };
 
     useEffect(() => {
         applyTheme(isDark);
@@ -358,17 +470,52 @@ export default function Profile() {
             const bal = e.detail?.potatoBalance;
             if (bal !== undefined) {
                 setCustomer(prev => prev ? { ...prev, potatoBalance: bal } : prev);
+            } else if (e.detail?.addedPotato && e.detail?.status === 'approved') {
+                setCustomer(prev => prev ? { ...prev, potatoBalance: (prev.potatoBalance || 0) + e.detail.addedPotato } : prev);
             }
+
+            if (e.detail?.status === 'approved' && e.detail?.addedPotato) {
+                showToast(
+                    "🎉 Nạp Khoai Thành Công!",
+                    `Giao dịch ${e.detail.txCode || ''} đã được Quản trị viên phê duyệt! Đã cộng +${Number(e.detail.addedPotato).toLocaleString('vi-VN')} Khoai vào ví của bạn.`
+                );
+            } else if (e.detail?.status === 'rejected') {
+                showToast(
+                    "Giao Dịch Bị Từ Chối",
+                    `Giao dịch ${e.detail.txCode || ''} bị từ chối: ${e.detail.reason || 'Thông tin chuyển khoản chưa trùng khớp'}. Vui lòng kiểm tra lại.`
+                );
+            }
+
             loadWalletAndBookshelf();
         };
+
+        const handleDbUpdated = () => {
+            loadWalletAndBookshelf();
+            try {
+                const cached = localStorage.getItem('halm_customer_cache');
+                if (cached) {
+                    const parsed = JSON.parse(cached);
+                    setCustomer(prev => ({ ...prev, ...parsed }));
+                }
+            } catch (err) {
+                // ignore
+            }
+        };
+
         const handleBookshelfUpdated = () => {
             loadWalletAndBookshelf();
         };
+
         window.addEventListener('halm-potato-updated', handlePotatoUpdated);
         window.addEventListener('halm-bookshelf-updated', handleBookshelfUpdated);
+        window.addEventListener('halm_db_updated', handleDbUpdated);
+        window.addEventListener('storage', handleDbUpdated);
+
         return () => {
             window.removeEventListener('halm-potato-updated', handlePotatoUpdated);
             window.removeEventListener('halm-bookshelf-updated', handleBookshelfUpdated);
+            window.removeEventListener('halm_db_updated', handleDbUpdated);
+            window.removeEventListener('storage', handleDbUpdated);
         };
     }, []);
 
@@ -382,26 +529,69 @@ export default function Profile() {
         if (!selectedPkg) return;
         setIsSubmittingTopup(true);
         try {
-            const res = await topupPotato({
-                packageId: selectedPkg.packageId,
-                amountMoney: selectedPkg.priceVnd,
-                note: `Nạp gói ${selectedPkg.packageName || selectedPkg.tag}`
-            });
-            if (res.wallet && res.wallet.potatoBalance !== undefined) {
-                setCustomer(prev => prev ? { ...prev, potatoBalance: res.wallet.potatoBalance } : prev);
-            }
-            if (res.transaction) {
-                setTransactions(prev => [res.transaction, ...prev]);
-            }
-            setIsRechargeModalOpen(false);
             const totalReceived = (selectedPkg.potatoAmount || 0) + (selectedPkg.bonusPotato || 0);
-            showToast("Nạp Khoai Thành Công!", `Đã nạp thành công +${totalReceived.toLocaleString()} Khoai vào ví của bạn.`);
-            window.dispatchEvent(new CustomEvent('halm-potato-updated', {
-                detail: { potatoBalance: res.wallet?.potatoBalance }
-            }));
+            const price = Number(selectedPkg.priceVnd || selectedPkg.price || 0);
+            const pkgName = selectedPkg.packageName || selectedPkg.tag || 'Gói nạp';
+            const codeNum = Math.floor(10000 + Math.random() * 90000);
+            const txCode = `#TX-${codeNum}`;
+
+            const now = new Date();
+            const formattedDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+            const txPayload = {
+                id: `TX-${codeNum}`,
+                code: txCode,
+                userId: customer?.customerId || customer?.id || 'U1001',
+                userName: customer?.customerName || customer?.name || 'Độc giả HALM',
+                userEmail: customer?.email || '',
+                type: `Nạp Khoai - ${pkgName}`,
+                amount: price,
+                potatoes: totalReceived,
+                status: 'pending',
+                method: 'Chuyển khoản QR MB Bank',
+                createdAt: formattedDate
+            };
+
+            // 1. Gửi thông tin giao dịch chờ duyệt sang Admin (Quản Lý Tài Chính)
+            if (window.DB && typeof window.DB.createUserTransaction === 'function') {
+                window.DB.createUserTransaction(txPayload);
+            } else if (DB && typeof DB.createUserTransaction === 'function') {
+                DB.createUserTransaction(txPayload);
+            } else {
+                const existing = JSON.parse(localStorage.getItem('halm_db_transactions') || '[]');
+                existing.unshift(txPayload);
+                localStorage.setItem('halm_db_transactions', JSON.stringify(existing));
+                window.dispatchEvent(new Event('halm_db_updated'));
+            }
+
+            // 2. Ghi nhận giao dịch vào lịch sử của User với trạng thái "Chờ duyệt" (TUYỆT ĐỐI KHÔNG CỘNG KHOAI NGAY)
+            const userTx = {
+                id: txPayload.id,
+                code: txCode,
+                transactionCode: txCode,
+                transactionId: txPayload.id,
+                type: 'NẠP KHOAI',
+                note: `Nạp gói ${pkgName} (+${totalReceived.toLocaleString()} Khoai)`,
+                amount: totalReceived,
+                priceVnd: price,
+                status: 'pending',
+                time: 'Vừa xong',
+                createdAt: formattedDate
+            };
+            setTransactions(prev => [userTx, ...(prev && prev.length > 0 ? prev : rawHistoryList)]);
+
+            // 3. Đóng modal nạp
+            setIsRechargeModalOpen(false);
+
+            // 4. Thông báo rõ ràng cho người dùng là đang chờ Admin xét duyệt
+            showToast(
+                "Yêu Cầu Nạp Khoai Đã Gửi Đi!",
+                `Giao dịch ${txCode} (${price.toLocaleString('vi-VN')} đ) đã được gửi tới Ban Quản Trị. Khoai sẽ được cộng vào ví của bạn ngay sau khi Admin duyệt giao dịch!`
+            );
+
         } catch (error) {
-            console.error("Lỗi nạp khoai:", error);
-            showToast("Nạp Khoai Thất Bại", error?.response?.data?.message || error?.message || "Không thể xử lý giao dịch.");
+            console.error("Lỗi gửi yêu cầu nạp khoai:", error);
+            showToast("Lỗi Gửi Yêu Cầu", "Không thể gửi yêu cầu nạp đến hệ thống. Vui lòng thử lại!");
         } finally {
             setIsSubmittingTopup(false);
         }
@@ -499,9 +689,16 @@ export default function Profile() {
     }, []);
 
     useEffect(() => {
+        let ticking = false;
         const updateScrollState = () => {
-            const scrollY = window.pageYOffset || document.documentElement.scrollTop;
-            setIsScrollTopVisible(scrollY > 250);
+            if (!ticking) {
+                window.requestAnimationFrame(() => {
+                    const scrollY = window.pageYOffset || document.documentElement.scrollTop;
+                    setIsScrollTopVisible(scrollY > 250);
+                    ticking = false;
+                });
+                ticking = true;
+            }
         };
         window.addEventListener('scroll', updateScrollState, { passive: true });
         updateScrollState();
@@ -576,6 +773,54 @@ export default function Profile() {
         pendingTimers.current.clear();
         setMessages([]);
     };
+
+    const rawHistoryList = useMemo(() => {
+        return (transactions && transactions.length > 0) ? transactions : DEFAULT_HISTORY_LIST;
+    }, [transactions]);
+
+    const filteredTransactions = useMemo(() => {
+        return rawHistoryList.filter(tx => {
+            if (historyFilter !== 'all') {
+                const type = (tx.type || '').toUpperCase();
+                if (historyFilter === 'topup' && !(type.includes('TOPUP') || type.includes('NAP'))) return false;
+                if (historyFilter === 'rent' && !(type.includes('RENT') || type.includes('THUE'))) return false;
+                if (historyFilter === 'reward' && !(type.includes('REWARD') || type.includes('THUONG') || type.includes('TRANSFER') || type.includes('TANG'))) return false;
+            }
+            if (historySearchQuery) {
+                const q = normalizeSearch(historySearchQuery);
+                const code = normalizeSearch(tx.code || tx.transactionCode || tx.transactionId || tx.id);
+                const note = normalizeSearch(tx.note || tx.description || tx.title);
+                const type = normalizeSearch(tx.type);
+                const status = normalizeSearch(tx.status);
+                const amount = String(tx.amount || '');
+                if (!code.includes(q) && !note.includes(q) && !type.includes(q) && !status.includes(q) && !amount.includes(q)) {
+                    return false;
+                }
+            }
+            return true;
+        });
+    }, [rawHistoryList, historyFilter, historySearchQuery]);
+
+    const totalHistoryPages = useMemo(() => {
+        return Math.max(1, Math.ceil(filteredTransactions.length / HISTORY_PER_PAGE));
+    }, [filteredTransactions.length]);
+
+    const paginatedTransactions = useMemo(() => {
+        return filteredTransactions.slice((historyCurrentPage - 1) * HISTORY_PER_PAGE, historyCurrentPage * HISTORY_PER_PAGE);
+    }, [filteredTransactions, historyCurrentPage]);
+
+    const userTierLevel = useMemo(() => {
+        return getTierLevel(customer?.membershipTier, customer?.potatoBalance ?? 0, rentedCount);
+    }, [customer?.membershipTier, customer?.potatoBalance, rentedCount]);
+
+    const avatarFrame = useMemo(() => {
+        return getTierAvatarFrame(userTierLevel, customer?.potatoBalance ?? 0, rentedCount);
+    }, [userTierLevel, customer?.potatoBalance, rentedCount]);
+
+    const tierBadgeClass = useMemo(() => {
+        return getTierBadgeClass(userTierLevel, customer?.potatoBalance ?? 0, rentedCount);
+    }, [userTierLevel, customer?.potatoBalance, rentedCount]);
+
     if (isLoading) {
         return (
             <UserLayout className="profile-page" onOpenChatbot={openChatbot} onThemeChange={setIsDark}>
@@ -652,22 +897,21 @@ export default function Profile() {
             color: #EDE9DF;
         }
 
-        [class~="bg-paper"] { background-color: #F7F4EE; }
-        [class~="bg-paper-surface"] { background-color: #FFFEFA; }
-        [class~="bg-paper-200"] { background-color: #EAE5D9; }
-        [class~="bg-paper-200/70"] { background-color: rgb(234 229 217 / 0.7); }
-        [class~="bg-wine"] { background-color: #8E3038; }
-        [class~="bg-wine/10"] { background-color: rgb(142 48 56 / 0.1); }
-        [class~="bg-wine/20"] { background-color: rgb(142 48 56 / 0.2); }
-        [class~="bg-gold"] { background-color: #B8860B; }
-        [class~="bg-gold/15"] { background-color: rgb(184 134 11 / 0.15); }
-        [class~="bg-night-card"] { background-color: #20221E; }
-        [class~="bg-night-border"] { background-color: #2C2E29; }
+        html:not(.dark) [class~="bg-paper"] { background-color: #F7F4EE; }
+        html:not(.dark) [class~="bg-paper-surface"] { background-color: #FFFEFA; }
+        html:not(.dark) [class~="bg-paper-200"] { background-color: #EAE5D9; }
+        html:not(.dark) [class~="bg-paper-200/70"] { background-color: rgb(234 229 217 / 0.7); }
+        html:not(.dark) [class~="bg-wine"] { background-color: #8E3038; }
+        html:not(.dark) [class~="bg-wine/10"] { background-color: rgb(142 48 56 / 0.1); }
+        html:not(.dark) [class~="bg-wine/20"] { background-color: rgb(142 48 56 / 0.2); }
+        html:not(.dark) [class~="bg-gold"] { background-color: #B8860B; }
+        html:not(.dark) [class~="bg-gold/15"] { background-color: rgb(184 134 11 / 0.15); }
 
-        [class~="text-ink"] { color: #1E1F1D; }
-        [class~="text-ink/80"] { color: rgb(30 31 29 / 0.8); }
-        [class~="text-ink-muted"] { color: #66645E; }
-        [class~="text-ink-muted/60"] { color: rgb(102 100 94 / 0.6); }
+        html:not(.dark) [class~="text-ink"] { color: #1E1F1D; }
+        html:not(.dark) [class~="text-ink/80"] { color: rgb(30 31 29 / 0.8); }
+        html:not(.dark) [class~="text-ink-muted"] { color: #66645E; }
+        html:not(.dark) [class~="text-ink-muted/60"] { color: rgb(102 100 94 / 0.6); }
+        html:not(.dark) [class~="border-paper-border"] { border-color: #E3DDD0; }
         [class~="text-wine"] { color: #8E3038; }
         [class~="text-gold"] { color: #B8860B; }
         [class~="text-night-text"] { color: #EDE9DF; }
@@ -701,6 +945,53 @@ export default function Profile() {
         html.dark [class~="dark:bg-night-bg"] { background-color: #111210; }
         html.dark [class~="dark:bg-night-card"] { background-color: #20221E; }
         html.dark [class~="dark:bg-night-surface"] { background-color: #181916; }
+        html.dark [class*="user-sidebar-card"],
+        html.dark [class*="dark:bg-night-surface"],
+        html.dark [class*="dark:bg-[#181916]"] {
+            background-color: #181916 !important;
+            border-color: #2C2E29 !important;
+        }
+        html.dark [class*="user-sidebar-box"] {
+            background-color: #181916 !important;
+            border-color: #2C2E29 !important;
+        }
+        html.dark [class*="user-sidebar-card"] h2,
+        html.dark [class*="user-sidebar-card"] [class*="font-display"],
+        html.dark [class*="user-sidebar-box"] span.text-2xl,
+        html.dark [class*="user-sidebar-box"] span:first-child {
+            color: #EDE9DF !important;
+        }
+        html.dark [class*="user-sidebar-box"] span:last-child,
+        html.dark [class*="user-sidebar-card"] p {
+            color: #9CA3AF !important;
+        }
+        html.dark [class*="dark:border-night-border"],
+        html.dark [class*="dark:border-[#2C2E29]"] {
+            border-color: #2C2E29 !important;
+        }
+        html.dark [class*="dark:bg-[#242116]"] {
+            background-color: #242116 !important;
+        }
+        html.dark [class*="dark:border-[#52441D]"] {
+            border-color: #52441D !important;
+        }
+        html.dark [class~="bg-paper-surface"] {
+            background-color: #181916 !important;
+        }
+        html.dark [class~="bg-paper"] {
+            background-color: #111210 !important;
+        }
+        html.dark [class~="border-paper-border"] {
+            border-color: #2C2E29 !important;
+        }
+        html.dark [class~="text-ink"],
+        html.dark .text-ink {
+            color: #EDE9DF !important;
+        }
+        html.dark [class~="text-ink-muted"],
+        html.dark .text-ink-muted {
+            color: #9CA3AF !important;
+        }
         html.dark [class~="dark:text-gold"] { color: #B8860B; }
         html.dark [class~="dark:text-night-bg"] { color: #111210; }
         html.dark [class~="dark:text-night-muted"] { color: #96938B; }
@@ -925,145 +1216,180 @@ export default function Profile() {
 
 
                         {/* LEFT SIDEBAR - FIXED/STICKY CONTAINER */}
-                        <aside className="w-full lg:w-80 shrink-0 space-y-5 lg:sticky lg:top-24 lg:self-start">
+                        <aside className="w-full lg:w-80 shrink-0 space-y-4 lg:sticky lg:top-24 lg:self-start">
 
                             {/* 1. Profile Avatar Card */}
-                            <div className="rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-6 shadow-sm flex flex-col items-center text-center relative overflow-hidden group">
-                                <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-36 h-36 bg-wine/10 dark:bg-gold/10 rounded-full blur-2xl pointer-events-none"></div>
+                            <div className="rounded-3xl user-sidebar-card bg-paper-surface dark:bg-night-surface border border-paper-border dark:border-night-border p-6 shadow-sm flex flex-col items-center text-center relative overflow-hidden group">
+                                <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-36 h-36 bg-amber-500/10 rounded-full blur-2xl pointer-events-none"></div>
 
-                                <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-wine to-wine-light dark:from-gold dark:to-gold-light p-1 shadow-md mb-3.5 relative">
-                                    <div className="w-full h-full rounded-full bg-paper-surface dark:bg-night-surface flex items-center justify-center font-display font-black text-2xl text-wine dark:text-gold overflow-hidden">
-                                        {customer?.avatar || customer?.avatarUrl ? (
-                                            <img src={customer.avatar || customer.avatarUrl} alt="Avatar" className="w-full h-full object-cover rounded-full" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/logo.png'; }} />
+                                {/* Dynamic Avatar Frame with Tier Prestige - Bo theo viền cung tròn Tu Tiên */}
+                                <div className="relative group/avatar">
+                                    <AvatarWithFrame
+                                        avatarSrc={customer?.avatar || customer?.avatarUrl}
+                                        name={customer?.customerName || 'Độc giả'}
+                                        tier={customer?.membershipTier}
+                                        potatoBalance={customer?.potatoBalance ?? 0}
+                                        booksCount={rentedCount || bookshelf?.length || 0}
+                                        size="lg"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => avatarInputRef.current?.click()}
+                                        disabled={isUploadingAvatar}
+                                        className="absolute -bottom-1 -right-1 w-9 h-9 rounded-full bg-wine hover:bg-wine-dark text-white dark:bg-gold dark:hover:bg-gold-light dark:text-night-bg flex items-center justify-center shadow-lg transition-transform hover:scale-110 cursor-pointer border-2 border-white dark:border-night-surface z-20"
+                                        title="Tải ảnh đại diện mới từ máy tính (Cloudinary)"
+                                        aria-label="Tải ảnh đại diện mới"
+                                    >
+                                        {isUploadingAvatar ? (
+                                            <div className="w-4 h-4 border-2 border-white dark:border-night-bg border-t-transparent rounded-full animate-spin"></div>
                                         ) : (
-                                            customer?.customerName ? customer.customerName.trim().charAt(0).toUpperCase() : 'U'
+                                            <i className="ph-bold ph-camera text-sm"></i>
                                         )}
-                                    </div>
-                                    <span className="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-emerald-500 border-2 border-white dark:border-night-card flex items-center justify-center text-[10px] text-white" title="Trực tuyến">
-                                        <i className="ph-bold ph-check text-[9px]"></i>
-                                    </span>
+                                    </button>
+                                    <input
+                                        type="file"
+                                        ref={avatarInputRef}
+                                        accept="image/png,image/jpeg,image/jpg,image/webp"
+                                        className="hidden"
+                                        onChange={handleAvatarFileSelected}
+                                    />
                                 </div>
 
-                                <h2 className="font-display font-black text-lg text-ink dark:text-night-text leading-tight">
+                                <h2 className="font-display font-black text-2xl text-stone-900 dark:!text-[#EDE9DF] leading-tight">
                                     {customer?.customerName || 'Độc giả'}
                                 </h2>
-                                <p className="font-metadata-spec text-xs text-ink-muted dark:text-night-muted mt-0.5">
-                                    {customer?.customerId ? `id#C${String(customer.customerId).padStart(5, '0')}` : (customer?.customer_id ? `id#C${String(customer.customer_id).padStart(5, '0')}` : (customer?.email || 'id#C00007'))}
+                                <p className="font-metadata-spec text-xs text-stone-500 dark:!text-[#9CA3AF] mt-1">
+                                    {formatCustomerId(customer?.customerId || customer?.customer_id)}
                                 </p>
 
-                                <Link to="/hang" className="mt-3.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25 text-xs font-metadata-spec font-bold hover:scale-105 transition-transform" title="Xem cấp bậc hội viên">
-                                    <i className={`ph-bold ${getTierInfo(customer?.membershipTier).icon} text-emerald-600 dark:text-emerald-400`}></i>
-                                    <span>{getTierInfo(customer?.membershipTier).name}</span>
+                                <Link to="/hang" className={`mt-3.5 inline-flex items-center gap-1.5 px-4 py-1 rounded-full text-xs font-metadata-spec font-bold hover:scale-105 transition-transform ${getTierBadgeClass(customer?.membershipTier, customer?.potatoBalance ?? 0, rentedCount || bookshelf?.length || 0)}`} title="Xem cấp bậc hội viên">
+                                    <i className={`ph-bold ${getTierInfo(customer?.membershipTier, customer?.potatoBalance ?? 0, rentedCount || bookshelf?.length || 0).icon}`}></i>
+                                    <span>{getTierInfo(customer?.membershipTier, customer?.potatoBalance ?? 0, rentedCount || bookshelf?.length || 0).name}</span>
                                 </Link>
 
-                                <div className="grid grid-cols-2 gap-2 w-full pt-4 mt-4 border-t border-paper-border dark:border-night-border text-center">
-                                    <button type="button" onClick={() => handleSelectTab('wallet')} className="p-2.5 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-gold transition-colors">
-                                        <span className="block font-metadata-spec text-base font-black text-ink dark:text-night-text">{(customer?.potatoBalance ?? 0).toLocaleString()}</span>
-                                        <span className="font-metadata-spec text-[10px] text-ink-muted dark:text-night-muted">Khoai Tích Lũy</span>
+                                {/* Divider */}
+                                <div className="w-full h-px bg-paper-border dark:bg-night-border my-5"></div>
+
+                                <div className="grid grid-cols-2 gap-3 w-full text-center">
+                                    <button type="button" onClick={() => handleSelectTab('wallet')} className="py-4 px-3 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-gold transition-colors flex flex-col justify-center">
+                                        <span className="block font-metadata-spec text-2xl font-black text-stone-900 dark:!text-[#EDE9DF]" style={{ color: isDark ? '#EDE9DF' : undefined }}>{(customer?.potatoBalance ?? 0).toLocaleString()}</span>
+                                        <span className="font-metadata-spec text-xs text-stone-500 dark:!text-[#9CA3AF] mt-1" style={{ color: isDark ? '#9CA3AF' : undefined }}>Khoai Tích Lũy</span>
                                     </button>
-                                    <Link to="/tusachcn" className="p-2.5 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-wine dark:hover:border-gold transition-colors">
-                                        <span className="block font-metadata-spec text-base font-black text-ink dark:text-night-text">{rentedCount}</span>
-                                        <span className="font-metadata-spec text-[10px] text-ink-muted dark:text-night-muted">Sách Trong Tủ</span>
+                                    <Link to="/tusachcn" className="py-4 px-3 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-wine dark:hover:border-gold transition-colors flex flex-col justify-center">
+                                        <span className="block font-metadata-spec text-2xl font-black text-stone-900 dark:!text-[#EDE9DF]" style={{ color: isDark ? '#EDE9DF' : undefined }}>{rentedCount}</span>
+                                        <span className="font-metadata-spec text-xs text-stone-500 dark:!text-[#9CA3AF] mt-1" style={{ color: isDark ? '#9CA3AF' : undefined }}>Sách Trong Tủ</span>
                                     </Link>
                                 </div>
                             </div>
 
                             {/* 2. Navigation Menu Card - STRICT ORDER (1: Profile, 2: Bookshelf, 3: Tiers, 4: Missions, 5: Wallet, 6: History, Divider, 7: Logout) */}
-                            <div className="rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-3 shadow-sm space-y-1">
+                            <div className="rounded-3xl user-sidebar-card bg-paper-surface dark:bg-night-surface border border-paper-border dark:border-night-border p-3.5 shadow-sm space-y-1.5">
                                 {/* 1. Thông Tin Cá Nhân */}
                                 <button
                                     type="button"
                                     onClick={() => handleSelectTab('profile')}
-                                    className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold transition-all ${activeTab === 'profile'
-                                        ? 'bg-wine text-white dark:bg-gold dark:text-night-bg shadow-sm'
-                                        : 'text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface hover:text-ink dark:hover:text-night-text'
+                                    className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-metadata-spec transition-all ${activeTab === 'profile'
+                                        ? 'bg-[#C28807] text-[#111210] font-black shadow-md'
+                                        : 'font-bold text-ink-muted dark:text-stone-300 hover:bg-paper-200 dark:hover:bg-stone-800/40 hover:text-ink dark:hover:text-white'
                                         }`}
                                 >
-                                    <i className="ph-bold ph-user text-base"></i>
+                                    <i className={`ph-bold ph-user text-lg ${activeTab === 'profile' ? 'text-[#111210]' : 'text-stone-400'}`}></i>
                                     <span>Thông Tin Cá Nhân</span>
                                 </button>
 
                                 {/* 2. Tủ Sách Cá Nhân */}
                                 <Link
                                     to="/tusachcn"
-                                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface hover:text-ink dark:hover:text-night-text transition-colors"
+                                    className="w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-stone-300 hover:bg-paper-200 dark:hover:bg-stone-800/40 hover:text-ink dark:hover:text-white transition-colors"
                                 >
-                                    <div className="flex items-center gap-3">
-                                        <i className="ph-bold ph-book-bookmark text-base"></i>
+                                    <div className="flex items-center gap-3.5">
+                                        <i className="ph-bold ph-book-bookmark text-lg text-stone-400"></i>
                                         <span>Tủ Sách Cá Nhân</span>
                                     </div>
-                                    <span className="potato-badge text-[11px] py-0 px-2">{rentedCount} cuốn</span>
+                                    <span className="px-3 py-1 rounded-full bg-paper-200 dark:bg-[#242116] border border-paper-border dark:border-[#52441D] text-amber-600 dark:text-[#D8B44A] text-xs font-bold font-metadata-spec">{rentedCount} cuốn</span>
                                 </Link>
 
                                 {/* 3. Hạng Thành Viên */}
                                 <Link
                                     to="/hang"
-                                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface hover:text-ink dark:hover:text-night-text transition-colors"
+                                    className="w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-stone-300 hover:bg-paper-200 dark:hover:bg-stone-800/40 hover:text-ink dark:hover:text-white transition-colors"
                                 >
-                                    <div className="flex items-center gap-3">
-                                        <i className="ph-bold ph-trophy text-base"></i>
+                                    <div className="flex items-center gap-3.5">
+                                        <i className="ph-bold ph-trophy text-lg text-stone-400"></i>
                                         <span>Hạng Thành Viên</span>
                                     </div>
-                                    <span className="potato-badge text-[11px] py-0.5 px-2 inline-flex items-center gap-1.5 whitespace-nowrap font-bold">
-                                        <i className={`ph-bold ${getTierInfo(customer?.membershipTier).icon} text-[12px] text-amber-600 dark:text-amber-400 shrink-0`}></i>
-                                        <span>{getTierInfo(customer?.membershipTier).name}</span>
-                                    </span>
+                                    <i className="ph-bold ph-caret-right text-xs text-stone-400"></i>
                                 </Link>
 
                                 {/* 3.5. Nhiệm Vụ Hằng Ngày */}
                                 <Link
                                     to="/nhiemvu"
-                                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface hover:text-ink dark:hover:text-night-text transition-colors"
+                                    className="w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-stone-300 hover:bg-paper-200 dark:hover:bg-stone-800/40 hover:text-ink dark:hover:text-white transition-colors"
                                 >
-                                    <div className="flex items-center gap-3">
-                                        <i className="ph-bold ph-target text-base text-amber-500"></i>
+                                    <div className="flex items-center gap-3.5">
+                                        <i className="ph-bold ph-target text-lg text-stone-400"></i>
                                         <span>Nhiệm Vụ Hằng Ngày</span>
                                     </div>
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold">Streak 🔥</span>
+                                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-paper-200 dark:bg-[#242116] border border-paper-border dark:border-[#52441D] text-amber-600 dark:text-[#D8B44A] text-xs font-bold">Streak 🔥</span>
                                 </Link>
 
                                 {/* 4. Ví Khoai Tây */}
                                 <button
                                     type="button"
                                     onClick={() => handleSelectTab('wallet')}
-                                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold transition-all ${activeTab === 'wallet'
-                                        ? 'bg-wine text-white dark:bg-gold dark:text-night-bg shadow-sm'
-                                        : 'text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface hover:text-ink dark:hover:text-night-text'
+                                    className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-metadata-spec transition-all ${activeTab === 'wallet'
+                                        ? 'bg-[#C28807] text-[#111210] font-black shadow-md'
+                                        : 'font-bold text-ink-muted dark:text-stone-300 hover:bg-paper-200 dark:hover:bg-stone-800/40 hover:text-ink dark:hover:text-white'
                                         }`}
                                 >
-                                    <div className="flex items-center gap-3">
-                                        <i className="ph-bold ph-wallet text-base"></i>
+                                    <div className="flex items-center gap-3.5">
+                                        <i className={`ph-bold ph-wallet text-lg ${activeTab === 'wallet' ? 'text-[#111210]' : 'text-stone-400'}`}></i>
                                         <span>Ví Khoai Tây</span>
                                     </div>
-                                    <span className={`potato-badge text-[11px] py-0 px-2 ${activeTab === 'wallet' ? 'bg-white/20 text-white border-white/30' : ''}`}>{(customer?.potatoBalance ?? 0).toLocaleString()} 🥔</span>
+                                    <span className={`px-3 py-1 rounded-full text-xs font-bold font-metadata-spec ${activeTab === 'wallet' ? 'bg-black/25 text-black font-black' : 'bg-paper-200 dark:bg-[#242116] border border-paper-border dark:border-[#52441D] text-amber-600 dark:text-[#D8B44A]'}`}>{(customer?.potatoBalance ?? 0).toLocaleString()} 🥔</span>
                                 </button>
 
                                 {/* 5. Lịch Sử Giao Dịch */}
                                 <button
                                     type="button"
                                     onClick={() => handleSelectTab('history')}
-                                    className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold transition-all ${activeTab === 'history'
-                                        ? 'bg-wine text-white dark:bg-gold dark:text-night-bg shadow-sm'
-                                        : 'text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface hover:text-ink dark:hover:text-night-text'
+                                    className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-metadata-spec transition-all ${activeTab === 'history'
+                                        ? 'bg-[#C28807] text-[#111210] font-black shadow-md'
+                                        : 'font-bold text-ink-muted dark:text-stone-300 hover:bg-paper-200 dark:hover:bg-stone-800/40 hover:text-ink dark:hover:text-white'
                                         }`}
                                 >
-                                    <i className="ph-bold ph-clock-counter-clockwise text-base"></i>
+                                    <i className={`ph-bold ph-clock-counter-clockwise text-lg ${activeTab === 'history' ? 'text-[#111210]' : 'text-stone-400'}`}></i>
                                     <span>Lịch Sử Giao Dịch</span>
                                 </button>
 
-                                {/* Divider Line */}
-                                <div className="pt-2 border-t border-paper-border dark:border-night-border mt-2">
-                                    {/* 6. Đăng Xuất */}
-                                    <Link
-                                        to="/dangnhap"
-                                        className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors"
-                                    >
-                                        <i className="ph-bold ph-sign-out text-base"></i>
-                                        <span>Đăng Xuất</span>
-                                    </Link>
-                                </div>
-                            </div>
+                                {/* 6. Khiếu Nại & Hỗ Trợ (RabbitMQ) */}
+                                <button
+                                    type="button"
+                                    onClick={() => handleSelectTab('support')}
+                                    className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-metadata-spec transition-all ${activeTab === 'support'
+                                        ? 'bg-[#C28807] text-[#111210] font-black'
+                                        : 'font-bold text-ink-muted dark:text-stone-300 hover:bg-paper-200 dark:hover:bg-stone-800/40 hover:text-ink dark:hover:text-white'
+                                        }`}
+                                >
+                                    <i className={`ph-bold ph-headset text-lg ${activeTab === 'support' ? 'text-[#111210]' : 'text-stone-400'}`}></i>
+                                    <span>Khiếu Nại & Hỗ Trợ</span>
+                                </button>
 
+                                {/* Divider Line */}
+                                <div className="my-2 border-t border-paper-border dark:border-[#2C2E29]"></div>
+
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        clearAuthSession();
+                                        window.location.assign('/');
+                                    }}
+                                    className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-metadata-spec font-bold text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                                >
+                                    <i className="ph-bold ph-sign-out text-lg text-rose-500"></i>
+                                    <span>Đăng Xuất</span>
+                                </button>
+                            </div>
                         </aside>
 
                         {/* RIGHT CONTENT AREA - CHANGES SMOOTHLY BY TAB */}
@@ -1088,7 +1414,7 @@ export default function Profile() {
                                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-paper-border dark:border-night-border">
                                         <div>
                                             <div className="flex items-center gap-2 text-xs font-metadata-spec text-ink-muted dark:text-night-muted mb-1">
-                                                <Link to="/trangchu" className="hover:underline">Trang chủ</Link>
+                                                <Link to="/" className="hover:underline">Trang chủ</Link>
                                                 <i className="ph-bold ph-caret-right text-[10px]"></i>
                                                 <span>Tài khoản</span>
                                                 <i className="ph-bold ph-caret-right text-[10px]"></i>
@@ -1308,7 +1634,7 @@ export default function Profile() {
                                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-paper-border dark:border-night-border">
                                         <div>
                                             <div className="flex items-center gap-2 text-xs font-metadata-spec text-ink-muted dark:text-night-muted mb-1">
-                                                <Link to="/trangchu" className="hover:underline">Trang chủ</Link>
+                                                <Link to="/" className="hover:underline">Trang chủ</Link>
                                                 <i className="ph-bold ph-caret-right text-[10px]"></i>
                                                 <span>Tài khoản</span>
                                                 <i className="ph-bold ph-caret-right text-[10px]"></i>
@@ -1411,11 +1737,6 @@ export default function Profile() {
                                         </div>
                                     </div>
 
-                                    {/* 1. Giao diện Streak Điểm Danh 7 Ngày */}
-                                    <div className="mb-2">
-                                        <StreakDiemDanh onShowToast={showToast} onCheckinSuccess={fetchCustomerData} />
-                                    </div>
-
                                     {/* 2. Trung Tâm Nhiệm Vụ Hằng Ngày - Điều Hướng Tập Trung */}
                                     <div className="rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-6 shadow-sm space-y-4">
                                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1477,7 +1798,7 @@ export default function Profile() {
                                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-paper-border dark:border-night-border">
                                         <div>
                                             <div className="flex items-center gap-2 text-xs font-metadata-spec text-ink-muted dark:text-night-muted mb-1">
-                                                <Link to="/trangchu" className="hover:underline">Trang chủ</Link>
+                                                <Link to="/" className="hover:underline">Trang chủ</Link>
                                                 <i className="ph-bold ph-caret-right text-[10px]"></i>
                                                 <span>Tài khoản</span>
                                                 <i className="ph-bold ph-caret-right text-[10px]"></i>
@@ -1500,10 +1821,10 @@ export default function Profile() {
                                     </div>
 
                                     {/* Transactions List Card */}
-                                    <div className="rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-6 shadow-sm space-y-4">
-                                        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-paper-border dark:border-night-border">
-                                            <div className="flex items-center gap-2">
-                                                <span className="w-8 h-8 rounded-lg bg-wine/10 dark:bg-gold/15 text-wine dark:text-gold flex items-center justify-center text-lg">
+                                    <div className="rounded-3xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-6 shadow-sm space-y-4">
+                                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-paper-border dark:border-night-border">
+                                            <div className="flex items-center gap-2.5">
+                                                <span className="w-9 h-9 rounded-xl bg-wine/10 dark:bg-gold/15 text-wine dark:text-gold flex items-center justify-center text-lg">
                                                     <i className="ph-bold ph-receipt"></i>
                                                 </span>
                                                 <div>
@@ -1512,29 +1833,64 @@ export default function Profile() {
                                                 </div>
                                             </div>
 
-                                            {/* Filters */}
-                                            <div className="flex items-center gap-1.5 text-xs font-metadata-spec font-bold">
-                                                {['all', 'topup', 'rent', 'reward'].map((f) => {
-                                                    const labels = {
-                                                        all: 'Tất Cả',
-                                                        topup: 'Nạp Khoai',
-                                                        rent: 'Thuê Sách',
-                                                        reward: 'Thưởng & Tặng'
-                                                    };
-                                                    return (
+                                            {/* Filters & Search */}
+                                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                                                {/* Search Input */}
+                                                <div className="relative w-full sm:w-60">
+                                                    <i className="ph-bold ph-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-[#8E3038] dark:text-[#D4AF37]"></i>
+                                                    <input
+                                                        type="text"
+                                                        value={historySearchQuery}
+                                                        onChange={(e) => {
+                                                            setHistorySearchQuery(e.target.value);
+                                                            setHistoryCurrentPage(1);
+                                                        }}
+                                                        placeholder="Tìm mã GD, nội dung..."
+                                                        className="w-full pl-8 pr-7 py-1.5 rounded-xl text-xs bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border focus:outline-none focus:border-wine dark:focus:border-gold text-ink dark:text-night-text placeholder-ink-muted/70 transition-colors font-metadata-spec"
+                                                        autoComplete="off"
+                                                    />
+                                                    {historySearchQuery && (
                                                         <button
-                                                            key={f}
                                                             type="button"
-                                                            onClick={() => setHistoryFilter(f)}
-                                                            className={`px-3 py-1 rounded-xl transition-colors ${historyFilter === f
-                                                                ? 'bg-wine text-white dark:bg-gold dark:text-night-bg'
-                                                                : 'bg-paper-200 dark:bg-night-surface text-ink-muted dark:text-night-muted hover:text-ink dark:hover:text-night-text'
-                                                                }`}
+                                                            onClick={() => {
+                                                                setHistorySearchQuery('');
+                                                                setHistoryCurrentPage(1);
+                                                            }}
+                                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-muted hover:text-ink dark:hover:text-white text-xs cursor-pointer"
+                                                            title="Xóa tìm kiếm"
                                                         >
-                                                            {labels[f]}
+                                                            <i className="ph-bold ph-x"></i>
                                                         </button>
-                                                    );
-                                                })}
+                                                    )}
+                                                </div>
+
+                                                {/* Filter Category Pills */}
+                                                <div className="flex items-center gap-1.5 text-xs font-metadata-spec font-bold overflow-x-auto pb-1 sm:pb-0">
+                                                    {['all', 'topup', 'rent', 'reward'].map((f) => {
+                                                        const labels = {
+                                                            all: 'Tất Cả',
+                                                            topup: 'Nạp Khoai',
+                                                            rent: 'Thuê Sách',
+                                                            reward: 'Thưởng & Tặng'
+                                                        };
+                                                        return (
+                                                            <button
+                                                                key={f}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setHistoryFilter(f);
+                                                                    setHistoryCurrentPage(1);
+                                                                }}
+                                                                className={`px-3 py-1.5 rounded-xl transition-colors whitespace-nowrap cursor-pointer ${historyFilter === f
+                                                                    ? 'bg-wine text-white dark:bg-gold dark:text-night-bg shadow-sm'
+                                                                    : 'bg-paper-200 dark:bg-night-surface text-ink-muted dark:text-night-muted hover:text-ink dark:hover:text-night-text'
+                                                                    }`}
+                                                            >
+                                                                {labels[f]}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
                                         </div>
 
@@ -1550,67 +1906,124 @@ export default function Profile() {
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-paper-border dark:divide-night-border">
-                                                    {(transactions && transactions.length > 0 ? (
-                                                        transactions.filter(tx => {
-                                                            if (historyFilter === 'all') return true;
-                                                            const type = (tx.type || '').toUpperCase();
-                                                            if (historyFilter === 'topup') return type.includes('TOPUP') || type.includes('NAP');
-                                                            if (historyFilter === 'rent') return type.includes('RENT') || type.includes('THUE');
-                                                            if (historyFilter === 'reward') return type.includes('REWARD') || type.includes('THUONG') || type.includes('TRANSFER') || type.includes('TANG');
-                                                            return true;
-                                                        }).map((tx, idx) => {
+                                                    {paginatedTransactions.length === 0 ? (
+                                                        <tr>
+                                                            <td colSpan="5" className="py-8 text-center text-xs text-ink-muted dark:text-night-muted">
+                                                                Không tìm thấy giao dịch nào phù hợp với bộ lọc.
+                                                            </td>
+                                                        </tr>
+                                                    ) : (
+                                                        paginatedTransactions.map((tx, idx) => {
                                                             const isMinus = (tx.amount < 0) || (tx.type && (tx.type.includes('RENT') || tx.type.includes('THUE')));
                                                             const displayAmount = Math.abs(tx.amount || 0);
+                                                            const code = tx.code || tx.transactionCode || `GD-${tx.transactionId || tx.id || idx + 100}`;
+                                                            const note = tx.note || tx.description || tx.title || 'Giao dịch ví';
+                                                            const type = tx.type || 'GIAO DỊCH';
+                                                            const time = tx.time || (tx.createdAt ? tx.createdAt.replace('T', ' ').substring(0, 16) : 'Gần đây');
+                                                            const status = tx.status || 'Thành công';
+
                                                             return (
                                                                 <tr key={tx.transactionId || tx.id || idx} className="hover:bg-paper dark:hover:bg-night-surface/50 transition-colors">
-                                                                    <td className="py-3.5 px-3 font-mono font-bold text-ink-muted dark:text-night-muted">{tx.code || tx.transactionCode || `GD-${tx.transactionId || tx.id || idx + 100}`}</td>
+                                                                    <td className="py-3.5 px-3 font-mono font-bold text-ink-muted dark:text-night-muted">{code}</td>
                                                                     <td className="py-3.5 px-3">
-                                                                        <span className="font-bold text-ink dark:text-night-text block">{tx.note || tx.description || tx.title || 'Giao dịch ví'}</span>
-                                                                        <span className="text-[10px] text-ink-muted dark:text-night-muted uppercase tracking-wider">{tx.type || 'GIAO DỊCH'}</span>
+                                                                        <span className="font-bold text-ink dark:text-night-text block">{note}</span>
+                                                                        <span className="text-[10px] text-ink-muted dark:text-night-muted uppercase tracking-wider">{type}</span>
                                                                     </td>
-                                                                    <td className="py-3.5 px-3 text-ink-muted dark:text-night-muted">{tx.createdAt ? tx.createdAt.replace('T', ' ').substring(0, 16) : 'Gần đây'}</td>
-                                                                    <td className={`py-3.5 px-3 text-right font-black ${isMinus ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                                                                        {isMinus ? `-${displayAmount}` : `+${displayAmount}`} Khoai 🥔
-                                                                    </td>
-                                                                    <td className="py-3.5 px-3 text-center">
-                                                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400 text-[10px] font-bold">
-                                                                            <i className="ph-bold ph-check-circle"></i> {tx.status || 'Thành công'}
-                                                                        </span>
-                                                                    </td>
+                                                                    <td className="py-3.5 px-3 text-ink-muted dark:text-night-muted">{time}</td>
+                                                                    {(() => {
+                                                                        const s = String(status || '').toLowerCase();
+                                                                        const isPending = s === 'pending' || s.includes('chờ');
+                                                                        const isRejected = s === 'rejected' || s.includes('từ chối') || s.includes('hủy');
+
+                                                                        return (
+                                                                            <>
+                                                                                <td className={`py-3.5 px-3 text-right font-black ${
+                                                                                    isPending 
+                                                                                        ? 'text-amber-600 dark:text-amber-400' 
+                                                                                        : isRejected 
+                                                                                            ? 'text-slate-400 dark:text-slate-500 line-through' 
+                                                                                            : isMinus 
+                                                                                                ? 'text-rose-600 dark:text-rose-400' 
+                                                                                                : 'text-emerald-600 dark:text-emerald-400'
+                                                                                }`}>
+                                                                                    {isMinus ? `-${displayAmount}` : `+${displayAmount}`} Khoai 🥔
+                                                                                    {isPending && <span className="block text-[10px] font-normal text-amber-600 dark:text-amber-400">(Chờ duyệt)</span>}
+                                                                                </td>
+                                                                                <td className="py-3.5 px-3 text-center">
+                                                                                    {isPending ? (
+                                                                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-400 border border-amber-300 dark:border-amber-700/60 text-[10px] font-bold shadow-xs">
+                                                                                            <i className="ph-bold ph-hourglass-medium animate-pulse text-amber-600 dark:text-amber-400"></i> Chờ duyệt
+                                                                                        </span>
+                                                                                    ) : isRejected ? (
+                                                                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-100 dark:bg-rose-950/50 text-rose-800 dark:text-rose-400 border border-rose-300 dark:border-rose-700/60 text-[10px] font-bold shadow-xs" title={tx.rejectReason || 'Giao dịch bị từ chối'}>
+                                                                                            <i className="ph-bold ph-x-circle text-rose-600 dark:text-rose-400"></i> Bị từ chối
+                                                                                        </span>
+                                                                                    ) : (
+                                                                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-700/60 text-[10px] font-bold shadow-xs">
+                                                                                            <i className="ph-bold ph-check-circle text-emerald-600 dark:text-emerald-400"></i> Thành công
+                                                                                        </span>
+                                                                                    )}
+                                                                                </td>
+                                                                            </>
+                                                                        );
+                                                                    })()}
                                                                 </tr>
                                                             );
                                                         })
-                                                    ) : (
-                                                        [
-                                                            { code: 'GD984321', note: 'Thuê sách: Atomic Habits (7 ngày)', type: 'THUÊ SÁCH', time: 'Hôm nay 14:32', amount: -9, status: 'Thành công' },
-                                                            { code: 'GD984210', note: 'Điểm danh hằng ngày', type: 'THƯỞNG HẰNG NGÀY', time: 'Hôm nay 08:15', amount: 5, status: 'Thành công' },
-                                                            { code: 'GD982109', note: 'Nạp khoai: Gói Mọt Sách (+200 thưởng)', type: 'NẠP KHOAI', time: 'Hôm qua 19:40', amount: 1200, status: 'Thành công' },
-                                                            { code: 'GD979924', note: 'Thuê sách: Điện Biên Phủ 56 Ngày Đêm', type: 'THUÊ SÁCH', time: '15/10/2026', amount: -9, status: 'Thành công' },
-                                                            { code: 'GD910022', note: 'Thưởng thăng hạng: Thợ Cày 🌱', type: 'THƯỞNG VIP', time: '15/01/2026', amount: 50, status: 'Thành công' },
-                                                        ].map((tx, idx) => (
-                                                            <tr key={idx} className="hover:bg-paper dark:hover:bg-night-surface/50 transition-colors">
-                                                                <td className="py-3.5 px-3 font-mono font-bold text-ink-muted dark:text-night-muted">{tx.code}</td>
-                                                                <td className="py-3.5 px-3">
-                                                                    <span className="font-bold text-ink dark:text-night-text block">{tx.note}</span>
-                                                                    <span className="text-[10px] text-ink-muted dark:text-night-muted">{tx.type}</span>
-                                                                </td>
-                                                                <td className="py-3.5 px-3 text-ink-muted dark:text-night-muted">{tx.time}</td>
-                                                                <td className={`py-3.5 px-3 text-right font-black ${tx.amount < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                                                                    {tx.amount > 0 ? `+${tx.amount}` : tx.amount} Khoai 🥔
-                                                                </td>
-                                                                <td className="py-3.5 px-3 text-center">
-                                                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400 text-[10px] font-bold">
-                                                                        <i className="ph-bold ph-check-circle"></i> {tx.status}
-                                                                    </span>
-                                                                </td>
-                            </tr>
-                                                        ))
-                                                    ))}
+                                                    )}
                                                 </tbody>
                                             </table>
                                         </div>
+
+                                        {/* Pagination Controls */}
+                                        {totalHistoryPages > 1 && (
+                                            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-paper-border dark:border-night-border font-metadata-spec">
+                                                <div className="text-xs text-ink-muted dark:text-night-muted">
+                                                    Hiển thị <span className="font-bold text-ink dark:text-night-text">{(historyCurrentPage - 1) * HISTORY_PER_PAGE + 1} - {Math.min(historyCurrentPage * HISTORY_PER_PAGE, filteredTransactions.length)}</span> trên <span className="font-bold text-ink dark:text-night-text">{filteredTransactions.length}</span> giao dịch
+                                                </div>
+                                                <div className="flex items-center gap-1.5">
+                                                    <button
+                                                        type="button"
+                                                        disabled={historyCurrentPage <= 1}
+                                                        onClick={() => setHistoryCurrentPage(prev => Math.max(1, prev - 1))}
+                                                        className="px-3 py-1.5 rounded-xl border border-paper-border dark:border-night-border bg-paper-surface dark:bg-night-card text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-200 dark:hover:bg-night-surface transition-colors flex items-center gap-1"
+                                                    >
+                                                        <i className="ph-bold ph-caret-left text-xs"></i>
+                                                        <span>Trước</span>
+                                                    </button>
+                                                    {Array.from({ length: totalHistoryPages }, (_, i) => i + 1).map(num => (
+                                                        <button
+                                                            key={num}
+                                                            type="button"
+                                                            onClick={() => setHistoryCurrentPage(num)}
+                                                            className={`w-8 h-8 rounded-xl text-xs font-bold transition-all flex items-center justify-center cursor-pointer ${
+                                                                historyCurrentPage === num
+                                                                    ? 'bg-wine text-white dark:bg-gold dark:text-night-bg shadow-sm'
+                                                                    : 'border border-paper-border dark:border-night-border bg-paper-surface dark:bg-night-card text-ink dark:text-night-text hover:bg-paper-200 dark:hover:bg-night-surface'
+                                                            }`}
+                                                        >
+                                                            {num}
+                                                        </button>
+                                                    ))}
+                                                    <button
+                                                        type="button"
+                                                        disabled={historyCurrentPage >= totalHistoryPages}
+                                                        onClick={() => setHistoryCurrentPage(prev => Math.min(totalHistoryPages, prev + 1))}
+                                                        className="px-3 py-1.5 rounded-xl border border-paper-border dark:border-night-border bg-paper-surface dark:bg-night-card text-xs font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-paper-200 dark:hover:bg-night-surface transition-colors flex items-center gap-1"
+                                                    >
+                                                        <span>Sau</span>
+                                                        <i className="ph-bold ph-caret-right text-xs"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </>
+                            )}
+
+                            {/* TAB 4: KHIẾU NẠI & HỖ TRỢ (RABBITMQ ASYNC PIPELINE) */}
+                            {activeTab === 'support' && (
+                                <SupportTicketSection customer={customer} showToast={showToast} />
                             )}
 
                         </div>
@@ -1768,6 +2181,14 @@ export default function Profile() {
                                                     <span>Chép</span>
                                                 </button>
                                             </div>
+
+                                            <div className="p-3 rounded-2xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border flex items-start gap-2.5">
+                                                <i className="ph-bold ph-shield-check text-wine dark:text-gold text-base mt-0.5 flex-shrink-0"></i>
+                                                <div className="text-[11px] leading-relaxed text-ink-muted dark:text-night-muted">
+                                                    <span className="font-bold text-ink dark:text-night-text block mb-0.5">Xác nhận 2 bước an toàn:</span>
+                                                    Sau khi bạn nhấn <b className="text-wine dark:text-gold font-bold">"Tôi Đã Chuyển Khoản"</b>, yêu cầu sẽ được chuyển đến Admin tại màn hình Quản lý tài chính để đối soát sao kê ngân hàng và cộng Khoai vào ví.
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -1796,7 +2217,7 @@ export default function Profile() {
                                         {isSubmittingTopup ? (
                                             <>
                                                 <i className="ph-bold ph-spinner animate-spin text-base"></i>
-                                                <span>Đang Kiểm Tra...</span>
+                                                <span>Đang Gửi Yêu Cầu...</span>
                                             </>
                                         ) : (
                                             <>
@@ -2151,86 +2572,6 @@ export default function Profile() {
 
 
 
-                <div id="chatbot-container">
-
-                    <div id="chat-window" className={`chat-window ${isChatOpen ? 'show' : ''}`}>
-
-                        <div className="bg-gradient-to-r from-wine to-wine-light text-white px-5 py-3.5 flex justify-between items-center shrink-0">
-                            <div className="flex items-center gap-2.5">
-                                <div className="w-8 h-8 rounded-full bg-white p-0.5 shrink-0">
-                                    <img src="/logo.png" alt="Bot" className="w-full h-full rounded-full object-cover" />
-                                </div>
-                                <div>
-                                    <div className="font-display font-bold text-sm tracking-wide leading-tight">Trợ lý ảo HALM BOOK</div>
-                                    <div className="font-metadata-spec text-[10px] text-gold font-medium">Hỗ trợ hồ sơ & tài khoản</div>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-2.5">
-                                <button id="refresh-chat" onClick={resetChat} className="hover:text-gold transition-colors" title="Làm mới hội thoại" aria-label="Làm mới hội thoại">
-                                    <i className="ph-bold ph-arrows-clockwise text-lg"></i>
-                                </button>
-                                <button id="close-chat" onClick={() => setIsChatOpen(false)} className="hover:text-gold transition-colors" title="Thu nhỏ" aria-label="Thu nhỏ cửa sổ chat">
-                                    <i className="ph-bold ph-x text-lg"></i>
-                                </button>
-                            </div>
-                        </div>
-
-
-                        <div className="flex-grow overflow-y-auto p-4 flex flex-col relative text-night-text bg-[#181916] text-xs space-y-3" id="chat-body">
-
-                            <div id="chat-welcome" className={`text-center py-5 space-y-3 ${messages.length ? 'hidden' : ''}`}>
-                                <div className="w-12 h-12 mx-auto rounded-full bg-wine/20 border border-wine/40 p-1 flex items-center justify-center">
-                                    <img src="/logo.png" alt="Bot" className="w-full h-full rounded-full object-cover" />
-                                </div>
-                                <h4 className="font-display font-black text-sm text-white">Xin chào Alex Nguyễn!</h4>
-                                <p className="font-editorial-body text-xs text-night-muted leading-relaxed">
-                                    Tôi là trợ lý AI của HALM BOOK. Bạn có thắc mắc gì về hồ sơ hoặc điểm thưởng Khoai không?
-                                </p>
-
-
-                                <div className="space-y-2 pt-1 text-left font-metadata-spec">
-                                    <button onClick={() => sendMessage("Cách nâng hạng hội viên từ Thợ Cày 🌱?")} className="suggestion-btn w-full p-2.5 rounded-xl bg-night-card hover:bg-night-border border border-night-border text-xs text-white flex items-center justify-between transition-colors">
-                                        <span>Cách nâng hạng hội viên từ Thợ Cày 🌱?</span>
-                                        <i className="ph-bold ph-arrow-right text-gold"></i>
-                                    </button>
-                                    <button onClick={() => sendMessage("Làm sao để đổi thông tin số điện thoại?")} className="suggestion-btn w-full p-2.5 rounded-xl bg-night-card hover:bg-night-border border border-night-border text-xs text-white flex items-center justify-between transition-colors">
-                                        <span>Làm sao để đổi thông tin số điện thoại?</span>
-                                        <i className="ph-bold ph-arrow-right text-gold"></i>
-                                    </button>
-                                    <button onClick={() => sendMessage("Kiểm tra lịch sử chi tiêu Khoai?")} className="suggestion-btn w-full p-2.5 rounded-xl bg-night-card hover:bg-night-border border border-night-border text-xs text-white flex items-center justify-between transition-colors">
-                                        <span>Kiểm tra lịch sử chi tiêu Khoai?</span>
-                                        <i className="ph-bold ph-arrow-right text-gold"></i>
-                                    </button>
-                                </div>
-                            </div>
-
-
-                            <div id="chat-messages" ref={messagesEndRef} className={`flex-col gap-3 ${messages.length ? '' : 'hidden'}`}>
-                                {messages.map((message) => (
-                                    <div key={message.id} className={message.sender === 'user' ? 'self-end bg-wine text-white max-w-[80%] rounded-2xl rounded-tr-sm px-3.5 py-2 text-xs font-metadata-spec' : 'self-start bg-night-card border border-night-border text-night-text max-w-[85%] rounded-2xl rounded-tl-sm px-3.5 py-2.5 text-xs font-editorial-body'}>
-                                        {message.content}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-
-                        <div className="p-3 bg-[#141512] border-t border-night-border shrink-0">
-                            <div className="relative flex items-center">
-                                <input type="text" id="chat-input" placeholder="Nhập câu hỏi của bạn..." value={chatInput} onChange={(event) => setChatInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') sendMessage(); }}
-                                    className="w-full bg-night-card text-white placeholder-night-muted text-xs rounded-xl pl-3.5 pr-10 py-3 border border-night-border focus:outline-none focus:border-wine transition-colors font-metadata-spec" />
-                                <button id="send-btn" onClick={() => sendMessage()} className="absolute right-2 text-gold hover:text-white p-1.5 transition-colors" aria-label="Gửi tin">
-                                    <i className="ph-bold ph-paper-plane-tilt text-lg"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-
-                    <button id="chat-toggle-btn" onClick={() => setIsChatOpen((current) => !current)} className="w-14 h-14 rounded-full bg-wine hover:bg-wine-dark text-white p-1 shadow-2xl flex items-center justify-center transition-transform hover:scale-105" aria-label="Mở trợ lý ảo AI">
-                        <img src="/logo.png" alt="Chatbot" className="w-full h-full rounded-full object-cover" />
-                    </button>
-                </div>
             </UserLayout>
         </>
     );

@@ -16,396 +16,15 @@ const DB_KEYS = {
     ADMIN_SESSION: 'halm_admin_session'
 };
 const DB_SCHEMA_VERSION = 'halm_db_schema_version';
-const CURRENT_DB_SCHEMA_VERSION = 'api-backed-v1';
+const CURRENT_DB_SCHEMA_VERSION = 'clean-live-v1';
 
-// Initial Seed Data
-const DEFAULT_BOOKS = [
-    {
-        id: 'B001',
-        title: 'Đợi Ngắn Đừng Ngủ Dài',
-        author: 'Nguyễn Ngọc Thiện',
-        category: 'Phát triển bản thân',
-        format: 'PDF',
-        fileSize: '14.2 MB',
-        reads: 1420,
-        status: 'public',
-        isbn: 'ISBN-978-604-12-9842-1',
-        coverUrl: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80',
-        synopsis: 'Cuốn sách chia sẻ 101 bài học cuộc sống sâu sắc và thực tế từ một nhà tư tưởng lớn. Từng câu chữ nhắc nhở chúng ta sống trọn vẹn, không lãng phí thời gian vào những điều vụn vặt và dám bước ra khỏi vùng an toàn.',
-        publisher: 'NXB Trẻ',
-        publishYear: 2023,
-        pages: 268,
-        rating: 4.9,
-        uploadDate: '2026-09-10',
-        contentSample: [
-            { chapter: 'Chương 1: Hãy là chính mình', text: 'Mỗi ngày bạn thức dậy là một cơ hội mới để bạn sống đúng với lý tưởng và đam mê của bản thân. Đừng để tiếng ồn từ quan điểm của người khác nhấn chìm tiếng nói sâu thẳm bên trong bạn. Hãy can đảm bước đi trên con đường của riêng mình.' },
-            { chapter: 'Chương 2: Thói quen buổi sáng', text: 'Cách bạn bắt đầu một ngày sẽ định hình cách bạn sống một đời. Khi thức dậy lúc 5 giờ sáng, thế giới vẫn còn tĩnh lặng, đó là khoảng thời gian vàng để bạn suy ngẫm, đọc sách và rèn luyện thể chất.' },
-            { chapter: 'Chương 3: Đừng sợ thất bại', text: 'Thất bại chỉ là bài học giá trị trên hành trình tiến tới thành công. Người không bao giờ vấp ngã là người chưa bao giờ dám thử làm điều gì mới mẻ.' }
-        ]
-    },
-    {
-        id: 'B002',
-        title: 'Nhà Giả Kim (The Alchemist)',
-        author: 'Paulo Coelho',
-        category: 'Tiểu thuyết kinh điển',
-        format: 'EPUB',
-        fileSize: '8.6 MB',
-        reads: 3890,
-        status: 'public',
-        isbn: 'ISBN-978-604-09-1120-4',
-        coverUrl: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=600&q=80',
-        synopsis: 'Câu chuyện kể về Santiago - chàng mục đồng xứ Andalusia quyết tâm lên đường đi tìm kho báu kim tự tháp Ai Cập theo điềm báo giấc mơ. Hành trình phiêu lưu giúp cậu hiểu được Tiếng nói của Vũ trụ và cách theo đuổi Vận Mệnh của đời mình.',
-        publisher: 'NXB Văn Học',
-        publishYear: 2022,
-        pages: 224,
-        rating: 5.0,
-        uploadDate: '2026-09-05',
-        contentSample: [
-            { chapter: 'Khởi hành xứ Andalusia', text: 'Cậu bé tên là Santiago. Trời vừa chập tối khi cậu cùng đàn cừu đến một nhà thờ cổ hoang phế. Mái nhà thờ đã sập từ lâu và một cây tiêu khổng lồ mọc lên ngay chỗ trước kia là phòng thánh.' },
-            { chapter: 'Gặp gỡ Vua Salem', text: 'Khi bạn thực sự khao khát một điều gì, toàn bộ vũ trụ sẽ đồng mưu để giúp bạn đạt được điều đó. Đó là chân lý vĩ đại nhất của hành tinh này.' }
-        ]
-    },
-    {
-        id: 'B003',
-        title: 'Tư Duy Nhanh Và Chậm',
-        author: 'Daniel Kahneman',
-        category: 'Kinh tế & Kinh doanh',
-        format: 'PDF',
-        fileSize: '22.8 MB',
-        reads: 2150,
-        status: 'public',
-        isbn: 'ISBN-978-604-56-3201-9',
-        coverUrl: 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=600&q=80',
-        synopsis: 'Kiệt tác tâm lý học kinh tế chỉ ra hai hệ thống chi phối tư duy con người: Hệ thống 1 (nhanh, tự động, cảm tính) và Hệ thống 2 (chậm, đòi hỏi nỗ lực, logic). Sách giúp người đọc thấu hiểu các định kiến nhận thức và đưa ra quyết định sáng suốt hơn.',
-        publisher: 'NXB Thế Giới',
-        publishYear: 2021,
-        pages: 610,
-        rating: 4.8,
-        uploadDate: '2026-08-18',
-        contentSample: [
-            { chapter: 'Hai hệ thống tư duy', text: 'Hệ thống 1 hoạt động tự động và nhanh chóng, với rất ít hoặc không có nỗ lực kiểm soát. Hệ thống 2 chú ý đến các hoạt động trí óc đòi hỏi nỗ lực, bao gồm các tính toán phức tạp.' }
-        ]
-    },
-    {
-        id: 'B004',
-        title: 'Deep Learning & Trí Tuệ Nhân Tạo',
-        author: 'Ian Goodfellow, Yoshua Bengio',
-        category: 'Công nghệ & AI',
-        format: 'PDF',
-        fileSize: '36.5 MB',
-        reads: 980,
-        status: 'public',
-        isbn: 'ISBN-978-604-88-7712-3',
-        coverUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80',
-        synopsis: 'Giáo trình nền tảng sâu rộng về học sâu, mạng nơ-ron nhân tạo, mô hình sinh (GAN) và toán học ứng dụng cho kỹ sư và nhà nghiên cứu công nghệ hiện đại.',
-        publisher: 'MIT Press & NXB Thông Tin',
-        publishYear: 2024,
-        pages: 780,
-        rating: 4.9,
-        uploadDate: '2026-09-28',
-        contentSample: [
-            { chapter: 'Giới thiệu mạng nơ-ron', text: 'Trí tuệ nhân tạo là ước mơ lâu đời của các nhà khoa học máy tính nhằm tạo ra cỗ máy có khả năng tư duy và tự học từ dữ liệu số lớn.' }
-        ]
-    },
-    {
-        id: 'B005',
-        title: 'Tâm Lý Học Về Tiền',
-        author: 'Morgan Housel',
-        category: 'Kinh tế & Kinh doanh',
-        format: 'EPUB',
-        fileSize: '6.4 MB',
-        reads: 3240,
-        status: 'public',
-        isbn: 'ISBN-978-604-33-4411-5',
-        coverUrl: 'https://images.unsplash.com/photo-1553729459-efe14ef6055d?auto=format&fit=crop&w=600&q=80',
-        synopsis: 'Làm tốt về tiền bạc không nhất thiết phụ thuộc vào bạn thông minh thế nào. Điều quan trọng hơn là cách bạn hành xử và quản lý tâm lý trước lòng tham và nỗi sợ.',
-        publisher: 'NXB Dân Trí',
-        publishYear: 2023,
-        pages: 312,
-        rating: 4.9,
-        uploadDate: '2026-07-15',
-        contentSample: [
-            { chapter: 'Không ai điên rồ cả', text: 'Kinh nghiệm cá nhân của mỗi người về tiền có thể chiếm khoảng 0,00000001% những gì đã xảy ra trên thế giới, nhưng nó lại chiếm tới 80% cách bạn nghĩ thế giới vận hành.' }
-        ]
-    },
-    {
-        id: 'B006',
-        title: 'Bản Đồ Tư Duy (Mind Map)',
-        author: 'Tony Buzan',
-        category: 'Phát triển bản thân',
-        format: 'PDF',
-        fileSize: '18.1 MB',
-        reads: 1120,
-        status: 'draft',
-        isbn: 'ISBN-978-604-77-9912-0',
-        coverUrl: 'https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&w=600&q=80',
-        synopsis: 'Công cụ tư duy phi tuyến tính giúp mở khóa tiềm năng não bộ, ghi nhớ siêu tốc và tổ chức công việc sáng tạo.',
-        publisher: 'NXB Tổng Hợp',
-        publishYear: 2024,
-        pages: 250,
-        rating: 4.6,
-        uploadDate: '2026-10-01',
-        contentSample: [
-            { chapter: 'Khởi đầu với màu sắc và hình ảnh', text: 'Bộ não con người ghi nhớ bằng hình ảnh và các liên tưởng đa chiều tốt gấp ngàn lần những dòng chữ tuyến tính khô khan.' }
-        ]
-    }
-];
-
-const DEFAULT_USERS = [
-    {
-        id: 'U1001',
-        name: 'Nguyễn Văn An',
-        email: 'an.nguyen@gmail.com',
-        phone: '0397409029',
-        avatar: 'NA',
-        tier: 'VIP Khoai Tây',
-        status: 'active',
-        balance: 650, // 650 củ khoai
-        joinedDate: '2026-02-14',
-        birthday: '1998-10-08',
-        booksReadCount: 52,
-        notifications: [
-            {
-                id: 'N01',
-                title: 'Chào mừng thành viên VIP',
-                message: 'Bạn đã kích hoạt thành công gói VIP Khoai Tây Tháng 10.',
-                date: '2026-10-01 09:30',
-                read: true,
-                type: 'system'
-            }
-        ]
-    },
-    {
-        id: 'U1002',
-        name: 'Trần Thị Mai',
-        email: 'mai.tran@gmail.com',
-        phone: '0793503369',
-        avatar: 'TM',
-        tier: 'Standard',
-        status: 'active',
-        balance: 45,
-        joinedDate: '2026-03-20',
-        birthday: '2001-10-06', // Hôm nay sinh nhật!
-        booksReadCount: 44,
-        notifications: []
-    },
-    {
-        id: 'U1003',
-        name: 'Lê Hoàng Nam',
-        email: 'nam.lehoang@yahoo.com',
-        phone: '0908123456',
-        avatar: 'HN',
-        tier: 'VIP Khoai Tây',
-        status: 'active',
-        balance: 1200,
-        joinedDate: '2026-01-10',
-        birthday: '1995-11-20',
-        booksReadCount: 39,
-        notifications: []
-    },
-    {
-        id: 'U1004',
-        name: 'Phạm Minh Đức',
-        email: 'duc.pham@outlook.com',
-        phone: '0912345678',
-        avatar: 'MD',
-        tier: 'Standard',
-        status: 'locked',
-        balance: 0,
-        joinedDate: '2026-05-12',
-        birthday: '2000-04-15',
-        booksReadCount: 12,
-        notifications: [
-            {
-                id: 'N02',
-                title: 'Tài khoản tạm khóa',
-                message: 'Tài khoản của bạn tạm thời bị khóa do vi phạm chính sách cộng đồng.',
-                date: '2026-09-20 11:00',
-                read: false,
-                type: 'warning'
-            }
-        ]
-    },
-    {
-        id: 'U1005',
-        name: 'Hoàng Kim Yến',
-        email: 'yen.kimhoang@gmail.com',
-        phone: '0938889999',
-        avatar: 'KY',
-        tier: 'VIP Khoai Tây',
-        status: 'active',
-        balance: 850,
-        joinedDate: '2026-06-01',
-        birthday: '1999-10-06', // Hôm nay sinh nhật!
-        booksReadCount: 28,
-        notifications: []
-    }
-];
-
-const DEFAULT_TRANSACTIONS = [
-    {
-        id: 'TX-99821',
-        code: '#TX-99821',
-        userId: 'U1001',
-        userName: 'Nguyễn Văn An',
-        type: 'Nạp Gói Khoai Tây VIP',
-        amount: 199000,
-        potatoes: 500,
-        status: 'pending',
-        createdAt: '2026-10-06 18:45',
-        method: 'Chuyển khoản QR Techcombank'
-    },
-    {
-        id: 'TX-99820',
-        code: '#TX-99820',
-        userId: 'U1002',
-        userName: 'Trần Thị Mai',
-        type: 'Nạp Gói Khởi Động',
-        amount: 49000,
-        potatoes: 100,
-        status: 'pending',
-        createdAt: '2026-10-06 17:30',
-        method: 'Ví MoMo'
-    },
-    {
-        id: 'TX-99819',
-        code: '#TX-99819',
-        userId: 'U1003',
-        userName: 'Lê Hoàng Nam',
-        type: 'Nạp Gói Đại Gia Khoai Tây',
-        amount: 499000,
-        potatoes: 1500,
-        status: 'approved',
-        createdAt: '2026-10-06 14:10',
-        method: 'VNPay QR'
-    },
-    {
-        id: 'TX-99818',
-        code: '#TX-99818',
-        userId: 'U1005',
-        userName: 'Hoàng Kim Yến',
-        type: 'Nạp Gói VIP Tháng',
-        amount: 199000,
-        potatoes: 500,
-        status: 'approved',
-        createdAt: '2026-10-05 20:00',
-        method: 'Chuyển khoản Vietcombank'
-    }
-];
-
-const DEFAULT_RENTALS = [
-    {
-        id: 'RT-4481',
-        code: '#RT-4481',
-        userId: 'U1001',
-        userName: 'Nguyễn Văn An',
-        userEmail: 'an.nguyen@gmail.com',
-        bookId: 'B001',
-        bookTitle: 'Đợi Ngắn Đừng Ngủ Dài',
-        bookCover: 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80',
-        duration: '30 ngày',
-        costPotatoes: 50,
-        status: 'active',
-        startDate: '2026-10-01',
-        endDate: '2026-10-31'
-    },
-    {
-        id: 'RT-4482',
-        code: '#RT-4482',
-        userId: 'U1002',
-        userName: 'Trần Thị Mai',
-        userEmail: 'mai.tran@gmail.com',
-        bookId: 'B002',
-        bookTitle: 'Nhà Giả Kim (The Alchemist)',
-        bookCover: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=600&q=80',
-        duration: '7 ngày',
-        costPotatoes: 20,
-        status: 'pending', // Đang chờ Admin duyệt kích hoạt
-        startDate: '2026-10-06',
-        endDate: '2026-10-13'
-    },
-    {
-        id: 'RT-4483',
-        code: '#RT-4483',
-        userId: 'U1003',
-        userName: 'Lê Hoàng Nam',
-        userEmail: 'nam.lehoang@yahoo.com',
-        bookId: 'B003',
-        bookTitle: 'Tư Duy Nhanh Và Chậm',
-        bookCover: 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=600&q=80',
-        duration: 'Vĩnh viễn',
-        costPotatoes: 150,
-        status: 'active',
-        startDate: '2026-09-15',
-        endDate: 'Vô thời hạn'
-    },
-    {
-        id: 'RT-4484',
-        code: '#RT-4484',
-        userId: 'U1005',
-        userName: 'Hoàng Kim Yến',
-        userEmail: 'yen.kimhoang@gmail.com',
-        bookId: 'B005',
-        bookTitle: 'Tâm Lý Học Về Tiền',
-        bookCover: 'https://images.unsplash.com/photo-1553729459-efe14ef6055d?auto=format&fit=crop&w=600&q=80',
-        duration: '7 ngày',
-        costPotatoes: 20,
-        status: 'pending',
-        startDate: '2026-10-06',
-        endDate: '2026-10-13'
-    }
-];
-
-const DEFAULT_TICKETS = [
-    {
-        id: 'TK-1024',
-        code: '#TK-1024',
-        userId: 'U1001',
-        userName: 'Nguyễn Văn An',
-        userEmail: 'an.nguyen@gmail.com',
-        subject: 'Không tải được file EPUB trên ứng dụng máy tính bảng',
-        message: 'Chào Admin, hôm nay tôi vào đọc cuốn Nhà Giả Kim nhưng ấn nút tải EPUB thì báo lỗi định dạng không tương thích. Nhờ Admin kiểm tra giúp tôi.',
-        status: 'pending',
-        createdAt: '2026-10-06 15:30',
-        reply: '',
-        repliedAt: '',
-        repliedBy: ''
-    },
-    {
-        id: 'TK-1023',
-        code: '#TK-1023',
-        userId: 'U1002',
-        userName: 'Trần Thị Mai',
-        userEmail: 'mai.tran@gmail.com',
-        subject: 'Hỏi về ưu đãi nạp khoai tây ngày sinh nhật',
-        message: 'Hôm nay sinh nhật tôi, không biết hệ thống có tặng mã ưu đãi nạp khoai tây hay sách miễn phí không ạ?',
-        status: 'pending',
-        createdAt: '2026-10-06 16:15',
-        reply: '',
-        repliedAt: '',
-        repliedBy: ''
-    },
-    {
-        id: 'TK-1022',
-        code: '#TK-1022',
-        userId: 'U1003',
-        userName: 'Lê Hoàng Nam',
-        userEmail: 'nam.lehoang@yahoo.com',
-        subject: 'Cần hướng dẫn chuyển đổi gói VIP Khoai Tây thường niên',
-        message: 'Tôi muốn nâng cấp lên gói đọc không giới hạn 1 năm, đã nạp chuyển khoản.',
-        status: 'resolved',
-        createdAt: '2026-10-05 10:20',
-        reply: 'Chào bạn Nam, hệ thống đã ghi nhận giao dịch của bạn và kích hoạt thời hạn VIP 365 ngày thành công. Chúc bạn có những giờ đọc sách bổ ích!',
-        repliedAt: '2026-10-05 11:05',
-        repliedBy: 'Admin Tổng'
-    }
-];
-
-const DEFAULT_PACKAGES = [
-    { id: 'PKG-1', name: 'Gói Khởi Động', potatoes: 100, bonus: 10, price: 49000, tag: 'Cơ bản', desc: 'Thích hợp đọc thử thư giãn cuối tuần.' },
-    { id: 'PKG-2', name: 'Gói VIP Tháng', potatoes: 500, bonus: 80, price: 199000, tag: 'Bán chạy nhất', desc: 'Đọc trọn vẹn kho sách độc quyền, tặng thêm 80 củ khoai.' },
-    { id: 'PKG-3', name: 'Gói Đại Gia Khoai Tây', potatoes: 1500, bonus: 300, price: 499000, tag: 'Siêu hời', desc: 'Dành cho độc giả nghiên cứu chuyên sâu, đọc không giới hạn.' }
-];
+// Initial Seed Data (Trống - không dùng dữ liệu mẫu, sẵn sàng nạp dữ liệu thật)
+const DEFAULT_BOOKS = [];
+const DEFAULT_USERS = [];
+const DEFAULT_TRANSACTIONS = [];
+const DEFAULT_RENTALS = [];
+const DEFAULT_TICKETS = [];
+const DEFAULT_PACKAGES = [];
 
 // Database Engine Object
 const DB = {
@@ -422,10 +41,10 @@ const DB = {
         this.loadBooksFromApi();
     },
     loadBooksFromApi: async function() {
-        const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+        const token = (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('token') : null) || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null);
         if (!token) return;
         // Chỉ gọi API quản trị khi đang truy cập trang Quản Trị
-        if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/admin')) {
+        if (typeof window !== 'undefined' && window.location && window.location.pathname && !window.location.pathname.startsWith('/admin')) {
             return;
         }
         try {
@@ -454,7 +73,6 @@ const DB = {
         this.emitChange();
         this.notify('Đã làm mới dữ liệu quản trị từ hệ thống.', 'success');
     },
-
     // --- BOOKS ---
     getBooks: function() {
         return JSON.parse(localStorage.getItem(DB_KEYS.BOOKS) || '[]');
@@ -569,27 +187,84 @@ const DB = {
         const tx = txs.find(t => t.id === id || t.code === id);
         if (tx && tx.status === 'pending') {
             tx.status = 'approved';
+            tx.approvedAt = new Date().toLocaleString('vi-VN');
             localStorage.setItem(DB_KEYS.TRANSACTIONS, JSON.stringify(txs));
 
-            // Cập nhật số dư khoai tây hoặc VIP cho User
+            // Cập nhật số dư khoai tây hoặc VIP cho User trong halm_db_users
             let users = this.getUsers();
-            const user = users.find(u => u.id === tx.userId);
+            let user = users.find(u => String(u.id) === String(tx.userId) || (tx.userEmail && u.email === tx.userEmail) || (tx.userName && u.name === tx.userName));
             if (user) {
                 user.balance = (user.balance || 0) + (tx.potatoes || 0);
-                if (tx.type.includes('VIP')) {
+                if (tx.type && tx.type.includes('VIP')) {
                     user.tier = 'VIP Khoai Tây';
                 }
                 if (!user.notifications) user.notifications = [];
                 user.notifications.unshift({
                     id: 'N_' + Date.now(),
-                    title: '✅ Giao dịch đã được duyệt',
-                    message: `Yêu cầu "${tx.type}" (${tx.amount.toLocaleString()} đ) đã được duyệt. Tài khoản bạn nhận thêm +${tx.potatoes} Củ Khoai!`,
+                    title: '✅ Giao dịch nạp đã được duyệt',
+                    message: `Yêu cầu "${tx.type}" (${tx.amount.toLocaleString()} đ) đã được Ban Quản Trị duyệt! Tài khoản bạn nhận thêm +${tx.potatoes} Củ Khoai.`,
                     date: new Date().toLocaleString('vi-VN'),
                     read: false,
                     type: 'finance'
                 });
-                localStorage.setItem(DB_KEYS.USERS, JSON.stringify(users));
+            } else if (tx.userId || tx.userName) {
+                user = {
+                    id: String(tx.userId || 'U' + Math.floor(1000 + Math.random() * 9000)),
+                    name: tx.userName || 'Độc giả HALM',
+                    email: tx.userEmail || '',
+                    balance: Number(tx.potatoes || 0),
+                    tier: tx.type && tx.type.includes('VIP') ? 'VIP Khoai Tây' : 'Thợ Cày 🌱',
+                    status: 'active',
+                    joinedDate: new Date().toISOString().slice(0, 10),
+                    notifications: [
+                        {
+                            id: 'N_' + Date.now(),
+                            title: '✅ Giao dịch nạp đã được duyệt',
+                            message: `Yêu cầu "${tx.type}" (${tx.amount.toLocaleString()} đ) đã được Ban Quản Trị duyệt! Tài khoản bạn nhận thêm +${tx.potatoes} Củ Khoai.`,
+                            date: new Date().toLocaleString('vi-VN'),
+                            read: false,
+                            type: 'finance'
+                        }
+                    ]
+                };
+                users.push(user);
             }
+            localStorage.setItem(DB_KEYS.USERS, JSON.stringify(users));
+
+            // Cập nhật đồng bộ trực tiếp vào halm_customer_cache cho User UI
+            let updatedBalance = null;
+            try {
+                const cached = localStorage.getItem('halm_customer_cache');
+                if (cached) {
+                    const custObj = JSON.parse(cached);
+                    const isTargetCustomer = !tx.userId || 
+                        String(custObj.customerId) === String(tx.userId) || 
+                        String(custObj.id) === String(tx.userId) || 
+                        custObj.customerName === tx.userName || 
+                        (tx.userEmail && custObj.email === tx.userEmail);
+                    if (isTargetCustomer) {
+                        custObj.potatoBalance = (custObj.potatoBalance || 0) + (tx.potatoes || 0);
+                        custObj.totalPotatoEarned = (custObj.totalPotatoEarned || custObj.potatoBalance) + (tx.potatoes || 0);
+                        localStorage.setItem('halm_customer_cache', JSON.stringify(custObj));
+                        updatedBalance = custObj.potatoBalance;
+                    }
+                }
+            } catch (e) {
+                console.warn("Lỗi đồng bộ halm_customer_cache:", e);
+            }
+
+            // Phát sự kiện toàn cục để Header, Cá Nhân, Giỏ Hàng... nhận số dư mới ngay lập tức
+            window.dispatchEvent(new CustomEvent('halm-potato-updated', {
+                detail: {
+                    potatoBalance: updatedBalance !== null ? updatedBalance : (user ? user.balance : undefined),
+                    addedPotato: tx.potatoes,
+                    txCode: tx.code,
+                    txId: tx.id,
+                    status: 'approved',
+                    tx: tx
+                }
+            }));
+
             this.emitChange();
             return tx;
         }
@@ -598,25 +273,39 @@ const DB = {
     rejectTransaction: function(id, reason = 'Thông tin giao dịch chưa trùng khớp') {
         let txs = this.getTransactions();
         const tx = txs.find(t => t.id === id || t.code === id);
-        if (tx) {
+        if (tx && tx.status === 'pending') {
             tx.status = 'rejected';
+            tx.rejectReason = reason;
+            tx.rejectedAt = new Date().toLocaleString('vi-VN');
             localStorage.setItem(DB_KEYS.TRANSACTIONS, JSON.stringify(txs));
 
             // Báo cho User
             let users = this.getUsers();
-            const user = users.find(u => u.id === tx.userId);
+            let user = users.find(u => String(u.id) === String(tx.userId) || (tx.userEmail && u.email === tx.userEmail) || (tx.userName && u.name === tx.userName));
             if (user) {
                 if (!user.notifications) user.notifications = [];
                 user.notifications.unshift({
                     id: 'N_' + Date.now(),
-                    title: '❌ Giao dịch bị từ chối',
-                    message: `Giao dịch ${tx.code} đã bị từ chối. Lý do: ${reason}. Vui lòng liên hệ hỗ trợ.`,
+                    title: '❌ Giao dịch nạp bị từ chối',
+                    message: `Giao dịch ${tx.code} đã bị từ chối. Lý do: ${reason}. Vui lòng liên hệ bộ phận hỗ trợ độc giả.`,
                     date: new Date().toLocaleString('vi-VN'),
                     read: false,
                     type: 'finance_reject'
                 });
                 localStorage.setItem(DB_KEYS.USERS, JSON.stringify(users));
             }
+
+            // Phát sự kiện toàn cục thông báo từ chối
+            window.dispatchEvent(new CustomEvent('halm-potato-updated', {
+                detail: {
+                    txCode: tx.code,
+                    txId: tx.id,
+                    status: 'rejected',
+                    reason: reason,
+                    tx: tx
+                }
+            }));
+
             this.emitChange();
             return tx;
         }
@@ -624,21 +313,60 @@ const DB = {
     },
     createUserTransaction: function(txData) {
         let txs = this.getTransactions();
+        const codeNum = Math.floor(10000 + Math.random() * 90000);
+        const now = new Date();
+        const formattedDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
         const newTx = {
-            id: 'TX-' + String(Math.floor(10000 + Math.random() * 90000)),
-            code: '#TX-' + String(Math.floor(10000 + Math.random() * 90000)),
+            id: txData.id || ('TX-' + codeNum),
+            code: txData.code || ('#TX-' + codeNum),
             userId: txData.userId,
             userName: txData.userName,
+            userEmail: txData.userEmail || '',
             type: txData.type || 'Nạp Khoai Tây',
-            amount: Number(txData.amount),
-            potatoes: Number(txData.potatoes),
+            amount: Number(txData.amount || 0),
+            potatoes: Number(txData.potatoes || 0),
             status: 'pending',
-            createdAt: new Date().toLocaleString('vi-VN'),
+            createdAt: txData.createdAt || formattedDate,
             method: txData.method || 'Chuyển khoản QR'
         };
         txs.unshift(newTx);
         localStorage.setItem(DB_KEYS.TRANSACTIONS, JSON.stringify(txs));
+
+        // Tự động đồng bộ User vào DB nếu chưa có
+        let users = this.getUsers();
+        let user = users.find(u => String(u.id) === String(newTx.userId) || (newTx.userEmail && u.email === newTx.userEmail) || (newTx.userName && u.name === newTx.userName));
+        if (!user && (newTx.userId || newTx.userName)) {
+            user = {
+                id: String(newTx.userId || 'U' + codeNum),
+                name: newTx.userName || 'Độc giả HALM',
+                email: newTx.userEmail || '',
+                balance: 0,
+                tier: 'Thợ Cày 🌱',
+                status: 'active',
+                joinedDate: new Date().toISOString().slice(0, 10),
+                notifications: [
+                    {
+                        id: 'N_' + Date.now(),
+                        title: '⏳ Giao dịch nạp đang chờ xét duyệt',
+                        message: `Yêu cầu "${newTx.type}" (${newTx.amount.toLocaleString()} đ) đã được ghi nhận và đang chờ Admin duyệt.`,
+                        date: formattedDate,
+                        read: false,
+                        type: 'finance_pending'
+                    }
+                ]
+            };
+            users.push(user);
+            localStorage.setItem(DB_KEYS.USERS, JSON.stringify(users));
+        }
+
         this.emitChange();
+
+        // Gửi thông báo nổi nếu Admin đang mở trang quản trị
+        if (typeof this.notify === 'function') {
+            this.notify(`📥 Giao dịch mới ${newTx.code} (${newTx.amount.toLocaleString()} đ) từ ${newTx.userName} đang chờ duyệt!`, 'info');
+        }
+
         return newTx;
     },
 
@@ -908,6 +636,7 @@ const DB = {
 
     // --- NOTIFICATION UTILITY ---
     notify: function(msg, type = 'info') {
+        if (typeof document === 'undefined' || typeof document.getElementById !== 'function' || typeof document.createElement !== 'function') return;
         let toast = document.getElementById('toastNotification');
         if (!toast) {
             toast = document.createElement('div');
@@ -936,4 +665,9 @@ const DB = {
 DB.init();
 
 // Window global expose
-window.DB = DB;
+if (typeof window !== 'undefined') {
+    window.DB = DB;
+}
+
+export default DB;
+export { DB };

@@ -1015,7 +1015,7 @@ export default function Payment({ onNavigate }) {
               Giỏ Hàng
             </button>
             <span>•</span>
-            <button type="button" onClick={() => onNavigate ? onNavigate('home') : navigate('/trangchu')} className="hover:text-wine dark:hover:text-gold cursor-pointer">
+            <button type="button" onClick={() => onNavigate ? onNavigate('home') : navigate('/')} className="hover:text-wine dark:hover:text-gold cursor-pointer">
               Trang Chủ
             </button>
           </div>

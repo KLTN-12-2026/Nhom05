@@ -574,20 +574,98 @@ document.addEventListener('click', function(e) {
 // Client-side SPA navigation interceptor for Admin pages
 if (!window.__HALM_ADMIN_CLICK_INTERCEPTOR__) {
     window.__HALM_ADMIN_CLICK_INTERCEPTOR__ = true;
+
+    const legacyAdminHtmlMap = {
+        'tongquan.html': '/admin',
+        'tongquan': '/admin',
+        'baocao&thongke.html': '/admin/thong-ke',
+        'baocao&thongke': '/admin/thong-ke',
+        'baocaothongke.html': '/admin/thong-ke',
+        'baocaothongke': '/admin/thong-ke',
+        'quanlysach.html': '/admin/quan-ly-sach',
+        'quanlysach': '/admin/quan-ly-sach',
+        'giaodichthuesach.html': '/admin/giao-dich-thue-sach',
+        'giaodichthuesach': '/admin/giao-dich-thue-sach',
+        'quanlytaichinh.html': '/admin/quan-ly-tai-chinh',
+        'quanlytaichinh': '/admin/quan-ly-tai-chinh',
+        'quanlykhachhang.html': '/admin/quan-ly-khach-hang',
+        'quanlykhachhang': '/admin/quan-ly-khach-hang',
+        'quanlyuudai.html': '/admin/quan-ly-uu-dai',
+        'quanlyuudai': '/admin/quan-ly-uu-dai',
+        'thongbaooutro.html': '/admin/thong-bao-ho-tro',
+        'thongbaooutro': '/admin/thong-bao-ho-tro',
+        'thongbao.html': '/admin/thong-bao-ho-tro',
+        'thongbao': '/admin/thong-bao-ho-tro',
+        'quanlygiaodien.html': '/admin/quan-ly-giao-dien',
+        'quanlygiaodien': '/admin/quan-ly-giao-dien'
+    };
+
     document.addEventListener('click', function(e) {
-        const link = e.target.closest('a[data-admin-route="true"], a.admin-brand, a[href^="/admin"]');
-        if (link && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && !link.target) {
-            const href = link.getAttribute('href');
-            if (href && (href.startsWith('/admin') || href === '/admin')) {
-                e.preventDefault();
-                if (href.toLowerCase() === window.location.pathname.toLowerCase()) {
-                    return;
-                }
-                if (typeof window.__HALM_ADMIN_NAVIGATE__ === 'function') {
-                    window.__HALM_ADMIN_NAVIGATE__(href);
-                } else {
-                    window.location.href = href;
-                }
+        const link = e.target.closest('a');
+        if (!link || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || link.target) {
+            return;
+        }
+
+        const rawHref = link.getAttribute('href');
+        if (!rawHref || rawHref === '#' || rawHref.startsWith('javascript:')) {
+            return;
+        }
+
+        const isCurrentlyInAdmin = window.location.pathname.toLowerCase().startsWith('/admin') || window.__HALM_ADMIN_REACT__;
+        if (!isCurrentlyInAdmin && !link.hasAttribute('data-admin-route') && !link.classList.contains('admin-brand')) {
+            return;
+        }
+
+        // 1. Phân giải target path & query string
+        let [targetPath, queryString] = rawHref.split('?');
+        const cleanBase = (targetPath || '').trim().replace(/^\.?\//, '').toLowerCase();
+
+        // 2. Cắt đứt tuyệt đối các liên kết trỏ sang màn hình user (ChiTietSach) từ Admin
+        if (cleanBase.includes('chitietsach') || cleanBase.includes('chi-tiet-sach') || cleanBase.startsWith('book/')) {
+            e.preventDefault();
+            // Trích xuất ID sách nếu có (ví dụ: /chitietsach/25 hoặc /chitietsach?id=25)
+            const idMatch = rawHref.match(/(?:chitietsach|chi-tiet-sach)\/([0-9]+)/i);
+            const bookId = idMatch ? idMatch[1] : '';
+            const searchParams = new URLSearchParams(queryString || '');
+            if (bookId && !searchParams.has('bookId')) {
+                searchParams.set('bookId', bookId);
+            }
+            const queryPart = searchParams.toString() ? `?${searchParams.toString()}` : '';
+            const destination = `/admin/quan-ly-sach${queryPart}`;
+
+            if (typeof window.__HALM_ADMIN_NAVIGATE__ === 'function') {
+                window.__HALM_ADMIN_NAVIGATE__(destination);
+            } else {
+                window.location.href = destination;
+            }
+            return;
+        }
+
+        // 3. Xử lý các liên kết dạng file legacy .html trong Admin
+        if (legacyAdminHtmlMap[cleanBase]) {
+            e.preventDefault();
+            const destination = legacyAdminHtmlMap[cleanBase] + (queryString ? `?${queryString}` : '');
+            if (destination.toLowerCase() === (window.location.pathname + window.location.search).toLowerCase()) {
+                return;
+            }
+            if (typeof window.__HALM_ADMIN_NAVIGATE__ === 'function') {
+                window.__HALM_ADMIN_NAVIGATE__(destination);
+            } else {
+                window.location.href = destination;
+            }
+            return;
+        }
+
+        // 4. Xử lý các liên kết SPA Admin (/admin/...)
+        if (rawHref.startsWith('/admin') || link.hasAttribute('data-admin-route') || link.classList.contains('admin-brand')) {
+            e.preventDefault();
+            if (rawHref.toLowerCase() === (window.location.pathname + window.location.search).toLowerCase()) {
+                return;
+            }
+            if (typeof window.__HALM_ADMIN_NAVIGATE__ === 'function') {
+                window.__HALM_ADMIN_NAVIGATE__(rawHref);
+            } else {
+                window.location.href = rawHref;
             }
         }
     });
@@ -972,14 +1050,14 @@ function submitRecoverPassword() {
 
 function executeLogout() {
     closeAdminModal('logoutModal');
-    sessionStorage.removeItem('token');
-    sessionStorage.removeItem('role');
-    localStorage.removeItem('token');
-    localStorage.removeItem('role');
+    sessionStorage.removeItem('admin_token');
+    sessionStorage.removeItem('admin_role');
+    localStorage.removeItem('admin_token');
+    localStorage.removeItem('admin_role');
     window.DB.notify('Đã đăng xuất phiên làm việc của Quản trị viên.', 'info');
     setTimeout(() => {
-        window.location.href = '/';
-    }, 1000);
+        window.location.href = '/dangnhap';
+    }, 800);
 }
 
 Object.assign(window, {
@@ -1009,11 +1087,19 @@ async function resetDefaultData() {
                 window.location.reload();
             }, 500);
         }
-    } else if (confirm('Bạn có chắc muốn khôi phục toàn bộ dữ liệu mẫu ban đầu của Database?')) {
-        window.DB.resetToDefault();
-        setTimeout(() => {
-            window.location.reload();
-        }, 500);
+    } else if (typeof window.halmConfirm === 'function') {
+        const confirmed = await window.halmConfirm({
+            title: 'Khôi Phục Dữ Liệu Gốc?',
+            message: 'Bạn có chắc chắn muốn đặt lại toàn bộ cơ sở dữ liệu về trạng thái mẫu ban đầu?',
+            confirmText: 'Khôi Phục Dữ Liệu',
+            type: 'warning'
+        });
+        if (confirmed) {
+            window.DB.resetToDefault();
+            setTimeout(() => {
+                window.location.reload();
+            }, 500);
+        }
     }
 }
 
@@ -1024,7 +1110,9 @@ window.AdminUI = {
         return new Promise((resolve) => {
             const modal = document.getElementById('adminConfirmModal');
             if (!modal) {
-                if (window.confirm(message || title)) return resolve(true);
+                if (typeof window.halmConfirm === 'function') {
+                    return window.halmConfirm({ title, message, confirmText, cancelText, type: confirmType }).then(resolve);
+                }
                 return resolve(false);
             }
             document.getElementById('adminConfirmTitle').innerText = title;
@@ -1120,16 +1208,20 @@ window.AdminUI = {
     },
 
     // Standard Export Modal (Word-Style Print Dialog Experience)
-    showExportModal: function({
-        title = 'Cấu Hình Xuất Dữ Liệu',
-        datasetName = 'Bản ghi',
-        defaultFilename = 'HALMBOOK_Export.csv',
-        currentFilterDesc = 'Không có bộ lọc',
-        totalCount = 0,
-        filteredCount = 0,
-        columns = [],
-        onExport
-    }) {
+    showExportModal: function(opts = {}) {
+        if (typeof window.halmExportDialog === 'function') {
+            return window.halmExportDialog(opts);
+        }
+        const {
+            title = 'Cấu Hình Xuất Dữ Liệu',
+            datasetName = 'Bản ghi',
+            defaultFilename = 'HALMBOOK_Export.csv',
+            currentFilterDesc = 'Không có bộ lọc',
+            totalCount = 0,
+            filteredCount = 0,
+            columns = [],
+            onExport
+        } = opts;
         return new Promise((resolve) => {
             const modal = document.getElementById('adminExportModal');
             if (!modal) {
