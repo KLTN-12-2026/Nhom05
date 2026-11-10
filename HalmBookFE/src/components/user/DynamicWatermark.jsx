@@ -60,6 +60,15 @@ const DynamicWatermark = ({
         };
     });
 
+    // Định dạng chuỗi nhận diện độc giả (khởi tạo sớm tránh Temporal Dead Zone)
+    const readerDisplay = useMemo(() => {
+        const parts = [];
+        if (readerInfo.name) parts.push(readerInfo.name);
+        if (readerInfo.email) parts.push(readerInfo.email);
+        if (readerInfo.id && !parts.includes(readerInfo.id)) parts.push(`ID: ${readerInfo.id}`);
+        return parts.length > 0 ? parts.join(' • ') : 'Độc giả HALM BOOK';
+    }, [readerInfo]);
+
     // 2. Timestamp động thời gian thực (Cập nhật định kỳ)
     const [currentTime, setCurrentTime] = useState(() => formatTimestamp(new Date()));
 
@@ -244,14 +253,6 @@ const DynamicWatermark = ({
         return () => observer.disconnect();
     }, [tamperCount]);
 
-    // Định dạng chuỗi nhận diện độc giả
-    const readerDisplay = useMemo(() => {
-        const parts = [];
-        if (readerInfo.name) parts.push(readerInfo.name);
-        if (readerInfo.email) parts.push(readerInfo.email);
-        if (readerInfo.id && !parts.includes(readerInfo.id)) parts.push(`ID: ${readerInfo.id}`);
-        return parts.length > 0 ? parts.join(' • ') : 'Độc giả HALM BOOK';
-    }, [readerInfo]);
 
     // Màu sắc watermark theo theme
     const styleTheme = useMemo(() => {
