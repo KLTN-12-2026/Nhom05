@@ -94,7 +94,7 @@ export const PHOTO_EXACT_TIERS: TierDto[] = [
       'Thuê và đọc toàn bộ kho sách mở tiêu chuẩn',
       'Mở khóa Ví Khoai Tây tích lũy điểm thưởng',
       'Có thể khám phá và trải nghiệm toàn bộ hệ sinh thái của HALM BOOK',
-      '3 lượt Upload file free cho người mới',
+      '3 lượt Upload file PDF miễn phí (hết lượt: 50 Khoai/lượt)',
     ],
   },
   {
@@ -109,6 +109,7 @@ export const PHOTO_EXACT_TIERS: TierDto[] = [
     description: 'Hạng Bạc Tri Thức. Giảm 5% phí thuê sách trọn đời, mở khóa huy hiệu Bạc danh dự.',
     benefits: [
       'Giảm 5% phí thuê & mua mọi đầu sách',
+      '10 lượt Upload file PDF miễn phí (hết lượt: 50 Khoai/lượt)',
       'Huy hiệu Cao Thủ Bạc danh vị nổi bật bên cạnh tên',
       'Đọc trước các tác phẩm mới xuất bản trước 3 ngày',
       'Ưu tiên hàng đợi hỗ trợ CSKH trong vòng 2 giờ',
@@ -126,6 +127,7 @@ export const PHOTO_EXACT_TIERS: TierDto[] = [
     description: 'Hạng Vàng Tinh Hoa. Giảm 10% phí thuê sách trọn đời, miễn phí 1 cuốn mỗi tháng và hỗ trợ VIP 24/7.',
     benefits: [
       'Giảm 10% toàn bộ chi phí thuê sách',
+      '15 lượt Upload file PDF miễn phí (hết lượt: 50 Khoai/lượt)',
       'Miễn phí 1 cuốn sách mỗi tháng (1 trong 5 sách do web cho phép)',
       'Khung Avatar Tinh Hoa hào quang vàng kim',
       'Đọc trước các tác phẩm mới xuất bản trước 7 ngày',
@@ -143,6 +145,7 @@ export const PHOTO_EXACT_TIERS: TierDto[] = [
     description: 'Hạng Hoàng Gia VIP Tối Thượng. Giảm 20% phí thuê sách trọn đời, miễn cọc trọn đời và đặc quyền chăm sóc 1-1.',
     benefits: [
       'Giảm 20% toàn bộ dịch vụ và thuê sách trọn đời',
+      'Upload file PDF KHÔNG GIỚI HẠN (Vĩnh viễn)',
       'Thuê KHÔNG GIỚI HẠN toàn bộ kho sách VIP',
       'Tặng ấn phẩm sách bìa cứng độc quyền tận nhà hàng năm',
       'Chuyên viên chăm sóc khách hàng VIP riêng biệt (1-on-1)',

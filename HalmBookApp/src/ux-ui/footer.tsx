@@ -1,5 +1,5 @@
+import React, { useEffect, useRef, useCallback } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppNavigation } from './navigation';
@@ -18,7 +18,7 @@ interface FooterProps {
   visible?: boolean;
 }
 
-export default function Footer({ activeNav, floating = false, visible = true }: FooterProps) {
+function FooterComponent({ activeNav, floating = false, visible = true }: FooterProps) {
   // ============================================================================
   // [GIẢI THÍCH CODE]: Lấy trạng thái `isLoggedIn` và hàm `showLoginAlert` từ navigation
   // để kiểm tra xem người dùng hiện tại có phải khách vãng lai hay không.
@@ -100,6 +100,8 @@ export default function Footer({ activeNav, floating = false, visible = true }: 
     </Animated.View>
   );
 }
+
+export default React.memo(FooterComponent);
 
 const styles = StyleSheet.create({
   footerWrap: {

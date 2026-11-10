@@ -1,9 +1,10 @@
+import React, { ComponentRef, RefObject, useEffect, useState } from 'react';
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import type { ComponentRef, RefObject } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppNavigation } from './navigation';
+import { getUnreadNotificationCount } from './notificationService';
 
 interface SharedHeaderProps {
   isDarkMode: boolean;
@@ -13,7 +14,7 @@ interface SharedHeaderProps {
   currentScreen?: string;
 }
 
-export default function SharedHeader({
+function SharedHeaderComponent({
   isDarkMode,
   onToggleDarkMode,
   blurTarget,
@@ -24,6 +25,12 @@ export default function SharedHeader({
   // [GIẢI THÍCH CODE]: Chỉ áp dụng avatar giống trang cá nhân trên tủ sách, ưu đãi và uploadfile
   const isProfileAvatarScreen = ['offers', 'upload', 'bookshelf'].includes(currentScreen || '');
   const foreground = isDarkMode ? '#F5F1E8' : '#11131A';
+
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    getUnreadNotificationCount().then(setUnreadCount).catch(() => {});
+  }, [currentScreen]);
 
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>
@@ -38,44 +45,61 @@ export default function SharedHeader({
         ]}
       >
         <View style={styles.brandRow}>
-          <TouchableOpacity
-            style={styles.logo}
-            onPress={() => navigateTab('home')}
-            accessibilityRole="button"
-            accessibilityLabel={lang === 'en' ? 'Back to HALM BOOK Home' : 'Về trang chủ HALM BOOK'}
-          >
-            <MaterialCommunityIcons name="book-open-page-variant" size={29} color="#9147DF" />
-            <Text style={[styles.logoText, { color: foreground }]}>HALM BOOK</Text>
-          </TouchableOpacity>
+          {currentScreen === 'bookshelf' ? (
+            <View style={styles.bookshelfHeader}>
+              <Text style={[styles.bookshelfTitle, { color: foreground }]}>
+                {lang === 'en' ? 'Your Bookshelf' : 'Tủ sách của bạn'}
+              </Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.logo}
+              onPress={() => navigateTab('home')}
+              accessibilityRole="button"
+              accessibilityLabel={lang === 'en' ? 'Back to HALM BOOK Home' : 'Về trang chủ HALM BOOK'}
+            >
+              <MaterialCommunityIcons name="book-open-page-variant" size={29} color="#9147DF" />
+              <Text style={[styles.logoText, { color: foreground }]}>HALM BOOK</Text>
+            </TouchableOpacity>
+          )}
           <View style={styles.actions}>
             <TouchableOpacity
               style={styles.actionButton}
-              onPress={() => navigate('transactions')}
+              onPress={() => navigate('notifications')}
               accessibilityRole="button"
-              accessibilityLabel={lang === 'en' ? 'Transaction history' : 'Lịch sử giao dịch'}
+              accessibilityLabel={lang === 'en' ? 'Notifications' : 'Thông báo'}
             >
               <MaterialCommunityIcons name="bell-outline" size={23} color={foreground} />
-              <View style={styles.notice} />
+              {unreadCount > 0 && <View style={styles.notice} />}
             </TouchableOpacity>
             {/* ============================================================================
-                [GIẢI THÍCH CODE]: Nút Giỏ hàng ở Header dùng chung
-                Khi chưa đăng nhập (!isLoggedIn), nhấn vào giỏ hàng sẽ yêu cầu đăng nhập luôn,
-                hiển thị thông báo "Bạn phải đăng nhập để dùng chức năng giỏ hàng" kèm nút "Đăng nhập ngay".
+                [GIẢI THÍCH CODE]: Nút tìm kiếm (khi ở Tủ Sách) hoặc Giỏ hàng (màn hình khác)
                 ============================================================================ */}
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => {
-                if (!isLoggedIn) {
-                  showLoginAlert(lang === 'en' ? 'Please log in to use cart feature' : 'Bạn phải đăng nhập để dùng chức năng giỏ hàng');
-                  return;
-                }
-                navigate('cart');
-              }}
-              accessibilityRole="button"
-              accessibilityLabel={lang === 'en' ? 'Cart' : 'Giỏ hàng'}
-            >
-              <Ionicons name="cart-outline" size={23} color={foreground} />
-            </TouchableOpacity>
+            {currentScreen === 'bookshelf' ? (
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => navigate('search')}
+                accessibilityRole="button"
+                accessibilityLabel={lang === 'en' ? 'Search' : 'Tìm kiếm'}
+              >
+                <Ionicons name="search-outline" size={23} color={foreground} />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => {
+                  if (!isLoggedIn) {
+                    showLoginAlert(lang === 'en' ? 'Please log in to use cart feature' : 'Bạn phải đăng nhập để dùng chức năng giỏ hàng');
+                    return;
+                  }
+                  navigate('cart');
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={lang === 'en' ? 'Cart' : 'Giỏ hàng'}
+              >
+                <Ionicons name="cart-outline" size={23} color={foreground} />
+              </TouchableOpacity>
+            )}
             {/* ============================================================================
                 [GIẢI THÍCH CODE]: Khách vãng lai nhấn vào icon trang cá nhân ở header
                 Hiển thị thông báo: "Bạn phải đăng nhập để dùng chức năng trang cá nhân"
@@ -148,6 +172,8 @@ export default function SharedHeader({
   );
 }
 
+export default React.memo(SharedHeaderComponent);
+
 const styles = StyleSheet.create({
   safeArea: { backgroundColor: 'transparent' },
   header: {
@@ -163,6 +189,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 8,
+  },
+  bookshelfHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  bookshelfTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: -0.3,
   },
   logo: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   logoText: { fontSize: 19, fontWeight: '900' },

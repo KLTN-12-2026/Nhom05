@@ -16,7 +16,8 @@ export type AppScreen =
   | 'reader'
   | 'payment'
   | 'chatbot'
-  | 'bookDetail';
+  | 'bookDetail'
+  | 'notifications';
 
 export interface BookData {
   id: string;
@@ -24,10 +25,17 @@ export interface BookData {
   author?: string;
   chapter?: string;
   tag?: string;
+  img_url?: string;
+  coverImage?: string | null;
+  coverUri?: string | null;
   pages?: number;
   reads?: string;
   rating?: string;
+  fileUri?: string;
+  fileName?: string;
+  chapters?: any[];
   initialChapterIndex?: number;
+  totalChapters?: number;
 }
 
 export type AppLanguage = 'vi' | 'en';
@@ -124,8 +132,8 @@ export function useAppThemeStyles<T extends AppStyleSheet>(styles: T): T {
   return useMemo(
     () => isDarkMode
       ? Object.fromEntries(
-          Object.entries(styles).map(([name, style]) => [name, darkenStyle((StyleSheet.flatten(style) || {}) as ViewStyle | TextStyle)]),
-        ) as T
+        Object.entries(styles).map(([name, style]) => [name, darkenStyle((StyleSheet.flatten(style) || {}) as ViewStyle | TextStyle)]),
+      ) as T
       : styles,
     [isDarkMode, styles],
   );

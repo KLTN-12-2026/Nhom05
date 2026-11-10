@@ -1010,13 +1010,19 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
     showToast(`Đã chuyển tới Trang ${bm.page} (${bm.percent}%)`);
   };
 
+  const lastReportedPercentRef = useRef<number>(-1);
+
   const handleScroll = (event: any) => {
     const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
     currentScrollYRef.current = contentOffset.y;
     const maxScroll = contentSize.height - layoutMeasurement.height;
     if (maxScroll > 0) {
       const p = Math.max(0, Math.min(1, contentOffset.y / maxScroll));
-      setScrollProgress(p);
+      const intPercent = Math.round(p * 100);
+      if (intPercent !== lastReportedPercentRef.current) {
+        lastReportedPercentRef.current = intPercent;
+        setScrollProgress(p);
+      }
     }
     if (selectedRange) {
       updateToolbarPosition(
@@ -1173,7 +1179,7 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
           },
         ]}
         onScroll={handleScroll}
-        scrollEventThrottle={16}
+        scrollEventThrottle={32}
         showsVerticalScrollIndicator={true}
         onScrollBeginDrag={() => {
           // LƯỚT XUỐNG HOẶC LƯỚT LÊN LÀ TỰ ĐỘNG ẨN NGAY ĐIỀU KHIỂN!
