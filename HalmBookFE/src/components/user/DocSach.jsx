@@ -260,11 +260,40 @@ const pageStyles = `
 
 function loadScript(src) {
     return new Promise((resolve, reject) => {
+        const isLoaded = () => {
+            if (src.includes('pdf.min.js')) return Boolean(window.pdfjsLib);
+            if (src.includes('epub.min.js')) return Boolean(window.ePub);
+            if (src.includes('jszip.min.js')) return Boolean(window.JSZip);
+            if (src.includes('three.min.js')) return Boolean(window.THREE);
+            return false;
+        };
+
+        if (isLoaded()) {
+            return resolve();
+        }
+
         const existing = document.querySelector(`script[src="${src}"]`);
         if (existing) {
-            resolve();
+            let count = 0;
+            const poller = setInterval(() => {
+                count++;
+                if (isLoaded() || count > 60) {
+                    clearInterval(poller);
+                    resolve();
+                }
+            }, 50);
+
+            existing.addEventListener('load', () => {
+                clearInterval(poller);
+                resolve();
+            }, { once: true });
+            existing.addEventListener('error', (e) => {
+                clearInterval(poller);
+                reject(e);
+            }, { once: true });
             return;
         }
+
         const script = document.createElement('script');
         script.src = src;
         script.onload = () => resolve();
@@ -997,7 +1026,16 @@ export default function DocSach() {
 
     // 3. Render Canvas (Trang in PDF gốc)
     const renderCanvasPage = useCallback(async (pageNum) => {
-        if (!pdfDoc || !canvasRef.current) return;
+        if (!pdfDoc) return;
+        let canvas = canvasRef.current;
+        if (!canvas) {
+            for (let i = 0; i < 15; i++) {
+                await new Promise(r => setTimeout(r, 40));
+                canvas = canvasRef.current;
+                if (canvas) break;
+            }
+        }
+        if (!canvas) return;
 
         try {
             setIsRendering(true);

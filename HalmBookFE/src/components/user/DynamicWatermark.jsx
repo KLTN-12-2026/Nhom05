@@ -72,7 +72,7 @@ const DynamicWatermark = ({
     const shieldTimerRef = useRef(null);
 
     // 5. Trạng thái che mờ khi chuyển cửa sổ / mở Snipping Tool
-    const [isWindowBlurred, setIsWindowBlurred] = useState(false);
+    // window blur guard removed to allow smooth iframe/EPUB and tab interaction
 
     // 6. Ref watermark container & MutationObserver để chống can thiệp DevTools
     const watermarkRef = useRef(null);
@@ -181,20 +181,6 @@ const DynamicWatermark = ({
             }
         };
 
-        // Khi cửa sổ mất focus (người dùng mở Snipping Tool, Lightshot hoặc chuyển ứng dụng chụp ảnh ngoài)
-        const handleWindowBlur = () => {
-            setIsWindowBlurred(true);
-        };
-
-        const handleWindowFocus = () => {
-            setIsWindowBlurred(false);
-        };
-
-        // Chống chuột phải lưu ảnh hoặc inspect
-        const handleContextMenu = (e) => {
-            e.preventDefault();
-        };
-
         // Chống sao chép hàng loạt & Tự động gắn Watermark bản quyền vào trích đoạn copy
         const handleCopy = (e) => {
             const selection = window.getSelection();
@@ -213,17 +199,11 @@ const DynamicWatermark = ({
 
         window.addEventListener('keydown', handleKeyDown, { capture: true });
         window.addEventListener('keyup', handleKeyUp, { capture: true });
-        window.addEventListener('blur', handleWindowBlur);
-        window.addEventListener('focus', handleWindowFocus);
-        window.addEventListener('contextmenu', handleContextMenu);
         window.addEventListener('copy', handleCopy);
 
         return () => {
             window.removeEventListener('keydown', handleKeyDown, { capture: true });
             window.removeEventListener('keyup', handleKeyUp, { capture: true });
-            window.removeEventListener('blur', handleWindowBlur);
-            window.removeEventListener('focus', handleWindowFocus);
-            window.removeEventListener('contextmenu', handleContextMenu);
             window.removeEventListener('copy', handleCopy);
             if (shieldTimerRef.current) clearTimeout(shieldTimerRef.current);
         };
@@ -352,11 +332,7 @@ const DynamicWatermark = ({
                 id="halm-dynamic-watermark"
                 ref={watermarkRef}
                 key={`wm-${tamperCount}`}
-                className="absolute inset-0 pointer-events-none select-none overflow-hidden z-25"
-                style={{
-                    contain: 'strict',
-                    mixBlendMode: paperTheme === 'starry' ? 'screen' : 'multiply'
-                }}
+                className="absolute inset-0 pointer-events-none select-none overflow-hidden z-20"
                 aria-hidden="true"
             >
                 {/* 1. LƯỚI WATERMARK TRẢI ĐỀU 16 Ô TOÀN BỘ KHUNG NHÌN */}
@@ -408,20 +384,7 @@ const DynamicWatermark = ({
                 </div>
             </div>
 
-            {/* 3. WINDOW BLUR GUARD (Che mờ khi cửa sổ mất tiêu điểm do mở Snipping Tool / Chuyển App ngoài) */}
-            {isWindowBlurred && (
-                <div
-                    className="absolute inset-0 z-40 backdrop-blur-md bg-black/40 flex flex-col items-center justify-center text-white pointer-events-none select-none transition-all duration-200"
-                >
-                    <div className="bg-[#1A1C18]/90 border border-[#D4AF37]/50 rounded-2xl px-6 py-4 shadow-2xl flex items-center gap-3 max-w-md text-center backdrop-blur-xl">
-                        <i className="ph-fill ph-eye-slash text-2xl text-[#D4AF37] animate-pulse"></i>
-                        <div className="text-left">
-                            <p className="text-xs font-bold text-[#EDE9DF]">Bản quyền số HALM BOOK được bảo vệ</p>
-                            <p className="text-[11px] text-[#A6A29A] mt-0.5">Nhấp lại vào trang đọc để tiếp tục trải nghiệm.</p>
-                        </div>
-                    </div>
-                </div>
-            )}
+
 
             {/* 4. PRIVACY SHIELD OVERLAY (Khi bấm PrintScreen hoặc phím tắt chụp màn hình) */}
             {privacyShieldActive && (
