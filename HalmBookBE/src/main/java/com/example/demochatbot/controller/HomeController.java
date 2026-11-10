@@ -11,6 +11,7 @@ import com.example.demochatbot.service.cart.CartService;
 import com.example.demochatbot.service.evaluate.EvaluateService;
 import com.example.demochatbot.service.order.OrderService;
 import com.example.demochatbot.service.bookmark.BookmarkService;
+import com.example.demochatbot.service.tier.TierService;
 import com.example.demochatbot.dto.ReadingNoteBookmarkDto;
 import com.example.demochatbot.dto.ReadingNoteBookmarkRequest;
 import com.example.demochatbot.dto.EvaluateDto;
@@ -63,6 +64,9 @@ public class HomeController {
     @Autowired
     private BookmarkService bookmarkService;
 
+    @Autowired
+    private TierService tierService;
+
     /**
      * API lấy danh sách sách (Đầy đủ)
      */
@@ -84,10 +88,15 @@ public class HomeController {
     @GetMapping("/covers/{fileName}")
     public ResponseEntity<byte[]> getBookCover(@PathVariable("fileName") String fileName) {
         try {
-            File file = new File("E:/Khoa_Luan/Nhom05/HalmBookBE/src/main/resources/static/covers/" + fileName);
-            if (!file.exists()) {
-                file = new File("E:/Khoa_Luan/BOOK/img/" + fileName);
+            String safeName = Paths.get(fileName).getFileName().toString();
+            Path filePath = Paths.get("uploads", "covers", safeName);
+            if (!Files.exists(filePath)) {
+                filePath = Paths.get("uploads", safeName);
             }
+            if (!Files.exists(filePath)) {
+                filePath = Paths.get("src", "main", "resources", "static", "covers", safeName);
+            }
+            File file = filePath.toFile();
             if (file.exists()) {
                 byte[] bytes = Files.readAllBytes(file.toPath());
                 return ResponseEntity.ok()
@@ -205,7 +214,10 @@ public class HomeController {
             }
 
             // 2. Nếu file lưu trên Cloudinary
-            String targetUrl = bookService.getBookReadUrl(bookId);
+            String targetUrl = null;
+            try {
+                targetUrl = bookService.getBookReadUrl(bookId);
+            } catch (Exception ignored) {}
             if (targetUrl == null || targetUrl.trim().isEmpty()) {
                 targetUrl = book.getPdf_url();
             }
@@ -246,6 +258,14 @@ public class HomeController {
             if (customer == null) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Không tìm thấy thông tin khách hàng!");
             }
+            try {
+                tierService.calculateAndUpdateCustomerTier(customer);
+                // Tải lại đối tượng khách hàng mới nhất kèm liên kết hạng hội viên đã lưu
+                Customer updated = customerService.findCustomerById(accountId);
+                if (updated != null) {
+                    customer = updated;
+                }
+            } catch (Exception ignored) {}
             return new ResponseEntity<>(customer, HttpStatus.OK);
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());

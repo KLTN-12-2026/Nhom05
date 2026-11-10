@@ -1168,6 +1168,26 @@ export default function GioHang() {
               <Text style={[styles.selectAllLabel, { color: colors.textPrimary }]}>
                 Tất cả
               </Text>
+        <View style={{ height: 150 }} /> {/* Padding dưới để không bị che bởi thanh thanh toán */}
+      </ScrollView>
+
+      {/* Thanh Thanh Toán (Chỉ hiện khi có ít nhất 1 sách được chọn) */}
+      {selectedCount > 0 && (
+        <View style={themeStyles.checkoutBar}>
+          
+          <View style={themeStyles.checkoutTopRow}>
+            <TouchableOpacity onPress={toggleSelectAll} style={themeStyles.selectAllBtn}>
+              <Ionicons 
+                name={isAllSelected ? "checkbox" : "square-outline"} 
+                size={22} 
+                color={isAllSelected ? "#2c3a7a" : "#888"} 
+              />
+              <Text style={themeStyles.selectAllText}>{lang === 'en' ? 'Select All' : 'Tất cả'}</Text>
+            </TouchableOpacity>
+            
+            <View style={themeStyles.priceContainer}>
+              <Text style={themeStyles.totalLabel}>{lang === 'en' ? `Total (${selectedCount} items):` : `Tổng tiền (${selectedCount} mục):`}</Text>
+              <Text style={themeStyles.totalPrice}>{totalPrice} 🥔</Text>
             </View>
             <Text style={[styles.selectedCountCaption, { color: colors.textSecondary }]}>
               Đã chọn: {selectedCount} cuốn

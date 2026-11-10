@@ -18,6 +18,24 @@
       } catch (e) {}
     })();
   </script>
+  <style>
+    /* Triệt tiêu 100% hiện tượng hắt sáng và nhấp nháy trắng khi F5 ở chế độ tối */
+    html.dark, html.dark body, html.dark #root {
+      background-color: #111210 !important;
+      color: #EDE9DF !important;
+    }
+    html.dark .user-sidebar-box * {
+      color: #EDE9DF !important;
+    }
+    html.dark .user-sidebar-box span.text-xs,
+    html.dark .user-sidebar-box span:last-child {
+      color: #9CA3AF !important;
+    }
+    html:not(.dark), html:not(.dark) body {
+      background-color: #F7F4EE;
+      color: #1E1F1D;
+    }
+  </style>
   <script>
     window.tailwind = window.tailwind || {};
     window.tailwind.config = {
@@ -26,10 +44,11 @@
         extend: {
           fontFamily: {
             sans: ['var(--font-ui)', 'Inter', 'sans-serif'],
-            display: ['var(--font-display)', 'Inter', 'sans-serif'],
+            display: ['var(--font-display, "Plus Jakarta Sans")', '"Plus Jakarta Sans"', '"Be Vietnam Pro"', 'Inter', 'sans-serif'],
             metadata: ['var(--font-metadata)', 'Roboto', 'sans-serif'],
             editorial: ['var(--font-editorial)', 'Open Sans', 'sans-serif'],
             nunito: ['Nunito', 'sans-serif'],
+            outfit: ['var(--font-outfit, "Plus Jakarta Sans")', '"Plus Jakarta Sans"', '"Be Vietnam Pro"', 'Inter', 'sans-serif'],
           },
           colors: {
             paper: {
@@ -94,7 +113,7 @@
     }
   </script>
   <link rel="stylesheet"
-    href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Quicksand:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800;900&display=swap">
+    href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Quicksand:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700;800;900&display=swap">
   <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
   <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css">
   <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">

@@ -27,7 +27,7 @@ interface ShelfBook {
 export default function TuSach() {
   const themeStyles = useAppThemeStyles(styles);
   const [activeTab, setActiveTab] = useState<'dangdoc' | 'dadoc'>('dangdoc');
-  const { navigate, isDarkMode } = useAppNavigation();
+  const { navigate, isDarkMode, lang } = useAppNavigation();
 
   const [readingList, setReadingList] = useState<ShelfBook[]>([]);
   const [completedList, setCompletedList] = useState<ShelfBook[]>([]);
@@ -97,7 +97,7 @@ export default function TuSach() {
       
       {/* Header */}
       <View style={themeStyles.header}>
-        <Text style={themeStyles.headerTitle}>Tủ Sách Của Tôi</Text>
+        <Text style={themeStyles.headerTitle}>{lang === 'en' ? 'My Bookshelf' : 'Tủ Sách Của Tôi'}</Text>
         <TouchableOpacity style={themeStyles.headerIcon} onPress={() => navigate('search')}>
           <Ionicons name="search" size={24} color="#1a1a1a" />
         </TouchableOpacity>
@@ -109,18 +109,26 @@ export default function TuSach() {
           style={[themeStyles.tabBtn, activeTab === 'dangdoc' && themeStyles.tabBtnActive]} 
           onPress={() => setActiveTab('dangdoc')}
         >
+<<<<<<< HEAD
+          <Text style={[themeStyles.tabText, activeTab === 'dangdoc' && themeStyles.tabTextActive]}>{lang === 'en' ? 'Reading' : 'Sách đang đọc'}</Text>
+=======
           <Text style={[themeStyles.tabText, activeTab === 'dangdoc' && themeStyles.tabTextActive]}>
             Sách đang đọc ({readingList.length})
           </Text>
+>>>>>>> origin/main
         </TouchableOpacity>
         
         <TouchableOpacity 
           style={[themeStyles.tabBtn, activeTab === 'dadoc' && themeStyles.tabBtnActive]} 
           onPress={() => setActiveTab('dadoc')}
         >
+<<<<<<< HEAD
+          <Text style={[themeStyles.tabText, activeTab === 'dadoc' && themeStyles.tabTextActive]}>{lang === 'en' ? 'Finished' : 'Sách đã đọc'}</Text>
+=======
           <Text style={[themeStyles.tabText, activeTab === 'dadoc' && themeStyles.tabTextActive]}>
             Sách đã đọc ({completedList.length})
           </Text>
+>>>>>>> origin/main
         </TouchableOpacity>
       </View>
 
@@ -128,10 +136,19 @@ export default function TuSach() {
         {/* Box Thống kê */}
         <View style={themeStyles.statsCard}>
           <View style={themeStyles.statsHeader}>
-            <Text style={themeStyles.statsHeaderText}>Thống kê Tủ sách</Text>
+            <Text style={themeStyles.statsHeaderText}>{lang === 'en' ? 'Bookshelf Stats' : 'Thống kê Tủ sách'}</Text>
           </View>
           <View style={themeStyles.statsBody}>
             <View style={themeStyles.statItem}>
+<<<<<<< HEAD
+              <Text style={themeStyles.statValue}>{DANG_DOC.length}</Text>
+              <Text style={themeStyles.statLabel}>{lang === 'en' ? 'Reading' : 'Đang đọc'}</Text>
+            </View>
+            <View style={themeStyles.statDivider} />
+            <View style={themeStyles.statItem}>
+              <Text style={themeStyles.statValue}>{DA_DOC.length}</Text>
+              <Text style={themeStyles.statLabel}>{lang === 'en' ? 'Completed' : 'Đã hoàn thành'}</Text>
+=======
               <Text style={themeStyles.statValue}>{readingList.length}</Text>
               <Text style={themeStyles.statLabel}>Đang đọc</Text>
             </View>
@@ -139,6 +156,7 @@ export default function TuSach() {
             <View style={themeStyles.statItem}>
               <Text style={themeStyles.statValue}>{completedList.length}</Text>
               <Text style={themeStyles.statLabel}>Đã hoàn thành</Text>
+>>>>>>> origin/main
             </View>
           </View>
         </View>
@@ -160,6 +178,17 @@ export default function TuSach() {
           </View>
         ) : (
           <View style={themeStyles.listContainer}>
+<<<<<<< HEAD
+            {DANG_DOC.map((item) => (
+              <TouchableOpacity key={item.id} style={themeStyles.bookCard} activeOpacity={0.8} onPress={() => navigate('bookDetail', { id: item.id, title: item.title, chapter: item.chapter })}>
+                <View style={themeStyles.bookCover}>
+                  <Text style={themeStyles.mockCoverText}>Ảnh</Text>
+                </View>
+                
+                <View style={themeStyles.bookInfo}>
+                  <Text style={themeStyles.bookTitle} numberOfLines={2}>{item.title}</Text>
+                  <Text style={themeStyles.bookChapter}>{lang === 'en' ? 'Progress: ' : 'Tiến độ: '}{item.chapter}</Text>
+=======
             {currentList.map((item) => {
               const cover = getBookCoverSource(item.id, item.img_url);
               return (
@@ -176,6 +205,7 @@ export default function TuSach() {
                       <Text style={themeStyles.mockCoverText}>Ảnh</Text>
                     )}
                   </View>
+>>>>>>> origin/main
                   
                   <View style={themeStyles.bookInfo}>
                     <Text style={themeStyles.bookTitle} numberOfLines={2}>{item.title}</Text>
@@ -207,11 +237,65 @@ export default function TuSach() {
                       </TouchableOpacity>
                     </View>
                   </View>
+<<<<<<< HEAD
+                  
+                  {/* Buttons */}
+                  <View style={themeStyles.actionRow}>
+                    <TouchableOpacity style={themeStyles.returnBtn}>
+                      <Ionicons name="return-down-back" size={14} color="#1a1a1a" style={{ marginRight: 4 }} />
+                      <Text style={themeStyles.returnBtnText}>{lang === 'en' ? 'Return' : 'Trả sách'}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={themeStyles.continueBtn} onPress={() => navigate('reader')}>
+                      <Text style={themeStyles.continueBtnText}>{lang === 'en' ? 'Read' : 'Đọc tiếp'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* ===================== BẢNG PHẢI: ĐÃ ĐỌC ===================== */}
+        {activeTab === 'dadoc' && (
+          <View style={themeStyles.listContainer}>
+            {DA_DOC.map((item) => (
+              <TouchableOpacity key={item.id} style={themeStyles.bookCard} activeOpacity={0.8} onPress={() => navigate('bookDetail', { id: item.id, title: item.title, chapter: item.total })}>
+                <View style={themeStyles.bookCover}>
+                  <Text style={themeStyles.mockCoverText}>Ảnh</Text>
+                </View>
+                <View style={themeStyles.bookInfo}>
+                  <Text style={themeStyles.bookTitle} numberOfLines={2}>{item.title}</Text>
+                  <Text style={themeStyles.bookChapter}>{lang === 'en' ? 'Finished: ' : 'Đã đọc xong: '}{item.total}</Text>
+                  
+                  <View style={themeStyles.statusBox}>
+                    <Ionicons name="checkmark-done-circle" size={16} color="#27ae60" />
+                    <Text style={themeStyles.statusText}>{lang === 'en' ? 'Completed' : 'Hoàn thành'}</Text>
+                  </View>
+                  
+                  {/* Buttons */}
+                  <View style={themeStyles.actionRow}>
+                    <TouchableOpacity style={themeStyles.rateBtn}>
+                      <Ionicons name="star" size={14} color="#1a1a1a" style={{ marginRight: 4 }} />
+                      <Text style={themeStyles.rateBtnText}>{lang === 'en' ? 'Review' : 'Đánh giá'}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={themeStyles.readAgainBtn} onPress={() => navigate('reader')}>
+                      <Ionicons name="refresh" size={14} color="#2c3a7a" style={{ marginRight: 4 }} />
+                      <Text style={themeStyles.readAgainBtnText}>{lang === 'en' ? 'Read Again' : 'Đọc lại'}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+=======
                 </TouchableOpacity>
               );
             })}
           </View>
         )}
+>>>>>>> origin/main
       </ScrollView>
     </View>
   );

@@ -20,7 +20,7 @@ export default function SharedHeader({
   compact = false,
   currentScreen,
 }: SharedHeaderProps) {
-  const { navigate, navigateTab, isLoggedIn, showLoginAlert, userAvatarUrl, userInitial } = useAppNavigation();
+  const { navigate, navigateTab, isLoggedIn, showLoginAlert, userAvatarUrl, userInitial, lang } = useAppNavigation();
   // [GIẢI THÍCH CODE]: Chỉ áp dụng avatar giống trang cá nhân trên tủ sách, ưu đãi và uploadfile
   const isProfileAvatarScreen = ['offers', 'upload', 'bookshelf'].includes(currentScreen || '');
   const foreground = isDarkMode ? '#F5F1E8' : '#11131A';
@@ -42,7 +42,7 @@ export default function SharedHeader({
             style={styles.logo}
             onPress={() => navigateTab('home')}
             accessibilityRole="button"
-            accessibilityLabel="Về trang chủ HALM BOOK"
+            accessibilityLabel={lang === 'en' ? 'Back to HALM BOOK Home' : 'Về trang chủ HALM BOOK'}
           >
             <MaterialCommunityIcons name="book-open-page-variant" size={29} color="#9147DF" />
             <Text style={[styles.logoText, { color: foreground }]}>HALM BOOK</Text>
@@ -52,7 +52,7 @@ export default function SharedHeader({
               style={styles.actionButton}
               onPress={() => navigate('transactions')}
               accessibilityRole="button"
-              accessibilityLabel="Lịch sử giao dịch"
+              accessibilityLabel={lang === 'en' ? 'Transaction history' : 'Lịch sử giao dịch'}
             >
               <MaterialCommunityIcons name="bell-outline" size={23} color={foreground} />
               <View style={styles.notice} />
@@ -66,13 +66,13 @@ export default function SharedHeader({
               style={styles.actionButton}
               onPress={() => {
                 if (!isLoggedIn) {
-                  showLoginAlert('Bạn phải đăng nhập để dùng chức năng giỏ hàng');
+                  showLoginAlert(lang === 'en' ? 'Please log in to use cart feature' : 'Bạn phải đăng nhập để dùng chức năng giỏ hàng');
                   return;
                 }
                 navigate('cart');
               }}
               accessibilityRole="button"
-              accessibilityLabel="Giỏ hàng"
+              accessibilityLabel={lang === 'en' ? 'Cart' : 'Giỏ hàng'}
             >
               <Ionicons name="cart-outline" size={23} color={foreground} />
             </TouchableOpacity>
@@ -85,13 +85,13 @@ export default function SharedHeader({
               style={styles.avatar}
               onPress={() => {
                 if (!isLoggedIn) {
-                  showLoginAlert('Bạn phải đăng nhập để dùng chức năng trang cá nhân');
+                  showLoginAlert(lang === 'en' ? 'Please log in to use profile feature' : 'Bạn phải đăng nhập để dùng chức năng trang cá nhân');
                   return;
                 }
                 navigateTab('profile');
               }}
               accessibilityRole="button"
-              accessibilityLabel="Trang cá nhân"
+              accessibilityLabel={lang === 'en' ? 'Profile' : 'Trang cá nhân'}
             >
               {isProfileAvatarScreen && isLoggedIn ? (
                 userAvatarUrl ? (
@@ -122,11 +122,11 @@ export default function SharedHeader({
               ]}
               onPress={() => navigate('search')}
               accessibilityRole="button"
-              accessibilityLabel="Tìm kiếm truyện"
+              accessibilityLabel={lang === 'en' ? 'Search books' : 'Tìm kiếm truyện'}
             >
               <Ionicons name="search" size={19} color={isDarkMode ? '#D1C6EA' : '#6F687C'} />
               <Text style={[styles.searchText, { color: isDarkMode ? '#C6C8D0' : '#77717F' }]}>
-                Tìm kiếm truyện...
+                {lang === 'en' ? 'Search books...' : 'Tìm kiếm truyện...'}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity

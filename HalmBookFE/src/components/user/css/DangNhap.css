@@ -498,3 +498,13 @@
         left: 0;
     }
 }
+
+
+/* Đảm bảo FontAwesome luôn hiển thị chuẩn 100% không bị font chữ Outfit đè mất icon */
+.auth-page-container i[class*="fa-"],
+.auth-page-container .fa-brands,
+.auth-page-container .fab,
+.auth-page-container .fas,
+.auth-page-container .far {
+    font-family: "Font Awesome 6 Brands", "Font Awesome 6 Free", FontAwesome !important;
+}

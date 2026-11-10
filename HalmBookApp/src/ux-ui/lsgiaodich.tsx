@@ -15,7 +15,7 @@ export interface TransactionItem {
 
 export default function HalmBookHistory() {
   const themeStyles = useAppThemeStyles(styles);
-  const { logout, isDarkMode } = useAppNavigation();
+  const { logout, isDarkMode, lang } = useAppNavigation();
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [filterType, setFilterType] = useState<string>('all');
   const [selectedDate, setSelectedDate] = useState<string>('');
@@ -63,26 +63,26 @@ export default function HalmBookHistory() {
         <View style={themeStyles.summaryCard}>
           <View style={themeStyles.summaryTitleRow}>
             <View style={themeStyles.summaryIconBox}><FileText size={18} color="#1a1a1a" /></View>
-            <Text style={themeStyles.summaryTitle}>LỊCH SỬ GIAO DỊCH</Text>
+            <Text style={themeStyles.summaryTitle}>{lang === 'en' ? 'TRANSACTION HISTORY' : 'LỊCH SỬ GIAO DỊCH'}</Text>
             <TouchableOpacity style={themeStyles.logoutAction} activeOpacity={0.8} onPress={logout}>
-              <Text style={themeStyles.logoutActionText}>Đăng xuất</Text>
+              <Text style={themeStyles.logoutActionText}>{lang === 'en' ? 'Log out' : 'Đăng xuất'}</Text>
             </TouchableOpacity>
           </View>
-          <Text style={themeStyles.summaryDesc}>Tóm tắt hoạt động thuê & thanh toán của bạn tại <Text style={{fontWeight: '900'}}>HALM BOOK</Text></Text>
+          <Text style={themeStyles.summaryDesc}>{lang === 'en' ? 'Summary of your rental & payment activities at ' : 'Tóm tắt hoạt động thuê & thanh toán của bạn tại '}<Text style={{fontWeight: '900'}}>HALM BOOK</Text></Text>
 
         <View style={themeStyles.filterSection}>
             <View style={[themeStyles.inputWrapper, { marginBottom: 12 }]}>
               <Search size={16} color="#1a1a1a" style={themeStyles.inputIcon} />
-              <TextInput style={themeStyles.textInput} placeholder="Tìm kiếm: Tên sách / Mã đơn..." placeholderTextColor="#888" value={searchTerm} onChangeText={setSearchTerm} />
+              <TextInput style={themeStyles.textInput} placeholder={lang === 'en' ? 'Search: Book title / Order ID...' : 'Tìm kiếm: Tên sách / Mã đơn...'} placeholderTextColor="#888" value={searchTerm} onChangeText={setSearchTerm} />
             </View>
 
             {/* Thêm contentContainerStyle để dải nút có không gian cho bóng đổ */}
           {/* Dải nút Filter (Đã bỏ nút Tất cả & thêm logic Toggle) */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={themeStyles.filterChipScroll} contentContainerStyle={themeStyles.filterChipContent}>
               {[ 
-                { id: 'rent', label: 'Thuê sách' }, 
-                { id: 'return', label: 'Trả sách' }, 
-                { id: 'package', label: 'Mua gói' } 
+                { id: 'rent', label: lang === 'en' ? 'Rentals' : 'Thuê sách' }, 
+                { id: 'return', label: lang === 'en' ? 'Returns' : 'Trả sách' }, 
+                { id: 'package', label: lang === 'en' ? 'Packages' : 'Mua gói' } 
               ].map(f => (
                 <TouchableOpacity 
                   key={f.id} 
@@ -99,14 +99,14 @@ export default function HalmBookHistory() {
 
             <View style={themeStyles.inputWrapper}>
               <Calendar size={16} color="#1a1a1a" style={themeStyles.inputIcon} />
-              <TextInput style={themeStyles.textInput} placeholder="Lọc theo ngày (YYYY-MM-DD)" placeholderTextColor="#888" value={selectedDate} onChangeText={setSelectedDate} />
+              <TextInput style={themeStyles.textInput} placeholder={lang === 'en' ? 'Filter by date (YYYY-MM-DD)' : 'Lọc theo ngày (YYYY-MM-DD)'} placeholderTextColor="#888" value={selectedDate} onChangeText={setSelectedDate} />
             </View>
           </View>
 
           <View style={themeStyles.statsRow}>
             <View style={themeStyles.statBadge}>
               <View style={themeStyles.dotBlack} />
-              <Text style={themeStyles.statLabel}>Tổng quan:</Text>
+              <Text style={themeStyles.statLabel}>{lang === 'en' ? 'Overview:' : 'Tổng quan:'}</Text>
             </View>
             <View style={themeStyles.statMiniCard}><Text style={themeStyles.statText}>Đã thuê: <Text style={themeStyles.textHighlight}>12</Text></Text></View>
             <View style={themeStyles.statMiniCard}><Text style={themeStyles.statText}>Đang thuê: <Text style={themeStyles.textHighlight}>3</Text></Text></View>

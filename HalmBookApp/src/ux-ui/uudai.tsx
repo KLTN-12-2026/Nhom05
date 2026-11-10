@@ -525,6 +525,36 @@ function SectionHeader({
       </Text>
     </View>
   );
+
+function Card({ item }:{ item:Offer }) {
+  const { lang } = useAppNavigation();
+  const { navigate } = useAppNavigation();
+  const s = useAppThemeStyles(baseStyles);
+
+  return <View style={s.card}>
+    {item.tag && <View style={s.tag}><Text style={s.tagText}>{item.tag}</Text></View>}
+    <MaterialCommunityIcons name={item.icon} size={42} color={item.color}/>
+    <Text style={s.cardTitle}>{item.title}</Text>
+    <Text numberOfLines={3} style={s.desc}>{item.description}</Text>
+    <View style={s.priceBox}>
+      {item.oldPrice && <Text style={s.oldPrice}>{item.oldPrice}</Text>}
+      <Text style={s.price}>{item.price}</Text>
+    </View>
+    <TouchableOpacity style={s.button} onPress={() => navigate(item.id === 'u1' ? 'upload' : 'payment')}>
+      <Text style={s.buttonText}>
+        {lang === 'en'
+          ? (item.action === 'Xác Thực Ngay' ? 'Verify Now'
+            : item.action === 'Đổi Khoai Ngay' ? 'Redeem Now'
+            : item.action === 'Sử Dụng Ngay' ? 'Use Now'
+            : item.action === 'Tìm Hiểu Thêm' ? 'Learn More'
+            : item.action === 'Nâng Cấp Gói' ? 'Upgrade'
+            : item.action === 'Mua Combo' ? 'Buy Combo'
+            : item.action === 'Mua Sách' ? 'Buy Book'
+            : item.action)
+          : item.action}
+      </Text>
+    </TouchableOpacity>
+  </View>;
 }
 
 // Wrapper component để inject theme vào SectionHeader
@@ -599,6 +629,7 @@ function HorizontalCarousel<T>({
           {renderItem(item, index)}
         </View>
       ))}
+
     </ScrollView>
   );
 }
@@ -607,6 +638,7 @@ function HorizontalCarousel<T>({
 // MAIN COMPONENT
 // ==============================================================
 export default function OffersScreen() {
+
   const { navigate, navigateTab, isDarkMode, toggleDarkMode, isLoggedIn, showLoginAlert } =
     useAppNavigation();
   const insets = useSafeAreaInsets();
@@ -1930,6 +1962,7 @@ export default function OffersScreen() {
       </Modal>
     </View>
   );
+
 }
 
 // ==============================================================

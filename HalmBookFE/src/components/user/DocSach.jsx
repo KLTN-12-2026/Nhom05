@@ -1,6 +1,10 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import axiosInstance from '@/services/axiosClient';
+import { getPersonalBookById } from '@/services/personalBookService';
+import { getBookAccessDetail, updateReadingProgress } from '@/services/userFeatureService';
+import AuthModal, { openAuthModal } from '@/components/common/AuthModal';
+import { isTokenValid } from '@/services/authToken';
 
 const tailwindConfig = {
     darkMode: 'class',
@@ -268,6 +272,41 @@ function loadScript(src) {
     });
 }
 
+const DEFAULT_PLAYLIST = [
+    {
+        id: 'rain',
+        title: 'Tiếng mưa rơi êm dịu',
+        subtitle: 'Mưa rào & tiếng tí tách thư thái',
+        src: '/audio/rain.mp3',
+        icon: 'ph-cloud-rain',
+        color: 'text-sky-400'
+    },
+    {
+        id: 'lofi',
+        title: 'Giai điệu Lofi Chill đọc sách',
+        subtitle: 'Lofi beats nhẹ nhàng, thư giãn',
+        src: '/audio/lofi.mp3',
+        icon: 'ph-headphones',
+        color: 'text-amber-400'
+    },
+    {
+        id: 'ambient',
+        title: 'Không gian tập trung sâu',
+        subtitle: 'Sóng âm kích thích tư duy Deep Focus',
+        src: '/audio/ambient.mp3',
+        icon: 'ph-brain',
+        color: 'text-purple-400'
+    },
+    {
+        id: 'nature',
+        title: 'Thiên nhiên trong lành',
+        subtitle: 'Gió nhẹ & tiếng chim rừng tự nhiên',
+        src: '/audio/nature.mp3',
+        icon: 'ph-tree',
+        color: 'text-emerald-400'
+    }
+];
+
 export default function DocSach() {
     const { id } = useParams();
     const [searchParams] = useSearchParams();
@@ -276,7 +315,10 @@ export default function DocSach() {
 
     // 0. Trial Mode Detection & Limitations (Mặc định là bản đọc thử trừ khi được chỉ định mode=full từ Tủ Sách hoặc đã thuê)
     const modeParam = searchParams.get('mode');
-    const [isTrialMode, setIsTrialMode] = useState(modeParam !== 'full');
+    const isPersonalBookId = Boolean(bookId && String(bookId).startsWith('personal_'));
+    const [isTrialMode, setIsTrialMode] = useState(
+        modeParam === 'full' || isPersonalBookId ? false : true
+    );
     const [isTrialModalOpen, setIsTrialModalOpen] = useState(false);
 
     // 1. Book & PDF state
@@ -288,6 +330,8 @@ export default function DocSach() {
             return null;
         }
     });
+
+    const targetId = bookId || book?.book_id || book?.id || '';
     const [pdfUrl, setPdfUrl] = useState("");
     const [isLoading, setIsLoading] = useState(true);
     const [errorMessage, setErrorMessage] = useState("");
@@ -340,8 +384,14 @@ export default function DocSach() {
     const [isAaOpen, setIsAaOpen] = useState(false);
     const [isAudioOpen, setIsAudioOpen] = useState(false);
     const [isPlayingMusic, setIsPlayingMusic] = useState(false);
-    const [audioTab, setAudioTab] = useState('kho');
+    const [audioTab, setAudioTab] = useState('kho'); // 'kho' | 'tai'
+    const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
+    const [volume, setVolume] = useState(0.75);
+    const [customTracks, setCustomTracks] = useState([]);
     const [toastMessage, setToastMessage] = useState("");
+
+    const playlist = useMemo(() => [...DEFAULT_PLAYLIST, ...customTracks], [customTracks]);
+    const currentTrack = playlist[currentTrackIndex] || playlist[0];
 
     const canvasRef = useRef(null);
     const renderTaskRef = useRef(null);
@@ -452,8 +502,12 @@ export default function DocSach() {
             document.body.style.height = '';
             document.documentElement.style.overflow = '';
             document.documentElement.style.height = '';
-            const overlays = document.querySelectorAll('[id^="book-transition"], [style*="z-index: 999999"]');
-            overlays.forEach(el => el.remove());
+            const preOverlays = document.querySelectorAll('#book-transition-pre-overlay, .epub-container, .epub-view');
+            preOverlays.forEach(el => {
+                if (el && el.parentNode && el.id === 'book-transition-pre-overlay') {
+                    try { el.parentNode.removeChild(el); } catch (_) {}
+                }
+            });
             window.dispatchEvent(new Event('resize'));
         };
     }, []);
@@ -500,20 +554,86 @@ export default function DocSach() {
         }
     }, [notes, bookId]);
 
+    // Đồng bộ âm lượng phát nhạc nền
+    useEffect(() => {
+        if (audioRef.current) {
+            audioRef.current.volume = volume;
+        }
+    }, [volume]);
+
     // 1. Unified Buffer-First Reader Engine (Hỗ trợ PDF & EPUB với phân tích Magic Bytes thực tế)
     useEffect(() => {
         let isCancelled = false;
+
+        // Ghi nhận hoàn thành nhiệm vụ hằng ngày: Đọc sách hôm nay
+        const todayKey = new Date().toISOString().slice(0, 10);
+        try {
+            localStorage.setItem(`halm_daily_action_read_${todayKey}`, 'true');
+        } catch {}
+        window.dispatchEvent(new CustomEvent('halm-daily-task-completed', { detail: { task: 'read' } }));
 
         const loadAndRenderBook = async () => {
             setIsLoading(true);
             setErrorMessage("");
 
             let currentBook = book;
-            const targetId = bookId || currentBook?.book_id || currentBook?.id;
+            let effectiveId = bookId || currentBook?.book_id || currentBook?.id;
 
-            if (targetId && (!currentBook || currentBook.book_id !== targetId)) {
+            // Nếu người dùng vào /docsach trực tiếp mà không có id và session, tự động lấy cuốn sách đầu tiên làm mặc định
+            if (!effectiveId) {
                 try {
-                    const res = await axiosInstance.get(`/api/home/books/${encodeURIComponent(targetId)}`);
+                    const listRes = await axiosInstance.get('/api/home/books', { params: { size: 1 } });
+                    const firstBook = listRes.data?.content?.[0];
+                    if (firstBook) {
+                        effectiveId = firstBook.book_id || firstBook.id;
+                        currentBook = firstBook;
+                        setBook(firstBook);
+                    }
+                } catch (e) {
+                    console.warn("Không thể tải sách mặc định:", e);
+                }
+            }
+
+            const isPersonalBook = effectiveId && String(effectiveId).startsWith('personal_');
+            let arrayBuffer = null;
+
+            if (isPersonalBook) {
+                try {
+                    const personalBook = await getPersonalBookById(effectiveId);
+                    if (personalBook && !isCancelled) {
+                        currentBook = {
+                            book_id: personalBook.id,
+                            id: personalBook.id,
+                            bookTitle: personalBook.title,
+                            title: personalBook.title,
+                            authorName: personalBook.author,
+                            author: personalBook.author,
+                            cover_image: personalBook.coverUrl,
+                            coverImage: personalBook.coverUrl,
+                            imgUrl: personalBook.coverUrl,
+                            fileFormat: personalBook.format,
+                            isPersonal: true
+                        };
+                        setBook(currentBook);
+                        sessionStorage.setItem('halm-reader-book', JSON.stringify(currentBook));
+                        setIsTrialMode(false);
+
+                        if (personalBook.fileArrayBuffer && personalBook.fileArrayBuffer.byteLength > 0) {
+                            arrayBuffer = personalBook.fileArrayBuffer;
+                        } else if (personalBook.fileBlob) {
+                            if (personalBook.fileBlob instanceof ArrayBuffer) {
+                                arrayBuffer = personalBook.fileBlob;
+                            } else if (typeof personalBook.fileBlob.arrayBuffer === 'function') {
+                                arrayBuffer = await personalBook.fileBlob.arrayBuffer();
+                            }
+                        }
+                    }
+                } catch (pErr) {
+                    console.error("Không thể đọc sách cá nhân từ IndexedDB:", pErr);
+                }
+            } else if (effectiveId && (!currentBook || (currentBook.book_id !== effectiveId && currentBook.id !== effectiveId))) {
+                try {
+                    const res = await axiosInstance.get(`/api/home/books/${encodeURIComponent(effectiveId)}`);
                     if (res.data && !isCancelled) {
                         currentBook = res.data;
                         setBook(res.data);
@@ -524,31 +644,54 @@ export default function DocSach() {
                 }
             }
 
-            // Nạp danh sách ghi chú & bookmarks từ backend
-            if (targetId) {
+            let resumePageNumber = 1;
+            if (effectiveId) {
                 try {
-                    const bmRes = await axiosInstance.get(`/api/home/books/${encodeURIComponent(targetId)}/bookmarks`);
-                    if (Array.isArray(bmRes.data) && bmRes.data.length > 0) {
-                        setNotes(bmRes.data);
-                        localStorage.setItem(`halm-book-notes-${targetId}`, JSON.stringify(bmRes.data));
-                    }
-                } catch (_) {}
-
-                // Tự động mở khóa bản đầy đủ nếu khách hàng đã thuê hoặc sở hữu sách
-                try {
-                    const checkRes = await axiosInstance.get(`/api/home/bookshelf/check/${encodeURIComponent(targetId)}`);
-                    if (checkRes.data?.hasAccess && !isCancelled) {
-                        setIsTrialMode(false);
+                    const localProg = localStorage.getItem(`halm_reading_progress_${effectiveId}`);
+                    if (localProg) {
+                        const parsed = JSON.parse(localProg);
+                        if (parsed.currentPage && Number(parsed.currentPage) > 1) {
+                            resumePageNumber = Number(parsed.currentPage);
+                        }
                     }
                 } catch (_) {}
             }
 
-            // Lấy URL đọc sách từ backend
+            // Nạp danh sách ghi chú & bookmarks
+            if (effectiveId) {
+                if (isPersonalBook) {
+                    try {
+                        const localBm = localStorage.getItem(`halm-book-notes-${effectiveId}`);
+                        if (localBm) setNotes(JSON.parse(localBm));
+                    } catch (_) {}
+                } else {
+                    try {
+                        const bmRes = await axiosInstance.get(`/api/home/books/${encodeURIComponent(effectiveId)}/bookmarks`);
+                        if (Array.isArray(bmRes.data) && bmRes.data.length > 0) {
+                            setNotes(bmRes.data);
+                            localStorage.setItem(`halm-book-notes-${effectiveId}`, JSON.stringify(bmRes.data));
+                        }
+                    } catch (_) {}
+
+                    // Tự động mở khóa bản đầy đủ nếu khách hàng đã thuê hoặc sở hữu sách, khôi phục trang đọc dở
+                    try {
+                        const accessDetail = await getBookAccessDetail(effectiveId);
+                        if (accessDetail?.hasAccess && !isCancelled) {
+                            setIsTrialMode(false);
+                            if (accessDetail.currentPage && Number(accessDetail.currentPage) > 1) {
+                                resumePageNumber = Number(accessDetail.currentPage);
+                            }
+                        }
+                    } catch (_) {}
+                }
+            }
+
+            // Lấy URL đọc sách từ backend (nếu không phải sách cá nhân)
             let resolvedUrl = "";
             let metaFormat = (currentBook?.fileFormat || '').toUpperCase();
-            if (targetId) {
+            if (effectiveId && !isPersonalBook) {
                 try {
-                    const readUrlRes = await axiosInstance.get(`/api/home/books/${encodeURIComponent(targetId)}/read-url`);
+                    const readUrlRes = await axiosInstance.get(`/api/home/books/${encodeURIComponent(effectiveId)}/read-url`);
                     if (readUrlRes.data?.readUrl) {
                         resolvedUrl = readUrlRes.data.readUrl;
                     }
@@ -571,10 +714,9 @@ export default function DocSach() {
             if (isCancelled) return;
 
             // 1. Tải nhị phân (ArrayBuffer) vào RAM: Không bao giờ dùng iframe để tránh trình duyệt tải file về máy
-            let arrayBuffer = null;
-            if (targetId) {
+            if (!arrayBuffer && effectiveId && !isPersonalBook) {
                 try {
-                    const contentRes = await axiosInstance.get(`/api/home/books/${encodeURIComponent(targetId)}/content`, {
+                    const contentRes = await axiosInstance.get(`/api/home/books/${encodeURIComponent(effectiveId)}/content`, {
                         responseType: 'arraybuffer'
                     });
                     if (contentRes.data && contentRes.data.byteLength > 0) {
@@ -593,6 +735,20 @@ export default function DocSach() {
                     }
                 } catch (dErr) {
                     console.warn("Không thể tải buffer từ URL:", dErr);
+                }
+            }
+
+            // Fallback đọc thử mẫu: Nếu sách trên hệ thống chưa có file PDF / EPUB thực tế
+            if (!arrayBuffer && !resolvedUrl) {
+                try {
+                    const sampleRes = await axiosInstance.get('/sample.pdf', { responseType: 'arraybuffer' });
+                    if (sampleRes.data && sampleRes.data.byteLength > 0 && !isCancelled) {
+                        arrayBuffer = sampleRes.data;
+                        metaFormat = 'PDF';
+                        showToast("Đang hiển thị bản đọc thử mô phỏng của cuốn sách.");
+                    }
+                } catch (sErr) {
+                    console.warn("Không thể tải sample.pdf fallback:", sErr);
                 }
             }
 
@@ -762,10 +918,14 @@ export default function DocSach() {
         const renderPdfDoc = async (arrayBuffer, url) => {
             try {
                 if (!window.pdfjsLib) {
-                    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+                    try {
+                        await loadScript('/libs/pdf.min.js');
+                    } catch {
+                        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+                    }
                 }
                 if (window.pdfjsLib && !window.pdfjsLib.GlobalWorkerOptions.workerSrc) {
-                    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                    window.pdfjsLib.GlobalWorkerOptions.workerSrc = '/libs/pdf.worker.min.js';
                 }
                 if (isCancelled) return;
 
@@ -790,7 +950,11 @@ export default function DocSach() {
 
                 setPdfDoc(loadedPdf);
                 setNumPages(loadedPdf.numPages);
-                setCurrentPage(1);
+                const startPage = (resumePageNumber > 1 && resumePageNumber <= loadedPdf.numPages) ? resumePageNumber : 1;
+                setCurrentPage(startPage);
+                if (startPage > 1) {
+                    showToast(`Chào mừng trở lại! Đang tiếp tục tại trang ${startPage}/${loadedPdf.numPages}`);
+                }
                 setIsLoading(false);
 
                 try {
@@ -802,6 +966,19 @@ export default function DocSach() {
             } catch (err) {
                 if (isCancelled) return;
                 console.error("Lỗi khởi tạo PDF:", err);
+                // Thử tải sample.pdf dự phòng nếu file tải về bị lỗi
+                if (!arrayBuffer?.isSampleFallback) {
+                    try {
+                        const sampleRes = await axiosInstance.get('/sample.pdf', { responseType: 'arraybuffer' });
+                        if (sampleRes.data && sampleRes.data.byteLength > 0 && !isCancelled) {
+                            const fallbackBuf = sampleRes.data;
+                            fallbackBuf.isSampleFallback = true;
+                            showToast("Đang hiển thị bản đọc thử mô phỏng của cuốn sách.");
+                            await renderPdfDoc(fallbackBuf, null);
+                            return;
+                        }
+                    } catch (_) {}
+                }
                 setIsLoading(false);
                 setErrorMessage("Không thể hiển thị tệp PDF. Tệp có thể đã bị hỏng hoặc chưa được tải lên đầy đủ.");
             }
@@ -878,6 +1055,27 @@ export default function DocSach() {
         }
     }, [currentPage, pdfDoc, zoomLevel, readMode, currentPageText, renderCanvasPage]);
 
+    // Tự động lưu tiến độ đọc sách thời gian thực lên Server & LocalStorage
+    useEffect(() => {
+        if (!targetId || numPages <= 0 || currentPage < 1 || isTrialMode) return;
+        const timer = setTimeout(() => {
+            const percentage = Math.min(100, Math.round((currentPage / numPages) * 1000) / 10);
+            updateReadingProgress(targetId, {
+                currentPage,
+                readingPercentage: percentage,
+                totalPages: numPages
+            });
+            try {
+                localStorage.setItem(`halm_reading_progress_${targetId}`, JSON.stringify({
+                    currentPage,
+                    readingPercentage: percentage,
+                    updatedAt: new Date().toISOString()
+                }));
+            } catch (_) {}
+        }, 1200);
+        return () => clearTimeout(timer);
+    }, [currentPage, numPages, targetId, isTrialMode]);
+
     // 4. Extract Text for Text Mode
     useEffect(() => {
         if (!pdfDoc) return;
@@ -951,6 +1149,11 @@ export default function DocSach() {
     // 6. Navigation Logic with Sub-page & EPUB Support
     const changePage = (delta) => {
         if (readMode === 'epub' && renditionRef.current) {
+            if (delta > 0 && isTrialMode && currentPage >= maxTrialPages) {
+                setIsTrialModalOpen(true);
+                showToast("Bạn đã đọc đến trang cuối của bản đọc thử!");
+                return;
+            }
             if (delta > 0) {
                 renditionRef.current.next();
             } else {
@@ -1045,6 +1248,48 @@ export default function DocSach() {
         }
     };
 
+    // Đánh dấu & bôi đậm trực tiếp (1-click Instant Highlight & Bold)
+    const handleQuickHighlight = async (textToHighlight) => {
+        const text = (textToHighlight || floatingBtnPos?.selectedText || '').trim();
+        if (!text) return;
+        const targetId = bookId || (book ? (book.book_id || book.id) : '');
+        const localId = `note_${Date.now()}`;
+        const newNote = {
+            id: localId,
+            bookId: targetId || 'default',
+            pageNumber: currentPage,
+            subPage: textSubPageIndex + 1,
+            selectedText: text,
+            personalNote: 'Đoạn văn tâm đắc đã đánh dấu',
+            isHighlight: true,
+            createdAt: new Date().toLocaleDateString('vi-VN', {
+                hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit'
+            }),
+        };
+
+        setNotes(prev => [newNote, ...prev]);
+        setFloatingBtnPos(null);
+        if (window.getSelection) {
+            window.getSelection().removeAllRanges();
+        }
+        showToast("Đã bôi đậm đoạn văn & lưu vào sổ tay!");
+
+        if (targetId) {
+            try {
+                const res = await axiosInstance.post(`/api/home/books/${encodeURIComponent(targetId)}/bookmarks`, {
+                    pageNumber: currentPage,
+                    selectedText: newNote.selectedText,
+                    personalNote: newNote.personalNote
+                });
+                if (res.data?.noteId) {
+                    setNotes(prev => prev.map(n => n.id === localId ? { ...n, id: res.data.noteId, noteId: res.data.noteId } : n));
+                }
+            } catch (err) {
+                console.warn('Lỗi khi lưu đánh dấu lên server:', err);
+            }
+        }
+    };
+
     const handleSaveNote = async () => {
         if (!selectedQuoteText) return;
         const targetId = bookId || (book ? (book.book_id || book.id) : '');
@@ -1066,7 +1311,10 @@ export default function DocSach() {
         setNoteDraftText("");
         setSelectedQuoteText("");
         setFloatingBtnPos(null);
-        showToast("Đã lưu trích dẫn vào sổ tay ghi chú!");
+        if (window.getSelection) {
+            window.getSelection().removeAllRanges();
+        }
+        showToast("Đã bôi đậm trích dẫn & lưu ghi chú!");
 
         if (targetId) {
             try {
@@ -1121,7 +1369,7 @@ export default function DocSach() {
         showToast(`Đã lật đến Trang ${note.pageNumber}`);
     };
 
-    // Render văn bản kèm highlight màu cho các đoạn trích dẫn đã lưu
+    // Render văn bản kèm bôi đậm (bold) & highlight cho các đoạn trích dẫn đã đánh dấu
     const renderParagraphWithHighlights = (para, pIdx) => {
         const pageNotes = notes.filter(n => Number(n.pageNumber) === Number(currentPage));
         if (!pageNotes || pageNotes.length === 0) {
@@ -1130,7 +1378,7 @@ export default function DocSach() {
 
         const validQuotes = pageNotes
             .map(n => (n.selectedText || '').trim())
-            .filter(t => t.length >= 3 && para.includes(t))
+            .filter(t => t.length >= 2 && para.includes(t))
             .sort((a, b) => b.length - a.length);
 
         if (validQuotes.length === 0) {
@@ -1144,13 +1392,17 @@ export default function DocSach() {
         return (
             <p key={pIdx} className="mb-4 leading-relaxed indent-6">
                 {parts.map((part, idx) => {
-                    const isMatch = validQuotes.includes(part);
-                    if (isMatch) {
+                    const matchedNote = pageNotes.find(n => (n.selectedText || '').trim() === part);
+                    if (matchedNote) {
                         return (
                             <mark
                                 key={idx}
-                                className="bg-amber-300/50 dark:bg-amber-500/40 text-inherit rounded px-1 py-0.5 border-b-2 border-amber-500 cursor-pointer hover:bg-amber-400/60 transition-colors shadow-2xs"
-                                title="Đoạn trích dẫn đã lưu trong sổ tay"
+                                className="bg-amber-300/80 dark:bg-amber-400/35 text-amber-950 dark:text-[#EDE9DF] font-bold rounded px-1.5 py-0.5 border-b-2 border-amber-600 dark:border-amber-400 cursor-pointer hover:bg-amber-400 dark:hover:bg-amber-400/50 transition-colors shadow-2xs select-text"
+                                title={`Đoạn trích đã bôi đậm (Trang ${currentPage})${matchedNote.personalNote ? `: "${matchedNote.personalNote}"` : ''} - Nhấp để xem sổ tay`}
+                                onClick={() => {
+                                    setActiveTocTab('note');
+                                    setIsTocOpen(true);
+                                }}
                             >
                                 {part}
                             </mark>
@@ -1185,20 +1437,68 @@ export default function DocSach() {
         }
     };
 
-    // Audio Player
-    const toggleMusic = () => {
+    // Audio Player phát nhạc nền đọc sách (Lofi, Mưa, Không gian đọc)
+    const toggleMusic = (trackIdx = null) => {
         if (!audioRef.current) return;
+        
+        // Nhấp vào một track cụ thể từ danh sách
+        if (trackIdx !== null && typeof trackIdx === 'number') {
+            const target = playlist[trackIdx];
+            if (target) {
+                if (currentTrackIndex === trackIdx && isPlayingMusic) {
+                    audioRef.current.pause();
+                    setIsPlayingMusic(false);
+                    showToast(`Đã tạm dừng: ${target.title}`);
+                    return;
+                }
+                setCurrentTrackIndex(trackIdx);
+                audioRef.current.src = target.src;
+                audioRef.current.currentTime = 0;
+                audioRef.current.play().then(() => {
+                    setIsPlayingMusic(true);
+                    showToast(`Đang phát: ${target.title}`);
+                }).catch(() => {
+                    showToast("Vui lòng nhấp vào trang trước để trình duyệt cho phép phát âm thanh.");
+                });
+                return;
+            }
+        }
+
+        // Bật / Tắt bài hiện tại
         if (isPlayingMusic) {
             audioRef.current.pause();
             setIsPlayingMusic(false);
-            showToast("Đã tạm dừng âm thanh.");
+            showToast("Đã tạm dừng nhạc nền.");
         } else {
+            const target = playlist[currentTrackIndex] || playlist[0];
+            const currentSrc = audioRef.current.getAttribute('src');
+            if (!currentSrc || currentSrc !== target.src) {
+                audioRef.current.src = target.src;
+            }
             audioRef.current.play().then(() => {
                 setIsPlayingMusic(true);
-                showToast("Đang phát nhạc nền thư giãn.");
+                showToast(`Đang phát: ${target.title}`);
             }).catch(() => {
-                showToast("Trình duyệt chặn tự động phát âm thanh.");
+                showToast("Vui lòng nhấp vào trang trước để trình duyệt cho phép phát âm thanh.");
             });
+        }
+    };
+
+    const handleNextTrack = () => {
+        const nextIdx = (currentTrackIndex + 1) % playlist.length;
+        toggleMusic(nextIdx);
+    };
+
+    const handlePrevTrack = () => {
+        const prevIdx = (currentTrackIndex - 1 + playlist.length) % playlist.length;
+        toggleMusic(prevIdx);
+    };
+
+    const handleVolumeChange = (newVol) => {
+        const val = Math.max(0, Math.min(1, newVol));
+        setVolume(val);
+        if (audioRef.current) {
+            audioRef.current.volume = val;
         }
     };
 
@@ -1219,11 +1519,57 @@ export default function DocSach() {
                     <div className="flex items-center gap-2.5 flex-1 min-w-0">
                         <button 
                             type="button"
-                            onClick={() => navigate(-1)} 
+                            onClick={() => {
+                                document.body.style.overflow = '';
+                                document.body.style.position = '';
+                                document.body.style.width = '';
+                                document.body.style.height = '';
+                                document.documentElement.style.overflow = '';
+                                document.documentElement.style.height = '';
+                                if (window.history.length > 1) {
+                                    navigate(-1);
+                                } else {
+                                    navigate('/tusachcn');
+                                }
+                            }} 
                             className="w-9 h-9 rounded-xl flex items-center justify-center halm-header-btn shrink-0 cursor-pointer" 
-                            title="Quay lại chi tiết sách"
+                            title="Quay lại"
                         >
                             <i className="ph-bold ph-arrow-left text-base text-[#D4AF37]"></i>
+                        </button>
+
+                        <button 
+                            type="button"
+                            onClick={() => {
+                                document.body.style.overflow = '';
+                                document.body.style.position = '';
+                                document.body.style.width = '';
+                                document.body.style.height = '';
+                                document.documentElement.style.overflow = '';
+                                document.documentElement.style.height = '';
+                                navigate('/');
+                            }} 
+                            className="w-9 h-9 rounded-xl flex items-center justify-center halm-header-btn shrink-0 cursor-pointer" 
+                            title="Về Trang Chủ"
+                        >
+                            <i className="ph-bold ph-house text-base text-[#D4AF37]"></i>
+                        </button>
+
+                        <button 
+                            type="button"
+                            onClick={() => {
+                                document.body.style.overflow = '';
+                                document.body.style.position = '';
+                                document.body.style.width = '';
+                                document.body.style.height = '';
+                                document.documentElement.style.overflow = '';
+                                document.documentElement.style.height = '';
+                                navigate('/tusachcn');
+                            }} 
+                            className="w-9 h-9 rounded-xl flex items-center justify-center halm-header-btn shrink-0 cursor-pointer" 
+                            title="Về Tủ Sách Cá Nhân"
+                        >
+                            <i className="ph-bold ph-books text-base text-[#D4AF37]"></i>
                         </button>
 
                         <button 
@@ -1561,27 +1907,47 @@ export default function DocSach() {
 
                     </section>
 
-                    {/* Floating Note Save Button (Hiện khi bôi đen chữ) */}
+                    {/* Floating Selection Toolbar (Hiện khi bôi đen chữ trên trang) */}
                     {floatingBtnPos && (
-                        <button
-                            type="button"
+                        <div
                             style={{
                                 position: 'fixed',
                                 top: `${floatingBtnPos.top}px`,
                                 left: `${floatingBtnPos.left}px`,
                                 zIndex: 99999,
                             }}
-                            onMouseDown={(e) => {
-                                e.preventDefault();
-                                setSelectedQuoteText(floatingBtnPos.selectedText);
-                                setIsNoteModalOpen(true);
-                                setFloatingBtnPos(null);
-                            }}
-                            className="bg-[#8E3038] hover:bg-[#6F252C] text-white border border-[#D4AF37]/50 px-4 py-2 rounded-full shadow-2xl text-xs font-outfit font-extrabold flex items-center gap-1.5 cursor-pointer transform hover:scale-105 transition-all shadow-[0_6px_20px_rgba(142,48,56,0.5)]"
+                            className="flex items-center gap-1.5 p-1 rounded-full bg-[#171815] border border-[#D4AF37]/70 shadow-[0_8px_24px_rgba(0,0,0,0.7)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-150"
                         >
-                            <i className="ph-fill ph-bookmark-simple text-[#D4AF37]"></i>
-                            <span>Lưu trích dẫn</span>
-                        </button>
+                            {/* Nút 1: Đánh dấu & Bôi đậm trực tiếp */}
+                            <button
+                                type="button"
+                                onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    handleQuickHighlight(floatingBtnPos.selectedText);
+                                }}
+                                className="bg-[#8E3038] hover:bg-[#A83B46] text-white px-3 py-1.5 rounded-full text-xs font-outfit font-bold flex items-center gap-1.5 cursor-pointer shadow-md hover:scale-105 active:scale-95 transition-all"
+                                title="Đánh dấu và bôi đậm ngay đoạn văn này"
+                            >
+                                <i className="ph-fill ph-highlighter text-[#FFE279]"></i>
+                                <span>Bôi đậm</span>
+                            </button>
+
+                            {/* Nút 2: Ghi chú chi tiết */}
+                            <button
+                                type="button"
+                                onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    setSelectedQuoteText(floatingBtnPos.selectedText);
+                                    setIsNoteModalOpen(true);
+                                    setFloatingBtnPos(null);
+                                }}
+                                className="bg-[#242621] hover:bg-[#2C2E28] text-[#EDE9DF] hover:text-[#D4AF37] px-3 py-1.5 rounded-full text-xs font-outfit font-bold flex items-center gap-1.5 cursor-pointer border border-[#2F322B] hover:border-[#D4AF37]/50 shadow-md hover:scale-105 active:scale-95 transition-all"
+                                title="Thêm lời bình / cảm nhận vào sổ tay"
+                            >
+                                <i className="ph-fill ph-chat-circle-dots text-[#D4AF37]"></i>
+                                <span>Ghi chú</span>
+                            </button>
+                        </div>
                     )}
 
                     {/* Sidebar TOC & Bookmarks (Khung đen sang trọng theo style HALM) */}
@@ -1746,7 +2112,7 @@ export default function DocSach() {
                                                     ✕
                                                 </button>
                                             </div>
-                                            <div className="text-[#EDE9DF] text-xs italic border-l-2 border-[#D4AF37] pl-2 line-clamp-3 leading-relaxed mb-1 font-serif">
+                                            <div className="text-[#EDE9DF] text-xs font-bold border-l-3 border-[#D4AF37] pl-2.5 py-1 rounded-r-md bg-[#D4AF37]/5 line-clamp-3 leading-relaxed mb-1 font-serif">
                                                 "{note.selectedText}"
                                             </div>
                                             {note.personalNote && (
@@ -1988,7 +2354,7 @@ export default function DocSach() {
 
                         {/* Book Metadata */}
                         <div className="mt-auto p-3.5 rounded-xl bg-[#1A1B18] border border-[#2F322B] text-xs space-y-1.5">
-                            <div className="text-[#9CA3AF]">Tác giả: <span className="text-[#EDE9DF] font-semibold">{book?.author || 'Toan Ánh'}</span></div>
+                            <div className="text-[#9CA3AF]">Tác giả: <span className="text-[#EDE9DF] font-semibold">{book?.author || book?.authorName || 'HALM BOOK'}</span></div>
                             <div className="text-[#9CA3AF]">Nhà XB: <span className="text-[#EDE9DF] font-semibold">{book?.publisher || 'HALM BOOK'}</span></div>
                             <div className="text-[#9CA3AF]">Định dạng: <span className="text-[#D4AF37] font-bold">Bản quyền số {bookFormat}</span></div>
                         </div>
@@ -1997,63 +2363,223 @@ export default function DocSach() {
                     {/* Sidebar Audio Music Player */}
                     <aside className={`sidebar-overlay w-80 bg-[#171815] border-l border-[#2F322B] p-4 flex flex-col gap-4 shadow-2xl text-[#EDE9DF] ${isAudioOpen ? '' : 'sidebar-right-hidden'}`}>
                         <div className="flex justify-between items-center pb-3 border-b border-[#2F322B]">
-                            <div className="flex gap-5 text-sm font-outfit font-semibold">
+                            <div className="flex gap-4 text-xs font-outfit font-bold uppercase tracking-wider">
                                 <button 
                                     type="button"
                                     onClick={() => setAudioTab('kho')} 
-                                    className={`cursor-pointer transition ${audioTab === 'kho' ? 'text-[#D4AF37]' : 'text-[#9CA3AF]'}`}
+                                    className={`cursor-pointer transition pb-1 border-b-2 ${audioTab === 'kho' ? 'text-[#D4AF37] border-[#D4AF37]' : 'text-[#9CA3AF] border-transparent hover:text-white'}`}
                                 >
-                                    Kho nhạc
+                                    Kho Nhạc Nền ({DEFAULT_PLAYLIST.length})
                                 </button>
                                 <button 
                                     type="button"
                                     onClick={() => setAudioTab('tai')} 
-                                    className={`cursor-pointer transition ${audioTab === 'tai' ? 'text-[#D4AF37]' : 'text-[#9CA3AF]'}`}
+                                    className={`cursor-pointer transition pb-1 border-b-2 ${audioTab === 'tai' ? 'text-[#D4AF37] border-[#D4AF37]' : 'text-[#9CA3AF] border-transparent hover:text-white'}`}
                                 >
-                                    Đã tải lên
+                                    Tải Lên {customTracks.length > 0 && `(${customTracks.length})`}
                                 </button>
                             </div>
-                            <button type="button" onClick={() => setIsAudioOpen(false)} className="w-5 h-5 rounded-full bg-[#222420] text-white text-[10px] font-bold flex items-center justify-center hover:bg-[#2C2E29] cursor-pointer">✕</button>
+                            <button type="button" onClick={() => setIsAudioOpen(false)} className="w-6 h-6 rounded-lg bg-[#222420] text-white text-xs font-bold flex items-center justify-center hover:bg-[#2C2E29] cursor-pointer">✕</button>
                         </div>
 
-                        {audioTab === 'kho' ? (
-                            <div className="space-y-4 pt-2">
-                                <div 
-                                    onClick={toggleMusic} 
-                                    className="flex items-center gap-3 p-3 rounded-xl bg-[#1A1B18] hover:bg-[#222420] transition cursor-pointer border border-[#2F322B]"
-                                >
-                                    <span className="w-6 text-center text-sm font-bold text-[#D4AF37]">1</span>
-                                    <div className="flex-1 min-w-0">
-                                        <h4 className="text-[#EDE9DF] font-serif font-bold text-xs truncate">Tiếng mưa & Không gian đọc</h4>
-                                        <p className="text-[#9CA3AF] text-[11px] mt-0.5">🌧 Google Ambience Loop</p>
-                                    </div>
-                                    <button type="button" className="w-8 h-8 rounded-full bg-[#8E3038] text-white flex items-center justify-center text-xs font-bold shadow hover:scale-105">
-                                        {isPlayingMusic ? '⏸' : '▶'}
-                                    </button>
+                        {/* Now Playing Widget */}
+                        <div className="p-3.5 rounded-2xl bg-gradient-to-br from-[#242621] to-[#1A1B18] border border-[#383A32] shadow-lg">
+                            <div className="flex items-center gap-3 mb-3">
+                                <div className={`w-11 h-11 rounded-xl bg-[#8E3038]/30 border border-[#8E3038]/60 flex items-center justify-center text-xl shrink-0 ${isPlayingMusic ? 'text-[#FFE279] shadow-[0_0_15px_rgba(255,226,121,0.3)] animate-pulse' : 'text-[#9CA3AF]'}`}>
+                                    <i className={`ph-bold ${isPlayingMusic ? 'ph-waveform' : (currentTrack?.icon || 'ph-headphones')}`}></i>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#D4AF37] flex items-center gap-1">
+                                        {isPlayingMusic ? <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span> : <span className="w-2 h-2 rounded-full bg-stone-500"></span>}
+                                        {isPlayingMusic ? 'Đang phát' : 'Đang tạm dừng'}
+                                    </span>
+                                    <h4 className="text-xs font-bold text-[#EDE9DF] truncate font-outfit mt-0.5">{currentTrack?.title}</h4>
+                                    <p className="text-[10px] text-[#9CA3AF] truncate">{currentTrack?.subtitle}</p>
                                 </div>
                             </div>
+
+                            {/* Player Controls */}
+                            <div className="flex items-center justify-center gap-4 pt-1 border-t border-[#2F322B]">
+                                <button
+                                    type="button"
+                                    onClick={handlePrevTrack}
+                                    title="Bài trước"
+                                    className="w-8 h-8 rounded-full bg-[#1A1B18] hover:bg-[#2C2E29] text-[#EDE9DF] flex items-center justify-center text-sm cursor-pointer transition hover:scale-105"
+                                >
+                                    <i className="ph-bold ph-skip-back"></i>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => toggleMusic()}
+                                    title={isPlayingMusic ? "Tạm dừng" : "Phát nhạc"}
+                                    className="w-11 h-11 rounded-full bg-gradient-to-tr from-[#8E3038] to-[#A83B46] hover:from-[#A83B46] hover:to-[#8E3038] text-white flex items-center justify-center text-base font-bold shadow-lg cursor-pointer transition hover:scale-110 active:scale-95"
+                                >
+                                    <i className={`ph-bold ${isPlayingMusic ? 'ph-pause' : 'ph-play ml-0.5'}`}></i>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleNextTrack}
+                                    title="Bài kế tiếp"
+                                    className="w-8 h-8 rounded-full bg-[#1A1B18] hover:bg-[#2C2E29] text-[#EDE9DF] flex items-center justify-center text-sm cursor-pointer transition hover:scale-105"
+                                >
+                                    <i className="ph-bold ph-skip-forward"></i>
+                                </button>
+                            </div>
+
+                            {/* Volume Slider */}
+                            <div className="mt-3 pt-2.5 border-t border-[#2F322B]/70 flex items-center gap-2.5">
+                                <button
+                                    type="button"
+                                    onClick={() => handleVolumeChange(volume > 0 ? 0 : 0.75)}
+                                    className="text-stone-400 hover:text-[#D4AF37] transition text-sm cursor-pointer"
+                                    title={volume === 0 ? "Bật âm" : "Tắt tiếng"}
+                                >
+                                    <i className={`ph-bold ${volume === 0 ? 'ph-speaker-simple-x text-rose-400' : volume < 0.5 ? 'ph-speaker-simple-low' : 'ph-speaker-simple-high'}`}></i>
+                                </button>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="1"
+                                    step="0.05"
+                                    value={volume}
+                                    onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+                                    className="w-full h-1.5 bg-[#171815] rounded-lg appearance-none cursor-pointer accent-[#D4AF37]"
+                                />
+                                <span className="text-[10px] font-mono text-[#9CA3AF] w-7 text-right">{Math.round(volume * 100)}%</span>
+                            </div>
+                        </div>
+
+                        {/* Tab Content */}
+                        {audioTab === 'kho' ? (
+                            <div className="space-y-2 pt-1 flex-1 overflow-y-auto">
+                                <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider block mb-1">Danh sách giai điệu</span>
+                                {DEFAULT_PLAYLIST.map((track, idx) => {
+                                    const isCurrent = currentTrackIndex === idx;
+                                    const isThisPlaying = isCurrent && isPlayingMusic;
+                                    return (
+                                        <div
+                                            key={track.id}
+                                            onClick={() => toggleMusic(idx)}
+                                            className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                                                isCurrent
+                                                    ? 'bg-[#222420] border-[#D4AF37] shadow-md'
+                                                    : 'bg-[#1A1B18] border-[#2F322B] hover:bg-[#222420] hover:border-stone-600'
+                                            }`}
+                                        >
+                                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${
+                                                isThisPlaying
+                                                    ? 'bg-[#D4AF37] text-[#111210] shadow animate-pulse'
+                                                    : isCurrent
+                                                    ? 'bg-[#D4AF37]/20 text-[#D4AF37]'
+                                                    : 'bg-[#252722] text-[#9CA3AF]'
+                                            }`}>
+                                                {isThisPlaying ? (
+                                                    <i className="ph-bold ph-waveform"></i>
+                                                ) : (
+                                                    <span>{idx + 1}</span>
+                                                )}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <h4 className={`font-bold text-xs truncate ${isCurrent ? 'text-[#FFE279]' : 'text-[#EDE9DF]'}`}>
+                                                    {track.title}
+                                                </h4>
+                                                <p className="text-[#9CA3AF] text-[10px] truncate mt-0.5">{track.subtitle}</p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); toggleMusic(idx); }}
+                                                className={`w-7 h-7 rounded-full flex items-center justify-center text-xs transition ${
+                                                    isThisPlaying
+                                                        ? 'bg-[#8E3038] text-white shadow'
+                                                        : 'bg-[#252722] hover:bg-[#8E3038] text-white'
+                                                }`}
+                                            >
+                                                <i className={`ph-bold ${isThisPlaying ? 'ph-pause' : 'ph-play ml-0.5'}`}></i>
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         ) : (
-                            <div className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-[#2F322B] rounded-xl bg-[#1A1B18] text-center">
-                                <i className="ph-bold ph-upload-simple text-3xl text-[#9CA3AF] mb-2"></i>
-                                <span className="text-[#EDE9DF] text-xs font-bold mb-3 font-outfit">Tải nhạc (.mp3 / .ogg) cá nhân</span>
-                                <label className="bg-[#8E3038] hover:bg-[#6F252C] text-white px-4 py-1.5 rounded-full font-bold text-xs hover:scale-105 cursor-pointer shadow-md">
-                                    Chọn tệp
-                                    <input 
-                                        type="file" 
-                                        accept="audio/*" 
-                                        onChange={(e) => {
-                                            const file = e.target.files?.[0];
-                                            if (file && audioRef.current) {
-                                                audioRef.current.src = URL.createObjectURL(file);
-                                                audioRef.current.play().then(() => {
-                                                    setIsPlayingMusic(true);
-                                                    showToast(`Đang phát: ${file.name}`);
-                                                });
-                                            }
-                                        }} 
-                                        className="hidden" 
-                                    />
-                                </label>
+                            <div className="space-y-3 pt-1 flex-1 overflow-y-auto">
+                                <div className="flex flex-col items-center justify-center p-5 border-2 border-dashed border-[#2F322B] hover:border-[#D4AF37]/60 rounded-2xl bg-[#1A1B18] text-center transition">
+                                    <i className="ph-bold ph-upload-simple text-3xl text-[#D4AF37] mb-2"></i>
+                                    <span className="text-[#EDE9DF] text-xs font-bold mb-1 font-outfit">Tải nhạc cá nhân</span>
+                                    <p className="text-[10px] text-[#9CA3AF] mb-3">Hỗ trợ các tệp .mp3, .ogg, .wav</p>
+                                    <label className="bg-[#8E3038] hover:bg-[#6F252C] text-white px-4 py-1.5 rounded-full font-bold text-xs hover:scale-105 cursor-pointer shadow-md transition">
+                                        Chọn tệp âm thanh
+                                        <input 
+                                            type="file" 
+                                            accept="audio/*" 
+                                            onChange={(e) => {
+                                                const file = e.target.files?.[0];
+                                                if (file) {
+                                                    const blobUrl = URL.createObjectURL(file);
+                                                    const customTrack = {
+                                                        id: `custom_${Date.now()}`,
+                                                        title: file.name.replace(/\.[^/.]+$/, ""),
+                                                        subtitle: 'Tệp cá nhân đã tải lên',
+                                                        src: blobUrl,
+                                                        icon: 'ph-music-note',
+                                                        isCustom: true
+                                                    };
+                                                    setCustomTracks(prev => [customTrack, ...prev]);
+                                                    const newIndex = DEFAULT_PLAYLIST.length;
+                                                    setCurrentTrackIndex(newIndex);
+                                                    if (audioRef.current) {
+                                                        audioRef.current.src = blobUrl;
+                                                        audioRef.current.play().then(() => {
+                                                            setIsPlayingMusic(true);
+                                                            showToast(`Đang phát: ${customTrack.title}`);
+                                                        });
+                                                    }
+                                                }
+                                            }} 
+                                            className="hidden" 
+                                        />
+                                    </label>
+                                </div>
+
+                                {customTracks.length > 0 && (
+                                    <div className="space-y-2">
+                                        <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider block">Các bài đã tải lên</span>
+                                        {customTracks.map((track, cIdx) => {
+                                            const realIdx = DEFAULT_PLAYLIST.length + cIdx;
+                                            const isCurrent = currentTrackIndex === realIdx;
+                                            const isThisPlaying = isCurrent && isPlayingMusic;
+                                            return (
+                                                <div
+                                                    key={track.id}
+                                                    onClick={() => toggleMusic(realIdx)}
+                                                    className={`flex items-center gap-3 p-2.5 rounded-xl border transition cursor-pointer ${
+                                                        isCurrent ? 'bg-[#222420] border-[#D4AF37]' : 'bg-[#1A1B18] border-[#2F322B] hover:bg-[#222420]'
+                                                    }`}
+                                                >
+                                                    <i className={`ph-bold ${isThisPlaying ? 'ph-waveform text-[#FFE279] animate-pulse' : 'ph-music-note text-[#D4AF37]'}`}></i>
+                                                    <div className="flex-1 min-w-0">
+                                                        <h5 className="text-xs font-bold text-[#EDE9DF] truncate">{track.title}</h5>
+                                                        <span className="text-[9px] text-[#9CA3AF]">Nhạc cá nhân</span>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setCustomTracks(prev => prev.filter(t => t.id !== track.id));
+                                                            if (isCurrent && audioRef.current) {
+                                                                audioRef.current.pause();
+                                                                setIsPlayingMusic(false);
+                                                            }
+                                                        }}
+                                                        className="text-stone-500 hover:text-rose-400 text-xs p-1"
+                                                        title="Gỡ bài này"
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
                         )}
                     </aside>
@@ -2198,21 +2724,55 @@ export default function DocSach() {
 
                             {/* Các nút hành động CTA */}
                             <div className="space-y-2 pt-1">
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        const targetId = bookId || book?.book_id || book?.id;
-                                        if (targetId) {
-                                            navigate('/chitietsach/' + encodeURIComponent(targetId) + '?openRental=true');
-                                        } else {
-                                            navigate('/chitietsach');
-                                        }
-                                    }}
-                                    className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-[#8E3038] via-[#A83B46] to-[#8E3038] hover:brightness-110 text-white font-outfit font-black text-xs uppercase tracking-wider shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer group"
-                                >
-                                    <i className="ph-fill ph-shopping-bag-open text-base text-amber-300 group-hover:scale-110 transition-transform"></i>
-                                    <span>Thuê Hoặc Mua Sách Ngay (Chỉ từ 2 Khoai)</span>
-                                </button>
+                                {!isTokenValid() ? (
+                                    <>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                openAuthModal({ 
+                                                    mode: 'login', 
+                                                    message: 'Vui lòng đăng nhập tài khoản để thuê hoặc mở khóa trọn vẹn tác phẩm!' 
+                                                });
+                                            }}
+                                            className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-amber-600 via-amber-500 to-amber-600 hover:brightness-110 text-white font-outfit font-black text-xs uppercase tracking-wider shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer group"
+                                        >
+                                            <i className="ph-bold ph-sign-in text-base text-amber-100 group-hover:scale-110 transition-transform"></i>
+                                            <span>Đăng Nhập Để Thuê & Đọc Tiếp</span>
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const targetId = bookId || book?.book_id || book?.id;
+                                                if (targetId) {
+                                                    navigate('/chitietsach/' + encodeURIComponent(targetId) + '?openRental=true');
+                                                } else {
+                                                    navigate('/chitietsach');
+                                                }
+                                            }}
+                                            className="w-full py-2.5 px-4 rounded-xl bg-[#222420] hover:bg-[#2C2E29] text-[#EDE9DF] font-outfit font-bold text-xs border border-[#D4AF37]/40 hover:border-[#D4AF37] transition-all flex items-center justify-center gap-2 cursor-pointer"
+                                        >
+                                            <i className="ph-fill ph-shopping-bag-open text-sm text-[#D4AF37]"></i>
+                                            <span>Xem Bảng Giá Gói Thuê (Chỉ từ 2 Khoai)</span>
+                                        </button>
+                                    </>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const targetId = bookId || book?.book_id || book?.id;
+                                            if (targetId) {
+                                                navigate('/chitietsach/' + encodeURIComponent(targetId) + '?openRental=true');
+                                            } else {
+                                                navigate('/chitietsach');
+                                            }
+                                        }}
+                                        className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-[#8E3038] via-[#A83B46] to-[#8E3038] hover:brightness-110 text-white font-outfit font-black text-xs uppercase tracking-wider shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 cursor-pointer group"
+                                    >
+                                        <i className="ph-fill ph-shopping-bag-open text-base text-amber-300 group-hover:scale-110 transition-transform"></i>
+                                        <span>Thuê Hoặc Mua Sách Ngay (Chỉ từ 2 Khoai)</span>
+                                    </button>
+                                )}
 
                                 <div className="flex items-center gap-2">
                                     <button
@@ -2257,7 +2817,28 @@ export default function DocSach() {
                 </div>
 
                 {/* Audio element for relaxation sounds */}
-                <audio ref={audioRef} loop src="https://actions.google.com/sounds/v1/ambiences/rain_heavy.ogg" />
+                <audio ref={audioRef} loop src={currentTrack?.src || '/audio/rain.mp3'} />
+
+                {/* Popup Auth Modal cho khách vãng lai khi cần đăng nhập ngay tại màn hình đọc sách */}
+                <AuthModal 
+                    onSuccess={async () => {
+                        const targetId = bookId || book?.book_id || book?.id;
+                        if (targetId) {
+                            try {
+                                const accessDetail = await getBookAccessDetail(targetId);
+                                if (accessDetail?.hasAccess) {
+                                    setIsTrialMode(false);
+                                    setIsTrialModalOpen(false);
+                                    showToast("Chúc mừng! Bạn đã sở hữu tác phẩm và được mở khóa toàn bộ trang.");
+                                } else {
+                                    showToast("Đăng nhập thành công! Hãy chọn gói thuê để tiếp tục.");
+                                }
+                            } catch (_) {
+                                showToast("Đăng nhập thành công!");
+                            }
+                        }
+                    }} 
+                />
 
             </div>
         </>

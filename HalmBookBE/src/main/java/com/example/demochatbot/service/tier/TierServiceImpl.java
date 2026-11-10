@@ -42,20 +42,36 @@ public class TierServiceImpl implements TierService {
     private PotatoTransactionRepository potatoTransactionRepository;
 
     /**
-     * Khởi tạo dữ liệu mẫu 4 cấp bậc hội viên nếu hệ thống chưa có
+     * Khởi tạo hoặc cập nhật đồng bộ 4 cấp bậc hội viên chuẩn xác trong cơ sở dữ liệu
      */
     @PostConstruct
     @Transactional
     public void initDefaultTiersIfEmpty() {
-        if (membershipTierRepository.count() == 0) {
-            List<MembershipTier> defaultTiers = List.of(
-                    new MembershipTier(0, "Thợ Cày", 0, 0, 0, "🌱", "Cấp bậc khởi đầu của độc giả HALM BOOK. Trải nghiệm hệ sinh thái đọc thử và mượn sách linh hoạt.", null),
-                    new MembershipTier(0, "Cao Thủ Cày", 10, 500, 5, "🚜", "Hạng Bạc Tri Thức. Giảm 5% phí thuê sách trọn đời, mở khóa huy hiệu Bạc danh dự.", null),
-                    new MembershipTier(0, "Lão Nông", 50, 2500, 10, "🌾", "Hạng Vàng Tinh Hoa. Giảm 10% phí thuê sách trọn đời, miễn phí 1 cuốn mỗi tháng và hỗ trợ VIP 24/7.", null),
-                    new MembershipTier(0, "Đại Điền Chủ", 150, 10000, 20, "👑", "Hạng Hoàng Gia VIP Tối Thượng. Giảm 20% phí thuê sách trọn đời, miễn cọc trọn đời và hộp quà ấn bản bìa cứng hàng năm.", null)
-            );
-            membershipTierRepository.saveAll(defaultTiers);
+        syncTier("Thợ Cày", 0, 0, 0, "🌱", "Cấp bậc khởi đầu của độc giả HALM BOOK. Trải nghiệm hệ sinh thái đọc thử và mượn sách linh hoạt.");
+        syncTier("Cao Thủ Cày", 10, 500, 5, "🚜", "Hạng Bạc Tri Thức. Giảm 5% phí thuê sách trọn đời, mở khóa huy hiệu Bạc danh dự.");
+        syncTier("Lão Nông", 50, 2500, 10, "🌾", "Hạng Vàng Tinh Hoa. Giảm 10% phí thuê sách trọn đời, miễn phí 1 cuốn mỗi tháng và hỗ trợ VIP 24/7.");
+        syncTier("Đại Điền Chủ", 150, 10000, 20, "👑", "Hạng Hoàng Gia VIP Tối Thượng. Giảm 20% phí thuê sách trọn đời, miễn cọc trọn đời và hộp quà ấn bản bìa cứng hàng năm.");
+    }
+
+    private void syncTier(String name, int minBooks, int minPotato, int discount, String icon, String desc) {
+        List<MembershipTier> existing = membershipTierRepository.findAll();
+        MembershipTier target = null;
+        for (MembershipTier t : existing) {
+            if (t.getTierName() != null && t.getTierName().trim().equalsIgnoreCase(name.trim())) {
+                target = t;
+                break;
+            }
         }
+        if (target == null) {
+            target = new MembershipTier(0, name, minBooks, minPotato, discount, icon, desc, null);
+        } else {
+            target.setMinBooksRequired(minBooks);
+            target.setMinPotatoRequired(minPotato);
+            target.setDiscountPercent(discount);
+            target.setBadgeIcon(icon);
+            target.setDescription(desc);
+        }
+        membershipTierRepository.save(target);
     }
 
     private List<String> getBenefitsForTier(String tierName) {
@@ -116,14 +132,25 @@ public class TierServiceImpl implements TierService {
                 .collect(Collectors.toList());
     }
 
+    public static int getTierRank(String tierName) {
+        if (tierName == null) return 1;
+        String upper = tierName.toUpperCase();
+        if (upper.contains("ĐẠI ĐIỀN") || upper.contains("DAI DIEN") || upper.contains("TOI THUONG") || upper.contains("TỐI THƯỢNG") || upper.contains("HOANG GIA") || upper.contains("HOÀNG GIA") || upper.contains("TIER 4") || upper.contains("TIER4")) return 4;
+        if (upper.contains("LÃO NÔNG") || upper.contains("LAO NONG") || upper.contains("TINH HOA") || upper.contains("TIER 3") || upper.contains("TIER3")) return 3;
+        if (upper.contains("CAO THỦ") || upper.contains("CAO THU") || upper.contains("TRI THUC") || upper.contains("TRI THỨC") || upper.contains("TIER 2") || upper.contains("TIER2")) return 2;
+        return 1;
+    }
+
     /**
      * Tính tổng điểm cày (XP) của độc giả:
-     * XP = Khoai tích lũy (totalPotatoEarned) + (Số sách trong tủ * 50 XP) + (Streak * 20 XP)
+     * XP = Khoai tích lũy hoặc Số dư ví thực tế (lấy max) + (Số sách trong tủ * 50 XP) + (Streak * 20 XP)
      */
     private int calculateTotalPoints(Customer customer, int booksReadCount) {
         int earnedPotato = customer.getTotalPotatoEarned() != null ? customer.getTotalPotatoEarned() : 0;
+        int balance = customer.getPotatoBalance() != null ? customer.getPotatoBalance() : 0;
+        int effectivePotato = Math.max(earnedPotato, balance);
         int streak = customer.getStreakDays() != null ? customer.getStreakDays() : 0;
-        return earnedPotato + (booksReadCount * 50) + (streak * 20);
+        return effectivePotato + (booksReadCount * 50) + (streak * 20);
     }
 
     @Override
@@ -146,20 +173,23 @@ public class TierServiceImpl implements TierService {
         int totalPoints = calculateTotalPoints(customer, booksReadCount);
 
         // 5. Xác định hạng kế tiếp
+        int currentRank = currentTier != null ? getTierRank(currentTier.getTierName()) : 1;
         MembershipTier nextTierEntity = null;
         for (MembershipTier tier : allTiersEntities) {
-            if (tier.getTierId() > currentTier.getTierId()) {
-                nextTierEntity = tier;
-                break;
+            int r = getTierRank(tier.getTierName());
+            if (r > currentRank) {
+                if (nextTierEntity == null || r < getTierRank(nextTierEntity.getTierName())) {
+                    nextTierEntity = tier;
+                }
             }
         }
 
-        boolean isMaxTier = (nextTierEntity == null);
-        int booksRequiredForNext = isMaxTier ? currentTier.getMinBooksRequired() : nextTierEntity.getMinBooksRequired();
+        boolean isMaxTier = (currentRank >= 4 || nextTierEntity == null);
+        int booksRequiredForNext = isMaxTier ? (currentTier != null ? currentTier.getMinBooksRequired() : 150) : nextTierEntity.getMinBooksRequired();
         int booksRemainingForNext = isMaxTier ? 0 : Math.max(0, booksRequiredForNext - booksReadCount);
         double progressPercentBooks = isMaxTier ? 100.0 : Math.min(100.0, Math.round(((double) booksReadCount / booksRequiredForNext) * 1000.0) / 10.0);
 
-        int pointsRequiredForNext = isMaxTier ? currentTier.getMinPotatoRequired() : nextTierEntity.getMinPotatoRequired();
+        int pointsRequiredForNext = isMaxTier ? (currentTier != null ? currentTier.getMinPotatoRequired() : 10000) : nextTierEntity.getMinPotatoRequired();
         int pointsRemainingForNext = isMaxTier ? 0 : Math.max(0, pointsRequiredForNext - totalPoints);
         double progressPercentPoints = isMaxTier ? 100.0 : Math.min(100.0, Math.round(((double) totalPoints / pointsRequiredForNext) * 1000.0) / 10.0);
 
@@ -191,7 +221,7 @@ public class TierServiceImpl implements TierService {
                 .overallProgressPercent(overallProgress)
                 .streakDays(customer.getStreakDays() != null ? customer.getStreakDays() : 0)
                 .hasCheckedInToday(hasCheckedInToday)
-                .discountPercent(currentTier.getDiscountPercent() != null ? currentTier.getDiscountPercent() : 0)
+                .discountPercent(currentTier != null && currentTier.getDiscountPercent() != null ? currentTier.getDiscountPercent() : 0)
                 .potatoBalance(customer.getPotatoBalance() != null ? customer.getPotatoBalance() : 0)
                 .isPermanentProtected(true)
                 .allTiers(allTiers)
@@ -209,30 +239,47 @@ public class TierServiceImpl implements TierService {
         int booksCount = (int) accessRecordRepository.countByCustomer(customer);
         int points = calculateTotalPoints(customer, booksCount);
 
-        // Duyệt từ hạng cao nhất xuống hạng thấp nhất để tìm hạng cao nhất đủ điều kiện
-        MembershipTier earnedTier = tiers.get(0); // Mặc định là Tier 1 (Thợ Cày)
-        for (int i = tiers.size() - 1; i >= 0; i--) {
-            MembershipTier t = tiers.get(i);
-            int minBooks = t.getMinBooksRequired() != null ? t.getMinBooksRequired() : 0;
-            int minPoints = t.getMinPotatoRequired() != null ? t.getMinPotatoRequired() : 0;
+        // Đồng bộ totalPotatoEarned nếu số dư thực tế trong ví lớn hơn
+        int currentBal = customer.getPotatoBalance() != null ? customer.getPotatoBalance() : 0;
+        int currentEarned = customer.getTotalPotatoEarned() != null ? customer.getTotalPotatoEarned() : 0;
+        if (currentBal > currentEarned) {
+            customer.setTotalPotatoEarned(currentBal);
+        }
 
-            // Đạt điều kiện sách HOẶC đạt điều kiện điểm cày
-            if ((minBooks > 0 && booksCount >= minBooks) || (minPoints > 0 && points >= minPoints)) {
+        // Xác định hạng đạt được dựa trên điểm XP (khoai) HOẶC số sách đã cày
+        int targetRank = 1;
+        if (points >= 10000 || booksCount >= 150 || currentBal >= 10000) {
+            targetRank = 4;
+        } else if (points >= 2500 || booksCount >= 50 || currentBal >= 2500) {
+            targetRank = 3;
+        } else if (points >= 500 || booksCount >= 10 || currentBal >= 500) {
+            targetRank = 2;
+        }
+
+        // Tìm tier thực tế trong database tương ứng với rank
+        MembershipTier earnedTier = null;
+        for (MembershipTier t : tiers) {
+            if (getTierRank(t.getTierName()) == targetRank) {
                 earnedTier = t;
                 break;
             }
         }
+        if (earnedTier == null) {
+            earnedTier = tiers.get(0);
+        }
 
         MembershipTier currentTier = customer.getMembershipTier();
+        int currentRank = currentTier != null ? getTierRank(currentTier.getTierName()) : 0;
+        int earnedRank = getTierRank(earnedTier.getTierName());
 
         // CHÍNH SÁCH BẢO LƯU VĨNH VIỄN: Chỉ thăng cấp lên hạng cao hơn, tuyệt đối không bị giáng cấp!
-        if (currentTier == null || earnedTier.getTierId() > currentTier.getTierId()) {
+        if (currentTier == null || earnedRank > currentRank) {
             customer.setMembershipTier(earnedTier);
             customerRepository.save(customer);
 
             // Nếu đây là lần thăng cấp thực sự, thưởng Khoai chào mừng hạng mới
-            if (currentTier != null && earnedTier.getTierId() > currentTier.getTierId()) {
-                int bonusPotato = earnedTier.getTierId() == 2 ? 50 : (earnedTier.getTierId() == 3 ? 150 : 500);
+            if (currentTier != null && earnedRank > currentRank) {
+                int bonusPotato = earnedRank == 2 ? 50 : (earnedRank == 3 ? 150 : 500);
                 int newBal = (customer.getPotatoBalance() != null ? customer.getPotatoBalance() : 0) + bonusPotato;
                 customer.setPotatoBalance(newBal);
                 customer.setTotalPotatoEarned((customer.getTotalPotatoEarned() != null ? customer.getTotalPotatoEarned() : 0) + bonusPotato);

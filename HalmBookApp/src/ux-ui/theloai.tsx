@@ -55,7 +55,7 @@ const GENRES = [
 export default function TheLoai() {
   const themeStyles = useAppThemeStyles(styles);
   const [filterVisible, setFilterVisible] = useState(false);
-  const { navigate, isDarkMode } = useAppNavigation();
+  const { navigate, isDarkMode, lang } = useAppNavigation();
   
   const [books, setBooks] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -141,8 +141,13 @@ export default function TheLoai() {
       
       {/* Header */}
       <View style={themeStyles.header}>
+<<<<<<< HEAD
+        <View style={{ width: 24 }} /> {/* Spacer */}
+        <Text style={themeStyles.headerTitle}>{lang === 'en' ? 'Book List' : 'Danh Sách Truyện'}</Text>
+=======
         <View style={{ width: 24 }} />
         <Text style={themeStyles.headerTitle}>Kho Sách Thư Viện</Text>
+>>>>>>> origin/main
         <TouchableOpacity onPress={() => setFilterVisible(true)}>
           <Icon name="filter-outline" size={24} color="#1a1a1a" />
         </TouchableOpacity>
@@ -151,19 +156,34 @@ export default function TheLoai() {
       {/* Lịch sử lọc hiện tại (Filter Tags) */}
       <View style={themeStyles.filterTagsContainer}>
         <View style={themeStyles.filterTag}>
-          <Text style={themeStyles.filterTagText}>Trạng thái: {activeStatus}</Text>
+          <Text style={themeStyles.filterTagText}>{lang === 'en' ? 'Status: ' : 'Trạng thái: '}{activeStatus}</Text>
         </View>
         <View style={themeStyles.filterTag}>
-          <Text style={themeStyles.filterTagText}>Xếp theo: {activeSort}</Text>
+          <Text style={themeStyles.filterTagText}>{lang === 'en' ? 'Sort by: ' : 'Xếp theo: '}{activeSort}</Text>
         </View>
         {activeGenre ? (
           <View style={themeStyles.filterTag}>
-            <Text style={themeStyles.filterTagText}>Thể loại: {activeGenre}</Text>
+            <Text style={themeStyles.filterTagText}>{lang === 'en' ? 'Genre: ' : 'Thể loại: '}{activeGenre}</Text>
           </View>
         ) : null}
       </View>
 
       <ScrollView style={themeStyles.scrollView} showsVerticalScrollIndicator={false}>
+<<<<<<< HEAD
+        
+        {/* Top truyện lướt ngang nổi bật của chuyên mục */}
+        <View style={themeStyles.topHighlightSection}>
+          <Text style={themeStyles.sectionTitle}>{lang === 'en' ? '🔥 Featured Today' : '🔥 Đề Cử Hôm Nay'}</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 15 }}>
+            {NOVELS.slice(0, 4).map((n, i) => (
+              <TouchableOpacity key={i} style={themeStyles.highlightCard} onPress={() => navigate('bookDetail', { id: n.id, title: n.title, chapter: n.chapter })}>
+                <View style={themeStyles.highlightCover}><Text style={themeStyles.mockText}>Ảnh</Text></View>
+                <Text style={themeStyles.highlightTitle} numberOfLines={2}>{n.title}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+=======
         {isLoading ? (
           <ActivityIndicator size="small" color="#5a8b82" style={{ marginTop: 40 }} />
         ) : filteredBooks.length === 0 ? (
@@ -197,6 +217,7 @@ export default function TheLoai() {
                 })}
               </ScrollView>
             </View>
+>>>>>>> origin/main
 
             {/* Danh Sách Tác Phẩm Dạng Lưới (Grid) */}
             <View style={themeStyles.gridContainer}>
@@ -233,11 +254,15 @@ export default function TheLoai() {
               <View style={themeStyles.sheetHandle} />
             </View>
             
+<<<<<<< HEAD
+            <Text style={themeStyles.sheetTitle}>{lang === 'en' ? 'Filter Books' : 'Lọc truyện'}</Text>
+=======
             <Text style={themeStyles.sheetTitle}>Lọc tác phẩm</Text>
+>>>>>>> origin/main
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
               {/* Trạng thái */}
-              <Text style={themeStyles.filterGroupTitle}>Trạng thái</Text>
+              <Text style={themeStyles.filterGroupTitle}>{lang === 'en' ? 'Status' : 'Trạng thái'}</Text>
               <View style={themeStyles.filterOptionsGroup}>
                 {['Tất cả', 'Đã xuất bản', 'Tiêu biểu'].map(st => (
                   <TouchableOpacity 
@@ -253,7 +278,7 @@ export default function TheLoai() {
               </View>
 
               {/* Xếp theo */}
-              <Text style={themeStyles.filterGroupTitle}>Xếp theo</Text>
+              <Text style={themeStyles.filterGroupTitle}>{lang === 'en' ? 'Sort by' : 'Xếp theo'}</Text>
               <View style={themeStyles.filterOptionsGroup}>
                 {['Ngày cập nhật', 'Lượt xem', 'Truyện mới'].map(sort => (
                   <TouchableOpacity 
@@ -269,7 +294,7 @@ export default function TheLoai() {
               </View>
 
               {/* Thể loại */}
-              <Text style={themeStyles.filterGroupTitle}>Thể loại</Text>
+              <Text style={themeStyles.filterGroupTitle}>{lang === 'en' ? 'Categories' : 'Thể loại'}</Text>
               <View style={themeStyles.filterOptionsGroup}>
                 {GENRES.map(genre => (
                   <TouchableOpacity 
@@ -287,10 +312,17 @@ export default function TheLoai() {
 
             <View style={themeStyles.sheetActions}>
               <TouchableOpacity style={themeStyles.cancelBtn} onPress={() => setFilterVisible(false)}>
+<<<<<<< HEAD
+                <Text style={themeStyles.cancelBtnText}>{lang === 'en' ? 'Cancel' : 'Hủy'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={themeStyles.confirmBtn} onPress={() => setFilterVisible(false)}>
+                <Text style={themeStyles.confirmBtnText}>{lang === 'en' ? 'Confirm' : 'Xác nhận'}</Text>
+=======
                 <Text style={themeStyles.cancelBtnText}>Đóng</Text>
               </TouchableOpacity>
               <TouchableOpacity style={themeStyles.confirmBtn} onPress={() => setFilterVisible(false)}>
                 <Text style={themeStyles.confirmBtnText}>Áp dụng</Text>
+>>>>>>> origin/main
               </TouchableOpacity>
             </View>
           </View>

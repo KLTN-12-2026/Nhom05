@@ -18,21 +18,44 @@ public class CustomUserDetails implements UserDetails {
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of(new SimpleGrantedAuthority("ROLE_"+ account.getRole().name()));
+        String roleName = (account != null && account.getRole() != null) ? account.getRole().name() : "USER";
+        return List.of(
+                new SimpleGrantedAuthority("ROLE_" + roleName),
+                new SimpleGrantedAuthority(roleName)
+        );
     }
 
     public Account getAccount() {
         return account;
     }
 
-
     @Override
     public String getPassword() {
-        return account.getPassword();
+        return account != null ? account.getPassword() : null;
     }
 
     @Override
     public String getUsername() {
-        return account.getUsername();
+        return account != null ? account.getUsername() : null;
+    }
+
+    @Override
+    public boolean isAccountNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return account != null && !"LOCKED".equalsIgnoreCase(account.getStatus());
+    }
+
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return account != null && !"DISABLED".equalsIgnoreCase(account.getStatus());
     }
 }

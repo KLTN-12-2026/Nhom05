@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import Constants from 'expo-constants';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
-import { ComponentRef, useCallback, useEffect, useRef, useState } from 'react';
+import { ComponentRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -55,6 +55,252 @@ async function fetchWithCandidateFallback(path: string, options: any = {}) {
   throw lastError;
 }
 
+<<<<<<< HEAD
+type LangCode = 'vi' | 'en';
+
+const TRANSLATIONS = {
+  vi: {
+    loading: 'Đang tải...',
+    defaultReader: 'Độc giả HALM',
+    defaultTier: 'Thành viên',
+    notUpdated: 'Chưa cập nhật',
+    myProfileBtn: 'Trang cá nhân',
+    topUpBtn: 'Nạp khoai',
+    potatoAvailable: 'Khoai đang có',
+    readingStreak: 'Chuỗi ngày đọc',
+    potatoEarned: 'Khoai tích lũy',
+    tierPrefix: 'Hạng',
+    menuDailyTasks: 'Nhiệm vụ hằng ngày',
+    dailyTasksModalTitle: 'Nhiệm vụ hằng ngày',
+    menuTransactions: 'Lịch sử giao dịch',
+    menuHelp: 'Trung tâm trợ giúp',
+    menuChangePassword: 'Đổi mật khẩu',
+    menuNotifications: 'Cài đặt thông báo',
+    menuAbout: 'Thông tin về HALM',
+    menuLanguage: 'Ngôn ngữ',
+    logoutBtn: 'Đăng xuất',
+    profileModalTitle: 'Thông tin cá nhân',
+    fieldName: 'Họ tên',
+    fieldUsername: 'Tên đăng nhập',
+    fieldEmail: 'Email',
+    fieldPhone: 'Số điện thoại',
+    fieldGender: 'Giới tính',
+    fieldDob: 'Ngày sinh (DD/MM/YYYY)',
+    fieldAddress: 'Địa chỉ',
+    genderMale: 'Nam',
+    genderFemale: 'Nữ',
+    editProfileBtn: 'Thay đổi thông tin',
+    saveProfileBtn: 'Lưu thay đổi',
+    cancelBtn: 'Hủy',
+    viewAvatar: 'Xem ảnh đại diện',
+    changeAvatar: 'Thay đổi ảnh đại diện',
+    alertErrorTitle: 'Lỗi',
+    alertSuccessTitle: 'Thành công',
+    alertUpdateErrorTitle: 'Lỗi cập nhật',
+    errNameEmpty: 'Họ tên không được để trống.',
+    errEmailEmpty: 'Email không được để trống.',
+    errSessionExpired: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
+    msgProfileUpdated: 'Cập nhật thông tin cá nhân thành công!',
+    helpModalTitle: 'Trung tâm trợ giúp',
+    aiChatTitle: 'Chat với trợ lý AI',
+    aiChatSub: 'Phản hồi lập tức 24/7',
+    reportAndHelp: 'Báo cáo & Trợ giúp',
+    callPhone: 'Gọi điện',
+    faqHeading: 'Các vấn đề thường gặp',
+    faqs: [
+      'Làm sao để lấy lại mật khẩu?',
+      'Cách thanh toán bằng khoai tây?',
+      'Truyện bị lỗi font chữ?',
+      'Nâng cấp hạng thành viên như thế nào?',
+    ],
+    notifModalTitle: 'Cài đặt thông báo',
+    notifMasterTitle: 'HALM Thông báo',
+    notifMasterSub: 'Nhận thông báo từ ứng dụng',
+    notifPromo: 'Thông báo ưu đãi',
+    notifExpire: 'Sách sắp hết hạn',
+    notifAds: 'Quảng cáo & Sự kiện',
+    aboutModalTitle: 'Thông tin HALM',
+    aboutVersion: 'Phiên bản 1.0.0 (Cập nhật: 18/09/2026)',
+    aboutSlogan: '"Sách là ánh sáng, tri thức là sức mạnh"',
+    aboutDesc:
+      'HALM Book là nền tảng đọc truyện và tiểu thuyết hàng đầu, mang đến cho người dùng trải nghiệm đọc mượt mà, kho tàng sách khổng lồ cùng với các tính năng cộng đồng thú vị.',
+    pwdModalTitle: 'Đổi mật khẩu',
+    pwdStep1Desc:
+      'Vui lòng nhập mật khẩu hiện tại của bạn để xác thực trước khi đổi mật khẩu mới.',
+    pwdCurrentPlaceholder: 'Mật khẩu hiện tại',
+    pwdContinueBtn: 'TIẾP TỤC',
+    pwdStep2DescPrefix: 'Mật khẩu hiện tại chính xác. Vui lòng tạo mật khẩu mới cho tài khoản',
+    pwdNewPlaceholder: 'Mật khẩu mới (tối thiểu 6 ký tự)',
+    pwdConfirmPlaceholder: 'Xác nhận mật khẩu mới',
+    pwdSaveBtn: 'LƯU MẬT KHẨU',
+    errEnterOldPwd: 'Vui lòng nhập mật khẩu hiện tại.',
+    errWrongOldPwd: 'Mật khẩu hiện tại không chính xác. Vui lòng kiểm tra lại.',
+    errVerifyServer: 'Không thể kết nối đến máy chủ để xác thực mật khẩu. Vui lòng thử lại.',
+    errFillNewPwd: 'Vui lòng điền đầy đủ mật khẩu mới.',
+    errConfirmMismatch: 'Mật khẩu xác nhận không trùng khớp.',
+    errMinLength: 'Mật khẩu mới phải có ít nhất 6 ký tự.',
+    errSameAsOld: 'Mật khẩu mới không được trùng với mật khẩu hiện tại.',
+    errNoAccountIdentifier:
+      'Không tìm thấy định danh tài khoản. Vui lòng đăng nhập lại trước khi đổi mật khẩu.',
+    msgPwdChanged: 'Đổi mật khẩu thành công!',
+    dailyTaskStreakTitle: 'Chuỗi đọc sách',
+    dailyTaskStreakSuffix: 'ngày liên tiếp 🔥',
+    dailyTaskCheckinDone: 'Đã điểm danh ✅',
+    dailyTaskCheckinBtn: 'Điểm danh +2 🥔',
+    dailyTaskHeading: 'Nhiệm vụ độc giả hôm nay',
+    dailyTask1Title: 'Đọc sách 20 phút hôm nay',
+    dailyTask1Reward: '+20 XP • +15 Khoai 🥔',
+    dailyTask1Desc: 'Duy trì thói quen đọc sách hàng ngày trên trình đọc số.',
+    dailyTask1Btn: 'Đọc Sách Ngay',
+    dailyTask2Title: 'Đánh giá sách vừa đọc',
+    dailyTask2Reward: '+30 XP • +15 Khoai 🥔',
+    dailyTask2Desc: 'Gửi nhận xét và cảm nghĩ chân thực về cuốn sách bạn tâm đắc.',
+    dailyTask2Btn: 'Đánh Giá Ngay',
+    dailyTask3Title: 'Chuỗi đọc 7 ngày liên tiếp',
+    dailyTask3Reward: '+100 XP • +30 Khoai 🥔',
+    dailyTask3Desc: 'Đăng nhập và hoàn thành ít nhất 1 chương sách mỗi ngày.',
+    dailyTask3Done: 'Đã điểm danh hôm nay',
+    dailyTask3Btn: 'Tiếp Tục Streak 🔥',
+    dailyTask4Title: 'Mời bạn bè cùng đọc sách',
+    dailyTask4Reward: '+150 XP • +50 Khoai 🥔',
+    dailyTask4Desc: 'Gửi liên kết giới thiệu để bạn bè cùng tích lũy Khoai.',
+    dailyTask4Btn: 'Sao Chép Mã Mời',
+    referralAlertTitle: 'Mã Giới Thiệu',
+    referralAlertPrefix: 'Mã giới thiệu của bạn là: ',
+    referralAlertSuffix: '\nChia sẻ cho bạn bè để nhận +50 Khoai khi bạn bè đăng ký!',
+    referralAlertBtn: 'Sao Chép Mã',
+    calendarTitle: 'Lịch Điểm Danh Đăng Nhập',
+    calendarSub: 'Điểm danh mỗi ngày để tích lũy Khoai và duy trì Streak',
+    calendarStreakLabel: 'Chuỗi:',
+    calendarCheckedDaysLabel: 'Đã điểm danh:',
+    daysShort: ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'],
+    checkinTodayBtn: 'Điểm Danh Hôm Nay (+2 🥔 • +10 XP)',
+    checkedInTodayBtn: 'Đã Điểm Danh Hôm Nay ✅',
+    todayLabel: 'Hôm nay',
+  },
+  en: {
+    loading: 'Loading...',
+    defaultReader: 'HALM Reader',
+    defaultTier: 'Member',
+    notUpdated: 'Not updated',
+    myProfileBtn: 'My Profile',
+    topUpBtn: 'Top Up Potatoes',
+    potatoAvailable: 'Available Potatoes',
+    readingStreak: 'Reading Streak',
+    potatoEarned: 'Total Potatoes',
+    tierPrefix: 'Tier',
+    menuDailyTasks: 'Daily Tasks',
+    dailyTasksModalTitle: 'Daily Tasks & Missions',
+    menuTransactions: 'Transaction History',
+    menuHelp: 'Help Center',
+    menuChangePassword: 'Change Password',
+    menuNotifications: 'Notification Settings',
+    menuAbout: 'About HALM',
+    menuLanguage: 'Language',
+    logoutBtn: 'Log Out',
+    profileModalTitle: 'Personal Information',
+    fieldName: 'Full Name',
+    fieldUsername: 'Username',
+    fieldEmail: 'Email',
+    fieldPhone: 'Phone Number',
+    fieldGender: 'Gender',
+    fieldDob: 'Date of Birth (DD/MM/YYYY)',
+    fieldAddress: 'Address',
+    genderMale: 'Male',
+    genderFemale: 'Female',
+    editProfileBtn: 'Edit Information',
+    saveProfileBtn: 'Save Changes',
+    cancelBtn: 'Cancel',
+    viewAvatar: 'View Avatar',
+    changeAvatar: 'Change Avatar',
+    alertErrorTitle: 'Error',
+    alertSuccessTitle: 'Success',
+    alertUpdateErrorTitle: 'Update Failed',
+    errNameEmpty: 'Full name cannot be empty.',
+    errEmailEmpty: 'Email cannot be empty.',
+    errSessionExpired: 'Your session has expired. Please log in again.',
+    msgProfileUpdated: 'Personal information updated successfully!',
+    helpModalTitle: 'Help Center',
+    aiChatTitle: 'Chat with AI Assistant',
+    aiChatSub: 'Instant 24/7 response',
+    reportAndHelp: 'Report & Support',
+    callPhone: 'Call',
+    faqHeading: 'Frequently Asked Questions',
+    faqs: [
+      'How do I recover my password?',
+      'How to pay with potatoes?',
+      'What if a book has font issues?',
+      'How do I upgrade my membership tier?',
+    ],
+    notifModalTitle: 'Notification Settings',
+    notifMasterTitle: 'HALM Notifications',
+    notifMasterSub: 'Receive notifications from the app',
+    notifPromo: 'Promotions & Offers',
+    notifExpire: 'Expiring Books',
+    notifAds: 'Events & Announcements',
+    aboutModalTitle: 'About HALM',
+    aboutVersion: 'Version 1.0.0 (Updated: 18/09/2026)',
+    aboutSlogan: '"Books are light, knowledge is power"',
+    aboutDesc:
+      'HALM Book is a leading novel and book reading platform, offering a smooth reading experience, a massive library, and engaging community features.',
+    pwdModalTitle: 'Change Password',
+    pwdStep1Desc:
+      'Please enter your current password to verify your identity before setting a new password.',
+    pwdCurrentPlaceholder: 'Current password',
+    pwdContinueBtn: 'CONTINUE',
+    pwdStep2DescPrefix: 'Current password verified. Please create a new password for account',
+    pwdNewPlaceholder: 'New password (at least 6 characters)',
+    pwdConfirmPlaceholder: 'Confirm new password',
+    pwdSaveBtn: 'SAVE PASSWORD',
+    errEnterOldPwd: 'Please enter your current password.',
+    errWrongOldPwd: 'Current password is incorrect. Please check again.',
+    errVerifyServer: 'Unable to connect to server to verify password. Please try again.',
+    errFillNewPwd: 'Please fill in both new password fields.',
+    errConfirmMismatch: 'Confirmation password does not match.',
+    errMinLength: 'New password must be at least 6 characters.',
+    errSameAsOld: 'New password must be different from your current password.',
+    errNoAccountIdentifier:
+      'Account identifier not found. Please log in again before changing password.',
+    msgPwdChanged: 'Password changed successfully!',
+    dailyTaskStreakTitle: 'Reading Streak',
+    dailyTaskStreakSuffix: 'consecutive days 🔥',
+    dailyTaskCheckinDone: 'Checked in ✅',
+    dailyTaskCheckinBtn: 'Check-in +2 🥔',
+    dailyTaskHeading: "Today's Reader Missions",
+    dailyTask1Title: 'Read for 20 minutes today',
+    dailyTask1Reward: '+20 XP • +15 Potatoes 🥔',
+    dailyTask1Desc: 'Maintain daily reading habits on the digital reader.',
+    dailyTask1Btn: 'Read Now',
+    dailyTask2Title: 'Review a recently read book',
+    dailyTask2Reward: '+30 XP • +15 Potatoes 🥔',
+    dailyTask2Desc: 'Share honest thoughts and reviews on books you loved.',
+    dailyTask2Btn: 'Review Now',
+    dailyTask3Title: '7-day reading streak',
+    dailyTask3Reward: '+100 XP • +30 Potatoes 🥔',
+    dailyTask3Desc: 'Log in and finish at least 1 book chapter every day.',
+    dailyTask3Done: 'Checked in today',
+    dailyTask3Btn: 'Continue Streak 🔥',
+    dailyTask4Title: 'Invite friends to read together',
+    dailyTask4Reward: '+150 XP • +50 Potatoes 🥔',
+    dailyTask4Desc: 'Share referral link so your friends also earn Potatoes.',
+    dailyTask4Btn: 'Copy Invite Code',
+    referralAlertTitle: 'Referral Code',
+    referralAlertPrefix: 'Your referral code is: ',
+    referralAlertSuffix: '\nShare with friends to earn +50 Potatoes upon registration!',
+    referralAlertBtn: 'Copy Code',
+    calendarTitle: 'Daily Login Calendar',
+    calendarSub: 'Check in daily to earn Potatoes and keep your streak',
+    calendarStreakLabel: 'Streak:',
+    calendarCheckedDaysLabel: 'Checked in:',
+    daysShort: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+    checkinTodayBtn: 'Check-in Today (+2 🥔 • +10 XP)',
+    checkedInTodayBtn: 'Checked in Today ✅',
+    todayLabel: 'Today',
+  },
+};
+
+=======
+>>>>>>> origin/main
 const formatDateForDisplay = (dateVal: any): string => {
   if (!dateVal) return '';
   try {
@@ -113,7 +359,11 @@ const decodeJwtPayload = (token: string): Record<string, any> | null => {
 
 export default function Toi() {
   const themeStyles = useAppThemeStyles(styles);
+<<<<<<< HEAD
+  const { navigate, logout, isDarkMode, setUserAvatarUrl, setUserInitial, lang, setLang } = useAppNavigation();
+=======
   const { navigate, logout, isDarkMode } = useAppNavigation();
+>>>>>>> origin/main
 
   // Trạng thái hiển thị các Modal chức năng con
   const [showHelp, setShowHelp] = useState(false);
@@ -144,8 +394,31 @@ export default function Toi() {
   const [notifExpire, setNotifExpire] = useState(true);
   const [notifAds, setNotifAds] = useState(false);
 
-  // Trạng thái ngôn ngữ
-  const [lang, setLang] = useState('vi'); // vi or en
+  // Trạng thái ngôn ngữ toàn cục & từ điển TRANSLATIONS
+  const t = TRANSLATIONS[lang] || TRANSLATIONS.vi;
+
+  const changeLanguage = (newLang: LangCode) => {
+    setLang(newLang);
+  };
+
+  // ============================================================================
+  // [GIẢI THÍCH CODE]: Quản lý Cuốn Lịch Điểm Danh Đăng Nhập / Chuỗi Đọc Sách
+  // ============================================================================
+  const [calendarMonthOffset, setCalendarMonthOffset] = useState(0);
+  const [storedCheckinDates, setStoredCheckinDates] = useState<string[]>([]);
+
+  // Tải lịch sử ngày điểm danh đã lưu
+  useEffect(() => {
+    AsyncStorage.getItem('user_checkin_history').then((data) => {
+      if (data) {
+        try {
+          const parsed = JSON.parse(data);
+          if (Array.isArray(parsed)) setStoredCheckinDates(parsed);
+        } catch {}
+      }
+    }).catch(() => {});
+  }, []);
+
 
   // Trang cá nhân & Dữ liệu Database
   const [showProfile, setShowProfile] = useState(false);
@@ -171,6 +444,86 @@ export default function Toi() {
     tierName: 'Thành viên',
     streakDays: 0,
   });
+
+  // Tập hợp tất cả các ngày đã điểm danh (lưu trữ + tính toán từ Streak thực tế)
+  const allCheckedDatesSet = useMemo(() => {
+    const set = new Set<string>(storedCheckinDates);
+    const today = new Date();
+
+    if (tierSummary?.hasCheckedInToday) {
+      const y = today.getFullYear();
+      const m = String(today.getMonth() + 1).padStart(2, '0');
+      const d = String(today.getDate()).padStart(2, '0');
+      set.add(`${y}-${m}-${d}`);
+    }
+
+    const streak = tierSummary?.streakDays ?? userInfo.streakDays;
+    if (streak && streak > 0) {
+      const startIndex = tierSummary?.hasCheckedInToday ? 0 : 1;
+      for (let i = startIndex; i < startIndex + streak; i++) {
+        const pastDate = new Date();
+        pastDate.setDate(today.getDate() - i);
+        const py = pastDate.getFullYear();
+        const pm = String(pastDate.getMonth() + 1).padStart(2, '0');
+        const pd = String(pastDate.getDate()).padStart(2, '0');
+        set.add(`${py}-${pm}-${pd}`);
+      }
+    }
+
+    return set;
+  }, [storedCheckinDates, tierSummary?.hasCheckedInToday, tierSummary?.streakDays, userInfo.streakDays]);
+
+  // Dữ liệu lưới ngày cho cuốn lịch
+  const calendarData = useMemo(() => {
+    const now = new Date();
+    const viewDate = new Date(now.getFullYear(), now.getMonth() + calendarMonthOffset, 1);
+    const viewYear = viewDate.getFullYear();
+    const viewMonth = viewDate.getMonth();
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const startDayOfWeek = (new Date(viewYear, viewMonth, 1).getDay() + 6) % 7;
+
+    const today = new Date();
+    const isCurrentMonthView = today.getFullYear() === viewYear && today.getMonth() === viewMonth;
+    const todayDayNumber = isCurrentMonthView ? today.getDate() : -1;
+
+    const gridCells: (number | null)[] = [];
+    for (let i = 0; i < startDayOfWeek; i++) {
+      gridCells.push(null);
+    }
+    for (let day = 1; day <= daysInMonth; day++) {
+      gridCells.push(day);
+    }
+    while (gridCells.length % 7 !== 0) {
+      gridCells.push(null);
+    }
+
+    const weeks: (number | null)[][] = [];
+    for (let i = 0; i < gridCells.length; i += 7) {
+      weeks.push(gridCells.slice(i, i + 7));
+    }
+
+    let checkedCountInMonth = 0;
+    for (let day = 1; day <= daysInMonth; day++) {
+      const key = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      if (allCheckedDatesSet.has(key)) checkedCountInMonth++;
+    }
+
+    const monthTitle = lang === 'en'
+      ? viewDate.toLocaleString('en-US', { month: 'long', year: 'numeric' })
+      : `Tháng ${viewMonth + 1} / ${viewYear}`;
+
+    return {
+      viewYear,
+      viewMonth,
+      daysInMonth,
+      isCurrentMonthView,
+      todayDayNumber,
+      weeks,
+      checkedCountInMonth,
+      monthTitle,
+    };
+  }, [calendarMonthOffset, allCheckedDatesSet, lang]);
+
 
   const [editForm, setEditForm] = useState({
     name: '',
@@ -263,7 +616,26 @@ export default function Toi() {
         const tierVal = customerData.membershipTier?.tierName || 'Thành viên';
         const streakVal = customerData.streakDays ?? 0;
 
+<<<<<<< HEAD
+        // [GIẢI THÍCH CODE]: Tự động thông báo chúc mừng khi đạt được hạng mới (Cao Thủ Cày, Lão Nông, Đại Điền Chủ)
+        if (custIdVal && tierVal && tierVal !== 'Thợ Cày') {
+          AsyncStorage.getItem(`@halm_celebrated_tier_${custIdVal}`).then((savedTier) => {
+            if (savedTier && savedTier !== tierVal) {
+              Alert.alert(
+                lang === 'en' ? '🎉 CONGRATULATIONS!' : '🎉 CHÚC MỪNG!',
+                lang === 'en'
+                  ? `Congratulations! You have reached ${tierVal}!`
+                  : `Chúc mừng bạn đã đạt được ${tierVal}!`
+              );
+            }
+            AsyncStorage.setItem(`@halm_celebrated_tier_${custIdVal}`, tierVal);
+          }).catch(() => {});
+        }
+
+        setUserInfo({
+=======
         const nextProfile = {
+>>>>>>> origin/main
           name: nameVal,
           username: currentUsername || custIdVal,
           email: emailVal,
@@ -329,6 +701,71 @@ export default function Toi() {
     fetchUserData(true);
   }, [fetchUserData]);
 
+<<<<<<< HEAD
+  // [GIẢI THÍCH CODE]: Điểm danh đọc sách hằng ngày theo API Backend (/api/home/membership/checkin-streak)
+  const handleDailyCheckin = async () => {
+    if (isCheckingIn) return;
+    try {
+      setIsCheckingIn(true);
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        Alert.alert(
+          lang === 'en' ? 'Login Required' : 'Yêu cầu đăng nhập',
+          lang === 'en' ? 'Please log in to check in and claim rewards!' : 'Vui lòng đăng nhập để điểm danh nhận quà!'
+        );
+        return;
+      }
+
+      const res = await apiRequestWithFallback('/api/home/membership/checkin-streak', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        timeout: 8000,
+      });
+
+      if (res.data?.success) {
+        // [GIẢI THÍCH CODE]: Lưu ngày hôm nay vào lịch sử điểm danh
+        const today = new Date();
+        const y = today.getFullYear();
+        const m = String(today.getMonth() + 1).padStart(2, '0');
+        const d = String(today.getDate()).padStart(2, '0');
+        const todayKey = `${y}-${m}-${d}`;
+        setStoredCheckinDates((prev) => {
+          const next = Array.from(new Set([...prev, todayKey]));
+          AsyncStorage.setItem('user_checkin_history', JSON.stringify(next)).catch(() => {});
+          return next;
+        });
+
+        Alert.alert(
+          lang === 'en' ? '🎉 Check-in Successful!' : '🎉 Điểm Danh Thành Công!',
+          res.data.message ||
+            (lang === 'en'
+              ? `Received +${res.data.earnedPotato || 2} Potatoes and +10 XP 🔥. Reading streak: ${res.data.streakDays} days!`
+              : `Nhận +${res.data.earnedPotato || 2} Khoai Tây và +10 Điểm cày XP 🔥. Chuỗi ngày đọc: ${res.data.streakDays} ngày!`)
+        );
+        fetchUserData(false);
+      } else {
+        Alert.alert(
+          lang === 'en' ? 'Daily Reading Check-in' : 'Điểm Danh Đọc Sách',
+          res.data?.message || (lang === 'en' ? 'You have already checked in today!' : 'Hôm nay bạn đã điểm danh rồi!')
+        );
+      }
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        (lang === 'en'
+          ? 'Unable to complete check-in. Please check your connection!'
+          : 'Không thể thực hiện điểm danh. Vui lòng kiểm tra lại kết nối!');
+      Alert.alert(lang === 'en' ? 'Notice' : 'Thông báo', msg);
+    } finally {
+      setIsCheckingIn(false);
+    }
+  };
+
+=======
+>>>>>>> origin/main
   const handleOpenProfile = () => {
     setEditForm({
       name: userInfo.name !== 'Đang tải...' ? userInfo.name : '',
@@ -347,11 +784,11 @@ export default function Toi() {
     const emailVal = editForm.email.trim();
 
     if (!nameVal) {
-      Alert.alert('Lỗi', 'Họ tên không được để trống.');
+      Alert.alert(t.alertErrorTitle, t.errNameEmpty);
       return;
     }
     if (!emailVal) {
-      Alert.alert('Lỗi', 'Email không được để trống.');
+      Alert.alert(t.alertErrorTitle, t.errEmailEmpty);
       return;
     }
 
@@ -359,7 +796,7 @@ export default function Toi() {
       setIsSaving(true);
       const token = await AsyncStorage.getItem('userToken');
       if (!token) {
-        Alert.alert('Lỗi', 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        Alert.alert(t.alertErrorTitle, t.errSessionExpired);
         return;
       }
 
@@ -402,7 +839,7 @@ export default function Toi() {
       }
 
       setIsEditingProfile(false);
-      Alert.alert('Thành công', 'Cập Nhập Thông Tin Thành Công');
+      Alert.alert(t.alertSuccessTitle, t.msgProfileUpdated);
     } catch (error: any) {
       if (error?.response?.status === 401) {
         await AsyncStorage.multiRemove(['userToken', 'userRole', 'savedRoutes', 'cachedUserProfile']);
@@ -411,7 +848,7 @@ export default function Toi() {
         return;
       }
       const errorMsg = error.response?.data || error.message || 'Không thể cập nhật thông tin.';
-      Alert.alert('Lỗi cập nhật', typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
+      Alert.alert(t.alertUpdateErrorTitle, typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
     } finally {
       setIsSaving(false);
     }
@@ -428,7 +865,7 @@ export default function Toi() {
   const handleCheckOldPassword = async () => {
     const trimmedOld = oldPassword.trim();
     if (!trimmedOld) {
-      setOldPwdError('Vui lòng nhập mật khẩu hiện tại.');
+      setOldPwdError(t.errEnterOldPwd);
       return;
     }
 
@@ -496,10 +933,10 @@ export default function Toi() {
         setOldPwdError('');
         setPasswordStep(2);
       } else {
-        setOldPwdError('Mật khẩu hiện tại không chính xác. Vui lòng kiểm tra lại.');
+        setOldPwdError(t.errWrongOldPwd);
       }
     } catch {
-      setOldPwdError('Không thể kết nối đến máy chủ để xác thực mật khẩu. Vui lòng thử lại.');
+      setOldPwdError(t.errVerifyServer);
     } finally {
       setIsVerifyingOldPwd(false);
     }
@@ -510,19 +947,19 @@ export default function Toi() {
     const trimmedConfirm = confirmPassword.trim();
 
     if (!trimmedNew || !trimmedConfirm) {
-      setNewPwdError('Vui lòng điền đầy đủ mật khẩu mới.');
+      setNewPwdError(t.errFillNewPwd);
       return;
     }
     if (trimmedNew !== trimmedConfirm) {
-      setNewPwdError('Mật khẩu xác nhận không trùng khớp.');
+      setNewPwdError(t.errConfirmMismatch);
       return;
     }
     if (trimmedNew.length < 6) {
-      setNewPwdError('Mật khẩu mới phải có ít nhất 6 ký tự.');
+      setNewPwdError(t.errMinLength);
       return;
     }
     if (trimmedNew === oldPassword.trim()) {
-      setNewPwdError('Mật khẩu mới không được trùng với mật khẩu hiện tại.');
+      setNewPwdError(t.errSameAsOld);
       return;
     }
 
@@ -561,7 +998,7 @@ export default function Toi() {
       }
 
       if (!emailToUse) {
-        setNewPwdError('Không tìm thấy thông tin email của tài khoản. Vui lòng cập nhật email trong Thông tin cá nhân trước khi đổi mật khẩu.');
+        setNewPwdError(t.errNoAccountIdentifier);
         setIsUpdatingPwd(false);
         return;
       }
@@ -605,7 +1042,7 @@ export default function Toi() {
         }
       }
 
-      Alert.alert('Thành công', 'Đổi mật khẩu thành công!');
+      Alert.alert(t.alertSuccessTitle, t.msgPwdChanged);
       resetPasswordModal();
     } catch (err: any) {
       console.error('Lỗi khi đổi mật khẩu:', err);
@@ -674,18 +1111,18 @@ export default function Toi() {
             </View>
           )}
           <Text style={themeStyles.userName}>{userInfo.name}</Text>
-          <Text style={themeStyles.userId}>#ID: {userInfo.customerId || userInfo.username || 'Chưa cập nhật'}</Text>
+          <Text style={themeStyles.userId}>#ID: {userInfo.customerId || userInfo.username || t.notUpdated}</Text>
         </View>
 
         {/* Cụm 2 nút thao tác chính */}
         <View style={themeStyles.mainActionsRow}>
           <TouchableOpacity style={themeStyles.primaryBtn} onPress={handleOpenProfile}>
             <Ionicons name="person-outline" size={18} color="#fff" />
-            <Text style={themeStyles.primaryBtnText}>Trang cá nhân</Text>
+            <Text style={themeStyles.primaryBtnText}>{t.myProfileBtn}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[themeStyles.primaryBtn, { backgroundColor: '#f39c12' }]} onPress={() => navigate('payment')}>
             <Text style={themeStyles.potatoIcon}>🥔</Text>
-            <Text style={themeStyles.primaryBtnText}>Nạp khoai</Text>
+            <Text style={themeStyles.primaryBtnText}>{t.topUpBtn}</Text>
           </TouchableOpacity>
         </View>
 
@@ -693,33 +1130,139 @@ export default function Toi() {
         <View style={themeStyles.statsCard}>
           <View style={themeStyles.statItem}>
             <Text style={themeStyles.statIcon}>🥔</Text>
+<<<<<<< HEAD
+            <Text style={themeStyles.statValue}>{userInfo.potatoBalance.toLocaleString(lang === 'en' ? 'en-US' : 'vi-VN')}</Text>
+            <Text style={themeStyles.statLabel}>{t.potatoAvailable}</Text>
+=======
             <Text style={themeStyles.statValue}>{(userInfo.potatoBalance ?? 0).toLocaleString('vi-VN')}</Text>
             <Text style={themeStyles.statLabel}>Khoai đang có</Text>
+>>>>>>> origin/main
           </View>
           <View style={themeStyles.statDivider} />
           <View style={themeStyles.statItem}>
             <Ionicons name="flame-outline" size={28} color="#e67e22" />
             <Text style={themeStyles.statValue}>{userInfo.streakDays}</Text>
-            <Text style={themeStyles.statLabel}>Chuỗi ngày đọc</Text>
+            <Text style={themeStyles.statLabel}>{t.readingStreak}</Text>
           </View>
           <View style={themeStyles.statDivider} />
           <View style={themeStyles.statItem}>
             <Ionicons name="book-outline" size={28} color="#27ae60" />
             <Text style={themeStyles.statValue}>3</Text>
-            <Text style={themeStyles.statLabel}>Đang đọc</Text>
+            <Text style={themeStyles.statLabel}>{lang === 'en' ? 'Reading' : 'Đang đọc'}</Text>
           </View>
         </View>
 
+<<<<<<< HEAD
+        {/* [GIẢI THÍCH CODE]: Thanh Hạng Thành Viên Tương Tác - Chạm vào để xem chi tiết lộ trình & đặc quyền */}
+        <TouchableOpacity
+          style={themeStyles.tierCardEnhanced}
+          onPress={() => setShowTierModal(true)}
+          activeOpacity={0.8}
+        >
+          <View style={themeStyles.tierCardTopRow}>
+            <View style={themeStyles.tierBadgeCircle}>
+              <Text style={themeStyles.tierBadgeEmoji}>
+                {tierSummary?.currentTier?.badgeIcon || '🌱'}
+              </Text>
+            </View>
+            <View style={themeStyles.tierCardMainInfo}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={themeStyles.tierCardName}>
+                  {tierSummary?.currentTier?.tierName || userInfo.tierName || t.defaultTier}
+                </Text>
+                <View style={themeStyles.tierDiscountPill}>
+                  <Text style={themeStyles.tierDiscountText}>
+                    {lang === 'en' ? `${tierSummary?.discountPercent ?? 0}% Off` : `Giảm ${tierSummary?.discountPercent ?? 0}%`}
+                  </Text>
+                </View>
+              </View>
+              <Text style={themeStyles.tierCardSub}>
+                {tierSummary?.isMaxTier
+                  ? (lang === 'en' ? '👑 Ultimate Royal Rank' : '👑 Cấp bậc Hoàng Gia Tối Thượng')
+                  : (lang === 'en'
+                      ? `Progress to ${tierSummary?.nextTier?.tierName || 'next rank'}: ${Math.round(tierSummary?.overallProgressPercent || 0)}%`
+                      : `Tiến độ lên ${tierSummary?.nextTier?.tierName || 'hạng kế'}: ${Math.round(tierSummary?.overallProgressPercent || 0)}%`)}
+              </Text>
+            </View>
+            <View style={themeStyles.tierArrowBtn}>
+              <Ionicons name="chevron-forward" size={20} color="#888" />
+            </View>
+          </View>
+
+          {/* Thanh mini progress nếu chưa đạt max tier */}
+          {!tierSummary?.isMaxTier && (
+            <View style={themeStyles.miniProgressBarTrack}>
+              <View
+                style={[
+                  themeStyles.miniProgressBarFill,
+                  { width: `${Math.min(100, Math.max(5, tierSummary?.overallProgressPercent || 0))}%` },
+                ]}
+              />
+            </View>
+          )}
+
+          <View style={themeStyles.tierCardFooter}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Ionicons name="shield-checkmark" size={14} color="#27ae60" />
+              <Text style={themeStyles.tierCardFooterText}>
+                {lang === 'en' ? 'Permanent Retention' : 'Bảo lưu vĩnh viễn'}
+              </Text>
+            </View>
+            <Text style={themeStyles.tierCardActionHint}>
+              {lang === 'en' ? 'View Perks & Roadmap ❯' : 'Xem quyền lợi & Lộ trình ❯'}
+            </Text>
+=======
         {/* Hạng thành viên */}
         <TouchableOpacity style={themeStyles.tierCard}>
           <View style={themeStyles.tierInfo}>
             <Ionicons name="medal" size={24} color="#f1c40f" />
             <Text style={themeStyles.tierTitle}>Hạng: {userInfo.tierName}</Text>
+>>>>>>> origin/main
           </View>
           <Ionicons name="chevron-forward" size={20} color="#888" />
         </TouchableOpacity>
 
+<<<<<<< HEAD
+        {/* [GIẢI THÍCH CODE]: Thanh Điểm Danh Nhanh Ngay Tại Trang Cá Nhân */}
+        <View style={themeStyles.quickCheckinBar}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+            <Ionicons name="flame" size={22} color="#e67e22" />
+            <View style={{ marginLeft: 8 }}>
+              <Text style={themeStyles.quickCheckinTitle}>
+                {lang === 'en' ? 'Daily Reading Check-in' : 'Điểm danh đọc sách'}
+              </Text>
+              <Text style={themeStyles.quickCheckinSub}>
+                {lang === 'en'
+                  ? `Streak: ${tierSummary?.streakDays ?? userInfo.streakDays} consecutive days`
+                  : `Chuỗi ${tierSummary?.streakDays ?? userInfo.streakDays} ngày liên tiếp`}
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={[
+              themeStyles.quickCheckinBtn,
+              tierSummary?.hasCheckedInToday && themeStyles.quickCheckinBtnDone,
+            ]}
+            onPress={handleDailyCheckin}
+            disabled={isCheckingIn || tierSummary?.hasCheckedInToday}
+            activeOpacity={0.8}
+          >
+            {isCheckingIn ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={themeStyles.quickCheckinBtnText}>
+                {tierSummary?.hasCheckedInToday
+                  ? (lang === 'en' ? 'Checked in ✅' : 'Đã điểm danh ✅')
+                  : (lang === 'en' ? 'Check-in +2 🥔' : 'Điểm danh +2 🥔')}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Danh sách Menu */}
+=======
         {/* Danh sách các Menu chức năng */}
+>>>>>>> origin/main
         <View style={themeStyles.menuSection}>
           <TouchableOpacity style={themeStyles.menuItem} onPress={() => setShowHelp(true)}>
             <View style={[themeStyles.menuIconBox, { backgroundColor: '#e8f4fd' }]}>
@@ -733,7 +1276,7 @@ export default function Toi() {
             <View style={[themeStyles.menuIconBox, { backgroundColor: '#fef5e7' }]}>
               <Ionicons name="notifications" size={20} color="#f39c12" />
             </View>
-            <Text style={themeStyles.menuItemText}>Cài đặt thông báo</Text>
+            <Text style={themeStyles.menuItemText}>{t.menuNotifications}</Text>
             <Ionicons name="chevron-forward" size={20} color="#ccc" />
           </TouchableOpacity>
 
@@ -741,7 +1284,7 @@ export default function Toi() {
             <View style={[themeStyles.menuIconBox, { backgroundColor: '#f5eef8' }]}>
               <Ionicons name="lock-closed" size={20} color="#9b59b6" />
             </View>
-            <Text style={themeStyles.menuItemText}>Đổi mật khẩu</Text>
+            <Text style={themeStyles.menuItemText}>{t.menuChangePassword}</Text>
             <Ionicons name="chevron-forward" size={20} color="#ccc" />
           </TouchableOpacity>
 
@@ -749,7 +1292,7 @@ export default function Toi() {
             <View style={[themeStyles.menuIconBox, { backgroundColor: '#e8f6e9' }]}>
               <Ionicons name="receipt-outline" size={20} color="#27ae60" />
             </View>
-            <Text style={themeStyles.menuItemText}>Lịch sử giao dịch</Text>
+            <Text style={themeStyles.menuItemText}>{t.menuTransactions}</Text>
             <Ionicons name="chevron-forward" size={20} color="#ccc" />
           </TouchableOpacity>
 
@@ -757,7 +1300,7 @@ export default function Toi() {
             <View style={[themeStyles.menuIconBox, { backgroundColor: '#fff0e6' }]}>
               <Ionicons name="cart-outline" size={20} color="#e67e22" />
             </View>
-            <Text style={themeStyles.menuItemText}>Giỏ hàng</Text>
+            <Text style={themeStyles.menuItemText}>{lang === 'en' ? 'My Cart' : 'Giỏ hàng'}</Text>
             <Ionicons name="chevron-forward" size={20} color="#ccc" />
           </TouchableOpacity>
 
@@ -765,23 +1308,25 @@ export default function Toi() {
             <View style={[themeStyles.menuIconBox, { backgroundColor: '#e8f6e9' }]}>
               <Ionicons name="language" size={20} color="#27ae60" />
             </View>
-            <Text style={themeStyles.menuItemText}>Ngôn ngữ</Text>
-            <Text style={{ marginRight: 8, fontWeight: '800', color: lang === 'vi' ? '#2c3a7a' : '#888' }}>
-              {lang === 'vi' ? 'VI' : 'EN'}
-            </Text>
-            <Switch
-              trackColor={{ false: '#dcdde1', true: '#2c3a7a' }}
-              thumbColor={'#fff'}
-              value={lang === 'vi'}
-              onValueChange={(val) => setLang(val ? 'vi' : 'en')}
-            />
+            <Text style={themeStyles.menuItemText}>{t.menuLanguage}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={{ marginRight: 10, fontWeight: '800', fontSize: 14, color: '#2c3a7a' }}>
+                {lang === 'vi' ? 'VI' : 'EN'}
+              </Text>
+              <Switch
+                trackColor={{ false: '#dcdde1', true: '#2c3a7a' }}
+                thumbColor={'#fff'}
+                value={lang === 'en'}
+                onValueChange={(val) => changeLanguage(val ? 'en' : 'vi')}
+              />
+            </View>
           </View>
 
           <TouchableOpacity style={[themeStyles.menuItem, { borderBottomWidth: 0 }]} onPress={() => setShowAbout(true)}>
             <View style={[themeStyles.menuIconBox, { backgroundColor: '#eaeded' }]}>
               <Ionicons name="information-circle" size={20} color="#7f8c8d" />
             </View>
-            <Text style={themeStyles.menuItemText}>Thông tin về HALM</Text>
+            <Text style={themeStyles.menuItemText}>{t.menuAbout}</Text>
             <Ionicons name="chevron-forward" size={20} color="#ccc" />
           </TouchableOpacity>
         </View>
@@ -790,12 +1335,12 @@ export default function Toi() {
         <View style={themeStyles.bottomActionsRow}>
           <TouchableOpacity style={themeStyles.logoutBtn} onPress={logout}>
             <Ionicons name="log-out-outline" size={18} color="#e74c3c" />
-            <Text style={themeStyles.logoutBtnText}>Đăng xuất</Text>
+            <Text style={themeStyles.logoutBtnText}>{t.logoutBtn}</Text>
           </TouchableOpacity>
           <View style={{ width: 15 }} />
           <TouchableOpacity style={themeStyles.secondaryBtn} onPress={logout}>
             <Ionicons name="people-outline" size={18} color="#1a1a1a" />
-            <Text style={themeStyles.secondaryBtnText}>Thay đổi tài khoản</Text>
+            <Text style={themeStyles.secondaryBtnText}>{lang === 'en' ? 'Switch Account' : 'Thay đổi tài khoản'}</Text>
           </TouchableOpacity>
         </View>
         <View style={{ height: 40 }} />
@@ -807,7 +1352,7 @@ export default function Toi() {
       <Modal visible={showProfile} animationType="slide">
         <View style={themeStyles.modalContainer}>
           <SubScreenHeader
-            title="Thông tin cá nhân"
+            title={t.profileModalTitle}
             onClose={() => {
               setShowProfile(false);
               setIsEditingProfile(false);
@@ -836,13 +1381,13 @@ export default function Toi() {
             {/* User Info Fields */}
             <View style={themeStyles.infoFieldsContainer}>
               {[
-                { key: 'name', label: 'Họ tên', value: isEditingProfile ? editForm.name : userInfo.name, editable: true },
-                { key: 'username', label: 'Tên đăng nhập', value: userInfo.username, editable: false },
-                { key: 'email', label: 'Email', value: isEditingProfile ? editForm.email : userInfo.email, editable: true, keyboardType: 'email-address' as const },
-                { key: 'phone', label: 'Số điện thoại', value: isEditingProfile ? editForm.phone : userInfo.phone, editable: true, keyboardType: 'phone-pad' as const },
-                { key: 'gender', label: 'Giới tính', value: isEditingProfile ? editForm.gender : userInfo.gender, editable: true },
-                { key: 'dob', label: 'Ngày sinh (DD/MM/YYYY)', value: isEditingProfile ? editForm.dob : userInfo.dob, editable: true },
-                { key: 'address', label: 'Địa chỉ', value: isEditingProfile ? editForm.address : userInfo.address, editable: true },
+                { key: 'name', label: t.fieldName, value: isEditingProfile ? editForm.name : userInfo.name, editable: true },
+                { key: 'username', label: t.fieldUsername, value: userInfo.username, editable: false },
+                { key: 'email', label: t.fieldEmail, value: isEditingProfile ? editForm.email : userInfo.email, editable: true, keyboardType: 'email-address' as const },
+                { key: 'phone', label: t.fieldPhone, value: isEditingProfile ? editForm.phone : userInfo.phone, editable: true, keyboardType: 'phone-pad' as const },
+                { key: 'gender', label: t.fieldGender, value: isEditingProfile ? (editForm.gender === 'Nam' ? t.genderMale : t.genderFemale) : (userInfo.gender === 'Nam' ? t.genderMale : t.genderFemale), editable: true },
+                { key: 'dob', label: t.fieldDob, value: isEditingProfile ? editForm.dob : userInfo.dob, editable: true },
+                { key: 'address', label: t.fieldAddress, value: isEditingProfile ? editForm.address : userInfo.address, editable: true },
               ].map((field) => (
                 <View key={field.key} style={themeStyles.infoFieldRow}>
                   <Text style={themeStyles.infoFieldLabel}>{field.label}</Text>
@@ -862,7 +1407,7 @@ export default function Toi() {
                               editForm.gender === 'Nam' && themeStyles.genderOptionTextActive,
                             ]}
                           >
-                            Nam
+                            {t.genderMale}
                           </Text>
                         </TouchableOpacity>
                         <TouchableOpacity
@@ -879,7 +1424,7 @@ export default function Toi() {
                               editForm.gender === 'Nữ' && themeStyles.genderOptionTextActive,
                             ]}
                           >
-                            Nữ
+                            {t.genderFemale}
                           </Text>
                         </TouchableOpacity>
                       </View>
@@ -897,7 +1442,7 @@ export default function Toi() {
                   ) : (
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                       <Text style={[themeStyles.infoFieldValue, !field.editable && { color: '#888' }]}>
-                        {field.value || 'Chưa cập nhật'}
+                        {field.value || t.notUpdated}
                       </Text>
                       {!field.editable && isEditingProfile && (
                         <Ionicons name="lock-closed" size={14} color="#aaa" style={{ marginLeft: 6 }} />
@@ -910,7 +1455,7 @@ export default function Toi() {
 
             {!isEditingProfile ? (
               <TouchableOpacity style={themeStyles.editProfileBtn} onPress={() => setIsEditingProfile(true)}>
-                <Text style={themeStyles.editProfileBtnText}>Thay đổi thông tin</Text>
+                <Text style={themeStyles.editProfileBtnText}>{t.editProfileBtn}</Text>
               </TouchableOpacity>
             ) : (
               <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -922,7 +1467,7 @@ export default function Toi() {
                   {isSaving ? (
                     <ActivityIndicator color="#fff" size="small" />
                   ) : (
-                    <Text style={themeStyles.saveProfileBtnText}>Lưu thay đổi</Text>
+                    <Text style={themeStyles.saveProfileBtnText}>{t.saveProfileBtn}</Text>
                   )}
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -940,7 +1485,7 @@ export default function Toi() {
                   }}
                   disabled={isSaving}
                 >
-                  <Text style={themeStyles.cancelProfileBtnText}>Hủy</Text>
+                  <Text style={themeStyles.cancelProfileBtnText}>{t.cancelBtn}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -952,11 +1497,11 @@ export default function Toi() {
             <TouchableOpacity style={themeStyles.avatarMenuOverlay} activeOpacity={1} onPress={() => setShowAvatarMenu(false)}>
               <View style={themeStyles.avatarMenuBox}>
                 <TouchableOpacity style={themeStyles.avatarMenuItem} onPress={() => setShowAvatarMenu(false)}>
-                  <Text style={themeStyles.avatarMenuItemText}>Xem ảnh đại diện</Text>
+                  <Text style={themeStyles.avatarMenuItemText}>{t.viewAvatar}</Text>
                 </TouchableOpacity>
                 <View style={themeStyles.avatarMenuDivider} />
                 <TouchableOpacity style={themeStyles.avatarMenuItem} onPress={() => setShowAvatarMenu(false)}>
-                  <Text style={themeStyles.avatarMenuItemText}>Thay đổi ảnh đại diện</Text>
+                  <Text style={themeStyles.avatarMenuItemText}>{t.changeAvatar}</Text>
                 </TouchableOpacity>
               </View>
             </TouchableOpacity>
@@ -967,7 +1512,7 @@ export default function Toi() {
       {/* 1. Modal Trung tâm trợ giúp */}
       <Modal visible={showHelp} animationType="slide">
         <View style={themeStyles.modalContainer}>
-          <SubScreenHeader title="Trung tâm trợ giúp" onClose={() => setShowHelp(false)} />
+          <SubScreenHeader title={t.helpModalTitle} onClose={() => setShowHelp(false)} />
           <ScrollView style={themeStyles.modalContent}>
 
             <TouchableOpacity
@@ -979,26 +1524,21 @@ export default function Toi() {
             >
               <Ionicons name="chatbubbles" size={32} color="#fff" />
               <View style={{ marginLeft: 15 }}>
-                <Text style={themeStyles.aiChatTitle}>Chat với trợ lý AI</Text>
-                <Text style={themeStyles.aiChatSub}>Phản hồi lập tức 24/7</Text>
+                <Text style={themeStyles.aiChatTitle}>{t.aiChatTitle}</Text>
+                <Text style={themeStyles.aiChatSub}>{t.aiChatSub}</Text>
               </View>
             </TouchableOpacity>
 
-            <Text style={themeStyles.sectionHeading}>Báo cáo & Trợ giúp</Text>
+            <Text style={themeStyles.sectionHeading}>{t.reportAndHelp}</Text>
             <View style={themeStyles.socialRow}>
               <TouchableOpacity style={themeStyles.socialBox}><Ionicons name="mail" size={28} color="#e74c3c" /><Text style={themeStyles.socialText}>Gmail</Text></TouchableOpacity>
               <TouchableOpacity style={themeStyles.socialBox}><Ionicons name="paper-plane" size={28} color="#2980b9" /><Text style={themeStyles.socialText}>Telegram</Text></TouchableOpacity>
               <TouchableOpacity style={themeStyles.socialBox}><Ionicons name="chatbubble-ellipses" size={28} color="#8e44ad" /><Text style={themeStyles.socialText}>Mess</Text></TouchableOpacity>
-              <TouchableOpacity style={themeStyles.socialBox}><Ionicons name="call" size={28} color="#27ae60" /><Text style={themeStyles.socialText}>Gọi điện</Text></TouchableOpacity>
+              <TouchableOpacity style={themeStyles.socialBox}><Ionicons name="call" size={28} color="#27ae60" /><Text style={themeStyles.socialText}>{t.callPhone}</Text></TouchableOpacity>
             </View>
 
-            <Text style={themeStyles.sectionHeading}>Các vấn đề thường gặp</Text>
-            {[
-              'Làm sao để lấy lại mật khẩu?',
-              'Cách thanh toán bằng khoai tây?',
-              'Truyện bị lỗi font chữ?',
-              'Nâng cấp hạng thành viên như thế nào?'
-            ].map((faq, idx) => (
+            <Text style={themeStyles.sectionHeading}>{t.faqHeading}</Text>
+            {t.faqs.map((faq, idx) => (
               <TouchableOpacity key={idx} style={themeStyles.faqItem}>
                 <Text style={themeStyles.faqText}>{faq}</Text>
                 <Ionicons name="chevron-down" size={20} color="#888" />
@@ -1011,13 +1551,13 @@ export default function Toi() {
       {/* 2. Modal Cài đặt thông báo */}
       <Modal visible={showNotif} animationType="slide">
         <View style={themeStyles.modalContainer}>
-          <SubScreenHeader title="Cài đặt thông báo" onClose={() => setShowNotif(false)} />
+          <SubScreenHeader title={t.notifModalTitle} onClose={() => setShowNotif(false)} />
           <ScrollView style={themeStyles.modalContent}>
 
             <View style={themeStyles.switchRowMaster}>
               <View>
-                <Text style={themeStyles.switchTitleMaster}>HALM Thông báo</Text>
-                <Text style={themeStyles.switchSub}>Nhận thông báo từ ứng dụng</Text>
+                <Text style={themeStyles.switchTitleMaster}>{t.notifMasterTitle}</Text>
+                <Text style={themeStyles.switchSub}>{t.notifMasterSub}</Text>
               </View>
               <Switch
                 trackColor={{ false: '#dcdde1', true: '#2c3a7a' }}
@@ -1030,7 +1570,7 @@ export default function Toi() {
             {/* Các tùy chọn phụ bị mờ đi nếu masterNotif là false */}
             <View style={[themeStyles.subOptionsContainer, !masterNotif && themeStyles.disabledOptions]}>
               <View style={themeStyles.switchRow}>
-                <Text style={themeStyles.switchTitle}>Thông báo ưu đãi</Text>
+                <Text style={themeStyles.switchTitle}>{t.notifPromo}</Text>
                 <Switch
                   disabled={!masterNotif}
                   trackColor={{ false: '#dcdde1', true: '#2ecc71' }}
@@ -1040,7 +1580,7 @@ export default function Toi() {
                 />
               </View>
               <View style={themeStyles.switchRow}>
-                <Text style={themeStyles.switchTitle}>Sách sắp hết hạn</Text>
+                <Text style={themeStyles.switchTitle}>{t.notifExpire}</Text>
                 <Switch
                   disabled={!masterNotif}
                   trackColor={{ false: '#dcdde1', true: '#2ecc71' }}
@@ -1050,7 +1590,7 @@ export default function Toi() {
                 />
               </View>
               <View style={themeStyles.switchRow}>
-                <Text style={themeStyles.switchTitle}>Quảng cáo & Sự kiện</Text>
+                <Text style={themeStyles.switchTitle}>{t.notifAds}</Text>
                 <Switch
                   disabled={!masterNotif}
                   trackColor={{ false: '#dcdde1', true: '#2ecc71' }}
@@ -1068,19 +1608,17 @@ export default function Toi() {
       {/* 3. Modal Thông tin về HALM */}
       <Modal visible={showAbout} animationType="slide">
         <View style={themeStyles.modalContainer}>
-          <SubScreenHeader title="Thông tin HALM" onClose={() => setShowAbout(false)} />
+          <SubScreenHeader title={t.aboutModalTitle} onClose={() => setShowAbout(false)} />
           <ScrollView style={themeStyles.modalContent}>
 
             <View style={themeStyles.aboutHeader}>
               <Text style={themeStyles.aboutLogoText}>HALM <Text style={{ color: '#9b51e0' }}>Book</Text></Text>
-              <Text style={themeStyles.aboutVersion}>Phiên bản 1.0.0 (Cập nhật: 18/09/2026)</Text>
-              <Text style={themeStyles.aboutSlogan}>&quot;Sách là ánh sáng, tri thức là sức mạnh&quot;</Text>
+              <Text style={themeStyles.aboutVersion}>{t.aboutVersion}</Text>
+              <Text style={themeStyles.aboutSlogan}>{t.aboutSlogan}</Text>
             </View>
 
             <View style={themeStyles.aboutInfoBox}>
-              <Text style={themeStyles.aboutDesc}>
-                HALM Book là nền tảng đọc truyện và tiểu thuyết hàng đầu, mang đến cho người dùng trải nghiệm đọc mượt mà, kho tàng sách khổng lồ cùng với các tính năng cộng đồng thú vị.
-              </Text>
+              <Text style={themeStyles.aboutDesc}>{t.aboutDesc}</Text>
             </View>
 
           </ScrollView>
@@ -1090,20 +1628,20 @@ export default function Toi() {
       {/* 4. Modal Đổi mật khẩu */}
       <Modal visible={showChangePassword} animationType="slide">
         <View style={themeStyles.modalContainer}>
-          <SubScreenHeader title="Đổi mật khẩu" onClose={resetPasswordModal} />
+          <SubScreenHeader title={t.pwdModalTitle} onClose={resetPasswordModal} />
           <ScrollView style={themeStyles.modalContent}>
 
             {passwordStep === 1 ? (
               <View style={themeStyles.passwordForm}>
                 <Text style={themeStyles.passwordInstruction}>
-                  Vui lòng nhập mật khẩu hiện tại của bạn để xác thực trước khi đổi mật khẩu mới.
+                  {t.pwdStep1Desc}
                 </Text>
 
                 <View style={[themeStyles.inputWrapper, oldPwdError ? { borderColor: '#e74c3c' } : {}]}>
                   <Ionicons name="lock-open-outline" size={20} color="#1a1a1a" style={themeStyles.inputIcon} />
                   <TextInput
                     style={themeStyles.passwordInput}
-                    placeholder="Mật khẩu hiện tại"
+                    placeholder={t.pwdCurrentPlaceholder}
                     placeholderTextColor="#a4b0be"
                     secureTextEntry={!showOldPwdText}
                     value={oldPassword}
@@ -1133,21 +1671,21 @@ export default function Toi() {
                   {isVerifyingOldPwd ? (
                     <ActivityIndicator color="#1a1a1a" size="small" />
                   ) : (
-                    <Text style={themeStyles.submitPasswordBtnText}>TIẾP TỤC</Text>
+                    <Text style={themeStyles.submitPasswordBtnText}>{t.pwdContinueBtn}</Text>
                   )}
                 </TouchableOpacity>
               </View>
             ) : (
               <View style={themeStyles.passwordForm}>
                 <Text style={themeStyles.passwordInstruction}>
-                  Mật khẩu hiện tại chính xác. Vui lòng tạo mật khẩu mới cho tài khoản ({userInfo.email || userInfo.username}).
+                  {t.pwdStep2DescPrefix} ({userInfo.email || userInfo.username}).
                 </Text>
 
                 <View style={[themeStyles.softInputWrapper, newPwdError ? { borderColor: '#e74c3c' } : {}]}>
                   <Ionicons name="lock-closed-outline" size={20} color="#888" style={themeStyles.inputIcon} />
                   <TextInput
                     style={themeStyles.softPasswordInput}
-                    placeholder="Mật khẩu mới (tối thiểu 6 ký tự)"
+                    placeholder={t.pwdNewPlaceholder}
                     placeholderTextColor="#a4b0be"
                     secureTextEntry={!showNewPwdText}
                     returnKeyType="next"
@@ -1174,7 +1712,7 @@ export default function Toi() {
                   <TextInput
                     ref={confirmPwdRef}
                     style={themeStyles.softPasswordInput}
-                    placeholder="Xác nhận mật khẩu mới"
+                    placeholder={t.pwdConfirmPlaceholder}
                     placeholderTextColor="#a4b0be"
                     secureTextEntry={!showConfirmPwdText}
                     returnKeyType="done"
@@ -1205,7 +1743,7 @@ export default function Toi() {
                   {isUpdatingPwd ? (
                     <ActivityIndicator color="#1a1a1a" size="small" />
                   ) : (
-                    <Text style={themeStyles.submitPasswordBtnText}>LƯU MẬT KHẨU</Text>
+                    <Text style={themeStyles.submitPasswordBtnText}>{t.pwdSaveBtn}</Text>
                   )}
                 </TouchableOpacity>
               </View>
@@ -1215,6 +1753,295 @@ export default function Toi() {
         </View>
       </Modal>
 
+<<<<<<< HEAD
+      {/* 5. [GIẢI THÍCH CODE]: Modal Hạng Thành Viên & Đặc Quyền Độc Giả */}
+      <MembershipModal
+        visible={showTierModal}
+        onClose={() => setShowTierModal(false)}
+        summary={tierSummary}
+        potatoBalance={userInfo.potatoBalance}
+        onTopUp={() => {
+          setShowTierModal(false);
+          navigate('payment');
+        }}
+        allTiers={allTiers}
+        isCheckingIn={isCheckingIn}
+        onCheckinStreak={handleDailyCheckin}
+        lang={lang}
+      />
+
+      {/* 6. [GIẢI THÍCH CODE]: Modal Nhiệm Vụ Hằng Ngày - Tách biệt độc lập khỏi Hạng thành viên & đặc quyền */}
+      <Modal visible={showDailyTasks} animationType="slide">
+        <View style={themeStyles.modalContainer}>
+          <SubScreenHeader
+            title={t.dailyTasksModalTitle}
+            onClose={() => setShowDailyTasks(false)}
+          />
+          <ScrollView style={themeStyles.modalContent}>
+            {/* ================================================================ */}
+            {/* [GIẢI THÍCH CODE]: CUỐN LỊCH ĐIỂM DANH NGÀY ĐĂNG NHẬP (ATTENDANCE CALENDAR) */}
+            {/* ================================================================ */}
+            <View style={themeStyles.calendarCard}>
+              {/* Header cuốn lịch: Chỉ hiển thị icon và Tháng / Năm */}
+              <View style={themeStyles.calendarHeader}>
+                <View style={themeStyles.calendarTitleBox}>
+                  <View style={themeStyles.calendarIconCircle}>
+                    <Ionicons name="calendar" size={20} color="#2c3a7a" />
+                  </View>
+                  <Text style={themeStyles.calendarTitle}>{calendarData.monthTitle}</Text>
+                </View>
+
+                <View style={themeStyles.calendarNavRow}>
+                  <TouchableOpacity
+                    style={themeStyles.calendarNavBtn}
+                    onPress={() => setCalendarMonthOffset((prev) => prev - 1)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="chevron-back" size={16} color="#2c3a7a" />
+                  </TouchableOpacity>
+                  {calendarMonthOffset !== 0 && (
+                    <TouchableOpacity
+                      style={[themeStyles.calendarNavBtn, { paddingHorizontal: 7, width: 'auto' }]}
+                      onPress={() => setCalendarMonthOffset(0)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#2c3a7a' }}>
+                        {t.todayLabel}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    style={themeStyles.calendarNavBtn}
+                    onPress={() => setCalendarMonthOffset((prev) => prev + 1)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="chevron-forward" size={16} color="#2c3a7a" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Dải tiêu đề 7 ngày trong tuần */}
+              <View style={themeStyles.calendarWeekHeader}>
+                {t.daysShort.map((dayName, idx) => (
+                  <Text
+                    key={idx}
+                    style={[
+                      themeStyles.calendarWeekDayText,
+                      idx === 6 && { color: '#e74c3c' },
+                    ]}
+                  >
+                    {dayName}
+                  </Text>
+                ))}
+              </View>
+
+              {/* Lưới các tuần và ngày trong tháng */}
+              {calendarData.weeks.map((week: (number | null)[], weekIdx: number) => (
+                <View key={weekIdx} style={themeStyles.calendarWeekRow}>
+                  {week.map((dayNum: number | null, dayIdx: number) => {
+                    if (dayNum === null) {
+                      return <View key={dayIdx} style={themeStyles.calendarDaySlot} />;
+                    }
+
+                    const dateKey = `${calendarData.viewYear}-${String(calendarData.viewMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                    const isChecked = allCheckedDatesSet.has(dateKey);
+                    const isToday = calendarData.isCurrentMonthView && dayNum === calendarData.todayDayNumber;
+                    const isFuture = calendarData.isCurrentMonthView
+                      ? dayNum > calendarData.todayDayNumber
+                      : (new Date(calendarData.viewYear, calendarData.viewMonth, dayNum) > new Date());
+
+                    return (
+                      <View key={dayIdx} style={themeStyles.calendarDaySlot}>
+                        <TouchableOpacity
+                          style={[
+                            themeStyles.calendarDayCircle,
+                            isChecked && themeStyles.calendarDayChecked,
+                            isToday && !isChecked && themeStyles.calendarDayToday,
+                            isToday && isChecked && themeStyles.calendarDayTodayChecked,
+                          ]}
+                          disabled={!isToday || tierSummary?.hasCheckedInToday || isCheckingIn}
+                          onPress={handleDailyCheckin}
+                          activeOpacity={0.7}
+                        >
+                          <Text
+                            style={[
+                              themeStyles.calendarDayText,
+                              isChecked && themeStyles.calendarDayCheckedText,
+                              isToday && !isChecked && themeStyles.calendarDayTodayText,
+                              isToday && isChecked && themeStyles.calendarDayTodayCheckedText,
+                              isFuture && themeStyles.calendarDayFutureText,
+                            ]}
+                          >
+                            {dayNum}
+                          </Text>
+                          {isChecked && !isToday && (
+                            <View style={themeStyles.calendarCheckDot} />
+                          )}
+                          {isToday && (
+                            <View
+                              style={[
+                                themeStyles.calendarTodayPill,
+                                isChecked && { backgroundColor: '#2ecc71' },
+                              ]}
+                            >
+                              <Text style={themeStyles.calendarTodayPillText}>
+                                {isChecked ? '✓' : '•'}
+                              </Text>
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                </View>
+              ))}
+
+              {/* Dòng tóm tắt thống kê điểm danh */}
+              <View style={themeStyles.calendarSummaryRow}>
+                <View style={themeStyles.calendarSummaryItem}>
+                  <Ionicons name="flame" size={16} color="#e67e22" />
+                  <Text style={themeStyles.calendarSummaryText}>
+                    {t.calendarStreakLabel} {tierSummary?.streakDays ?? userInfo.streakDays} {lang === 'en' ? 'days' : 'ngày'}
+                  </Text>
+                </View>
+                <View style={themeStyles.calendarSummaryItem}>
+                  <Ionicons name="checkmark-circle" size={16} color="#27ae60" />
+                  <Text style={themeStyles.calendarSummaryText}>
+                    {t.calendarCheckedDaysLabel} {calendarData.checkedCountInMonth}/{calendarData.daysInMonth} {lang === 'en' ? 'days' : 'ngày'}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Nút Điểm Danh Hôm Nay Lớn Nổi Bật Ngay Dưới Cuốn Lịch */}
+              <TouchableOpacity
+                style={[
+                  themeStyles.calendarMainBtn,
+                  tierSummary?.hasCheckedInToday && themeStyles.calendarMainBtnDone,
+                ]}
+                onPress={handleDailyCheckin}
+                disabled={isCheckingIn || tierSummary?.hasCheckedInToday}
+                activeOpacity={0.85}
+              >
+                {isCheckingIn ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <>
+                    <Ionicons
+                      name={tierSummary?.hasCheckedInToday ? 'checkmark-circle' : 'gift-outline'}
+                      size={20}
+                      color="#fff"
+                    />
+                    <Text style={themeStyles.calendarMainBtnText}>
+                      {tierSummary?.hasCheckedInToday ? t.checkedInTodayBtn : t.checkinTodayBtn}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+
+            <Text style={themeStyles.sectionHeading}>{t.dailyTaskHeading}</Text>
+
+            {/* Nhiệm vụ 1: Đọc sách 20 phút */}
+            <View style={themeStyles.dailyTaskItemCard}>
+              <View style={themeStyles.dailyTaskIconRow}>
+                <View style={[themeStyles.dailyTaskIconBadge, { backgroundColor: '#ebf5fb' }]}>
+                  <Ionicons name="book-outline" size={22} color="#2980b9" />
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={themeStyles.dailyTaskItemTitle}>{t.dailyTask1Title}</Text>
+                  <Text style={themeStyles.dailyTaskItemReward}>{t.dailyTask1Reward}</Text>
+                  <Text style={themeStyles.dailyTaskItemDesc}>{t.dailyTask1Desc}</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={themeStyles.dailyTaskActionBtn}
+                onPress={() => {
+                  setShowDailyTasks(false);
+                  navigate('bookshelf');
+                }}
+              >
+                <Text style={themeStyles.dailyTaskActionBtnText}>{t.dailyTask1Btn}</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Nhiệm vụ 2: Đánh giá sách */}
+            <View style={themeStyles.dailyTaskItemCard}>
+              <View style={themeStyles.dailyTaskIconRow}>
+                <View style={[themeStyles.dailyTaskIconBadge, { backgroundColor: '#fef9e7' }]}>
+                  <Ionicons name="star-outline" size={22} color="#f39c12" />
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={themeStyles.dailyTaskItemTitle}>{t.dailyTask2Title}</Text>
+                  <Text style={themeStyles.dailyTaskItemReward}>{t.dailyTask2Reward}</Text>
+                  <Text style={themeStyles.dailyTaskItemDesc}>{t.dailyTask2Desc}</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={themeStyles.dailyTaskActionBtn}
+                onPress={() => {
+                  setShowDailyTasks(false);
+                  navigate('bookshelf');
+                }}
+              >
+                <Text style={themeStyles.dailyTaskActionBtnText}>{t.dailyTask2Btn}</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Nhiệm vụ 3: Chuỗi đọc 7 ngày */}
+            <View style={themeStyles.dailyTaskItemCard}>
+              <View style={themeStyles.dailyTaskIconRow}>
+                <View style={[themeStyles.dailyTaskIconBadge, { backgroundColor: '#fbeee6' }]}>
+                  <Ionicons name="flame-outline" size={22} color="#e67e22" />
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={themeStyles.dailyTaskItemTitle}>{t.dailyTask3Title}</Text>
+                  <Text style={themeStyles.dailyTaskItemReward}>{t.dailyTask3Reward}</Text>
+                  <Text style={themeStyles.dailyTaskItemDesc}>{t.dailyTask3Desc}</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={[themeStyles.dailyTaskActionBtn, { backgroundColor: '#e67e22' }]}
+                onPress={handleDailyCheckin}
+                disabled={tierSummary?.hasCheckedInToday}
+              >
+                <Text style={themeStyles.dailyTaskActionBtnText}>
+                  {tierSummary?.hasCheckedInToday ? t.dailyTask3Done : t.dailyTask3Btn}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Nhiệm vụ 4: Mời bạn bè */}
+            <View style={themeStyles.dailyTaskItemCard}>
+              <View style={themeStyles.dailyTaskIconRow}>
+                <View style={[themeStyles.dailyTaskIconBadge, { backgroundColor: '#f4ecf7' }]}>
+                  <Ionicons name="people-outline" size={22} color="#8e44ad" />
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={themeStyles.dailyTaskItemTitle}>{t.dailyTask4Title}</Text>
+                  <Text style={themeStyles.dailyTaskItemReward}>{t.dailyTask4Reward}</Text>
+                  <Text style={themeStyles.dailyTaskItemDesc}>{t.dailyTask4Desc}</Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={[themeStyles.dailyTaskActionBtn, { backgroundColor: '#8e44ad' }]}
+                onPress={() => {
+                  Alert.alert(
+                    t.referralAlertTitle,
+                    t.referralAlertPrefix + (userInfo.name ? userInfo.name.replace(/\s+/g, '').toUpperCase() : 'USER') + t.referralAlertSuffix,
+                    [{ text: t.referralAlertBtn }]
+                  );
+                }}
+              >
+                <Text style={themeStyles.dailyTaskActionBtnText}>{t.dailyTask4Btn}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ height: 40 }} />
+          </ScrollView>
+        </View>
+      </Modal>
+=======
+>>>>>>> origin/main
     </View>
   );
 }
@@ -1259,6 +2086,439 @@ const styles = StyleSheet.create({
   tierInfo: { flexDirection: 'row', alignItems: 'center' },
   tierTitle: { fontSize: 15, fontWeight: '700', color: '#1a1a1a', marginLeft: 10 },
 
+<<<<<<< HEAD
+  // Tier Card Enhanced
+  tierCardEnhanced: {
+    backgroundColor: '#fff',
+    marginHorizontal: 20,
+    marginBottom: 12,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#f1f2f6',
+    shadowColor: '#1a1a1a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  tierCardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  tierBadgeCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#fff9e6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#f9e79f',
+  },
+  tierBadgeEmoji: {
+    fontSize: 24,
+  },
+  tierCardMainInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  tierCardName: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1a1a1a',
+  },
+  tierDiscountPill: {
+    backgroundColor: '#ebf5fb',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#aed6f1',
+  },
+  tierDiscountText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2980b9',
+  },
+  tierCardSub: {
+    fontSize: 12,
+    color: '#7f8c8d',
+    marginTop: 3,
+  },
+  tierArrowBtn: {
+    padding: 4,
+  },
+  miniProgressBarTrack: {
+    height: 6,
+    backgroundColor: '#f0f3f4',
+    borderRadius: 3,
+    marginTop: 12,
+    overflow: 'hidden',
+  },
+  miniProgressBarFill: {
+    height: '100%',
+    backgroundColor: '#f39c12',
+    borderRadius: 3,
+  },
+  tierCardFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 10,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f8f9f9',
+  },
+  tierCardFooterText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#27ae60',
+  },
+  tierCardActionHint: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2c3a7a',
+  },
+
+  // Quick Checkin Bar
+  quickCheckinBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    marginHorizontal: 20,
+    marginBottom: 20,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#f1f2f6',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  quickCheckinTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1a1a1a',
+  },
+  quickCheckinSub: {
+    fontSize: 11,
+    color: '#7f8c8d',
+    marginTop: 2,
+  },
+  quickCheckinBtn: {
+    backgroundColor: '#e67e22',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  quickCheckinBtnDone: {
+    backgroundColor: '#27ae60',
+  },
+  quickCheckinBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  // Cuốn Lịch Điểm Danh (Attendance Calendar Styles)
+  calendarCard: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#eef0f4',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  calendarTitleBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  calendarIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#ebf3ff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#1a1a1a',
+  },
+  calendarSub: {
+    fontSize: 12,
+    color: '#7f8c8d',
+    marginTop: 2,
+  },
+  calendarNavRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  calendarNavBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f1f2f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarWeekHeader: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f2f6',
+    paddingBottom: 8,
+    marginBottom: 8,
+  },
+  calendarWeekDayText: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#8a92a6',
+  },
+  calendarWeekRow: {
+    flexDirection: 'row',
+    marginBottom: 6,
+  },
+  calendarDaySlot: {
+    flex: 1,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarDayCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  calendarDayText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#2d3436',
+  },
+  calendarDayChecked: {
+    backgroundColor: '#e8f8f5',
+    borderWidth: 1.5,
+    borderColor: '#27ae60',
+  },
+  calendarDayCheckedText: {
+    color: '#27ae60',
+    fontWeight: '800',
+  },
+  calendarDayToday: {
+    borderWidth: 2,
+    borderColor: '#e67e22',
+    backgroundColor: '#fffaf0',
+  },
+  calendarDayTodayChecked: {
+    backgroundColor: '#27ae60',
+    borderColor: '#27ae60',
+  },
+  calendarDayTodayText: {
+    color: '#e67e22',
+    fontWeight: '900',
+  },
+  calendarDayTodayCheckedText: {
+    color: '#fff',
+    fontWeight: '900',
+  },
+  calendarDayFutureText: {
+    color: '#bdc3c7',
+  },
+  calendarCheckDot: {
+    position: 'absolute',
+    bottom: 2,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#27ae60',
+  },
+  calendarTodayPill: {
+    position: 'absolute',
+    bottom: -4,
+    backgroundColor: '#e67e22',
+    borderRadius: 6,
+    paddingHorizontal: 3,
+    paddingVertical: 1,
+    minWidth: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarTodayPillText: {
+    color: '#fff',
+    fontSize: 8,
+    fontWeight: '900',
+    lineHeight: 9,
+  },
+  calendarSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 10,
+    marginBottom: 12,
+  },
+  calendarSummaryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  calendarSummaryText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#4b6584',
+  },
+  calendarMainBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#e67e22',
+    paddingVertical: 13,
+    borderRadius: 14,
+    shadowColor: '#e67e22',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  calendarMainBtnDone: {
+    backgroundColor: '#27ae60',
+    shadowColor: '#27ae60',
+  },
+  calendarMainBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '800',
+  },
+
+  // Daily Tasks Modal Styles
+  dailyTaskHeaderCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#f1f2f6',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  dailyTaskFlameCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#fff4eb',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dailyTaskStreakTitle: {
+    fontSize: 13,
+    color: '#7f8c8d',
+    fontWeight: '600',
+  },
+  dailyTaskStreakValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#e67e22',
+    marginTop: 2,
+  },
+  dailyTaskCheckinBtn: {
+    backgroundColor: '#e67e22',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  dailyTaskCheckinBtnDone: {
+    backgroundColor: '#27ae60',
+  },
+  dailyTaskCheckinBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  dailyTaskItemCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#f1f2f6',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  dailyTaskIconRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  dailyTaskIconBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dailyTaskItemTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1a1a1a',
+  },
+  dailyTaskItemReward: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#e67e22',
+    marginTop: 3,
+  },
+  dailyTaskItemDesc: {
+    fontSize: 12,
+    color: '#7f8c8d',
+    lineHeight: 17,
+    marginTop: 4,
+  },
+  dailyTaskActionBtn: {
+    backgroundColor: '#2c3a7a',
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    alignSelf: 'flex-start',
+    marginTop: 12,
+  },
+  dailyTaskActionBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+=======
+>>>>>>> origin/main
   // Menu Section
   menuSection: { backgroundColor: '#fff', borderRadius: 15, marginHorizontal: 20, paddingHorizontal: 15, paddingVertical: 5 },
   menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#f1f2f6' },

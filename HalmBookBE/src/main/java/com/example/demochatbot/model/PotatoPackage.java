@@ -17,19 +17,19 @@ public class PotatoPackage {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "package_id")
-    private int packageId;
+    private Integer packageId;
 
     @Column(name = "package_name", nullable = false)
     private String packageName;
 
     @Column(name = "potato_amount", nullable = false)
-    private int potatoAmount;
+    private Integer potatoAmount = 0;
 
     @Column(name = "bonus_potato")
-    private int bonusPotato = 0;
+    private Integer bonusPotato = 0;
 
     @Column(name = "price_vnd", nullable = false)
-    private double priceVnd;
+    private Double priceVnd = 0.0;
 
     @Column(name = "badge_tag", length = 50)
     private String badgeTag;

@@ -1,6 +1,6 @@
 const FLY_HEIGHT_RATIO = 0.82;
-const FLY_DURATION = 1000;
-const READER_DELAY = 3000;
+const FLY_DURATION = 600;
+const READER_DELAY = 1000;
 
 function createElement(styles = {}) {
     const element = document.createElement('div');
@@ -321,7 +321,34 @@ export function openBookReaderTransition({ bookCard, coverUrl, book, onComplete 
         overlay.style.background = overlayColor;
     });
 
+    let completed = false;
+    const finish = () => {
+        if (completed) return;
+        completed = true;
+        try {
+            sessionStorage.setItem('halm-reader-book', JSON.stringify(book || {}));
+            transitionStyles.remove();
+            overlay.remove();
+            bookCard.style.opacity = '';
+            document.body.style.overflow = '';
+        } catch (_) {}
+        onComplete();
+    };
+
+    // Cho phép bấm hoặc nhấn phím bất kỳ để vào đọc ngay lập tức không cần đợi
+    overlay.style.pointerEvents = 'auto';
+    overlay.style.cursor = 'pointer';
+    overlay.addEventListener('click', finish, { once: true });
+    const handleKey = (e) => {
+        if (e.key === 'Escape' || e.key === ' ' || e.key === 'Enter') {
+            window.removeEventListener('keydown', handleKey);
+            finish();
+        }
+    };
+    window.addEventListener('keydown', handleKey, { once: true });
+
     window.setTimeout(() => {
+        if (completed) return;
         coverWrapper.style.transform = 'rotateY(-180deg)';
         overlay.style.background = overlayColor;
         applyPageThickness(pages, 'right');
@@ -329,11 +356,7 @@ export function openBookReaderTransition({ bookCard, coverUrl, book, onComplete 
     }, FLY_DURATION);
 
     window.setTimeout(() => {
-        sessionStorage.setItem('halm-reader-book', JSON.stringify(book || {}));
-        transitionStyles.remove();
-        overlay.remove();
-        bookCard.style.opacity = '';
-        document.body.style.overflow = '';
-        onComplete();
+        window.removeEventListener('keydown', handleKey);
+        finish();
     }, FLY_DURATION + READER_DELAY);
 }
