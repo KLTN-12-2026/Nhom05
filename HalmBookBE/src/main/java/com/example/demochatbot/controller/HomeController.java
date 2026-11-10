@@ -23,6 +23,7 @@ import com.example.demochatbot.dto.RentedBookDto;
 import com.example.demochatbot.model.Book;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.data.domain.Page;
@@ -158,9 +159,19 @@ public class HomeController {
     @GetMapping("/books/{bookId}/read-url")
     public ResponseEntity<?> getBookReadUrl(@PathVariable("bookId") String bookId) {
         try {
-            String readUrl = bookService.getBookReadUrl(bookId);
+            String readUrl = null;
+            try {
+                readUrl = bookService.getBookReadUrl(bookId);
+            } catch (Exception ignored) {}
+
             BookDto bookDto = bookService.findBookDetailById(bookId);
             String format = bookDto != null && bookDto.getFileFormat() != null ? bookDto.getFileFormat() : "PDF";
+
+            // Tự động fallback sang endpoint /content nếu sách chưa có link Cloudinary
+            if (readUrl == null || readUrl.trim().isEmpty()) {
+                readUrl = "/api/home/books/" + bookId + "/content";
+            }
+
             return ResponseEntity.ok(Map.of(
                     "book_id", bookId,
                     "readUrl", readUrl,
@@ -168,7 +179,7 @@ public class HomeController {
                     "expiresInSeconds", 3600,
                     "message", "Lấy URL đọc sách thành công!"
             ));
-        } catch (RuntimeException e) {
+        } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("message", e.getMessage()));
         }
@@ -240,6 +251,15 @@ public class HomeController {
                             .body(data);
                 }
                 conn.disconnect();
+            }
+
+            // 3. Fallback đọc thử tài liệu mẫu nếu sách chưa có file PDF riêng
+            ClassPathResource sampleResource = new ClassPathResource("static/sample.pdf");
+            if (sampleResource.exists()) {
+                return ResponseEntity.ok()
+                        .contentType(MediaType.APPLICATION_PDF)
+                        .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
+                        .body(sampleResource);
             }
 
             return ResponseEntity.status(HttpStatus.NOT_FOUND)

@@ -769,13 +769,16 @@ export default function DocSach() {
             }
 
             // Fallback đọc thử mẫu: Nếu sách trên hệ thống chưa có file PDF / EPUB thực tế
-            if (!arrayBuffer && !resolvedUrl) {
+            if (!arrayBuffer) {
                 try {
-                    const sampleRes = await axiosInstance.get('/sample.pdf', { responseType: 'arraybuffer' });
-                    if (sampleRes.data && sampleRes.data.byteLength > 0 && !isCancelled) {
-                        arrayBuffer = sampleRes.data;
-                        metaFormat = 'PDF';
-                        showToast("Đang hiển thị bản đọc thử mô phỏng của cuốn sách.");
+                    const sampleRes = await fetch('/sample.pdf');
+                    if (sampleRes.ok) {
+                        const sBuf = await sampleRes.arrayBuffer();
+                        if (sBuf && sBuf.byteLength > 0 && !isCancelled) {
+                            arrayBuffer = sBuf;
+                            metaFormat = 'PDF';
+                            showToast("Đang hiển thị bản đọc thử mô phỏng của cuốn sách.");
+                        }
                     }
                 } catch (sErr) {
                     console.warn("Không thể tải sample.pdf fallback:", sErr);
@@ -999,13 +1002,15 @@ export default function DocSach() {
                 // Thử tải sample.pdf dự phòng nếu file tải về bị lỗi
                 if (!arrayBuffer?.isSampleFallback) {
                     try {
-                        const sampleRes = await axiosInstance.get('/sample.pdf', { responseType: 'arraybuffer' });
-                        if (sampleRes.data && sampleRes.data.byteLength > 0 && !isCancelled) {
-                            const fallbackBuf = sampleRes.data;
-                            fallbackBuf.isSampleFallback = true;
-                            showToast("Đang hiển thị bản đọc thử mô phỏng của cuốn sách.");
-                            await renderPdfDoc(fallbackBuf, null);
-                            return;
+                        const sampleRes = await fetch('/sample.pdf');
+                        if (sampleRes.ok) {
+                            const fallbackBuf = await sampleRes.arrayBuffer();
+                            if (fallbackBuf && fallbackBuf.byteLength > 0 && !isCancelled) {
+                                fallbackBuf.isSampleFallback = true;
+                                showToast("Đang hiển thị bản đọc thử mô phỏng của cuốn sách.");
+                                await renderPdfDoc(fallbackBuf, null);
+                                return;
+                            }
                         }
                     } catch (_) {}
                 }
