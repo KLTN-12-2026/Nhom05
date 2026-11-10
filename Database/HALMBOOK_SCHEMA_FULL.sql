@@ -269,5 +269,76 @@ CREATE TABLE chat_message (
     CONSTRAINT fk_chatmessage_session FOREIGN KEY (chat_session_id) REFERENCES chat_session(chat_session_id) ON DELETE CASCADE
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
+-- 4.4 Bảng Phiếu Hỗ Trợ & Khiếu Nại (Support Ticket) - Đồng bộ SupportTicket.java & UserSupportController
+DROP TABLE IF EXISTS support_ticket;
+CREATE TABLE support_ticket (
+    ticket_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    ticket_code VARCHAR(50) NOT NULL UNIQUE,
+    customer_id VARCHAR(50) NULL,
+    sender_name VARCHAR(150),
+    sender_email VARCHAR(150),
+    sender_phone VARCHAR(50),
+    category VARCHAR(50) DEFAULT 'OTHER',          -- 'PAYMENT', 'READING', 'ACCOUNT', 'COPYRIGHT', 'OTHER'
+    priority VARCHAR(20) DEFAULT 'NORMAL',         -- 'LOW', 'NORMAL', 'HIGH', 'URGENT'
+    subject VARCHAR(255),
+    message TEXT,
+    status VARCHAR(30) DEFAULT 'pending',          -- 'pending', 'in_progress', 'resolved', 'closed'
+    admin_reply TEXT,
+    chat_history LONGTEXT,
+    reply_at DATETIME NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_ticket_customer FOREIGN KEY (customer_id) REFERENCES customer(customer_id) ON DELETE SET NULL
+) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- 4.5 Bảng Thông Báo Hệ Thống (Notification) - Đồng bộ Notification.java & ThongBao.jsx
+DROP TABLE IF EXISTS notification;
+CREATE TABLE notification (
+    notification_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    customer_id VARCHAR(50) NOT NULL,
+    title VARCHAR(255),
+    message TEXT,
+    type VARCHAR(50) DEFAULT 'SYSTEM',             -- 'TOPUP', 'RENT', 'EXPIRING', 'REWARD', 'SYSTEM'
+    link VARCHAR(255) NULL,
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_notification_customer FOREIGN KEY (customer_id) REFERENCES customer(customer_id) ON DELETE CASCADE
+) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- 4.6 Bảng Sách Yêu Thích (Favorite Book / Wishlist) - Đồng bộ FavoriteBook.java
+DROP TABLE IF EXISTS favorite_book;
+CREATE TABLE favorite_book (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    customer_id VARCHAR(50) NOT NULL,
+    book_id VARCHAR(50) NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_fav_customer FOREIGN KEY (customer_id) REFERENCES customer(customer_id) ON DELETE CASCADE,
+    CONSTRAINT fk_fav_book FOREIGN KEY (book_id) REFERENCES book(book_id) ON DELETE CASCADE,
+    UNIQUE KEY uk_fav_customer_book (customer_id, book_id)
+) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- 4.7 Bảng Nhận Thưởng Nhiệm Vụ Độc Giả (User Mission Claim) - Đồng bộ UserMissionClaim.java & NhiemVu.jsx
+DROP TABLE IF EXISTS user_mission_claim;
+CREATE TABLE user_mission_claim (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    customer_id VARCHAR(50) NOT NULL,
+    mission_id VARCHAR(100) NOT NULL,
+    claim_date DATE NOT NULL,
+    reward_potato INT DEFAULT 5,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_mission_customer FOREIGN KEY (customer_id) REFERENCES customer(customer_id) ON DELETE CASCADE,
+    KEY idx_mission_claim (customer_id, mission_id, claim_date)
+) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- =============================================================================
+-- 5. CÁC CHỈ MỤC TỐI ƯU HIỆU NĂNG TRUY VẤN (PERFORMANCE INDEXES)
+-- =============================================================================
+CREATE INDEX idx_access_customer_book ON access_record(customer_id, book_id);
+CREATE INDEX idx_access_status_end ON access_record(status, end_date);
+CREATE INDEX idx_orders_customer_status ON orders(customer_id, payment_status, order_date);
+CREATE INDEX idx_eval_book_created ON evaluate(book_id, created_at);
+CREATE INDEX idx_notif_customer_unread ON notification(customer_id, is_read);
+CREATE INDEX idx_ticket_status_created ON support_ticket(status, created_at);
+
 -- Bật lại kiểm tra khóa ngoại sau khi khởi tạo xong cấu trúc
 SET FOREIGN_KEY_CHECKS = 1;
