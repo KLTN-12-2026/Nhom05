@@ -1,4 +1,4 @@
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ArrowLeft,
@@ -14,21 +14,39 @@ import {
 } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Animated,
+  ActivityIndicator,
+  Alert,
   Dimensions,
   Image,
+  KeyboardAvoidingView,
+  Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { getBookChapterLabel, getBookRealChapters } from './bookContentService';
 import { getBookCoverSource } from './bookCovers';
+import CosmicBackground from './CosmicBackground';
+import { checkBookIsFavorite, toggleFavoriteBook } from './favoriteService';
 import { useAppNavigation } from './navigation';
-import { getBookRealChapters, getBookChapterLabel } from './bookContentService';
+import { addNotification } from './notificationService';
+import {
+  getCurrentUsername,
+  getUserItem,
+  KEY_GIFTED_BOOKS,
+  KEY_POTATO_BALANCE,
+  lookupUserInDirectory,
+  setUserItem,
+  UserDirectoryEntry
+} from './userStorage';
 
 const { width, height } = Dimensions.get('window');
 
@@ -38,195 +56,6 @@ const BRAND = {
   secondary: '#D8B36A',
 };
 
-// --- COMPONENT HIỆU ỨNG SAO VÀ VŨ TRỤ (TỪ TRANG CHỦ APP) ---
-
-// Hào quang tinh vân (Nebula) chớp nở chậm rãi
-const Nebula = () => {
-  const anim = useRef(new Animated.Value(0)).current;
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(anim, { toValue: 1, duration: 5000, useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0, duration: 5000, useNativeDriver: true }),
-      ])
-    ).start();
-  }, [anim]);
-
-  return (
-    <>
-      {/* Góc trên trái (Ánh tím) */}
-      <Animated.View
-        style={{
-          position: 'absolute',
-          top: -100,
-          left: -100,
-          width: 350,
-          height: 350,
-          borderRadius: 175,
-          backgroundColor: BRAND.primary,
-          opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.03, 0.12] }),
-          transform: [
-            {
-              scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1.2] }),
-            },
-          ],
-        }}
-      />
-      {/* Góc dưới phải (Ánh vàng) */}
-      <Animated.View
-        style={{
-          position: 'absolute',
-          bottom: -100,
-          right: -100,
-          width: 400,
-          height: 400,
-          borderRadius: 200,
-          backgroundColor: BRAND.secondary,
-          opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.05] }),
-          transform: [
-            {
-              scale: anim.interpolate({ inputRange: [0, 1], outputRange: [1.2, 0.8] }),
-            },
-          ],
-        }}
-      />
-    </>
-  );
-};
-
-// Sao băng rơi chéo màn hình
-const ShootingStar = ({ delay, top, left }: any) => {
-  const anim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.delay(delay),
-        Animated.timing(anim, { toValue: 1, duration: 1200, useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0, duration: 0, useNativeDriver: true }),
-      ])
-    ).start();
-  }, [anim, delay]);
-
-  const translateX = anim.interpolate({ inputRange: [0, 1], outputRange: [0, width] });
-  const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [0, height * 0.8] });
-  const opacity = anim.interpolate({ inputRange: [0, 0.1, 0.8, 1], outputRange: [0, 1, 1, 0] });
-
-  return (
-    <Animated.View
-      style={{
-        position: 'absolute',
-        top,
-        left,
-        width: 80,
-        height: 2,
-        backgroundColor: '#fff',
-        transform: [{ rotate: '45deg' }, { translateX }, { translateY }],
-        opacity,
-        shadowColor: BRAND.secondary,
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 1,
-        shadowRadius: 10,
-      }}
-    />
-  );
-};
-
-// Ngôi sao lấp lánh (Tốc độ và độ trễ ngẫu nhiên)
-const TwinkleStar = ({ duration, top, left, size, color }: any) => {
-  const anim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(anim, { toValue: 1, duration, useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0.1, duration, useNativeDriver: true }),
-      ])
-    ).start();
-  }, [anim, duration]);
-
-  return (
-    <Animated.View
-      style={{
-        position: 'absolute',
-        top,
-        left,
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        backgroundColor: color,
-        opacity: anim,
-        shadowColor: color,
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 1,
-        shadowRadius: 6,
-      }}
-    />
-  );
-};
-
-// Quản lý tổng thể Background Dark Mode Bầu Trời Sao của Trang Chủ App
-const DarkModeBackgroundEffects = ({ visible }: { visible: boolean }) => {
-  const opacityAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.timing(opacityAnim, {
-      toValue: visible ? 1 : 0,
-      duration: 800,
-      useNativeDriver: true,
-    }).start();
-  }, [opacityAnim, visible]);
-
-  const { stars, shootingStars } = useMemo(() => {
-    const starsList = Array.from({ length: 110 }).map((_, i) => ({
-      id: i,
-      top: `${Math.random() * 100}%`,
-      left: `${Math.random() * 100}%`,
-      duration: Math.random() * 500 + 300,
-      size: Math.random() * 3 + 1,
-      color:
-        Math.random() > 0.7
-          ? BRAND.secondary
-          : Math.random() > 0.5
-          ? '#48dbfb'
-          : BRAND.primary,
-    }));
-
-    const shootingList = Array.from({ length: 3 }).map((_, i) => ({
-      id: `shoot_${i}`,
-      top: `${Math.random() * -20}%`,
-      left: `${Math.random() * 60}%`,
-      delay: Math.random() * 8000 + 2000,
-    }));
-
-    return { stars: starsList, shootingStars: shootingList };
-  }, []);
-
-  return (
-    <Animated.View
-      style={[
-        StyleSheet.absoluteFill,
-        { opacity: opacityAnim, zIndex: 0, overflow: 'hidden' },
-      ]}
-      pointerEvents="none"
-    >
-      <Nebula />
-      {stars.map((s) => (
-        <TwinkleStar
-          key={s.id}
-          top={s.top}
-          left={s.left}
-          duration={s.duration}
-          size={s.size}
-          color={s.color}
-        />
-      ))}
-      {shootingStars.map((s) => (
-        <ShootingStar key={s.id} top={s.top} left={s.left} delay={s.delay} />
-      ))}
-    </Animated.View>
-  );
-};
 // -------------------------------------------------------------
 
 interface BookDetailProps {
@@ -307,13 +136,37 @@ const getBookChapters = (book: any): ChapterItem[] => {
 };
 
 export default function BookDetailScreen({ book, onBack, onStartReading }: BookDetailProps) {
-  const { isDarkMode, setFooterVisible, lang } = useAppNavigation();
+  const { isDarkMode, setFooterVisible, lang, isLoggedIn, showLoginAlert } = useAppNavigation();
   const themeStyles = useMemo(() => getThemedStyles(isDarkMode), [isDarkMode]);
   const [isSaved, setIsSaved] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [savedChapter, setSavedChapter] = useState<{ chapterNum: number; title: string } | null>(null);
   const [showAllChapters, setShowAllChapters] = useState(false);
   const scrollOffset = useRef(0);
+
+  // Quản lý Modal 1 (Nhập ID người nhận) & Modal 2 (Màn tặng sách cho bạn bè)
+  const [isIdPromptVisible, setIsIdPromptVisible] = useState(false);
+  const [recipientInputId, setRecipientInputId] = useState('');
+  const [idErrorMsg, setIdErrorMsg] = useState('');
+  const [isCheckingId, setIsCheckingId] = useState(false);
+
+  const [isGiftModalVisible, setIsGiftModalVisible] = useState(false);
+  const [verifiedRecipient, setVerifiedRecipient] = useState<UserDirectoryEntry | null>(null);
+  const [giftMessage, setGiftMessage] = useState('');
+  const [isSendingGift, setIsSendingGift] = useState(false);
+  const [potatoBalance, setPotatoBalance] = useState<number>(100);
+
+  // Đọc số dư khoai lưu trữ
+  const loadPotatoBalance = async () => {
+    try {
+      const raw = await getUserItem(KEY_POTATO_BALANCE);
+      if (raw) {
+        setPotatoBalance(Number(raw) || 0);
+      } else {
+        setPotatoBalance(100);
+      }
+    } catch { }
+  };
 
   // Đảm bảo footer luôn hiển thị khi vừa mở màn hình chi tiết sách
   useEffect(() => {
@@ -366,6 +219,288 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
   const chapters = useMemo(() => getBookChapters(book), [book]);
   const chapterDisplay = useMemo(() => getBookChapterDisplay(book, chapters), [book, chapters]);
 
+  // Đồng bộ trạng thái yêu thích từ Backend MySQL & Cache Local
+  useEffect(() => {
+    let isMounted = true;
+    checkBookIsFavorite(String(book.id)).then((fav) => {
+      if (isMounted) {
+        setIsLiked(fav);
+      }
+    }).catch(() => { });
+    return () => {
+      isMounted = false;
+    };
+  }, [book.id]);
+
+  const handleToggleFavorite = async () => {
+    if (!isLoggedIn) {
+      showLoginAlert(
+        lang === 'en'
+          ? 'Please log in to add books to your Favorites and sync with Web!'
+          : 'Bạn phải đăng nhập để lưu sách yêu thích và đồng bộ lên Web!'
+      );
+      return;
+    }
+
+    const prevLiked = isLiked;
+    const nextLiked = !prevLiked;
+    setIsLiked(nextLiked);
+
+    const result = await toggleFavoriteBook({
+      id: String(book.id),
+      title: book.title,
+      author: authorName,
+      chapter: chapterDisplay,
+      category_name: categoryName,
+      img_url: (book as any).img_url || '',
+      coverImage: (book as any).img_url || '',
+    });
+
+    if (result.success) {
+      setIsLiked(result.isFavorite);
+      Alert.alert(
+        lang === 'en' ? 'Favorites' : 'Yêu Thích',
+        result.message || (result.isFavorite
+          ? (lang === 'en' ? 'Added to favorites! It will appear on Web as well.' : 'Đã thêm tác phẩm vào danh sách Yêu Thích! Bạn có thể xem trên cả Web.')
+          : (lang === 'en' ? 'Removed from favorites!' : 'Đã xóa tác phẩm khỏi danh sách Yêu Thích!'))
+      );
+    } else if (result.requireLogin) {
+      setIsLiked(prevLiked);
+      showLoginAlert(
+        lang === 'en'
+          ? 'Please log in to add books to your Favorites and sync with Web!'
+          : 'Bạn phải đăng nhập để lưu sách yêu thích và đồng bộ lên Web!'
+      );
+    } else {
+      setIsLiked(prevLiked);
+      Alert.alert(lang === 'en' ? 'Notice' : 'Thông báo', result.message);
+    }
+  };
+
+  // Bật modal nhập ID người nhận
+  const handleOpenIdPrompt = () => {
+    setRecipientInputId('');
+    setIdErrorMsg('');
+    loadPotatoBalance();
+    setIsIdPromptVisible(true);
+  };
+
+  // Xác nhận ID người nhận: kiểm tra tồn tại
+  const handleConfirmRecipientId = async () => {
+    const rawId = recipientInputId.trim();
+    if (!rawId) {
+      setIdErrorMsg(lang === 'en' ? 'Please enter the recipient ID' : 'Vui lòng nhập ID người nhận');
+      return;
+    }
+
+    try {
+      setIsCheckingId(true);
+      setIdErrorMsg('');
+
+      // Lấy username/id của người đang đăng nhập để tránh tự tặng chính mình
+      const currentSender = await getCurrentUsername();
+      const currentSenderId = await AsyncStorage.getItem('@halm_current_customer_id');
+
+      const cleanInput = rawId.toLowerCase().replace(/^(id#|#|id)/i, '');
+      if (
+        (currentSender && currentSender.toLowerCase() === rawId.toLowerCase()) ||
+        (currentSenderId && currentSenderId.toLowerCase().replace(/^(id#|#|id)/i, '') === cleanInput)
+      ) {
+        setIsCheckingId(false);
+        setIdErrorMsg(lang === 'en' ? 'You cannot gift a book to yourself!' : 'Bạn không thể tự tặng sách cho chính mình!');
+        return;
+      }
+
+      // Tra cứu người dùng theo ID trong hệ thống
+      const foundUser = await lookupUserInDirectory(rawId);
+      if (!foundUser) {
+        setIsCheckingId(false);
+        setIdErrorMsg(lang === 'en' ? 'User does not exist' : 'Người dùng không tồn tại');
+        return;
+      }
+
+      setVerifiedRecipient(foundUser);
+      setGiftMessage('');
+      setIsCheckingId(false);
+      setIsIdPromptVisible(false);
+
+      // Mở màn tặng sách cho bạn bè
+      setIsGiftModalVisible(true);
+    } catch {
+      setIsCheckingId(false);
+      setIdErrorMsg(lang === 'en' ? 'User does not exist' : 'Người dùng không tồn tại');
+    }
+  };
+
+  // ============================================================================
+  // [GIẢI THÍCH CODE]: Xử lý xác nhận tặng sách cho bạn bè
+  // Người gửi bị trừ 10 Khoai (phí dịch vụ). Bên người nhận CHỈ NHẬN SÁCH, KHÔNG NHẬN KHOAI.
+  // Sách sẽ được chuyển vào mục "Sách được tặng" trong Tủ sách của người nhận.
+  // ============================================================================
+  const handleConfirmSendGift = async () => {
+    if (!verifiedRecipient) return;
+
+    try {
+      setIsSendingGift(true);
+      const currentSender = await getCurrentUsername();
+
+      // 1. Kiểm tra số dư Khoai của người gửi (yêu cầu tối thiểu 10 Khoai)
+      let currentBalance = potatoBalance;
+      const storedBalance = await getUserItem(KEY_POTATO_BALANCE);
+      if (storedBalance !== null) currentBalance = Number(storedBalance) || 0;
+
+      if (currentBalance < 10) {
+        setIsSendingGift(false);
+        Alert.alert(
+          lang === 'en' ? 'Insufficient Potatoes 🥔' : 'Không đủ Khoai 🥔',
+          lang === 'en'
+            ? 'Your balance is not enough to gift this book (requires 10 Potatoes). Please top up in your Profile!'
+            : 'Số dư của bạn không đủ 10 Khoai để tặng sách. Vui lòng nạp thêm Khoai tại Trang cá nhân!'
+        );
+        return;
+      }
+
+      // 2. Trừ 10 Khoai của người gửi làm phí tặng sách
+      const nextBalance = Math.max(0, currentBalance - 10);
+      setPotatoBalance(nextBalance);
+      await setUserItem(KEY_POTATO_BALANCE, String(nextBalance));
+      await AsyncStorage.setItem('@halm_potato_balance', String(nextBalance));
+
+      // 3. Ghi lại lịch sử giao dịch trừ khoai của người gửi
+      try {
+        const txKey = `@halm_potato_history_${currentSender}`;
+        const existingTxRaw = await AsyncStorage.getItem(txKey);
+        let txList: any[] = existingTxRaw ? JSON.parse(existingTxRaw) : [];
+        if (!Array.isArray(txList)) txList = [];
+        txList.unshift({
+          id: `gift_tx_${Date.now()}`,
+          amount: -10,
+          description: `Phí tặng sách "${book.title}" cho độc giả ${verifiedRecipient.name} (${verifiedRecipient.id})`,
+          balanceAfter: nextBalance,
+          createdAt: new Date().toISOString(),
+          type: 'GIFT_BOOK',
+        });
+        await AsyncStorage.setItem(txKey, JSON.stringify(txList));
+      } catch { }
+
+      // 4. Bên người nhận CHỈ NHẬN SÁCH, KHÔNG NHẬN KHOAI
+      // Thêm cuốn sách vào mục "Sách được tặng" trong Tủ sách của người nhận
+      const giftedItem = {
+        id: String(book.id),
+        title: book.title,
+        author: authorName,
+        chapter: `Tặng bởi ${currentSender === 'guest' ? 'bạn bè' : currentSender}`,
+        coverImage: (book as any).img_url || '',
+        img_url: (book as any).img_url || '',
+        giftedBy: currentSender,
+        giftedTo: verifiedRecipient.name,
+        recipientId: verifiedRecipient.id,
+        message: giftMessage.trim(),
+        giftedAt: new Date().toISOString(),
+      };
+
+      // Lưu vào danh sách sách tặng của người nhận theo nhiều khóa để khi người nhận đăng nhập tài khoản nào cũng thấy
+      const targetKeys: string[] = [
+        verifiedRecipient.id,
+        verifiedRecipient.customerId,
+        verifiedRecipient.username,
+        (verifiedRecipient.id || '').replace(/^(id#|#|id)/i, ''),
+      ].filter((k): k is string => Boolean(k && k.trim()));
+
+      for (const tKey of targetKeys) {
+        const storageKey = `${KEY_GIFTED_BOOKS}_${tKey.toLowerCase()}`;
+        const existingRaw = await AsyncStorage.getItem(storageKey);
+        let list: any[] = [];
+        if (existingRaw) {
+          try {
+            list = JSON.parse(existingRaw);
+            if (!Array.isArray(list)) list = [];
+          } catch { }
+        }
+        list = [giftedItem, ...list.filter((b) => String(b.id) !== String(book.id))];
+        await AsyncStorage.setItem(storageKey, JSON.stringify(list));
+      }
+
+      // 5. Lưu vào lịch sử tặng sách của người gửi
+      const senderKey = `@halm_sent_gifts_v1_${currentSender}`;
+      const senderRaw = await AsyncStorage.getItem(senderKey);
+      let senderList: any[] = [];
+      if (senderRaw) {
+        try {
+          senderList = JSON.parse(senderRaw);
+          if (!Array.isArray(senderList)) senderList = [];
+        } catch { }
+      }
+      senderList = [giftedItem, ...senderList.filter((b) => String(b.id) !== String(book.id))];
+      await AsyncStorage.setItem(senderKey, JSON.stringify(senderList));
+
+      // 6. [GIẢI THÍCH CODE]: Tự động gửi thông báo cho cả Người gửi và Người nhận
+      try {
+        // Thông báo cho Người gửi
+        await addNotification(
+          {
+            type: 'gift_sent',
+            title: lang === 'en' ? 'Gift Sent Successfully! 🎁' : 'Tặng sách thành công! 🎁',
+            message:
+              lang === 'en'
+                ? `You have gifted "${book.title}" to ${verifiedRecipient.name} (-10 Potatoes).`
+                : `Bạn đã tặng cuốn sách "${book.title}" cho bạn bè (${verifiedRecipient.name}) kèm lời nhắn: "${giftMessage.trim() || 'Chúc bạn đọc sách vui vẻ!'}". (-10 🥔)`,
+            data: {
+              bookId: String(book.id),
+              bookTitle: book.title,
+              recipientName: verifiedRecipient.name,
+              giftMessage: giftMessage.trim(),
+              potatoAmount: 10,
+            },
+          },
+          currentSender
+        );
+
+        // Thông báo cho Người nhận
+        const recipientUser = verifiedRecipient.username || verifiedRecipient.id;
+        if (recipientUser) {
+          await addNotification(
+            {
+              type: 'gift_received',
+              title: lang === 'en' ? 'You Received a Gift Book! 🎁' : 'Bạn vừa nhận được một cuốn sách mới! 🎁',
+              message:
+                lang === 'en'
+                  ? `${currentSender} just gifted the book "${book.title}" to you. Go to your bookshelf to enjoy it now!`
+                  : `Bạn ${currentSender} vừa tặng sách ${book.title} cho bạn. Hãy vào tủ sách của bạn để thưởng thức ngay!`,
+              data: {
+                bookId: String(book.id),
+                bookTitle: book.title,
+                senderName: currentSender,
+                giftMessage: giftMessage.trim(),
+              },
+            },
+            recipientUser
+          );
+        }
+      } catch (errNotif) {
+        console.warn('Lỗi ghi thông báo tặng sách:', errNotif);
+      }
+
+      setIsSendingGift(false);
+      setIsGiftModalVisible(false);
+      setVerifiedRecipient(null);
+      setGiftMessage('');
+
+      Alert.alert(
+        lang === 'en' ? 'Gift Sent Successfully! 🎉' : 'Tặng sách thành công! 🎉',
+        lang === 'en'
+          ? `Book "${book.title}" has been gifted to ${verifiedRecipient.name} (-10 Potatoes). Remaining balance: ${nextBalance} 🥔.`
+          : `Cuốn sách "${book.title}" đã được tặng cho ${verifiedRecipient.name} thành công (-10 Khoai). Sách đã được chuyển vào mục Sách được tặng trong Tủ sách của bạn bè!`
+      );
+    } catch {
+      setIsSendingGift(false);
+      Alert.alert(
+        lang === 'en' ? 'Error' : 'Lỗi',
+        lang === 'en' ? 'Could not complete book gifting.' : 'Không thể thực hiện tặng sách lúc này.'
+      );
+    }
+  };
+
   const handleContinueReading = () => {
     onStartReading(savedChapter ? Math.max(0, savedChapter.chapterNum - 1) : 0);
   };
@@ -378,7 +513,7 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
       />
 
       {/* HIỆU ỨNG BẦU TRỜI SAO VÀ SAO BĂNG ĐỒNG BỘ TRANG CHỦ APP */}
-      <DarkModeBackgroundEffects visible={isDarkMode} />
+      <CosmicBackground visible={isDarkMode} />
 
 
       {/* Header Điều Hướng */}
@@ -391,7 +526,7 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
         </Text>
         <TouchableOpacity
           style={themeStyles.iconButton}
-          onPress={() => setIsLiked(!isLiked)}
+          onPress={handleToggleFavorite}
           activeOpacity={0.8}
         >
           <Heart
@@ -465,6 +600,15 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
                 <Text style={themeStyles.statBadgeChaptersText}>{chapterDisplay}</Text>
               </View>
             </View>
+
+            {/* Nút / Icon Hộp Quà (CHỈ ICON, KHÔNG CHỮ) */}
+            <TouchableOpacity
+              style={themeStyles.giftIconOnlyBtn}
+              onPress={handleOpenIdPrompt}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="gift" size={18} color="#ffffff" />
+            </TouchableOpacity>
 
             {/* GIỚI THIỆU SÁCH RÚT GỌN (CHỈ HIỂN THỊ KHI CÓ DỮ LIỆU) */}
             {shortIntro.trim().length > 0 && (
@@ -648,6 +792,286 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
         {/* Khoảng cách đáy */}
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* ============================================================================
+          [GIẢI THÍCH CODE]: Modal 1 - Nhập ID người nhận (xem tại Trang cá nhân)
+          Nếu ID sai -> hiển thị thông báo "Người dùng không tồn tại"
+          Nếu ID đúng -> chuyển sang Modal 2 tặng sách cho bạn bè
+          ============================================================================ */}
+      <Modal
+        visible={isIdPromptVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setIsIdPromptVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={themeStyles.promptBackdrop}
+        >
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setIsIdPromptVisible(false)}
+          />
+          <View style={themeStyles.promptCard}>
+            <View style={themeStyles.promptHeaderRow}>
+              <View style={themeStyles.promptIconBadge}>
+                <Ionicons name="gift" size={18} color="#ffffff" />
+              </View>
+              <Text style={themeStyles.promptTitle}>
+                {lang === 'en' ? 'Gift Book to Friends' : 'Tặng sách cho bạn bè'}
+              </Text>
+            </View>
+
+            <Text style={themeStyles.promptSubtitle}>
+              {lang === 'en'
+                ? 'Enter recipient ID (found in their Profile screen):'
+                : 'Vui lòng nhập ID người nhận (hiển thị trong Trang cá nhân):'}
+            </Text>
+
+            <View style={themeStyles.promptInputWrapper}>
+              <Ionicons
+                name="person-outline"
+                size={18}
+                color={isDarkMode ? '#8A8780' : '#94a3b8'}
+                style={{ marginRight: 8 }}
+              />
+              <TextInput
+                style={themeStyles.promptInput}
+                placeholder={lang === 'en' ? 'e.g. id#C00001, C00007...' : 'Ví dụ: id#C00001, C00007...'}
+                placeholderTextColor={isDarkMode ? '#6B7280' : '#94a3b8'}
+                value={recipientInputId}
+                onChangeText={(text) => {
+                  setRecipientInputId(text);
+                  if (idErrorMsg) setIdErrorMsg('');
+                }}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+
+            {idErrorMsg ? (
+              <View style={themeStyles.errorRow}>
+                <Ionicons name="alert-circle" size={14} color="#ef4444" />
+                <Text style={themeStyles.errorText}>{idErrorMsg}</Text>
+              </View>
+            ) : null}
+
+            <View style={themeStyles.promptActionsRow}>
+              <TouchableOpacity
+                style={themeStyles.promptCancelBtn}
+                onPress={() => setIsIdPromptVisible(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={themeStyles.promptCancelBtnText}>
+                  {lang === 'en' ? 'Cancel' : 'Hủy'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[themeStyles.promptConfirmBtn, isCheckingId && { opacity: 0.7 }]}
+                onPress={handleConfirmRecipientId}
+                disabled={isCheckingId}
+                activeOpacity={0.8}
+              >
+                {isCheckingId ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={themeStyles.promptConfirmBtnText}>
+                    {lang === 'en' ? 'Confirm' : 'Xác nhận'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ============================================================================
+          [GIẢI THÍCH CODE]: Modal 2 - Màn Thông Tin Tặng Sách Cho Bạn Bè
+          Hiển thị: Tên sách, Tác giả, Ảnh sách, Tên người nhận theo ID đã xác thực, Lời nhắn gửi tặng
+          ============================================================================ */}
+      <Modal
+        visible={isGiftModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setIsGiftModalVisible(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={themeStyles.modalBackdrop}
+        >
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setIsGiftModalVisible(false)}
+          />
+          <View style={themeStyles.modalCard}>
+            {/* Thanh kéo nhỏ phía trên cùng của modal sheet */}
+            <View style={themeStyles.modalDragHandle} />
+
+            {/* Phía trên: Tiêu đề Tặng sách cho bạn bè */}
+            <View style={themeStyles.modalHeaderRow}>
+              <View style={themeStyles.modalHeaderTitleGroup}>
+                <View style={themeStyles.modalHeaderIconBadge}>
+                  <Ionicons name="gift" size={17} color="#ffffff" />
+                </View>
+                <View>
+                  <Text style={themeStyles.modalHeaderTitle}>
+                    {lang === 'en' ? 'Gift Book to Friends' : 'Tặng sách cho bạn bè'}
+                  </Text>
+                  <Text style={themeStyles.modalHeaderSubtitle}>
+                    {lang === 'en' ? 'Share knowledge & reading joy' : 'Gửi trọn tri thức và niềm vui đọc sách'}
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={themeStyles.modalCloseBtn}
+                onPress={() => setIsGiftModalVisible(false)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="close" size={20} color={isDarkMode ? '#A6A29A' : '#64748b'} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              style={{ maxHeight: height * 0.68 }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {/* Phía dưới: Ảnh sách được tặng, Tên sách và Tác giả */}
+              <View style={themeStyles.giftBookPreviewCard}>
+                <View style={themeStyles.giftBookCoverThumb}>
+                  {(() => {
+                    const coverSource = getBookCoverSource(book.id, (book as any).img_url);
+                    return coverSource ? (
+                      <Image source={coverSource} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                    ) : (
+                      <View style={themeStyles.giftBookCoverFallback}>
+                        <BookOpen size={20} color="#ffffff" />
+                      </View>
+                    );
+                  })()}
+                </View>
+                <View style={themeStyles.giftBookInfoCol}>
+                  <Text style={themeStyles.giftBookLabel}>
+                    {lang === 'en' ? 'GIFTED BOOK' : 'SÁCH ĐƯỢC TẶNG'}
+                  </Text>
+                  <Text style={themeStyles.giftBookTitle} numberOfLines={2}>
+                    {book.title}
+                  </Text>
+                  <Text style={themeStyles.giftBookAuthor} numberOfLines={1}>
+                    {lang === 'en' ? 'Author: ' : 'Tác giả: '}
+                    <Text style={themeStyles.giftBookAuthorBold}>{authorName}</Text>
+                  </Text>
+                  <View style={themeStyles.giftBookTagPill}>
+                    <Text style={themeStyles.giftBookTagText} numberOfLines={1}>
+                      {categoryName}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Phía dưới nữa: Thông tin người nhận theo ID đã xác thực */}
+              <View style={themeStyles.recipientSection}>
+                <View style={themeStyles.recipientSectionHeader}>
+                  <Ionicons
+                    name="person-circle-outline"
+                    size={19}
+                    color={isDarkMode ? '#F3DA7A' : '#d97706'}
+                  />
+                  <Text style={themeStyles.recipientSectionTitle}>
+                    {lang === 'en' ? 'Recipient Information' : 'Thông tin người nhận'}
+                  </Text>
+                </View>
+
+                {/* Thẻ người nhận: hiển thị tên theo ID */}
+                <View style={themeStyles.verifiedRecipientCard}>
+                  <View style={themeStyles.verifiedRecipientIcon}>
+                    <Ionicons name="person" size={18} color="#ffffff" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={themeStyles.verifiedRecipientLabel}>
+                      {lang === 'en' ? 'Recipient' : 'Người nhận'}
+                    </Text>
+                    <Text style={themeStyles.verifiedRecipientName}>
+                      {verifiedRecipient?.name || 'Độc giả'}
+                    </Text>
+                    <Text style={themeStyles.verifiedRecipientId}>
+                      ID: {verifiedRecipient?.id || verifiedRecipient?.customerId || recipientInputId}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Lời nhắn gửi tặng */}
+                <View style={themeStyles.inputGroup}>
+                  <Text style={themeStyles.inputLabel}>
+                    {lang === 'en' ? 'Gift Message' : 'Lời nhắn gửi tặng'}
+                  </Text>
+                  <TextInput
+                    style={[themeStyles.textInput, themeStyles.textArea]}
+                    placeholder={
+                      lang === 'en'
+                        ? 'Write a warm message...'
+                        : 'Chúc bạn đọc sách thật nhiều cảm hứng và niềm vui!...'
+                    }
+                    placeholderTextColor={isDarkMode ? '#6B7280' : '#94a3b8'}
+                    value={giftMessage}
+                    onChangeText={setGiftMessage}
+                    multiline={true}
+                    numberOfLines={3}
+                    textAlignVertical="top"
+                  />
+                </View>
+
+                {/* Bảng thông tin chi phí trừ 10 khoai */}
+                <View style={themeStyles.costInfoRow}>
+                  <View style={themeStyles.costLeft}>
+                    <Text style={themeStyles.costLabel}>
+                      {lang === 'en' ? 'Gifting fee:' : 'Phí tặng sách:'}
+                    </Text>
+                    <Text style={themeStyles.costValue}>10 Khoai 🥔</Text>
+                  </View>
+                  <Text style={themeStyles.balanceHint}>
+                    {lang === 'en' ? `Balance: ${potatoBalance} 🥔` : `Số dư: ${potatoBalance} 🥔`}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Nhóm nút hành động: Hủy & Xác nhận tặng sách */}
+              <View style={themeStyles.modalActionRow}>
+                <TouchableOpacity
+                  style={themeStyles.modalCancelBtn}
+                  onPress={() => setIsGiftModalVisible(false)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={themeStyles.modalCancelBtnText}>
+                    {lang === 'en' ? 'Cancel' : 'Hủy'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[themeStyles.modalConfirmBtn, isSendingGift && { opacity: 0.7 }]}
+                  onPress={handleConfirmSendGift}
+                  disabled={isSendingGift}
+                  activeOpacity={0.85}
+                >
+                  {isSendingGift ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                  ) : (
+                    <>
+                      <Ionicons name="gift" size={16} color="#ffffff" />
+                      <Text style={themeStyles.modalConfirmBtnText}>
+                        {lang === 'en' ? 'Gift (10 🥔)' : 'Tặng sách (10 Khoai 🥔)'}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1098,6 +1522,418 @@ function getThemedStyles(isDarkMode: boolean) {
       fontSize: 13,
       color: isDarkMode ? '#A6A29A' : '#64748b',
       fontStyle: 'italic',
+    },
+
+    // Nút / Icon Hộp Quà (CHỈ ICON, KHÔNG CHỮ)
+    giftIconOnlyBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: isDarkMode ? '#E8656F' : '#e11d48',
+      justifyContent: 'center',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      marginBottom: 8,
+      shadowColor: '#E8656F',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.35,
+      shadowRadius: 4,
+      elevation: 3,
+    },
+
+    // Modal 1: Nhập ID người nhận
+    promptBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.65)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+    },
+    promptCard: {
+      width: '100%',
+      maxWidth: 360,
+      backgroundColor: isDarkMode ? '#1e222b' : '#ffffff',
+      borderRadius: 20,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: isDarkMode ? '#2d3340' : '#e2e8f0',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.3,
+      shadowRadius: 10,
+      elevation: 8,
+    },
+    promptHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 10,
+    },
+    promptIconBadge: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      backgroundColor: isDarkMode ? '#E8656F' : '#e11d48',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    promptTitle: {
+      fontSize: 16.5,
+      fontWeight: '800',
+      color: isDarkMode ? '#EDE9DF' : '#0f172a',
+    },
+    promptSubtitle: {
+      fontSize: 12.5,
+      color: isDarkMode ? '#A6A29A' : '#64748b',
+      marginBottom: 14,
+      lineHeight: 18,
+    },
+    promptInputWrapper: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: isDarkMode ? '#14171d' : '#f8fafc',
+      borderWidth: 1,
+      borderColor: isDarkMode ? '#333a48' : '#cbd5e1',
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: Platform.OS === 'ios' ? 10 : 7,
+    },
+    promptInput: {
+      flex: 1,
+      fontSize: 13.5,
+      color: isDarkMode ? '#EDE9DF' : '#0f172a',
+    },
+    errorRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      marginTop: 8,
+    },
+    errorText: {
+      fontSize: 12,
+      color: '#ef4444',
+      fontWeight: '600',
+    },
+    promptActionsRow: {
+      flexDirection: 'row',
+      gap: 10,
+      marginTop: 18,
+    },
+    promptCancelBtn: {
+      flex: 1,
+      paddingVertical: 10,
+      borderRadius: 10,
+      backgroundColor: isDarkMode ? '#282d38' : '#f1f5f9',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: isDarkMode ? '#333842' : '#e2e8f0',
+    },
+    promptCancelBtnText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: isDarkMode ? '#A6A29A' : '#64748b',
+    },
+    promptConfirmBtn: {
+      flex: 1,
+      paddingVertical: 10,
+      borderRadius: 10,
+      backgroundColor: isDarkMode ? '#E8656F' : '#e11d48',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    promptConfirmBtnText: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: '#ffffff',
+    },
+
+    // Modal 2: Tặng Sách Cho Bạn Bè
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.65)',
+      justifyContent: 'flex-end',
+    },
+    modalCard: {
+      backgroundColor: isDarkMode ? '#1a1d24' : '#ffffff',
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      paddingHorizontal: 20,
+      paddingTop: 12,
+      paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+      borderWidth: 1,
+      borderColor: isDarkMode ? '#2d323e' : '#e2e8f0',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: -4 },
+      shadowOpacity: 0.25,
+      shadowRadius: 12,
+      elevation: 10,
+    },
+    modalDragHandle: {
+      width: 38,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: isDarkMode ? '#3f4452' : '#cbd5e1',
+      alignSelf: 'center',
+      marginBottom: 12,
+    },
+    modalHeaderRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 14,
+      paddingBottom: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: isDarkMode ? '#282c37' : '#f1f5f9',
+    },
+    modalHeaderTitleGroup: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    modalHeaderIconBadge: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      backgroundColor: isDarkMode ? '#E8656F' : '#e11d48',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    modalHeaderTitle: {
+      fontSize: 16.5,
+      fontWeight: '800',
+      color: isDarkMode ? '#EDE9DF' : '#0f172a',
+    },
+    modalHeaderSubtitle: {
+      fontSize: 11,
+      color: isDarkMode ? '#8A8780' : '#64748b',
+      marginTop: 1,
+    },
+    modalCloseBtn: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: isDarkMode ? '#252933' : '#f1f5f9',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+
+    // Thẻ Sách Được Tặng (Ảnh, Tên, Tác Giả)
+    giftBookPreviewCard: {
+      flexDirection: 'row',
+      backgroundColor: isDarkMode ? '#20242D' : '#f8fafc',
+      borderRadius: 14,
+      padding: 12,
+      marginBottom: 14,
+      borderWidth: 1,
+      borderColor: isDarkMode ? '#2d323e' : '#e2e8f0',
+      alignItems: 'center',
+      gap: 12,
+    },
+    giftBookCoverThumb: {
+      width: 62,
+      height: 86,
+      borderRadius: 8,
+      overflow: 'hidden',
+      backgroundColor: '#3b7a6d',
+    },
+    giftBookCoverFallback: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: '#3b7a6d',
+    },
+    giftBookInfoCol: {
+      flex: 1,
+    },
+    giftBookLabel: {
+      fontSize: 9.5,
+      fontWeight: '800',
+      color: isDarkMode ? '#F3DA7A' : '#b45309',
+      letterSpacing: 0.8,
+      marginBottom: 2,
+    },
+    giftBookTitle: {
+      fontSize: 14.5,
+      fontWeight: '800',
+      color: isDarkMode ? '#EDE9DF' : '#0f172a',
+      marginBottom: 3,
+      lineHeight: 19,
+    },
+    giftBookAuthor: {
+      fontSize: 12,
+      color: isDarkMode ? '#A6A29A' : '#64748b',
+      marginBottom: 6,
+    },
+    giftBookAuthorBold: {
+      fontWeight: '700',
+      color: isDarkMode ? '#EDE9DF' : '#1e293b',
+    },
+    giftBookTagPill: {
+      alignSelf: 'flex-start',
+      paddingHorizontal: 7,
+      paddingVertical: 2.5,
+      borderRadius: 6,
+      backgroundColor: isDarkMode ? 'rgba(212, 175, 55, 0.15)' : '#e6f4f1',
+    },
+    giftBookTagText: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: isDarkMode ? '#F3DA7A' : '#2a6b5c',
+    },
+
+    // Phần Thông Tin Người Nhận
+    recipientSection: {
+      backgroundColor: isDarkMode ? '#20242D' : '#ffffff',
+      borderRadius: 14,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: isDarkMode ? '#2d323e' : '#e2e8f0',
+      marginBottom: 14,
+    },
+    recipientSectionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 12,
+    },
+    recipientSectionTitle: {
+      fontSize: 13.5,
+      fontWeight: '800',
+      color: isDarkMode ? '#EDE9DF' : '#0f172a',
+    },
+
+    // Thẻ Người Nhận Đã Xác Thực
+    verifiedRecipientCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: isDarkMode ? '#14171d' : '#f1f5f9',
+      borderRadius: 12,
+      padding: 12,
+      marginBottom: 14,
+      gap: 10,
+      borderWidth: 1,
+      borderColor: isDarkMode ? '#2d3340' : '#e2e8f0',
+    },
+    verifiedRecipientIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: isDarkMode ? '#D4AF37' : '#d97706',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    verifiedRecipientLabel: {
+      fontSize: 11,
+      color: isDarkMode ? '#8A8780' : '#64748b',
+      fontWeight: '600',
+    },
+    verifiedRecipientName: {
+      fontSize: 14.5,
+      fontWeight: '800',
+      color: isDarkMode ? '#EDE9DF' : '#0f172a',
+    },
+    verifiedRecipientId: {
+      fontSize: 11.5,
+      color: isDarkMode ? '#F3DA7A' : '#b45309',
+      fontWeight: '700',
+      marginTop: 1,
+    },
+
+    // Chi Phí Tặng Sách & Số Dư
+    costInfoRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      backgroundColor: isDarkMode ? 'rgba(212, 175, 55, 0.12)' : '#fef3c7',
+      borderRadius: 10,
+      marginBottom: 6,
+      borderWidth: 1,
+      borderColor: isDarkMode ? 'rgba(212, 175, 55, 0.25)' : '#fde68a',
+    },
+    costLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    costLabel: {
+      fontSize: 12.5,
+      fontWeight: '700',
+      color: isDarkMode ? '#F3DA7A' : '#92400e',
+    },
+    costValue: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: isDarkMode ? '#F3DA7A' : '#92400e',
+    },
+    balanceHint: {
+      fontSize: 11.5,
+      color: isDarkMode ? '#D1CEBF' : '#78350f',
+      fontWeight: '600',
+    },
+
+    inputGroup: {
+      marginBottom: 11,
+    },
+    inputLabel: {
+      fontSize: 11.5,
+      fontWeight: '700',
+      color: isDarkMode ? '#D1CEBF' : '#475569',
+      marginBottom: 5,
+    },
+    textInput: {
+      backgroundColor: isDarkMode ? '#16181B' : '#f8fafc',
+      borderWidth: 1,
+      borderColor: isDarkMode ? '#333842' : '#cbd5e1',
+      borderRadius: 9,
+      paddingHorizontal: 12,
+      paddingVertical: 8.5,
+      fontSize: 13,
+      color: isDarkMode ? '#EDE9DF' : '#0f172a',
+    },
+    textArea: {
+      height: 68,
+      paddingTop: 8,
+    },
+
+    // Nút Hành Động Modal
+    modalActionRow: {
+      flexDirection: 'row',
+      gap: 10,
+      marginTop: 4,
+      marginBottom: 6,
+    },
+    modalCancelBtn: {
+      flex: 1,
+      paddingVertical: 11,
+      borderRadius: 11,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isDarkMode ? '#252933' : '#f1f5f9',
+      borderWidth: 1,
+      borderColor: isDarkMode ? '#333842' : '#e2e8f0',
+    },
+    modalCancelBtnText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: isDarkMode ? '#A6A29A' : '#64748b',
+    },
+    modalConfirmBtn: {
+      flex: 2,
+      flexDirection: 'row',
+      paddingVertical: 11,
+      borderRadius: 11,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isDarkMode ? '#E8656F' : '#e11d48',
+      gap: 6,
+    },
+    modalConfirmBtnText: {
+      fontSize: 13.5,
+      fontWeight: '800',
+      color: '#ffffff',
     },
   });
 }

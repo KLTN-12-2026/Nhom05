@@ -15,20 +15,7 @@ import { useAppNavigation, useAppThemeStyles } from './navigation';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { getBookCoverSource } from './bookCovers';
 import { getBookChapterLabel } from './bookContentService';
-import axios from 'axios';
-import Constants from 'expo-constants';
-
-const debuggerHost = Constants.expoConfig?.hostUri;
-const localhost = debuggerHost ? debuggerHost.split(':')[0] : 'localhost';
-const API_BASE_URL = `http://${localhost}:8082`;
-
-const CANDIDATE_API_URLS = [
-  API_BASE_URL,
-  'http://localhost:8082',
-  'http://127.0.0.1:8082',
-  'http://192.168.1.165:8082',
-  'http://10.0.2.2:8082',
-];
+import { fetchApiWithFallback } from './apiService';
 
 const ICONS = {
   'filter-outline': '☷',
@@ -69,39 +56,37 @@ export default function TheLoai() {
     let isMounted = true;
     const fetchBooks = async () => {
       setIsLoading(true);
-      for (const baseUrl of CANDIDATE_API_URLS) {
-        try {
-          const res = await axios.get(`${baseUrl}/api/home/books`, {
-            params: { page: 0, size: 50 },
-            timeout: 6000,
-          });
-          const raw = res.data;
-          const list = Array.isArray(raw)
-            ? raw
-            : Array.isArray(raw?.content)
-              ? raw.content
-              : Array.isArray(raw?.data)
-                ? raw.data
-                : [];
-          if (isMounted) {
-            const mapped = list.map((item: any, idx: number) => ({
-              id: String(item.book_id || item.id || `book-${idx}`),
-              title: String(item.bookName || item.title || 'Chưa có tiêu đề'),
-              author: item.author || 'HALM BOOK',
-              chapter: getBookChapterLabel({ ...item, id: String(item.book_id || item.id || `book-${idx}`), title: String(item.bookName || item.title || '') }),
-              img_url: item.img_url || item.img,
-              category_name: item.category_name || item.tag || 'Sách hay',
-              category_id: item.category_id,
-              price: item.rent_price !== undefined ? item.rent_price : item.price,
-              description: item.description || item.desc || '',
-            }));
-            setBooks(mapped);
-            setIsLoading(false);
-            return;
-          }
-        } catch {
-          // Thử tiếp candidate khác
+      try {
+        const res = await fetchApiWithFallback('/api/home/books', {
+          params: { page: 0, size: 50 },
+          timeout: 4000,
+        });
+        const raw = res.data;
+        const list = Array.isArray(raw)
+          ? raw
+          : Array.isArray(raw?.content)
+            ? raw.content
+            : Array.isArray(raw?.data)
+              ? raw.data
+              : [];
+        if (isMounted) {
+          const mapped = list.map((item: any, idx: number) => ({
+            id: String(item.book_id || item.id || `book-${idx}`),
+            title: String(item.bookName || item.title || 'Chưa có tiêu đề'),
+            author: item.author || 'HALM BOOK',
+            chapter: getBookChapterLabel({ ...item, id: String(item.book_id || item.id || `book-${idx}`), title: String(item.bookName || item.title || '') }),
+            img_url: item.img_url || item.img,
+            category_name: item.category_name || item.tag || 'Sách hay',
+            category_id: item.category_id,
+            price: item.rent_price !== undefined ? item.rent_price : item.price,
+            description: item.description || item.desc || '',
+          }));
+          setBooks(mapped);
+          setIsLoading(false);
+          return;
         }
+      } catch {
+        // Thử tiếp
       }
       if (isMounted) setIsLoading(false);
     };
@@ -141,13 +126,8 @@ export default function TheLoai() {
       
       {/* Header */}
       <View style={themeStyles.header}>
-<<<<<<< HEAD
-        <View style={{ width: 24 }} /> {/* Spacer */}
-        <Text style={themeStyles.headerTitle}>{lang === 'en' ? 'Book List' : 'Danh Sách Truyện'}</Text>
-=======
         <View style={{ width: 24 }} />
-        <Text style={themeStyles.headerTitle}>Kho Sách Thư Viện</Text>
->>>>>>> origin/main
+        <Text style={themeStyles.headerTitle}>{lang === 'en' ? 'Book List' : 'Kho Sách Thư Viện'}</Text>
         <TouchableOpacity onPress={() => setFilterVisible(true)}>
           <Icon name="filter-outline" size={24} color="#1a1a1a" />
         </TouchableOpacity>
@@ -169,21 +149,7 @@ export default function TheLoai() {
       </View>
 
       <ScrollView style={themeStyles.scrollView} showsVerticalScrollIndicator={false}>
-<<<<<<< HEAD
-        
-        {/* Top truyện lướt ngang nổi bật của chuyên mục */}
-        <View style={themeStyles.topHighlightSection}>
-          <Text style={themeStyles.sectionTitle}>{lang === 'en' ? '🔥 Featured Today' : '🔥 Đề Cử Hôm Nay'}</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 15 }}>
-            {NOVELS.slice(0, 4).map((n, i) => (
-              <TouchableOpacity key={i} style={themeStyles.highlightCard} onPress={() => navigate('bookDetail', { id: n.id, title: n.title, chapter: n.chapter })}>
-                <View style={themeStyles.highlightCover}><Text style={themeStyles.mockText}>Ảnh</Text></View>
-                <Text style={themeStyles.highlightTitle} numberOfLines={2}>{n.title}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-=======
+
         {isLoading ? (
           <ActivityIndicator size="small" color="#5a8b82" style={{ marginTop: 40 }} />
         ) : filteredBooks.length === 0 ? (
@@ -217,7 +183,7 @@ export default function TheLoai() {
                 })}
               </ScrollView>
             </View>
->>>>>>> origin/main
+
 
             {/* Danh Sách Tác Phẩm Dạng Lưới (Grid) */}
             <View style={themeStyles.gridContainer}>
@@ -254,11 +220,7 @@ export default function TheLoai() {
               <View style={themeStyles.sheetHandle} />
             </View>
             
-<<<<<<< HEAD
-            <Text style={themeStyles.sheetTitle}>{lang === 'en' ? 'Filter Books' : 'Lọc truyện'}</Text>
-=======
-            <Text style={themeStyles.sheetTitle}>Lọc tác phẩm</Text>
->>>>>>> origin/main
+            <Text style={themeStyles.sheetTitle}>{lang === 'en' ? 'Filter Books' : 'Lọc tác phẩm'}</Text>
 
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
               {/* Trạng thái */}
@@ -312,17 +274,10 @@ export default function TheLoai() {
 
             <View style={themeStyles.sheetActions}>
               <TouchableOpacity style={themeStyles.cancelBtn} onPress={() => setFilterVisible(false)}>
-<<<<<<< HEAD
-                <Text style={themeStyles.cancelBtnText}>{lang === 'en' ? 'Cancel' : 'Hủy'}</Text>
+                <Text style={themeStyles.cancelBtnText}>{lang === 'en' ? 'Close' : 'Đóng'}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={themeStyles.confirmBtn} onPress={() => setFilterVisible(false)}>
-                <Text style={themeStyles.confirmBtnText}>{lang === 'en' ? 'Confirm' : 'Xác nhận'}</Text>
-=======
-                <Text style={themeStyles.cancelBtnText}>Đóng</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={themeStyles.confirmBtn} onPress={() => setFilterVisible(false)}>
-                <Text style={themeStyles.confirmBtnText}>Áp dụng</Text>
->>>>>>> origin/main
+                <Text style={themeStyles.confirmBtnText}>{lang === 'en' ? 'Apply' : 'Áp dụng'}</Text>
               </TouchableOpacity>
             </View>
           </View>

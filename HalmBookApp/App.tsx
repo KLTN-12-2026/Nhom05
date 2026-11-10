@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
 import { BlurTargetView } from 'expo-blur';
-import { ComponentRef, ComponentType, useEffect, useRef, useState } from 'react';
+import { ComponentRef, ComponentType, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, BackHandler, Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import ChatBotScreen, { ChatMessage } from './src/ux-ui/chatbot';
@@ -15,12 +16,17 @@ import { AppLanguage, AppScreen, BookData, NavigationContext } from './src/ux-ui
 import ThanhToan from './src/ux-ui/PTThanhtoan';
 import SharedHeader from './src/ux-ui/sharedheader';
 import TheLoai from './src/ux-ui/theloai';
+import ThongBaoScreen from './src/ux-ui/thongbao';
 import TimKiem from './src/ux-ui/timkiem';
 import TrangCaNhan from './src/ux-ui/trangcanhan';
 import TrangChu from './src/ux-ui/trangchu';
 import TuSach from './src/ux-ui/tusach';
 import UploadFile from './src/ux-ui/uploadfile';
 import UuDai from './src/ux-ui/uudai';
+import AuthRequiredModal from './src/ux-ui/AuthRequiredModal';
+import { API_BASE_URL } from './src/ux-ui/apiService';
+import { addToReadingList } from './src/ux-ui/readingHistory';
+import { clearLegacyBookshelfKeys } from './src/ux-ui/userStorage';
 
 interface ScreenRoute {
   name: AppScreen;
@@ -29,8 +35,6 @@ interface ScreenRoute {
 
 const SCREENS_WITH_SHARED_HEADER: AppScreen[] = [
   'offers',
-  'upload',
-  'bookshelf',
   'categories',
   'search',
   'transactions',
@@ -63,7 +67,7 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isFooterVisible, setIsFooterVisible] = useState(true);
   const [homeRefreshKey, setHomeRefreshKey] = useState(0);
-<<<<<<< HEAD
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   // [GIẢI THÍCH CODE]: Quản lý ảnh đại diện & chữ cái đầu đồng bộ cho các màn được chỉ định
   const [userAvatarUrl, setUserAvatarUrl] = useState<string>('');
   const [userInitial, setUserInitial] = useState<string>('H');
@@ -79,10 +83,10 @@ export default function App() {
     }).catch(() => {});
   }, []);
 
-  const setLang = (newLang: AppLanguage) => {
+  const setLang = useCallback((newLang: AppLanguage) => {
     setLangState(newLang);
     AsyncStorage.setItem('appLanguage', newLang).catch(() => {});
-  };
+  }, []);
 
   // ============================================================================
   // [GIẢI THÍCH CODE]: Quản lý bản thông báo yêu cầu đăng nhập
@@ -97,31 +101,24 @@ export default function App() {
     message: '',
   });
 
-  const showLoginAlert = (message: string) => {
+  const showLoginAlert = useCallback((message: string) => {
     setAuthModal({
       visible: true,
       message,
     });
-  };
+  }, []);
 
-  const closeAuthModal = () => {
+  const closeAuthModal = useCallback(() => {
     setAuthModal({ visible: false, message: '' });
-  };
-
-  const handleModalLoginPress = () => {
-    closeAuthModal();
-    // [GIẢI THÍCH CODE]: Nhấn "Đăng nhập ngay" -> chuyển sang màn hình đăng nhập
-    navigate('auth');
-  };
-=======
->>>>>>> origin/main
+  }, []);
 
   const blurTargetRef = useRef<ComponentRef<typeof View> | null>(null);
+  const [isChatLoading, setIsChatLoading] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
       sender: 'bot',
-      text: 'Xin chào! Mình là trợ lý HALM. Bạn cần hỗ trợ gì?',
+      text: 'Xin chào! Mình là HALM.AI - trợ lý ảo của HALM BOOK. Bạn có thể hỏi mình tìm sách, tư vấn tác phẩm hoặc giải đáp thắc mắc!',
       time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
     },
   ]);
@@ -147,6 +144,7 @@ export default function App() {
         // Nếu là reload trong cùng phiên làm việc (FE & BE vẫn đang chạy liên tục)
         const token = await AsyncStorage.getItem('userToken');
         if (token && isMounted) {
+          setIsLoggedIn(true);
           const savedRoutesStr = await AsyncStorage.getItem('savedRoutes');
           if (savedRoutesStr) {
             const parsed = JSON.parse(savedRoutesStr);
@@ -184,13 +182,14 @@ export default function App() {
   }, [routes, isReady]);
 
   const currentRoute = routes[routes.length - 1];
-  const activeTabRoute = [...routes].reverse().find((route) =>
-    PRIMARY_TABS.some((tab) => tab.id === route.name),
-  );
-  const activeNav = activeTabRoute?.name ?? 'home';
+  const activeNav = useMemo(() => {
+    const activeTabRoute = [...routes].reverse().find((route) =>
+      PRIMARY_TABS.some((tab) => tab.id === route.name),
+    );
+    return activeTabRoute?.name ?? 'home';
+  }, [routes]);
 
-  const navigate = (name: AppScreen, book?: BookData) => {
-<<<<<<< HEAD
+  const navigate = useCallback((name: AppScreen, book?: BookData) => {
     if (!isLoggedIn) {
       if (name === 'upload') {
         showLoginAlert(lang === 'en' ? 'Please log in to use upload file feature' : 'Bạn phải đăng nhập mới dùng được chức năng uploadfile');
@@ -213,14 +212,16 @@ export default function App() {
         return;
       }
     }
-=======
->>>>>>> origin/main
     setIsFooterVisible(true);
     setRoutes((current) => [...current, { name, book }]);
-  };
+  }, [isLoggedIn, lang, showLoginAlert]);
 
-  const navigateTab = (name: AppScreen) => {
-<<<<<<< HEAD
+  const handleModalLoginPress = useCallback(() => {
+    closeAuthModal();
+    navigate('auth');
+  }, [closeAuthModal, navigate]);
+
+  const navigateTab = useCallback((name: AppScreen) => {
     if (!isLoggedIn) {
       if (name === 'upload') {
         showLoginAlert(lang === 'en' ? 'Please log in to use upload file feature' : 'Bạn phải đăng nhập mới dùng được chức năng uploadfile');
@@ -239,27 +240,26 @@ export default function App() {
         return;
       }
     }
-=======
->>>>>>> origin/main
     setIsFooterVisible(true);
     setRoutes([{ name }]);
-  };
+  }, [isLoggedIn, lang, showLoginAlert]);
 
   const lastBackPressTime = useRef(0);
-  const goBack = () => {
+  const goBack = useCallback(() => {
     const now = Date.now();
     if (now - lastBackPressTime.current < 450) return;
     lastBackPressTime.current = now;
     setIsFooterVisible(true);
     setRoutes((current) => (current.length > 1 ? current.slice(0, -1) : current));
-  };
+  }, []);
 
-  const finishLogin = () => {
+  const finishLogin = useCallback(() => {
     setSessionActive(true);
+    setIsLoggedIn(true);
     const nextRoutes: ScreenRoute[] = [{ name: 'home' }];
     setRoutes(nextRoutes);
     AsyncStorage.setItem('savedRoutes', JSON.stringify(nextRoutes)).catch(() => {});
-  };
+  }, []);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -270,51 +270,153 @@ export default function App() {
     return () => subscription.remove();
   }, [routes.length]);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
-      setSessionActive(false);
-      await AsyncStorage.multiRemove(['userToken', 'userRole', 'savedRoutes']);
-      setRoutes([{ name: 'auth' }]);
+      await AsyncStorage.multiRemove([
+        'userToken',
+        'userRole',
+        'savedRoutes',
+        'userAvatarUrl',
+        'userInitial',
+        'currentUsername',
+      ]);
+      await clearLegacyBookshelfKeys();
+      setIsLoggedIn(false);
+      setUserAvatarUrl('');
+      setUserInitial('H');
+      setRoutes([{ name: 'home' }]);
     } catch {
       Alert.alert('Không thể đăng xuất', 'Đã xảy ra lỗi khi xóa thông tin đăng nhập.');
     }
-  };
+  }, []);
 
-  const sendChatMessage = (text: string) => {
-    const time = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  // ============================================================================
+  // [GIẢI THÍCH CODE]: Tích hợp Trợ lý AI (HALM.AI) qua API Backend: POST /api/chat
+  // - Gửi câu hỏi đến BE kèm token xác thực (nếu đã đăng nhập) hoặc dưới dạng khách (guest)
+  // - BE sẽ xử lý qua Spring AI (Gemini Flash + Tool tìm kiếm sách trong database)
+  // - Nhận câu trả lời thực tế từ HALM.AI và cập nhật vào danh sách tin nhắn
+  // ============================================================================
+  const sendChatMessage = async (text: string) => {
+    const userTime = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+    const userMsgId = `${Date.now()}-user`;
+
+    // 1. Thêm tin nhắn người dùng vào danh sách
     setChatMessages((current) => [
       ...current,
-      { id: `${Date.now()}-user`, sender: 'user', text, time },
+      { id: userMsgId, sender: 'user', text, time: userTime },
+    ]);
+
+    setIsChatLoading(true);
+
+    try {
+      // 2. Lấy token xác thực nếu có
+      const token = await AsyncStorage.getItem('userToken');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      // 3. Gửi yêu cầu đến API backend POST /api/chat
+      const response = await axios.post<{ reply: string }>(
+        `${API_BASE_URL}/api/chat`,
+        { message: text },
+        { headers, timeout: 45000 }
+      );
+
+      const botTime = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      const replyText = response.data?.reply || 'Mình đã nhận được tin nhắn của bạn.';
+
+      setChatMessages((current) => [
+        ...current,
+        {
+          id: `${Date.now()}-bot`,
+          sender: 'bot',
+          text: replyText,
+          time: botTime,
+        },
+      ]);
+    } catch (error: any) {
+      console.warn('Lỗi gọi API chat:', error);
+      const botTime = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+      let errorReply = 'Không thể kết nối đến máy chủ trợ lý HALM.AI. Vui lòng kiểm tra lại kết nối mạng hoặc thử lại sau.';
+      
+      if (error?.response?.data?.reply) {
+        errorReply = error.response.data.reply;
+      } else if (error?.code === 'ECONNABORTED' || error?.message?.includes('timeout')) {
+        errorReply = 'HALM.AI phản hồi quá lâu do mạng chậm. Bạn vui lòng thử lại nhé.';
+      }
+
+      setChatMessages((current) => [
+        ...current,
+        {
+          id: `${Date.now()}-bot`,
+          sender: 'bot',
+          text: errorReply,
+          time: botTime,
+        },
+      ]);
+    } finally {
+      setIsChatLoading(false);
+    }
+  };
+
+  const clearChatMessages = () => {
+    setChatMessages([
       {
-        id: `${Date.now()}-bot`,
+        id: 'welcome',
         sender: 'bot',
-        text: 'Mình đã nhận được tin nhắn. Tính năng trả lời tự động chưa được kết nối.',
-        time,
+        text: lang === 'en'
+          ? 'Hello! I am HALM.AI - the smart virtual assistant of HALM BOOK. How can I help you today?'
+          : 'Xin chào! Mình là HALM.AI - trợ lý ảo của HALM BOOK. Bạn có thể hỏi mình tìm sách, tư vấn tác phẩm hoặc giải đáp thắc mắc!',
+        time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
       },
     ]);
   };
 
-  const navigation = {
-    navigate,
-    navigateTab,
-    goBack,
-    logout,
-    isDarkMode,
-    isFooterVisible,
-    setFooterVisible: setIsFooterVisible,
-<<<<<<< HEAD
-    userAvatarUrl,
-    setUserAvatarUrl,
-    userInitial,
-    setUserInitial,
-    lang,
-    setLang,
-=======
->>>>>>> origin/main
-  };
-  const showSharedHeader = SCREENS_WITH_SHARED_HEADER.includes(currentRoute.name);
-  const toggleDarkMode = () => setIsDarkMode((current) => !current);
-  const refreshHome = () => setHomeRefreshKey((current) => current + 1);
+  const toggleDarkMode = useCallback(() => setIsDarkMode((current) => !current), []);
+  const refreshHome = useCallback(() => setHomeRefreshKey((current) => current + 1), []);
+
+  const navigation = useMemo(
+    () => ({
+      navigate,
+      navigateTab,
+      goBack,
+      logout,
+      isDarkMode,
+      isFooterVisible,
+      setFooterVisible: setIsFooterVisible,
+      isLoggedIn,
+      setIsLoggedIn,
+      showLoginAlert,
+      userAvatarUrl,
+      setUserAvatarUrl,
+      userInitial,
+      setUserInitial,
+      lang,
+      setLang,
+    }),
+    [
+      navigate,
+      navigateTab,
+      goBack,
+      logout,
+      isDarkMode,
+      isFooterVisible,
+      isLoggedIn,
+      showLoginAlert,
+      userAvatarUrl,
+      userInitial,
+      lang,
+      setLang,
+    ]
+  );
+
+  const showSharedHeader = useMemo(
+    () => SCREENS_WITH_SHARED_HEADER.includes(currentRoute.name),
+    [currentRoute.name]
+  );
 
   let screen;
   switch (currentRoute.name) {
@@ -341,7 +443,7 @@ export default function App() {
       screen = <UploadFile />;
       break;
     case 'bookshelf':
-      screen = <TuSach />;
+      screen = <TuSach key={`bookshelf_${isLoggedIn}_${userAvatarUrl}`} />;
       break;
     case 'profile':
       screen = <TrangCaNhan />;
@@ -364,12 +466,17 @@ export default function App() {
     case 'payment':
       screen = <ThanhToan />;
       break;
+    case 'notifications':
+      screen = <ThongBaoScreen onBack={goBack} />;
+      break;
     case 'chatbot':
       screen = (
         <ChatBotScreen
           messages={chatMessages}
+          isLoading={isChatLoading}
           onBack={goBack}
           onSendMessage={sendChatMessage}
+          onClearChat={clearChatMessages}
         />
       );
       break;
@@ -378,14 +485,24 @@ export default function App() {
         <BookDetailScreen
           book={currentRoute.book}
           onBack={goBack}
-          onStartReading={(initialChapterIndex) =>
+          onStartReading={(initialChapterIndex) => {
+            if (currentRoute.book) {
+              addToReadingList({
+                id: currentRoute.book.id,
+                title: currentRoute.book.title,
+                author: currentRoute.book.author,
+                chapter: currentRoute.book.chapter,
+                img_url: currentRoute.book.img_url,
+                coverImage: currentRoute.book.coverImage,
+              });
+            }
             navigate('reader', {
               ...currentRoute.book,
               id: currentRoute.book?.id || 'book-1',
               title: currentRoute.book?.title || 'Đọc sách',
               initialChapterIndex: typeof initialChapterIndex === 'number' ? initialChapterIndex : 0,
-            })
-          }
+            } as any);
+          }}
         />
       ) : null;
       break;
@@ -418,7 +535,7 @@ export default function App() {
             >
               {screen}
             </BlurTargetView>
-            {!['auth', 'reader', 'chatbot'].includes(currentRoute.name) && (
+            {!['auth', 'reader', 'chatbot', 'notifications'].includes(currentRoute.name) && (
               <Footer
                 activeNav={activeNav}
                 floating={currentRoute.name === 'home' || currentRoute.name === 'bookDetail'}
@@ -427,8 +544,6 @@ export default function App() {
             )}
           </View>
         )}
-<<<<<<< HEAD
-
         {/* ============================================================================
             [GIẢI THÍCH CODE]: BẢN THÔNG BÁO YÊU CẦU ĐĂNG NHẬP
             Hiển thị đè lên trên màn hình khi khách vãng lai nhấn uploadfile, trangcanhan,
@@ -442,8 +557,6 @@ export default function App() {
           isDarkMode={isDarkMode}
           lang={lang}
         />
-=======
->>>>>>> origin/main
       </NavigationContext.Provider>
     </SafeAreaProvider>
   );

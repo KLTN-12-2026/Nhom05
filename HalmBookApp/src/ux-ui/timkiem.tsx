@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useAppNavigation, useAppThemeStyles } from './navigation';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
+import { fetchFavoriteBooksFromApi, toggleFavoriteBook } from './favoriteService';
 
 type Book = {
   id: number;
@@ -76,14 +77,54 @@ const CATEGORIES = [
 
 export default function SearchScreen() {
   const themeStyles = useAppThemeStyles(styles);
-  const { navigate, goBack, isDarkMode, lang } = useAppNavigation();
+  const { navigate, goBack, isDarkMode, lang, isLoggedIn, showLoginAlert } = useAppNavigation();
   const [keyword, setKeyword] = useState("");
+  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const [recent, setRecent] = useState([
     "Nhà giả kim",
     "Đắc nhân tâm",
     "Sherlock Holmes",
     "Tiểu thuyết",
   ]);
+
+  useEffect(() => {
+    fetchFavoriteBooksFromApi()
+      .then((favs) => {
+        setFavoriteIds(favs.map((f) => String(f.id || f.bookId)));
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleToggleHeart = async (item: Book) => {
+    if (!isLoggedIn) {
+      showLoginAlert(
+        lang === 'en'
+          ? 'Please log in to add books to your Favorites and sync with Web!'
+          : 'Bạn phải đăng nhập để lưu sách yêu thích và đồng bộ lên Web!'
+      );
+      return;
+    }
+    const bookId = String(item.id);
+    const isCurrentlyFav = favoriteIds.includes(bookId);
+    setFavoriteIds((prev) =>
+      isCurrentlyFav ? prev.filter((id) => id !== bookId) : [...prev, bookId]
+    );
+
+    const result = await toggleFavoriteBook({
+      id: bookId,
+      title: item.title,
+      author: item.author,
+      category_name: item.category,
+    });
+
+    if (result.success) {
+      setFavoriteIds((prev) =>
+        result.isFavorite
+          ? [...prev.filter((id) => id !== bookId), bookId]
+          : prev.filter((id) => id !== bookId)
+      );
+    }
+  };
 
   const results = useMemo(() => {
     const q = keyword.trim().toLowerCase();
@@ -143,8 +184,14 @@ export default function SearchScreen() {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={themeStyles.heart}>
-        <Text style={themeStyles.heartText}>♡</Text>
+      <TouchableOpacity
+        style={themeStyles.heart}
+        onPress={() => handleToggleHeart(item)}
+        activeOpacity={0.7}
+      >
+        <Text style={[themeStyles.heartText, favoriteIds.includes(String(item.id)) && { color: '#ef4444' }]}>
+          {favoriteIds.includes(String(item.id)) ? '❤️' : '♡'}
+        </Text>
       </TouchableOpacity>
     </View>
   );
