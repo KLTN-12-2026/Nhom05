@@ -69,7 +69,10 @@ public class AuthServiceImpl implements AuthService {
 
         Customer customer = new Customer();
         customer.setCustomer_id(genarateNextCustomerId());
-        customer.setCustomerName(request.getCustomerName());
+        String customerName = (request.getCustomerName() != null && !request.getCustomerName().trim().isEmpty())
+                ? request.getCustomerName().trim()
+                : savedAccount.getUsername();
+        customer.setCustomerName(customerName);
         customer.setEmail(request.getEmail());
         customer.setPhoneNumber(request.getPhoneNumber());
         customer.setAddress(request.getAddress());
