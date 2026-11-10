@@ -39,7 +39,7 @@ public class CustomerAdminController {
     @Autowired
     private PotatoTransactionRepository potatoTransactionRepository;
 
-    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd");
+    // DATE_FORMAT replaced with thread-safe instances
 
     /**
      * 1. Lấy danh sách khách hàng kèm bộ lọc và thống kê tổng quan
@@ -118,7 +118,7 @@ public class CustomerAdminController {
                 dto.put("phoneNumber", c.getPhoneNumber() != null ? c.getPhoneNumber() : "");
                 dto.put("address", c.getAddress() != null ? c.getAddress() : "");
                 dto.put("gender", c.isGender());
-                dto.put("birthday", c.getBirthday() != null ? DATE_FORMAT.format(c.getBirthday()) : "");
+                dto.put("birthday", c.getBirthday() != null ? new SimpleDateFormat("yyyy-MM-dd").format(c.getBirthday()) : "");
                 dto.put("isBirthdayToday", isBirthdayToday);
 
                 String avatar = c.getAvatarUrl() != null && !c.getAvatarUrl().isEmpty() 
@@ -246,7 +246,7 @@ public class CustomerAdminController {
                 String bStr = String.valueOf(body.get("birthday")).trim();
                 if (!bStr.isEmpty()) {
                     try {
-                        Date parsed = DATE_FORMAT.parse(bStr);
+                        Date parsed = new SimpleDateFormat("yyyy-MM-dd").parse(bStr);
                         c.setBirthday(parsed);
                     } catch (Exception ignored) {}
                 }

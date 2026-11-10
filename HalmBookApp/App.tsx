@@ -35,6 +35,8 @@ interface ScreenRoute {
 
 const SCREENS_WITH_SHARED_HEADER: AppScreen[] = [
   'offers',
+  'upload',
+  'bookshelf',
   'categories',
   'search',
   'transactions',
@@ -417,6 +419,14 @@ export default function App() {
     () => SCREENS_WITH_SHARED_HEADER.includes(currentRoute.name),
     [currentRoute.name]
   );
+    userAvatarUrl,
+    setUserAvatarUrl,
+    userInitial,
+    setUserInitial,
+    lang,
+    setLang,
+  };
+  const showSharedHeader = SCREENS_WITH_SHARED_HEADER.includes(currentRoute.name);
 
   let screen;
   switch (currentRoute.name) {
@@ -538,7 +548,7 @@ export default function App() {
             {!['auth', 'reader', 'chatbot', 'notifications'].includes(currentRoute.name) && (
               <Footer
                 activeNav={activeNav}
-                floating={currentRoute.name === 'home' || currentRoute.name === 'bookDetail'}
+                floating={['home', 'bookDetail', 'offers'].includes(currentRoute.name)}
                 visible={isFooterVisible}
               />
             )}

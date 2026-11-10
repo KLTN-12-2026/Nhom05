@@ -88,10 +88,15 @@ public class HomeController {
     @GetMapping("/covers/{fileName}")
     public ResponseEntity<byte[]> getBookCover(@PathVariable("fileName") String fileName) {
         try {
-            File file = new File("E:/Khoa_Luan/Nhom05/HalmBookBE/src/main/resources/static/covers/" + fileName);
-            if (!file.exists()) {
-                file = new File("E:/Khoa_Luan/BOOK/img/" + fileName);
+            String safeName = Paths.get(fileName).getFileName().toString();
+            Path filePath = Paths.get("uploads", "covers", safeName);
+            if (!Files.exists(filePath)) {
+                filePath = Paths.get("uploads", safeName);
             }
+            if (!Files.exists(filePath)) {
+                filePath = Paths.get("src", "main", "resources", "static", "covers", safeName);
+            }
+            File file = filePath.toFile();
             if (file.exists()) {
                 byte[] bytes = Files.readAllBytes(file.toPath());
                 return ResponseEntity.ok()
