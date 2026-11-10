@@ -5,6 +5,7 @@ import { getPersonalBookById } from '@/services/personalBookService';
 import { getBookAccessDetail, updateReadingProgress } from '@/services/userFeatureService';
 import AuthModal, { openAuthModal } from '@/components/common/AuthModal';
 import { isTokenValid } from '@/services/authToken';
+import DynamicWatermark from './DynamicWatermark';
 
 const tailwindConfig = {
     darkMode: 'class',
@@ -1734,6 +1735,12 @@ export default function DocSach() {
                             <i className="ph-bold ph-faders text-base text-[#D4AF37]"></i>
                         </button>
 
+                        {/* HALM DRM Protection Indicator */}
+                        <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[#222420] border border-[#2F322B] text-[#D4AF37] text-[11px] font-mono select-none" title="Bản quyền số được bảo vệ bởi HALM DRM (Dynamic Watermark)">
+                            <i className="ph-fill ph-shield-check text-xs"></i>
+                            <span className="font-bold">DRM ACTIVE</span>
+                        </div>
+
                         {/* Fullscreen */}
                         <button 
                             type="button"
@@ -1757,6 +1764,16 @@ export default function DocSach() {
                         {/* Starry Night Sky Canvas */}
                         {paperTheme === 'starry' && (
                             <div ref={starryBgRef} className="absolute inset-0 pointer-events-none z-0"></div>
+                        )}
+
+                        {/* Dynamic Watermark chống chụp màn hình (HALM DRM) */}
+                        {!isLoading && !errorMessage && (
+                            <DynamicWatermark
+                                bookId={bookId || book?.book_id || book?.id}
+                                bookTitle={book?.bookTitle || book?.title || ''}
+                                paperTheme={paperTheme}
+                                enabled={true}
+                            />
                         )}
 
                         {/* Loading State */}
