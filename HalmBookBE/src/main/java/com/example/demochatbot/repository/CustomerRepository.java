@@ -14,7 +14,7 @@ import java.util.Optional;
 @Repository
 public interface CustomerRepository extends JpaRepository<Customer, String> {
 
-    @Query(value = "SELECT customer_id FROM Customer ORDER BY customer_id DESC LIMIT 1", nativeQuery = true)
+    @Query(value = "SELECT customer_id FROM customer ORDER BY customer_id DESC LIMIT 1", nativeQuery = true)
     String findLastCustomer();
 
     Optional<Customer> findByEmail(String email);
