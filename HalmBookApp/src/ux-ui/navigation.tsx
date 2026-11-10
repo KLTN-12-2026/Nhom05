@@ -36,6 +36,7 @@ export interface NavigationContextValue {
   goBack: () => void;
   logout: () => void;
   isDarkMode: boolean;
+  toggleDarkMode?: () => void;
   isFooterVisible?: boolean;
   setFooterVisible?: (visible: boolean) => void;
 
