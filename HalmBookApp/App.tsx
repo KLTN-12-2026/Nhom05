@@ -28,7 +28,6 @@ interface ScreenRoute {
 }
 
 const SCREENS_WITH_SHARED_HEADER: AppScreen[] = [
-  'offers',
   'upload',
   'bookshelf',
   'categories',
@@ -294,12 +293,26 @@ export default function App() {
     ]);
   };
 
+  const toggleDarkMode = () => setIsDarkMode((current) => !current);
+  const refreshHome = () => setHomeRefreshKey((current) => current + 1);
   const navigation = {
     navigate,
     navigateTab,
     goBack,
     logout,
     isDarkMode,
+    toggleDarkMode,
+    isLoggedIn: isSessionActive(),
+    showLoginAlert: (message: string) => {
+      Alert.alert(
+        'Yêu cầu đăng nhập',
+        message,
+        [
+          { text: 'Hủy', style: 'cancel' },
+          { text: 'Đăng nhập ngay', onPress: () => navigate('auth') },
+        ],
+      );
+    },
     isFooterVisible,
     setFooterVisible: setIsFooterVisible,
 <<<<<<< HEAD
@@ -313,8 +326,6 @@ export default function App() {
 >>>>>>> origin/main
   };
   const showSharedHeader = SCREENS_WITH_SHARED_HEADER.includes(currentRoute.name);
-  const toggleDarkMode = () => setIsDarkMode((current) => !current);
-  const refreshHome = () => setHomeRefreshKey((current) => current + 1);
 
   let screen;
   switch (currentRoute.name) {
@@ -421,7 +432,7 @@ export default function App() {
             {!['auth', 'reader', 'chatbot'].includes(currentRoute.name) && (
               <Footer
                 activeNav={activeNav}
-                floating={currentRoute.name === 'home' || currentRoute.name === 'bookDetail'}
+                floating={['home', 'bookDetail', 'offers'].includes(currentRoute.name)}
                 visible={isFooterVisible}
               />
             )}

@@ -94,6 +94,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // 2. Các endpoint công khai không cần token
                         .requestMatchers("/api/auth/**", "/api/password/**").permitAll()
+
                         .requestMatchers("/api/chat/**").permitAll()
                         .requestMatchers("/api/home/**", "/api/promotions", "/api/promotions/**").permitAll()
                         .requestMatchers("/api/admin/support-tickets", "/api/admin/support-tickets/**").permitAll()
@@ -103,6 +104,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/user/support-tickets", "/api/user/support-tickets/**").permitAll()
 
                         // 3. FIX: Dùng hasAnyAuthority hỗ trợ cả ROLE_ADMIN lẫn ADMIN để tránh xung đột tiền tố
+
 
                         .requestMatchers("/user/**", "/api/user/**").hasAnyAuthority("ROLE_USER", "USER", "ROLE_ADMIN", "ADMIN")
 
