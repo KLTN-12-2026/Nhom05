@@ -119,14 +119,17 @@
   <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
   <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/duotone/style.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <script src="/libs/jszip.min.js"></script>
-  <script src="/libs/epub.min.js"></script>
-  <script src="/libs/pdf.min.js"></script>
+  <!-- Thư viện nặng được defer để chống chặn render (FCP / LCP Optimization) -->
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script defer src="/libs/jszip.min.js"></script>
+  <script defer src="/libs/epub.min.js"></script>
+  <script defer src="/libs/pdf.min.js"></script>
   <script>
-    if (window.pdfjsLib) {
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc = '/libs/pdf.worker.min.js';
-    }
+    window.addEventListener('DOMContentLoaded', function () {
+      if (window.pdfjsLib) {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = '/libs/pdf.worker.min.js';
+      }
+    });
   </script>
   <title>HALMBOOK</title>
 </head>

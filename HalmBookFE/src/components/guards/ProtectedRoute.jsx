@@ -18,8 +18,8 @@ const ProtectedRoute = ({ allowedRoles }) => {
             sessionStorage.getItem('role')
         )?.replace(/^ROLE_/, "")?.toUpperCase();
 
-        // Chống tự động đá văng ra login: Cho phép truy cập nếu token còn hạn HOẶC có role ADMIN
-        const hasAdminAccess = (adminToken && isAdminValid) || adminRole === 'ADMIN';
+        // Bắt buộc phải có Admin token hợp lệ VÀ quyền ADMIN (Ngăn chặn bypass bằng cách sửa thô localStorage)
+        const hasAdminAccess = !!adminToken && isAdminValid && adminRole === 'ADMIN';
 
         if (!hasAdminAccess) {
             return (
