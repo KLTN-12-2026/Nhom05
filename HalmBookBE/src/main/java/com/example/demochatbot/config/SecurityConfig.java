@@ -96,14 +96,13 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**", "/api/password/**").permitAll()
                         .requestMatchers("/api/chat/**").permitAll()
                         .requestMatchers("/api/home/**", "/api/promotions", "/api/promotions/**").permitAll()
-                        .requestMatchers("/api/admin/support-tickets", "/api/admin/support-tickets/**").permitAll()
-                        .requestMatchers("/api/admin/analytics", "/api/admin/analytics/**").permitAll()
-                        .requestMatchers("/api/admin/**", "/admin/**").hasAnyAuthority("ROLE_ADMIN", "ADMIN")
                         .requestMatchers("/uploads/**").permitAll()
                         .requestMatchers("/api/user/support-tickets", "/api/user/support-tickets/**").permitAll()
 
-                        // 3. FIX: Dùng hasAnyAuthority hỗ trợ cả ROLE_ADMIN lẫn ADMIN để tránh xung đột tiền tố
+                        // 3. Phân quyền Quản trị viên (Admin Portal): Siết chặt bảo mật, chỉ ADMIN mới được truy cập
+                        .requestMatchers("/api/admin/**", "/admin/**").hasAnyAuthority("ROLE_ADMIN", "ADMIN")
 
+                        // 4. Phân quyền Người dùng (Độc giả)
                         .requestMatchers("/user/**", "/api/user/**").hasAnyAuthority("ROLE_USER", "USER", "ROLE_ADMIN", "ADMIN")
 
                         .anyRequest().authenticated()
