@@ -415,6 +415,7 @@ public class UserFeaturesController {
         List<FavoriteBook> favorites = favoriteBookRepository.findByCustomerIdOrderByCreatedAtDesc(customer.getCustomer_id());
         List<Map<String, Object>> result = favorites.stream().map(fav -> {
             Book b = fav.getBook();
+            if (b == null) return null;
             Map<String, Object> map = new HashMap<>();
             map.put("favoriteId", fav.getId());
             map.put("bookId", b.getBook_id());
@@ -428,7 +429,7 @@ public class UserFeaturesController {
             map.put("price", b.getRent_price());
             map.put("createdAt", fav.getCreatedAt());
             return map;
-        }).toList();
+        }).filter(Objects::nonNull).toList();
 
         return ResponseEntity.ok(result);
     }

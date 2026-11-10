@@ -43,20 +43,34 @@ public class AuthController {
         if (authentication == null || !authentication.isAuthenticated() || "anonymousUser".equals(authentication.getPrincipal())) {
             return new ResponseEntity<>("user not authenticated", HttpStatus.UNAUTHORIZED);
         }
-        CustomUserDetails userDetails = (CustomUserDetails) authentication.getPrincipal();
+        Account account = null;
+        String username = authentication.getName();
+        String role = "USER";
 
-        assert userDetails != null;
-        String role = userDetails.getAuthorities().
-                stream().findFirst().
-                map(GrantedAuthority::getAuthority).
-                orElse("USER");
+        if (authentication.getPrincipal() instanceof CustomUserDetails userDetails) {
+            account = userDetails.getAccount();
+            username = userDetails.getUsername();
+            role = userDetails.getAuthorities().stream()
+                    .findFirst()
+                    .map(GrantedAuthority::getAuthority)
+                    .orElse("USER");
+        } else if (authentication.getPrincipal() instanceof org.springframework.security.core.userdetails.UserDetails userDetails) {
+            username = userDetails.getUsername();
+            role = userDetails.getAuthorities().stream()
+                    .findFirst()
+                    .map(GrantedAuthority::getAuthority)
+                    .orElse("USER");
+        }
+        if (account == null && username != null) {
+            account = accountRepository.findByUsername(username).orElse(null);
+        }
         if (role.startsWith("ROLE_")) {
             role = role.substring(5);
         }
         Map<String, Object> userInfo = new HashMap<>();
-        userInfo.put("username", userDetails.getUsername());
+        userInfo.put("username", username);
         userInfo.put("role", role);
-        userInfo.put("account_id", userDetails.getAccount().getAccount_id());
+        userInfo.put("account_id", account != null ? account.getAccount_id() : null);
         return ResponseEntity.ok(userInfo);
     }
 
