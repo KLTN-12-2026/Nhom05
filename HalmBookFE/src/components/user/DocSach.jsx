@@ -1582,39 +1582,6 @@ export default function DocSach() {
                             <i className="ph-bold ph-arrow-left text-base text-[#D4AF37]"></i>
                         </button>
 
-                        <button 
-                            type="button"
-                            onClick={() => {
-                                document.body.style.overflow = '';
-                                document.body.style.position = '';
-                                document.body.style.width = '';
-                                document.body.style.height = '';
-                                document.documentElement.style.overflow = '';
-                                document.documentElement.style.height = '';
-                                navigate('/');
-                            }} 
-                            className="w-9 h-9 rounded-xl flex items-center justify-center halm-header-btn shrink-0 cursor-pointer" 
-                            title="Về Trang Chủ"
-                        >
-                            <i className="ph-bold ph-house text-base text-[#D4AF37]"></i>
-                        </button>
-
-                        <button 
-                            type="button"
-                            onClick={() => {
-                                document.body.style.overflow = '';
-                                document.body.style.position = '';
-                                document.body.style.width = '';
-                                document.body.style.height = '';
-                                document.documentElement.style.overflow = '';
-                                document.documentElement.style.height = '';
-                                navigate('/tusachcn');
-                            }} 
-                            className="w-9 h-9 rounded-xl flex items-center justify-center halm-header-btn shrink-0 cursor-pointer" 
-                            title="Về Tủ Sách Cá Nhân"
-                        >
-                            <i className="ph-bold ph-books text-base text-[#D4AF37]"></i>
-                        </button>
 
                         <button 
                             type="button"
@@ -1678,12 +1645,7 @@ export default function DocSach() {
                         )}
                         
                         {/* Switch Mode: Trang In vs Chữ (Text Mode) - Chỉ hiện khi là sách PDF */}
-                        {bookFormat === 'EPUB' ? (
-                            <div className="flex items-center bg-[#222420] rounded-xl px-3 py-1.5 border border-[#2F322B] text-xs font-outfit font-bold text-[#D4AF37] gap-1.5 shadow-xs">
-                                <i className="ph-bold ph-book-open text-emerald-400"></i>
-                                <span>Sách EPUB</span>
-                            </div>
-                        ) : (
+                        {bookFormat !== 'EPUB' && (
                             <div className="flex items-center bg-[#222420] rounded-xl p-0.5 border border-[#2F322B]">
                                 <button
                                     type="button"
@@ -1777,12 +1739,6 @@ export default function DocSach() {
                         >
                             <i className="ph-bold ph-faders text-base text-[#D4AF37]"></i>
                         </button>
-
-                        {/* HALM DRM Protection Indicator */}
-                        <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[#222420] border border-[#2F322B] text-[#D4AF37] text-[11px] font-mono select-none" title="Bản quyền số được bảo vệ bởi HALM DRM (Dynamic Watermark)">
-                            <i className="ph-fill ph-shield-check text-xs"></i>
-                            <span className="font-bold">DRM ACTIVE</span>
-                        </div>
 
                         {/* Fullscreen */}
                         <button 

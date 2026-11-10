@@ -49,7 +49,7 @@ export default function AppRoutes() {
         <Route path="/trang-chu" element={<Navigate to="/" replace />} />
         <Route path={ROUTES.LOGIN} element={<DangNhap />} />
         <Route path="/login" element={<DangNhap />} />
-        <Route path="/admin/login" element={<DangNhap />} />
+        <Route path={ROUTES.ADMIN_LOGIN || "/admin/login"} element={<DangNhap />} />
         <Route path={ROUTES.FORGOT_PASSWORD} element={<QuenMatKhau />} />
         <Route path={ROUTES.TIERS} element={<HangTv />} />
         <Route path={ROUTES.OFFERS} element={<UuDai />} />

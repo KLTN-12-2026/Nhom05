@@ -72,9 +72,6 @@ const DynamicWatermark = ({
     // 2. Timestamp động thời gian thực (Cập nhật định kỳ)
     const [currentTime, setCurrentTime] = useState(() => formatTimestamp(new Date()));
 
-    // 3. Tọa độ di động cho Floating Watermark (Trôi ngẫu nhiên chống triệt tiêu)
-    const [floatingPos, setFloatingPos] = useState({ x: 20, y: 30 });
-
     // 4. Trạng thái kích hoạt Màn hình bảo vệ bản quyền (Privacy Shield) khi chụp màn hình
     const [privacyShieldActive, setPrivacyShieldActive] = useState(false);
     const [shieldMessage, setShieldMessage] = useState('');
@@ -119,16 +116,9 @@ const DynamicWatermark = ({
             setCurrentTime(formatTimestamp(new Date()));
         }, 1000);
 
-        const floatInterval = setInterval(() => {
-            // Random vị trí từ 10% đến 85% chiều rộng và chiều cao
-            const randX = Math.floor(Math.random() * 75) + 10;
-            const randY = Math.floor(Math.random() * 75) + 10;
-            setFloatingPos({ x: randX, y: randY });
-        }, 12000);
-
         return () => {
             clearInterval(timeInterval);
-            clearInterval(floatInterval);
+            
         };
     }, []);
 
@@ -358,30 +348,6 @@ const DynamicWatermark = ({
                             </span>
                         </div>
                     ))}
-                </div>
-
-                {/* 2. FLOATING WATERMARK BADGE (Trôi nổi ngẫu nhiên định kỳ - Chống cắt xén ảnh) */}
-                <div
-                    className="absolute transition-all duration-1000 ease-in-out pointer-events-none"
-                    style={{
-                        top: `${floatingPos.y}%`,
-                        left: `${floatingPos.x}%`,
-                        transform: 'translate(-50%, -50%) rotate(-12deg)'
-                    }}
-                >
-                    <div
-                        className="px-3 py-1.5 rounded-full border backdrop-blur-[1px] flex items-center gap-2 shadow-xs"
-                        style={{
-                            backgroundColor: styleTheme.floatingBg,
-                            borderColor: styleTheme.border,
-                            color: styleTheme.floatingText
-                        }}
-                    >
-                        <i className="ph-fill ph-shield-check text-xs opacity-75"></i>
-                        <span className="font-mono text-[10px] font-bold tracking-wider">
-                            HALM PROTECTED • {currentTime}
-                        </span>
-                    </div>
                 </div>
             </div>
 

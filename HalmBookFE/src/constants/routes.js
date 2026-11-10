@@ -23,6 +23,7 @@ export const ROUTES = {
 
   // Admin Protected: bắt buộc quyền Quản trị viên
   ADMIN: '/admin',
+  ADMIN_LOGIN: '/admin/login',
   ADMIN_STATISTICS: '/admin/thong-ke',
   ADMIN_BOOKS: '/admin/quan-ly-sach',
   ADMIN_RENTAL_TRANSACTIONS: '/admin/giao-dich-thue-sach',

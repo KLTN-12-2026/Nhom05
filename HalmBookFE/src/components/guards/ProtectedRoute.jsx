@@ -7,6 +7,10 @@ const ProtectedRoute = ({ allowedRoles }) => {
 
     // 1. Phân luồng kiểm tra cho khu vực Quản trị viên (Admin Portal)
     const isAdminRoute = (allowedRoles && allowedRoles.some((role) => role.includes('ADMIN'))) || location.pathname.startsWith('/admin');
+    if (location.pathname === '/admin/login' || location.pathname === '/login') {
+        return <Outlet />;
+    }
+
     if (isAdminRoute) {
         const adminToken = getAdminAuthToken();
         const isAdminValid = isTokenValid(adminToken);
@@ -24,7 +28,7 @@ const ProtectedRoute = ({ allowedRoles }) => {
         if (!hasAdminAccess) {
             return (
                 <Navigate
-                    to="/login"
+                    to="/admin/login"
                     state={{ from: location.pathname + location.search, portal: 'admin', loginMessage: 'Vui lòng đăng nhập với tài khoản Quản trị viên để truy cập!' }}
                     replace
                 />
