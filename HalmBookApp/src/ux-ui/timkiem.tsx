@@ -1,20 +1,23 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
+import { useEffect, useMemo, useState } from "react";
 import {
-  View,
+  ActivityIndicator,
+  FlatList,
+  Image,
+  ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  FlatList,
-  ScrollView,
-  StyleSheet,
-  StatusBar,
+  View
 } from "react-native";
-import { useAppNavigation, useAppThemeStyles } from './navigation';
-import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
+import { fetchApiWithFallback } from './apiService';
+import { getBookCoverSource } from './bookCovers';
 import { fetchFavoriteBooksFromApi, toggleFavoriteBook } from './favoriteService';
+import { useAppNavigation, useAppThemeStyles } from './navigation';
 
 type Book = {
-  id: number;
+  id: string;
   title: string;
   author: string;
   category: string;
@@ -22,48 +25,43 @@ type Book = {
   reviews: string;
   price: number;
   description: string;
+  img_url?: string;
+  isCatalogBook?: boolean;
 };
 
-const BOOKS: Book[] = [
+const FALLBACK_BOOKS: Book[] = [
   {
-    id: 1,
-    title: "Nhà giả kim",
-    author: "Paulo Coelho",
-    category: "Tiểu thuyết",
+    id: 'VH008',
+    title: 'Số Đỏ',
+    author: 'Vũ Trọng Phụng',
+    category: 'Văn học Việt Nam',
+    rating: 4.9,
+    reviews: '1.8k',
+    price: 20,
+    description: 'Tiểu thuyết trào phúng kinh điển khắc họa xã hội thượng lưu giả tạo qua nhân vật Xuân Tóc Đỏ.',
+    isCatalogBook: false,
+  },
+  {
+    id: 'KD001',
+    title: 'AQ Chính Truyện',
+    author: 'Lỗ Tấn',
+    category: 'Kinh điển',
     rating: 4.8,
-    reviews: "1.2k",
-    price: 25000,
-    description: "Hành trình khám phá ước mơ và ý nghĩa cuộc sống của Santiago.",
+    reviews: '1.2k',
+    price: 25,
+    description: 'Kiệt tác châm biếm khắc họa phép thắng lợi tinh thần trong xã hội Trung Hoa giao thời.',
+    isCatalogBook: false,
   },
   {
-    id: 2,
-    title: "Đắc nhân tâm",
-    author: "Dale Carnegie",
-    category: "Kỹ năng sống",
-    rating: 4.7,
-    reviews: "980",
-    price: 30000,
-    description: "Nghệ thuật đối nhân xử thế giúp bạn thành công trong cuộc sống.",
-  },
-  {
-    id: 3,
-    title: "Tuổi trẻ đáng giá bao nhiêu?",
-    author: "Rosie Nguyễn",
-    category: "Kỹ năng sống",
-    rating: 4.6,
-    reviews: "650",
-    price: 28000,
-    description: "Những chia sẻ dành cho người trẻ đang đi tìm chính mình.",
-  },
-  {
-    id: 4,
-    title: "Sherlock Holmes",
-    author: "Arthur Conan Doyle",
-    category: "Trinh thám",
+    id: 'LS001',
+    title: 'Đạo Đức Và Luân Lý Đông Tây',
+    author: 'Phan Châu Trinh',
+    category: 'Lịch sử',
     rating: 4.8,
-    reviews: "1.1k",
-    price: 25000,
-    description: "Những vụ án ly kỳ và trí tuệ của vị thám tử huyền thoại.",
+    reviews: '980',
+    price: 22,
+    description: 'Bài diễn thuyết tâm huyết so sánh nền tảng đạo đức và luân lý phương Đông với phương Tây.',
+    isCatalogBook: false,
   },
 ];
 
@@ -79,20 +77,63 @@ export default function SearchScreen() {
   const themeStyles = useAppThemeStyles(styles);
   const { navigate, goBack, isDarkMode, lang, isLoggedIn, showLoginAlert } = useAppNavigation();
   const [keyword, setKeyword] = useState("");
+  const [catalogBooks, setCatalogBooks] = useState<Book[]>(FALLBACK_BOOKS);
+  const [isLoadingBooks, setIsLoadingBooks] = useState(true);
   const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
   const [recent, setRecent] = useState([
-    "Nhà giả kim",
-    "Đắc nhân tâm",
-    "Sherlock Holmes",
-    "Tiểu thuyết",
+    "Số Đỏ",
+    "AQ Chính Truyện",
+    "Văn học",
+    "Lịch sử",
   ]);
 
   useEffect(() => {
+    let isMounted = true;
+    const loadBooks = async () => {
+      try {
+        const res = await fetchApiWithFallback('/api/home/books', {
+          method: 'GET',
+          timeout: 6000,
+        });
+        const rawList = Array.isArray(res.data) ? res.data : res.data?.books || [];
+        if (isMounted && Array.isArray(rawList) && rawList.length > 0) {
+          const mapped: Book[] = rawList
+            .filter((b: any) => b && b.status !== 'DELETED')
+            .map((b: any) => ({
+              id: String(b.book_id || b.id || ''),
+              title: b.bookName || b.title || 'Chưa rõ tên',
+              author: b.author || 'Chưa rõ tác giả',
+              category: b.category_name || b.categoryName || b.tag || 'Sách hay',
+              rating: Number(b.rating || 4.8),
+              reviews: String(b.views ? `${b.views}` : '1.2k'),
+              price: Number(b.rent_price ?? b.price ?? 15),
+              description: b.description || 'Khám phá nội dung đặc sắc trên HalmBook.',
+              img_url: b.img_url || '',
+              isCatalogBook: true,
+            }));
+          if (mapped.length > 0) {
+            setCatalogBooks(mapped);
+          }
+        }
+      } catch {
+        // Giữ FALLBACK_BOOKS khi offline
+      } finally {
+        if (isMounted) setIsLoadingBooks(false);
+      }
+    };
+    loadBooks();
+
     fetchFavoriteBooksFromApi()
       .then((favs) => {
-        setFavoriteIds(favs.map((f) => String(f.id || f.bookId)));
+        if (isMounted) {
+          setFavoriteIds(favs.map((f) => String(f.id || f.bookId)));
+        }
       })
-      .catch(() => {});
+      .catch(() => { });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const handleToggleHeart = async (item: Book) => {
@@ -115,6 +156,7 @@ export default function SearchScreen() {
       title: item.title,
       author: item.author,
       category_name: item.category,
+      img_url: item.img_url || '',
     });
 
     if (result.success) {
@@ -128,73 +170,87 @@ export default function SearchScreen() {
 
   const results = useMemo(() => {
     const q = keyword.trim().toLowerCase();
-    if (!q) return BOOKS;
+    if (!q) return catalogBooks;
 
-    return BOOKS.filter(
+    return catalogBooks.filter(
       (book) =>
         book.title.toLowerCase().includes(q) ||
         book.author.toLowerCase().includes(q) ||
         book.category.toLowerCase().includes(q)
     );
-  }, [keyword]);
+  }, [keyword, catalogBooks]);
 
   const chooseSearch = (value: string) => {
     setKeyword(value);
     setRecent((old) => [value, ...old.filter((x) => x !== value)].slice(0, 5));
   };
 
-  const renderBook = ({ item }: { item: Book }) => (
-    <View style={themeStyles.bookCard}>
-      <View style={themeStyles.cover}>
-        <Text style={themeStyles.coverIcon}>📖</Text>
-      </View>
-
-      <View style={themeStyles.bookInfo}>
-        <Text style={themeStyles.bookTitle}>{item.title}</Text>
-        <Text style={themeStyles.author}>{item.author}</Text>
-        <Text style={themeStyles.rating}>
-          ⭐ {item.rating} ({item.reviews} {lang === 'en' ? 'reviews)' : 'đánh giá)'}
-        </Text>
-        <Text style={themeStyles.description} numberOfLines={2}>
-          {item.description}
-        </Text>
-
-        <View style={themeStyles.rowBottom}>
-          <Text style={themeStyles.categoryTag}>{item.category}</Text>
-          <View style={themeStyles.priceBox}>
-            <Text style={themeStyles.priceLabel}>{lang === 'en' ? 'Rental price' : 'Giá thuê'}</Text>
-            <Text style={themeStyles.price}>
-              {item.price.toLocaleString("vi-VN")}đ
-            </Text>
+  const renderBook = ({ item }: { item: Book }) => {
+    const coverSource = getBookCoverSource(item.id, item.img_url);
+    return (
+      <View style={themeStyles.bookCard}>
+        {coverSource ? (
+          <Image source={coverSource} style={themeStyles.cover} resizeMode="cover" />
+        ) : (
+          <View style={themeStyles.cover}>
+            <Text style={themeStyles.coverIcon}>📖</Text>
           </View>
+        )}
+
+        <View style={themeStyles.bookInfo}>
+          <Text style={themeStyles.bookTitle}>{item.title}</Text>
+          <Text style={themeStyles.author}>{item.author}</Text>
+          <Text style={themeStyles.rating}>
+            ⭐ {item.rating} ({item.reviews} {lang === 'en' ? 'views)' : 'lượt)'}
+          </Text>
+          <Text style={themeStyles.description} numberOfLines={2}>
+            {item.description}
+          </Text>
+
+          <View style={themeStyles.rowBottom}>
+            <Text style={themeStyles.categoryTag}>{item.category}</Text>
+            <View style={themeStyles.priceBox}>
+              <Text style={themeStyles.priceLabel}>{lang === 'en' ? 'Rental / 7d' : 'Thuê / 7 ngày'}</Text>
+              <Text style={themeStyles.price}>
+                {item.price} 🥔
+              </Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={themeStyles.detailButton}
+            onPress={() => navigate('bookDetail', {
+              id: String(item.id),
+              title: item.title,
+              author: item.author,
+              img_url: item.img_url,
+              coverImage: item.img_url,
+              tag: item.category,
+              category_name: item.category,
+              description: item.description,
+              desc: item.description,
+              price: item.price,
+              rent_price: item.price,
+              rating: String(item.rating),
+              reads: item.reviews,
+            })}
+          >
+            <Text style={themeStyles.detailText}>{lang === 'en' ? 'View details' : 'Xem chi tiết'}</Text>
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity
-          style={themeStyles.detailButton}
-          onPress={() => navigate('bookDetail', {
-            id: String(item.id),
-            title: item.title,
-            author: item.author,
-            tag: item.category,
-            rating: String(item.rating),
-            reads: item.reviews,
-          })}
+          style={themeStyles.heart}
+          onPress={() => handleToggleHeart(item)}
+          activeOpacity={0.7}
         >
-          <Text style={themeStyles.detailText}>{lang === 'en' ? 'View details' : 'Xem chi tiết'}</Text>
+          <Text style={[themeStyles.heartText, favoriteIds.includes(String(item.id)) && { color: '#ef4444' }]}>
+            {favoriteIds.includes(String(item.id)) ? '❤️' : '♡'}
+          </Text>
         </TouchableOpacity>
       </View>
-
-      <TouchableOpacity
-        style={themeStyles.heart}
-        onPress={() => handleToggleHeart(item)}
-        activeOpacity={0.7}
-      >
-        <Text style={[themeStyles.heartText, favoriteIds.includes(String(item.id)) && { color: '#ef4444' }]}>
-          {favoriteIds.includes(String(item.id)) ? '❤️' : '♡'}
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
+    );
+  };
 
   return (
     <View style={themeStyles.safe}>
@@ -280,7 +336,10 @@ export default function SearchScreen() {
 
             <View style={themeStyles.resultHeader}>
               <Text style={themeStyles.sectionTitle}>☷  Kết quả tìm kiếm</Text>
-              <Text style={themeStyles.resultCount}>Có {results.length} kết quả</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                {isLoadingBooks && <ActivityIndicator size="small" color="#F04D6A" />}
+                <Text style={themeStyles.resultCount}>Có {results.length} kết quả</Text>
+              </View>
             </View>
           </>
         }
@@ -340,6 +399,7 @@ const styles = StyleSheet.create({
   cover: {
     width: 92, height: 132, borderRadius: 11, backgroundColor: "#FFE2D5",
     alignItems: "center", justifyContent: "center", marginRight: 13,
+    overflow: "hidden",
   },
   coverIcon: { fontSize: 38 },
   bookInfo: { flex: 1, paddingRight: 3 },

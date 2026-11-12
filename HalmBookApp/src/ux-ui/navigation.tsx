@@ -1,5 +1,5 @@
-import { createContext, useContext, useMemo } from 'react';
-import { StyleSheet, TextStyle, ViewStyle } from 'react-native';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
+import { NativeScrollEvent, NativeSyntheticEvent, StyleSheet, TextStyle, ViewStyle } from 'react-native';
 
 export type AppScreen =
   | 'auth'
@@ -31,6 +31,11 @@ export interface BookData {
   pages?: number;
   reads?: string;
   rating?: string;
+  price?: number;
+  rent_price?: number;
+  description?: string;
+  category_name?: string;
+  isPersonal?: boolean;
   fileUri?: string;
   fileName?: string;
   chapters?: any[];
@@ -82,6 +87,46 @@ export function useAppNavigation() {
     throw new Error('useAppNavigation must be used inside the app navigation provider.');
   }
   return navigation;
+}
+
+/**
+ * Đồng bộ ẩn/hiện thanh điều hướng dưới cùng theo thao tác cuộn giống Trang Chủ.
+ */
+export function useAutoHideFooter() {
+  const { setFooterVisible } = useAppNavigation();
+  const scrollOffset = useRef(0);
+
+  useEffect(() => {
+    setFooterVisible?.(true);
+    return () => {
+      setFooterVisible?.(true);
+    };
+  }, [setFooterVisible]);
+
+  const onScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const currentY = event.nativeEvent.contentOffset.y;
+      const diff = currentY - scrollOffset.current;
+      if (currentY <= 10) {
+        setFooterVisible?.(true);
+      } else if (Math.abs(diff) > 8) {
+        if (diff > 0 && currentY > 60) {
+          setFooterVisible?.(false);
+        } else if (diff < 0) {
+          setFooterVisible?.(true);
+        }
+      }
+      scrollOffset.current = Math.max(0, currentY);
+    },
+    [setFooterVisible],
+  );
+
+  const showFooter = useCallback(() => {
+    scrollOffset.current = 0;
+    setFooterVisible?.(true);
+  }, [setFooterVisible]);
+
+  return { onScroll, showFooter };
 }
 
 type AppStyleSheet = Record<string, ViewStyle | TextStyle>;

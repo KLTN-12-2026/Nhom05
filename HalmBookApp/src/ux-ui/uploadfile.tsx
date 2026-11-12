@@ -14,7 +14,7 @@ import {
   View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAppNavigation, useAppThemeStyles } from './navigation';
+import { useAppNavigation, useAppThemeStyles, useAutoHideFooter } from './navigation';
 import { Chapter, extractPdfChapters } from './pdfExtractor';
 import { addToReadingList } from './readingHistory';
 import {
@@ -44,11 +44,14 @@ import {
 // - Lão Nông: 15 lượt up free
 // - Đại Điền Chủ: Vĩnh viễn (không giới hạn)
 // Khi hết lượt free: Mỗi lần tải tốn 50 Khoai
-export const TIER_UPLOAD_CONFIG: Record<string, { maxFree: number; badge: string; name: string }> = {
-  'Thợ Cày': { maxFree: 3, badge: '🌱', name: 'Thợ Cày' },
-  'Cao Thủ Cày': { maxFree: 10, badge: '🚜', name: 'Cao Thủ Cày' },
-  'Lão Nông': { maxFree: 15, badge: '🌾', name: 'Lão Nông' },
-  'Đại Điền Chủ': { maxFree: Infinity, badge: '👑', name: 'Đại Điền Chủ' },
+export const TIER_UPLOAD_CONFIG: Record<
+  string,
+  { maxFree: number; badge: string; name: string; icon: keyof typeof Ionicons.glyphMap }
+> = {
+  'Thợ Cày': { maxFree: 3, badge: '🌱', name: 'Thợ Cày', icon: 'leaf-outline' },
+  'Cao Thủ Cày': { maxFree: 10, badge: '🚜', name: 'Cao Thủ Cày', icon: 'ribbon-outline' },
+  'Lão Nông': { maxFree: 15, badge: '🌾', name: 'Lão Nông', icon: 'medal-outline' },
+  'Đại Điền Chủ': { maxFree: Infinity, badge: '👑', name: 'Đại Điền Chủ', icon: 'shield-checkmark-outline' },
 };
 
 export const UPLOAD_COST_POTATO = 50;
@@ -105,6 +108,7 @@ const getPlaceholderColors = (title: string) => {
 export default function UploadFile() {
   const themeStyles = useAppThemeStyles(styles);
   const { navigate, isDarkMode, lang } = useAppNavigation();
+  const { onScroll: handleFooterScroll } = useAutoHideFooter();
 
   // Danh sách sách đã tải lên (ban đầu rỗng vì người dùng chưa tải sách nào)
   const [uploadedBooks, setUploadedBooks] = useState<UploadedBook[]>([]);
@@ -636,76 +640,172 @@ export default function UploadFile() {
     <SafeAreaView edges={['top']} style={themeStyles.safeArea}>
       <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'} />
 
-      {/* Header tinh gọn: Không hiển thị HALM BOOK, chuông, giỏ hàng, avatar, kính lúp */}
+      {/* Header tinh gọn chuẩn mobile app */}
       <View style={themeStyles.header}>
         <Text style={themeStyles.headerTitle}>
-          {lang === 'en' ? 'Upload File' : 'Tải Lên Tệp'}
+          {lang === 'en' ? 'Upload Book' : 'Tải lên tệp'}
         </Text>
       </View>
 
-      <ScrollView style={themeStyles.scrollContainer} showsVerticalScrollIndicator={false}>
-        {/* Phần Upload */}
-        <View style={themeStyles.uploadSection}>
-          {/* Icon Trồng Khoai (Lá cây + Khoai tây) */}
-          <View style={themeStyles.potatoIconWrapper}>
-            <Ionicons
-              name="leaf-outline"
-              size={40}
-              color="#27ae60"
-              style={{ position: 'absolute', top: -15, right: -10 }}
-            />
-            <Text style={{ fontSize: 70 }}>🥔</Text>
+      <ScrollView
+        style={themeStyles.scrollContainer}
+        contentContainerStyle={themeStyles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        onScroll={handleFooterScroll}
+        scrollEventThrottle={16}
+      >
+        {/* Thẻ Hạng thành viên, Lượt miễn phí & Ví Khoai */}
+        <View style={themeStyles.quotaBox}>
+          <View style={themeStyles.quotaTopRow}>
+            <View style={themeStyles.tierPill}>
+              <Text style={{ fontSize: 15 }}>{tierConfig.badge}</Text>
+              <Text style={themeStyles.tierPillText}>{currentTier}</Text>
+            </View>
+
+            <TouchableOpacity
+              style={themeStyles.walletPill}
+              activeOpacity={0.8}
+              onPress={() => navigate('payment')}
+            >
+              <Ionicons
+                name="wallet-outline"
+                size={15}
+                color={isDarkMode ? '#34D399' : '#2F6B5F'}
+              />
+              <Text style={themeStyles.walletPillText}>
+                {potatoBalance.toLocaleString('vi-VN')} Khoai
+              </Text>
+              <Ionicons
+                name="add-circle"
+                size={16}
+                color={isDarkMode ? '#34D399' : '#2F6B5F'}
+              />
+            </TouchableOpacity>
           </View>
 
-          <Text style={themeStyles.title}>{lang === 'en' ? 'Upload PDF Files' : 'Tải Lên Tệp PDF'}</Text>
+          <View style={themeStyles.quotaBottomRow}>
+            <Ionicons
+              name={isFree ? 'checkmark-circle-outline' : 'information-circle-outline'}
+              size={16}
+              color={isFree ? (isDarkMode ? '#34D399' : '#2F6B5F') : '#DC2626'}
+            />
+            <Text style={[themeStyles.quotaStatusText, !isFree && { color: '#DC2626' }]}>
+              {isUnlimited
+                ? (lang === 'en' ? 'Unlimited free uploads 👑' : 'Đặc quyền không giới hạn lượt tải 👑')
+                : isFree
+                  ? (lang === 'en'
+                    ? `${freeRemaining} / ${tierConfig.maxFree} free uploads remaining`
+                    : `Còn ${freeRemaining} / ${tierConfig.maxFree} lượt tải miễn phí`)
+                  : (lang === 'en'
+                    ? `Used all ${tierConfig.maxFree} free uploads`
+                    : `Đã dùng hết ${tierConfig.maxFree} lượt tải miễn phí`)}
+            </Text>
+          </View>
+        </View>
+
+        {/* Khu vực chọn tệp PDF / EPUB phong cách mobile app hiện đại */}
+        <View style={themeStyles.uploadDropzone}>
+          <View style={themeStyles.uploadHeroIconWrap}>
+            <Ionicons
+              name="cloud-upload-outline"
+              size={30}
+              color={isDarkMode ? '#34D399' : '#2F6B5F'}
+            />
+            <View style={themeStyles.uploadDocMiniBadge}>
+              <Ionicons name="document-text-outline" size={13} color="#FFFFFF" />
+            </View>
+          </View>
+
+          <Text style={themeStyles.title}>
+            {lang === 'en' ? 'Upload PDF & EPUB' : 'Tải lên tài liệu đọc'}
+          </Text>
           <Text style={themeStyles.subtitle}>
             {lang === 'en'
-              ? 'Only PDF format (.pdf) supported. Upload your file to enjoy our reading reader'
-              : 'Chỉ chấp nhận tệp định dạng PDF (.pdf). Tải lên để trải nghiệm trình đọc sách HALM BOOK'}
+              ? 'Supports PDF (.pdf) and EPUB (.epub). Read smoothly right inside HALM BOOK.'
+              : 'Hỗ trợ định dạng PDF (.pdf) và EPUB (.epub).\nĐọc mượt mà ngay trong ứng dụng HALM BOOK.'}
           </Text>
 
-          {/* [GIẢI THÍCH CODE]: Khung hiển thị Hạng thành viên, Lượt upload còn lại & Số dư Ví Khoai */}
-          <View style={styles.quotaBox}>
-            <View style={styles.quotaTopRow}>
-              <View style={styles.tierPill}>
-                <Text style={{ fontSize: 16 }}>{tierConfig.badge}</Text>
-                <Text style={styles.tierPillText}>{currentTier}</Text>
-              </View>
-
-              <TouchableOpacity
-                style={styles.walletPill}
-                activeOpacity={0.8}
-                onPress={() => navigate('payment')}
-              >
-                <Text style={{ fontSize: 14 }}>🥔</Text>
-                <Text style={styles.walletPillText}>
-                  {potatoBalance.toLocaleString('vi-VN')} Khoai
-                </Text>
-                <Ionicons name="add-circle" size={15} color="#b45309" />
-              </TouchableOpacity>
+          {/* Hiển thị giá tải lên rõ ràng, dễ quan sát */}
+          <View style={themeStyles.priceInfoRow}>
+            <View style={themeStyles.priceLabelGroup}>
+              <Ionicons
+                name="pricetag-outline"
+                size={15}
+                color={isDarkMode ? '#9CA3AF' : '#6B7280'}
+              />
+              <Text style={themeStyles.priceLabelText}>
+                {lang === 'en' ? 'Upload fee' : 'Phí mỗi lượt'}
+              </Text>
             </View>
 
-            <View style={styles.quotaBottomRow}>
-              <Ionicons
-                name={isFree ? "checkmark-circle" : "alert-circle"}
-                size={16}
-                color={isFree ? "#16a34a" : "#dc2626"}
-              />
-              <Text style={[styles.quotaStatusText, !isFree && { color: '#dc2626' }]}>
-                {isUnlimited
-                  ? (lang === 'en' ? 'Uploads: Unlimited (Forever) 👑' : 'Lượt tải: Không giới hạn (Vĩnh viễn) 👑')
-                  : isFree
-                    ? (lang === 'en'
-                      ? `Free uploads: ${freeRemaining} / ${tierConfig.maxFree} remaining`
-                      : `Lượt tải miễn phí: Còn ${freeRemaining} / ${tierConfig.maxFree} lượt`)
-                    : (lang === 'en'
-                      ? `0 free uploads left • 50 Potatoes / upload`
-                      : `Hết lượt up free • Phí 50 Khoai / lượt tải`)}
-              </Text>
+            <View style={themeStyles.priceValueGroup}>
+              {isUnlimited ? (
+                <>
+                  <Text style={themeStyles.priceStrikethrough}>50 Khoai</Text>
+                  <View
+                    style={[
+                      themeStyles.priceBadge,
+                      {
+                        backgroundColor: isDarkMode ? 'rgba(52, 211, 153, 0.16)' : '#E6F2EF',
+                        borderColor: isDarkMode ? 'rgba(52, 211, 153, 0.35)' : '#B8DCD3',
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        themeStyles.priceBadgeText,
+                        { color: isDarkMode ? '#34D399' : '#1E5247' },
+                      ]}
+                    >
+                      {lang === 'en' ? 'Free 👑' : 'Miễn phí 👑'}
+                    </Text>
+                  </View>
+                </>
+              ) : isFree ? (
+                <>
+                  <Text style={themeStyles.priceStrikethrough}>50 Khoai</Text>
+                  <View
+                    style={[
+                      themeStyles.priceBadge,
+                      {
+                        backgroundColor: isDarkMode ? 'rgba(52, 211, 153, 0.16)' : '#E6F2EF',
+                        borderColor: isDarkMode ? 'rgba(52, 211, 153, 0.35)' : '#B8DCD3',
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        themeStyles.priceBadgeText,
+                        { color: isDarkMode ? '#34D399' : '#1E5247' },
+                      ]}
+                    >
+                      {lang === 'en' ? '0 Khoai • Free' : '0 Khoai • Miễn phí'}
+                    </Text>
+                  </View>
+                </>
+              ) : (
+                <View
+                  style={[
+                    themeStyles.priceBadge,
+                    {
+                      backgroundColor: isDarkMode ? 'rgba(245, 158, 11, 0.18)' : '#FEF3C7',
+                      borderColor: isDarkMode ? 'rgba(245, 158, 11, 0.38)' : '#FDE68A',
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      themeStyles.priceBadgeText,
+                      { color: isDarkMode ? '#FBBF24' : '#B45309' },
+                    ]}
+                  >
+                    {lang === 'en' ? '50 Khoai / upload' : '50 Khoai / 1 lượt'}
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
 
-          {/* Nút Upload: Nhấn vào để mở file PDF trên điện thoại */}
           <TouchableOpacity
             style={themeStyles.uploadBtn}
             activeOpacity={0.85}
@@ -713,66 +813,24 @@ export default function UploadFile() {
             disabled={isPicking}
           >
             {isPicking ? (
-              <ActivityIndicator color="#1e3c72" style={{ marginRight: 15 }} />
+              <ActivityIndicator color="#FFFFFF" style={{ marginRight: 10 }} />
             ) : (
               <Ionicons
-                name="document-attach-outline"
-                size={28}
-                color="#1e3c72"
-                style={{ marginRight: 15 }}
+                name="folder-open-outline"
+                size={20}
+                color="#FFFFFF"
+                style={{ marginRight: 10 }}
               />
             )}
-            <View>
-              <Text style={themeStyles.uploadBtnText}>
-                {isPicking
-                  ? (lang === 'en' ? 'Opening PDF Files...' : 'Đang mở tệp PDF...')
-                  : 'Upload File PDF'}
-              </Text>
-              <View style={themeStyles.costRow}>
-                {isUnlimited ? (
-                  <Text style={themeStyles.costFree}>Miễn phí vĩnh viễn 👑</Text>
-                ) : isFree ? (
-                  <>
-                    <Text style={themeStyles.costStrikethrough}>50 🥔</Text>
-                    <Text style={themeStyles.costFree}>
-                      {lang === 'en' ? `0 🥔 (${freeRemaining} free left)` : `0 🥔 (Còn ${freeRemaining} lượt free)`}
-                    </Text>
-                  </>
-                ) : (
-                  <Text style={[themeStyles.costFree, { color: '#dc2626' }]}>
-                    {lang === 'en' ? '50 🥔 / upload' : '50 🥔 / lượt'}
-                  </Text>
-                )}
-              </View>
-            </View>
+            <Text style={themeStyles.uploadBtnText}>
+              {isPicking
+                ? (lang === 'en' ? 'Opening device files...' : 'Đang mở trình chọn tệp...')
+                : (lang === 'en' ? 'Choose File from Device' : 'Chọn tệp từ thiết bị')}
+            </Text>
           </TouchableOpacity>
         </View>
 
-        {/* [GIẢI THÍCH CODE]: Lối tắt truy cập Tủ sách cá nhân (mục Sách tải lên) */}
-        <View style={{ paddingHorizontal: 20, marginTop: 18 }}>
-          <TouchableOpacity
-            style={themeStyles.bookshelfShortcut}
-            activeOpacity={0.85}
-            onPress={() => navigate('bookshelf')}
-          >
-            <View style={themeStyles.bookshelfShortcutIcon}>
-              <Ionicons name="library" size={22} color={isDarkMode ? '#818cf8' : '#1e3c72'} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={themeStyles.bookshelfShortcutTitle}>
-                {lang === 'en' ? 'Go to Bookshelf' : 'Đến Tủ Sách Của Bạn'}
-              </Text>
-              <Text style={themeStyles.bookshelfShortcutDesc}>
-                {lang === 'en'
-                  ? 'View and read your uploaded books in the Uploaded tab'
-                  : 'Xem và đọc tất cả sách bạn đã tải lên trong mục "Tải lên"'}
-              </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={isDarkMode ? '#94a3b8' : '#64748b'} />
-          </TouchableOpacity>
-        </View>
-
-        <View style={{ height: 40 }} />
+        <View style={{ height: 110 }} />
       </ScrollView>
 
       {/* ================================================================ */}
@@ -787,13 +845,17 @@ export default function UploadFile() {
         }}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+          <View style={themeStyles.modalCard}>
             {/* Modal Header */}
-            <View style={styles.modalHeader}>
+            <View style={themeStyles.modalHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Ionicons name="book" size={22} color="#1e3c72" />
-                <Text style={styles.modalTitle}>
-                  {lang === 'en' ? 'PDF Upload Details' : 'Thông Tin Sách Tải Lên'}
+                <Ionicons
+                  name="document-text-outline"
+                  size={20}
+                  color={isDarkMode ? '#34D399' : '#2F6B5F'}
+                />
+                <Text style={themeStyles.modalTitle}>
+                  {lang === 'en' ? 'Book Upload Details' : 'Thông tin sách tải lên'}
                 </Text>
               </View>
               <TouchableOpacity
@@ -801,35 +863,39 @@ export default function UploadFile() {
                 disabled={isUploading}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Ionicons name="close" size={24} color="#64748b" />
+                <Ionicons name="close" size={22} color={isDarkMode ? '#9CA3AF' : '#6B7280'} />
               </TouchableOpacity>
             </View>
 
             <ScrollView
-              style={{ maxHeight: 480 }}
+              style={{ maxHeight: 460 }}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingVertical: 6 }}
             >
               {/* Thẻ hiển thị tệp đã chọn từ điện thoại */}
               {selectedFile && (
-                <View style={styles.selectedFileBox}>
-                  <View style={styles.selectedFileIconWrap}>
-                    <Ionicons name="document-text" size={24} color="#dc2626" />
+                <View style={themeStyles.selectedFileBox}>
+                  <View style={themeStyles.selectedFileIconWrap}>
+                    <Ionicons
+                      name="document-attach-outline"
+                      size={20}
+                      color={isDarkMode ? '#34D399' : '#2F6B5F'}
+                    />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.selectedFileName} numberOfLines={1}>
+                    <Text style={themeStyles.selectedFileName} numberOfLines={1}>
                       {selectedFile.name}
                     </Text>
-                    <Text style={styles.selectedFileSize}>
-                      {formatFileSize(selectedFile.size)} • {lang === 'en' ? 'PDF Ready to read' : 'Tệp PDF sẵn sàng đọc'}
+                    <Text style={themeStyles.selectedFileSize}>
+                      {formatFileSize(selectedFile.size)} • {lang === 'en' ? 'Ready to read' : 'Tệp sẵn sàng đọc'}
                     </Text>
                   </View>
                   <TouchableOpacity
-                    style={styles.reselectBtn}
+                    style={themeStyles.reselectBtn}
                     onPress={handlePickDocument}
                     disabled={isUploading}
                   >
-                    <Text style={styles.reselectBtnText}>
+                    <Text style={themeStyles.reselectBtnText}>
                       {lang === 'en' ? 'Change' : 'Đổi tệp'}
                     </Text>
                   </TouchableOpacity>
@@ -837,12 +903,12 @@ export default function UploadFile() {
               )}
 
               {/* 1. Nhập Tên Sách */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>
+              <View style={themeStyles.inputGroup}>
+                <Text style={themeStyles.inputLabel}>
                   {lang === 'en' ? 'Book Title' : 'Tên sách'}
                 </Text>
                 <TextInput
-                  style={styles.textInput}
+                  style={themeStyles.textInput}
                   value={bookTitle}
                   onChangeText={setBookTitle}
                   placeholder={
@@ -850,18 +916,18 @@ export default function UploadFile() {
                       ? 'e.g. Clean Code, Atomic Habits (Optional)'
                       : 'Ví dụ: Đắc Nhân Tâm, Hạt Giống Tâm Hồn (Tùy chọn)'
                   }
-                  placeholderTextColor="#94a3b8"
+                  placeholderTextColor="#9CA3AF"
                   editable={!isUploading}
                 />
               </View>
 
               {/* 2. Nhập Tên Tác Giả */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>
+              <View style={themeStyles.inputGroup}>
+                <Text style={themeStyles.inputLabel}>
                   {lang === 'en' ? 'Author Name' : 'Tên tác giả'}
                 </Text>
                 <TextInput
-                  style={styles.textInput}
+                  style={themeStyles.textInput}
                   value={bookAuthor}
                   onChangeText={setBookAuthor}
                   placeholder={
@@ -869,14 +935,14 @@ export default function UploadFile() {
                       ? 'e.g. Robert C. Martin, Dale Carnegie...'
                       : 'Ví dụ: Dale Carnegie, Nguyễn Nhật Ánh...'
                   }
-                  placeholderTextColor="#94a3b8"
+                  placeholderTextColor="#9CA3AF"
                   editable={!isUploading}
                 />
               </View>
 
               {/* 3. Thể loại sách đồng bộ với Backend */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>
+              <View style={themeStyles.inputGroup}>
+                <Text style={themeStyles.inputLabel}>
                   {lang === 'en' ? 'Category' : 'Thể loại sách'}
                 </Text>
                 <ScrollView
@@ -890,8 +956,8 @@ export default function UploadFile() {
                       <TouchableOpacity
                         key={cat.category_id}
                         style={[
-                          styles.categoryPill,
-                          isSelected && styles.categoryPillActive,
+                          themeStyles.categoryPill,
+                          isSelected && themeStyles.categoryPillActive,
                         ]}
                         onPress={() => setSelectedCategoryId(cat.category_id)}
                         disabled={isUploading}
@@ -899,8 +965,8 @@ export default function UploadFile() {
                       >
                         <Text
                           style={[
-                            styles.categoryPillText,
-                            isSelected && styles.categoryPillTextActive,
+                            themeStyles.categoryPillText,
+                            isSelected && themeStyles.categoryPillTextActive,
                           ]}
                         >
                           {cat.category_name}
@@ -912,12 +978,12 @@ export default function UploadFile() {
               </View>
 
               {/* 4. Mô tả tác phẩm (Tùy chọn) */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>
+              <View style={themeStyles.inputGroup}>
+                <Text style={themeStyles.inputLabel}>
                   {lang === 'en' ? 'Description (Optional)' : 'Mô tả tác phẩm (Tùy chọn)'}
                 </Text>
                 <TextInput
-                  style={[styles.textInput, { height: 60, textAlignVertical: 'top', paddingTop: 8 }]}
+                  style={[themeStyles.textInput, { height: 60, textAlignVertical: 'top', paddingTop: 8 }]}
                   value={bookDescription}
                   onChangeText={setBookDescription}
                   placeholder={
@@ -925,7 +991,7 @@ export default function UploadFile() {
                       ? 'Brief description or notes about the document...'
                       : 'Tóm tắt hoặc ghi chú về tài liệu cá nhân...'
                   }
-                  placeholderTextColor="#94a3b8"
+                  placeholderTextColor="#9CA3AF"
                   multiline
                   numberOfLines={2}
                   editable={!isUploading}
@@ -933,27 +999,31 @@ export default function UploadFile() {
               </View>
 
               {/* 5. Chọn Ảnh Bìa Sách */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>
+              <View style={themeStyles.inputGroup}>
+                <Text style={themeStyles.inputLabel}>
                   {lang === 'en' ? 'Book Cover Image' : 'Ảnh bìa sách'}
                 </Text>
 
-                <View style={styles.coverPickerRow}>
+                <View style={themeStyles.coverPickerRow}>
                   <TouchableOpacity
-                    style={styles.pickImageBtn}
+                    style={themeStyles.pickImageBtn}
                     activeOpacity={0.8}
                     onPress={handlePickCoverImage}
                     disabled={isUploading}
                   >
-                    <Ionicons name="images-outline" size={18} color="#1e3c72" />
-                    <Text style={styles.pickImageBtnText}>
+                    <Ionicons
+                      name="images-outline"
+                      size={17}
+                      color={isDarkMode ? '#34D399' : '#2F6B5F'}
+                    />
+                    <Text style={themeStyles.pickImageBtnText}>
                       {lang === 'en' ? 'Select Photo' : 'Chọn ảnh từ máy'}
                     </Text>
                   </TouchableOpacity>
 
                   {coverImageUri ? (
                     <TouchableOpacity
-                      style={styles.removeImageBtn}
+                      style={themeStyles.removeImageBtn}
                       activeOpacity={0.8}
                       onPress={() => {
                         setCoverImageUri('');
@@ -961,8 +1031,8 @@ export default function UploadFile() {
                       }}
                       disabled={isUploading}
                     >
-                      <Ionicons name="close-circle" size={16} color="#ef4444" />
-                      <Text style={styles.removeImageBtnText}>
+                      <Ionicons name="close-circle-outline" size={16} color="#E11D48" />
+                      <Text style={themeStyles.removeImageBtnText}>
                         {lang === 'en' ? 'Remove' : 'Bỏ ảnh'}
                       </Text>
                     </TouchableOpacity>
@@ -971,17 +1041,17 @@ export default function UploadFile() {
 
                 {/* Xem trước ảnh bìa đã chọn */}
                 {coverImageUri ? (
-                  <View style={styles.coverPreviewCard}>
+                  <View style={themeStyles.coverPreviewCard}>
                     <Image
                       source={{ uri: coverImageUri }}
-                      style={styles.coverPreviewImg}
+                      style={themeStyles.coverPreviewImg}
                       resizeMode="cover"
                     />
                     <View style={{ flex: 1, marginLeft: 12 }}>
-                      <Text style={styles.coverPreviewTitle} numberOfLines={1}>
+                      <Text style={themeStyles.coverPreviewTitle} numberOfLines={1}>
                         {coverImageName || (lang === 'en' ? 'Selected Cover' : 'Ảnh bìa đã chọn')}
                       </Text>
-                      <Text style={styles.coverPreviewSub}>
+                      <Text style={themeStyles.coverPreviewSub}>
                         {lang === 'en' ? 'Cover ready to apply' : 'Đã gắn ảnh bìa cho sách'}
                       </Text>
                     </View>
@@ -989,66 +1059,74 @@ export default function UploadFile() {
                 ) : null}
               </View>
 
-              {/* Thông báo kết nối đồng bộ Backend Cloudinary & Web */}
-              <View style={styles.syncNoticeBox}>
-                <Ionicons name="cloud-upload-outline" size={16} color="#0284c7" />
-                <Text style={styles.syncNoticeText}>
+              {/* Thông báo đồng bộ tài liệu */}
+              <View style={themeStyles.syncNoticeBox}>
+                <Ionicons
+                  name="cloud-done-outline"
+                  size={16}
+                  color={isDarkMode ? '#34D399' : '#2F6B5F'}
+                />
+                <Text style={themeStyles.syncNoticeText}>
                   {lang === 'en'
-                    ? 'Automatic sync with Cloudinary & Web Bookshelf'
-                    : 'Tự động đồng bộ lên máy chủ Cloudinary & Tủ sách Web'}
+                    ? 'Saved directly in your personal Bookshelf'
+                    : 'Lưu trữ và mở đọc ngay trong Tủ sách cá nhân'}
                 </Text>
               </View>
             </ScrollView>
 
             {/* Thanh hiển thị chi phí tải lên */}
-            <View style={styles.modalCostRow}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={{ fontSize: 16 }}>{isUnlimited ? '👑' : isFree ? '🎁' : '🥔'}</Text>
-                <Text style={[styles.modalCostText, !isFree && { color: '#dc2626' }]}>
+            <View style={themeStyles.modalCostRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons
+                  name={isUnlimited ? 'shield-checkmark-outline' : isFree ? 'pricetag-outline' : 'wallet-outline'}
+                  size={16}
+                  color={!isFree ? '#DC2626' : (isDarkMode ? '#34D399' : '#2F6B5F')}
+                />
+                <Text style={[themeStyles.modalCostText, !isFree && { color: '#DC2626' }]}>
                   {isUnlimited
-                    ? (lang === 'en' ? 'VIP Unlimited Upload (0 🥔)' : 'Đặc quyền Đại Điền Chủ: Miễn phí vĩnh viễn (0 🥔)')
+                    ? (lang === 'en' ? 'VIP Unlimited Upload (Free)' : 'Đặc quyền Đại Điền Chủ: Miễn phí')
                     : isFree
                       ? (lang === 'en'
                         ? `Free Upload (${freeRemaining} remaining)`
-                        : `Lượt tải miễn phí (${freeRemaining} lượt còn lại)`)
+                        : `Lượt tải miễn phí (Còn ${freeRemaining} lượt)`)
                       : (lang === 'en'
-                        ? `Cost: 50 Potatoes (Balance: ${potatoBalance} 🥔)`
-                        : `Phí tải: 50 Khoai (Ví hiện có: ${potatoBalance} 🥔)`)}
+                        ? `Cost: 50 Khoai (Balance: ${potatoBalance} Khoai)`
+                        : `Phí tải: 50 Khoai (Ví hiện có: ${potatoBalance} Khoai)`)}
                 </Text>
               </View>
             </View>
 
             {/* Modal Buttons: Upload & Hủy */}
-            <View style={styles.modalActionRow}>
+            <View style={themeStyles.modalActionRow}>
               <TouchableOpacity
-                style={styles.modalCancelBtn}
+                style={themeStyles.modalCancelBtn}
                 activeOpacity={0.8}
                 onPress={() => setIsModalVisible(false)}
                 disabled={isUploading}
               >
-                <Text style={styles.modalCancelBtnText}>
+                <Text style={themeStyles.modalCancelBtnText}>
                   {lang === 'en' ? 'Cancel' : 'Hủy'}
                 </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={[
-                  styles.modalSubmitBtn,
-                  !isFree && { backgroundColor: '#ea580c' },
+                  themeStyles.modalSubmitBtn,
+                  !isFree && { backgroundColor: '#B45309' },
                 ]}
                 activeOpacity={0.85}
                 onPress={handleConfirmUpload}
                 disabled={isUploading}
               >
                 {isUploading ? (
-                  <ActivityIndicator color="#ffffff" size="small" />
+                  <ActivityIndicator color="#FFFFFF" size="small" />
                 ) : (
                   <>
-                    <Ionicons name="cloud-upload" size={18} color="#ffffff" style={{ marginRight: 6 }} />
-                    <Text style={styles.modalSubmitBtnText}>
+                    <Ionicons name="cloud-upload-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={themeStyles.modalSubmitBtnText}>
                       {isFree
-                        ? (lang === 'en' ? 'Upload (Free)' : 'Upload (Miễn phí)')
-                        : (lang === 'en' ? 'Upload (-50 🥔)' : 'Upload (Trừ 50 🥔)')}
+                        ? (lang === 'en' ? 'Save & Read (Free)' : 'Tải lên (Miễn phí)')
+                        : (lang === 'en' ? 'Upload (-50 Khoai)' : 'Tải lên (-50 Khoai)')}
                     </Text>
                   </>
                 )}
@@ -1062,244 +1140,244 @@ export default function UploadFile() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#fff' },
-  container: { flex: 1, backgroundColor: '#f4f5f7' },
+  safeArea: { flex: 1, backgroundColor: '#FFFFFF' },
 
-  // Header đồng nhất
+  // Header tinh gọn chuẩn mobile app (đồng bộ với Tủ sách)
   header: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingTop: 15,
-    paddingBottom: 15,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  headerTitle: { fontSize: 20, fontWeight: '800', color: '#1a1a1a' },
-  headerIcon: { position: 'absolute', right: 20, bottom: 15 },
-
-  scrollContainer: { flex: 1 },
-
-  // Phần Upload
-  uploadSection: {
-    alignItems: 'center',
-    paddingTop: 30,
-    paddingBottom: 30,
-    paddingHorizontal: 20,
-    backgroundColor: '#fff',
-  },
-  potatoIconWrapper: {
-    position: 'relative',
-    marginBottom: 10,
-    marginTop: 10,
-  },
-  title: { fontSize: 22, fontWeight: '800', color: '#1a1a1a', marginTop: 15, marginBottom: 8 },
-  subtitle: {
-    fontSize: 14,
-    color: '#888',
-    textAlign: 'center',
-    marginBottom: 25,
-    lineHeight: 22,
-    paddingHorizontal: 10,
-  },
-
-  // Nút Upload màu Here We Go
-  uploadBtn: {
+    height: 56,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#64b5f6',
-    paddingVertical: 14,
-    paddingHorizontal: 30,
-    borderRadius: 12,
-    shadowColor: '#64b5f6',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 5,
-    elevation: 5,
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    backgroundColor: '#FFFFFF',
   },
-  uploadBtnText: { color: '#1e3c72', fontSize: 18, fontWeight: '800' },
-  costRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
-  costStrikethrough: {
-    color: '#1e3c72',
-    textDecorationLine: 'line-through',
-    opacity: 0.6,
-    fontSize: 12,
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+    color: '#111827',
   },
-  costFree: { color: '#1e3c72', fontWeight: '800', fontSize: 13, marginLeft: 6 },
 
-  divider: { height: 1, backgroundColor: '#eee' },
+  scrollContainer: { flex: 1, backgroundColor: '#FFFFFF' },
+  scrollContent: {
+    paddingHorizontal: 18,
+    paddingTop: 6,
+    paddingBottom: 24,
+  },
 
-  // Lối tắt Tủ Sách
-  bookshelfShortcut: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 16,
+  // Quota & Tier Card (Thanh lịch, chuẩn Dark/Light)
+  quotaBox: {
+    width: '100%',
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#E5E7EB',
+    padding: 14,
+    marginBottom: 18,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  quotaTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+    gap: 8,
+  },
+  tierPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F4F5F7',
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    gap: 6,
+  },
+  tierPillText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  walletPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F4F5F7',
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    gap: 6,
+  },
+  walletPillText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  quotaBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    gap: 7,
+  },
+  quotaStatusText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#374151',
+    flex: 1,
+  },
+
+  // Vùng chọn file phong cách mobile app đọc sách hiện đại
+  uploadDropzone: {
+    alignItems: 'center',
+    backgroundColor: '#F4F5F7',
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: '#D1D5DB',
+    paddingVertical: 30,
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  uploadHeroIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
     shadowRadius: 6,
     elevation: 2,
   },
-  bookshelfShortcutIcon: {
-    width: 44,
-    height: 44,
+  uploadDocMiniBadge: {
+    position: 'absolute',
+    right: -2,
+    bottom: -2,
+    width: 24,
+    height: 24,
     borderRadius: 12,
-    backgroundColor: '#eef2ff',
-    justifyContent: 'center',
+    backgroundColor: '#2F6B5F',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
     alignItems: 'center',
-    marginRight: 14,
+    justifyContent: 'center',
   },
-  bookshelfShortcutTitle: {
-    fontSize: 15,
+  title: {
+    fontSize: 19,
     fontWeight: '700',
-    color: '#0f172a',
+    color: '#111827',
+    marginBottom: 8,
+    textAlign: 'center',
   },
-  bookshelfShortcutDesc: {
-    fontSize: 12.5,
-    color: '#64748b',
-    marginTop: 2,
-  },
-
-  // Lịch sử Upload
-  historySection: { padding: 20 },
-  historyHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 15,
-  },
-  historyTitle: { fontSize: 18, fontWeight: '800', color: '#1a1a1a' },
-  historyMore: { fontSize: 13, fontWeight: '600', color: '#3498db' },
-
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 36,
-    paddingHorizontal: 20,
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  emptyText: {
+  subtitle: {
     fontSize: 13.5,
-    color: '#64748b',
+    color: '#6B7280',
     textAlign: 'center',
-    marginTop: 10,
+    marginBottom: 22,
     lineHeight: 20,
+    paddingHorizontal: 6,
   },
 
-  // Book Card
-  bookCard: {
+  // Hàng hiển thị phí mỗi lượt rõ ràng, dễ quan sát
+  priceInfoRow: {
+    width: '100%',
     flexDirection: 'row',
-    backgroundColor: '#fff',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 14,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: '#f1f2f6',
-  },
-  bookCover: {
-    width: 65,
-    height: 90,
-    borderRadius: 8,
-    overflow: 'hidden',
-    marginRight: 14,
-  },
-  bookCoverImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 8,
-  },
-  bookCoverPlaceholder: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 4,
-  },
-  mockCoverText: {
-    fontSize: 10,
-    fontWeight: '800',
-    textAlign: 'center',
-    marginTop: 4,
-  },
-  bookInfo: { flex: 1, justifyContent: 'center' },
-  bookTitle: { fontSize: 15, fontWeight: '800', color: '#1a1a1a', marginBottom: 3 },
-  bookAuthorText: {
-    fontSize: 12.5,
-    fontWeight: '600',
-    color: '#64748b',
-    marginBottom: 4,
-  },
-  bookChapter: { fontSize: 12, color: '#888', marginBottom: 6 },
-
-  // Thanh tiến độ
-  progressContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  progressBarBg: {
-    flex: 1,
-    height: 6,
-    backgroundColor: '#eee',
-    borderRadius: 3,
-    marginRight: 8,
-    overflow: 'hidden',
-  },
-  progressBarFill: { height: '100%', backgroundColor: '#f39c12', borderRadius: 3 },
-  progressPercentText: { fontSize: 11, fontWeight: '700', color: '#888' },
-
-  fileStatusBox: { flexDirection: 'row', alignItems: 'center' },
-  fileStatus: { fontSize: 12, fontWeight: '700', color: '#27ae60', marginLeft: 4 },
-  fileDateText: { fontSize: 11.5, color: '#94a3b8', marginLeft: 6 },
-
-  cardActionCol: {
     alignItems: 'center',
     justifyContent: 'space-between',
-    height: 80,
-    marginLeft: 6,
-  },
-  continueBtn: {
-    backgroundColor: '#fdf5e6',
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#fad390',
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    marginBottom: 14,
   },
-  continueBtnText: { color: '#e67e22', fontSize: 12.5, fontWeight: '700' },
-  deleteBtn: {
-    padding: 6,
+  priceLabelGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  priceLabelText: {
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  priceValueGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  priceStrikethrough: {
+    fontSize: 12.5,
+    fontWeight: '500',
+    color: '#9CA3AF',
+    textDecorationLine: 'line-through',
+  },
+  priceBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  priceBadgeText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
+
+  // Nút Upload chính chuẩn mobile app
+  uploadBtn: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2F6B5F',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  uploadBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15.5,
+    fontWeight: '700',
   },
 
   // MODAL STYLES
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    backgroundColor: 'rgba(0, 0, 0, 0.52)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
   },
   modalCard: {
     width: '100%',
-    maxWidth: 480,
-    backgroundColor: '#ffffff',
+    maxWidth: 460,
+    backgroundColor: '#FFFFFF',
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
     padding: 18,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.22,
     shadowRadius: 16,
     elevation: 10,
   },
@@ -1309,76 +1387,58 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
+    borderBottomColor: '#E5E7EB',
   },
   modalTitle: {
     fontSize: 16.5,
-    fontWeight: '800',
-    color: '#0f172a',
+    fontWeight: '700',
+    color: '#111827',
   },
 
   // Selected File Box
   selectedFileBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#F4F5F7',
     borderRadius: 12,
     padding: 10,
     marginTop: 10,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#E5E7EB',
   },
   selectedFileIconWrap: {
     width: 38,
     height: 38,
-    borderRadius: 19,
-    backgroundColor: '#fef2f2',
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
   },
   selectedFileName: {
     fontSize: 13.5,
-    fontWeight: '700',
-    color: '#1e293b',
+    fontWeight: '600',
+    color: '#111827',
   },
   selectedFileSize: {
     fontSize: 11.5,
-    color: '#64748b',
+    color: '#6B7280',
     marginTop: 2,
   },
   reselectBtn: {
-    paddingVertical: 5,
+    paddingVertical: 6,
     paddingHorizontal: 10,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#FFFFFF',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#cbd5e1',
+    borderColor: '#E5E7EB',
   },
   reselectBtnText: {
-    fontSize: 11.5,
-    fontWeight: '700',
-    color: '#2563eb',
-  },
-
-  // Rule Notice Box
-  ruleNoticeBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    backgroundColor: '#f0f9ff',
-    borderWidth: 1,
-    borderColor: '#bae6fd',
-    borderRadius: 10,
-    padding: 10,
-    marginTop: 10,
-  },
-  ruleNoticeText: {
-    flex: 1,
     fontSize: 12,
-    color: '#0369a1',
-    lineHeight: 17,
     fontWeight: '600',
+    color: '#2F6B5F',
   },
 
   // Form Inputs
@@ -1387,19 +1447,19 @@ const styles = StyleSheet.create({
   },
   inputLabel: {
     fontSize: 13,
-    fontWeight: '700',
-    color: '#334155',
+    fontWeight: '600',
+    color: '#374151',
     marginBottom: 6,
   },
   textInput: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#F4F5F7',
     borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 10,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
     paddingHorizontal: 12,
-    paddingVertical: 9,
+    paddingVertical: 10,
     fontSize: 13.5,
-    color: '#0f172a',
+    color: '#111827',
   },
 
   // Cover Picker
@@ -1412,17 +1472,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#e0f2fe',
+    backgroundColor: '#F4F5F7',
     borderWidth: 1,
-    borderColor: '#bae6fd',
-    borderRadius: 10,
-    paddingVertical: 8,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    paddingVertical: 9,
     paddingHorizontal: 14,
   },
   pickImageBtnText: {
     fontSize: 12.5,
-    fontWeight: '700',
-    color: '#0369a1',
+    fontWeight: '600',
+    color: '#111827',
   },
   removeImageBtn: {
     flexDirection: 'row',
@@ -1433,17 +1493,17 @@ const styles = StyleSheet.create({
   },
   removeImageBtnText: {
     fontSize: 12,
-    fontWeight: '700',
-    color: '#ef4444',
+    fontWeight: '600',
+    color: '#E11D48',
   },
 
   coverPreviewCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
-    borderRadius: 10,
+    backgroundColor: '#F4F5F7',
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#E5E7EB',
     padding: 8,
     marginTop: 8,
   },
@@ -1454,175 +1514,36 @@ const styles = StyleSheet.create({
   },
   coverPreviewTitle: {
     fontSize: 12.5,
-    fontWeight: '700',
-    color: '#1e293b',
+    fontWeight: '600',
+    color: '#111827',
   },
   coverPreviewSub: {
-    fontSize: 11,
-    color: '#16a34a',
+    fontSize: 11.5,
+    color: '#2F6B5F',
     marginTop: 2,
     fontWeight: '600',
-  },
-  coverEmptyNotice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 6,
-    paddingHorizontal: 4,
-  },
-  coverEmptyNoticeText: {
-    fontSize: 11.5,
-    color: '#94a3b8',
-    fontStyle: 'italic',
-  },
-
-  // Modal Actions
-  modalActionRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 18,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
-  },
-  modalCancelBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f1f5f9',
-  },
-  modalCancelBtnText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#64748b',
-  },
-  modalSubmitBtn: {
-    flex: 1.5,
-    flexDirection: 'row',
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#2563eb',
-    shadowColor: '#2563eb',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 3,
-  },
-  modalSubmitBtnText: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#ffffff',
-  },
-
-  // Quota & Tier Card
-  quotaBox: {
-    width: '100%',
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: '#e2e8f0',
-    padding: 12,
-    marginTop: 14,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  quotaTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-  },
-  tierPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fef3c7',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#fde68a',
-    gap: 6,
-  },
-  tierPillText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#92400e',
-  },
-  walletPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fffbeb',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#fcd34d',
-    gap: 4,
-  },
-  walletPillText: {
-    fontSize: 12.5,
-    fontWeight: '800',
-    color: '#b45309',
-  },
-  quotaBottomRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-    gap: 6,
-  },
-  quotaStatusText: {
-    fontSize: 12.5,
-    fontWeight: '700',
-    color: '#16a34a',
-    flex: 1,
-  },
-  modalCostRow: {
-    backgroundColor: '#f8fafc',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    marginTop: 10,
-    marginBottom: 4,
-  },
-  modalCostText: {
-    fontSize: 12.5,
-    fontWeight: '700',
-    color: '#1e293b',
-    flex: 1,
   },
 
   // Category Pills
   categoryPill: {
     paddingHorizontal: 12,
     paddingVertical: 7,
-    borderRadius: 14,
-    backgroundColor: '#f1f5f9',
+    borderRadius: 16,
+    backgroundColor: '#F4F5F7',
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#E5E7EB',
   },
   categoryPillActive: {
-    backgroundColor: '#1e3c72',
-    borderColor: '#1e3c72',
+    backgroundColor: '#2F6B5F',
+    borderColor: '#2F6B5F',
   },
   categoryPillText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#475569',
+    color: '#374151',
   },
   categoryPillTextActive: {
-    color: '#ffffff',
+    color: '#FFFFFF',
     fontWeight: '700',
   },
 
@@ -1631,17 +1552,73 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#f0f9ff',
+    backgroundColor: '#F4F5F7',
     padding: 10,
-    borderRadius: 10,
+    borderRadius: 12,
     marginTop: 12,
     borderWidth: 1,
-    borderColor: '#bae6fd',
+    borderColor: '#E5E7EB',
   },
   syncNoticeText: {
-    fontSize: 11.5,
-    color: '#0369a1',
-    fontWeight: '600',
+    fontSize: 12,
+    color: '#374151',
+    fontWeight: '500',
     flex: 1,
+  },
+
+  modalCostRow: {
+    backgroundColor: '#F4F5F7',
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginTop: 10,
+    marginBottom: 4,
+  },
+  modalCostText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#111827',
+    flex: 1,
+  },
+
+  // Modal Actions
+  modalActionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F4F5F7',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  modalCancelBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  modalSubmitBtn: {
+    flex: 1.5,
+    flexDirection: 'row',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2F6B5F',
+  },
+  modalSubmitBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });
