@@ -4,6 +4,7 @@ import { NativeScrollEvent, NativeSyntheticEvent, StyleSheet, TextStyle, ViewSty
 export type AppScreen =
   | 'auth'
   | 'home'
+  | 'leaderboard'
   | 'dmHome'
   | 'offers'
   | 'upload'
@@ -45,8 +46,12 @@ totalChapters?: number;
 
 export type AppLanguage = 'vi' | 'en';
 
+export interface NavigationOptions {
+  initialBookshelfTab?: 'dangdoc' | 'dangthue' | 'yeuthich' | 'tailen' | 'duoctang';
+}
+
 export interface NavigationContextValue {
-  navigate: (screen: AppScreen, book?: BookData) => void;
+  navigate: (screen: AppScreen, book?: BookData, options?: NavigationOptions) => void;
   navigateTab: (screen: AppScreen) => void;
   goBack: () => void;
   logout: () => void;
