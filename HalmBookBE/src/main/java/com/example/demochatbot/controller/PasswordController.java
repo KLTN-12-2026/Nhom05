@@ -53,7 +53,9 @@ public class PasswordController {
         // Lưu otp vào bảng account
         Customer customer = customerOtp.get();
         Account account = customer.getAccount();
-
+        if (account == null) {
+            return new ResponseEntity<>("Tài khoản liên kết không tồn tại.", HttpStatus.BAD_REQUEST);
+        }
         account.setOtpCode(otp);
         account.setOtpExpiration(LocalDateTime.now().plusMinutes(5));
         accountRepository.save(account);
@@ -75,12 +77,14 @@ public class PasswordController {
         }
 
         Account account = customerOpt.get().getAccount();
-
+        if (account == null) {
+            return new ResponseEntity<>("Tài khoản liên kết không tồn tại.", HttpStatus.BAD_REQUEST);
+        }
         if (account.getOtpCode() == null || !account.getOtpCode().equals(request.getOtp())) {
             return new ResponseEntity<>("Mã OTP không chính xác.", HttpStatus.BAD_REQUEST);
         }
 
-        if (account.getOtpExpiration().isBefore(LocalDateTime.now())) {
+        if (account.getOtpExpiration() == null || account.getOtpExpiration().isBefore(LocalDateTime.now())) {
             return new ResponseEntity<>("Mã OTP đã hết hạn.", HttpStatus.BAD_REQUEST);
         }
 

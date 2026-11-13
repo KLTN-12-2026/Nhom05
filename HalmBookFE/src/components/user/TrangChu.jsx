@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import logo from "@/assets/images/logo.png";
 import axiosInstance from "@/services/axiosClient";
 import UserLayout from "./layout/UserLayout";
+import { getBanners } from "@/services/bannerService";
 
-// Chỉnh số px này để thay đổi cỡ chữ tin nhắn trong khung chat AI.
-const CHAT_MESSAGE_FONT_SIZE = "16px";
+
+
 
 function applyImageFallback(event, fallbackSrc) {
   const image = event.currentTarget;
@@ -28,6 +29,7 @@ const PAGE_STYLES = [
   "",
   "        html {",
   "            scroll-behavior: smooth;",
+  "            overscroll-behavior-x: none;",
   "        }",
   "",
   "        body {",
@@ -35,25 +37,9 @@ const PAGE_STYLES = [
   "            background-color: #F7F4EE;",
   "            color: #1E1F1D;",
   "            overflow-x: hidden;",
+  "            overscroll-behavior-x: none;",
   "            -webkit-font-smoothing: antialiased;",
   "            transition: background-color 0.4s ease, color 0.4s ease;",
-  "        }",
-  "",
-  "        /* Chapter Flash Cue (subtle vignette flash when flipping) */",
-  "        #chapter-flip-cue {",
-  "            position: fixed;",
-  "            inset: 0;",
-  "            pointer-events: none;",
-  "            z-index: 9999;",
-  "            opacity: 0;",
-  "            background: radial-gradient(circle at center, transparent 40%, rgba(142,48,56,0.08) 100%);",
-  "            transition: opacity 0.4s ease;",
-  "        }",
-  "        .dark #chapter-flip-cue {",
-  "            background: radial-gradient(circle at center, transparent 40%, rgba(212,175,55,0.06) 100%);",
-  "        }",
-  "        #chapter-flip-cue.is-active {",
-  "            opacity: 1;",
   "        }",
   "",
   "        .dark body {",
@@ -638,15 +624,18 @@ const PAGE_STYLES = [
   "        .shelf-scroll-row {",
   "            scrollbar-width: none;",
   "            -ms-overflow-style: none;",
+  "            padding-top: 1.25rem;",
+  "            padding-bottom: 1.25rem;",
+  "            -webkit-overflow-scrolling: touch;",
+  "            overscroll-behavior-x: none;",
+  "            overscroll-behavior-y: auto;",
+  "            will-change: scroll-position;",
+  "            transform: translateZ(0);",
   "        }",
   "        .shelf-scroll-row::-webkit-scrollbar {",
   "            display: none;",
   "            width: 0;",
   "            height: 0;",
-  "        }",
-  "        .shelf-scroll-row {",
-  "            padding-top: 1rem;",
-  "            padding-bottom: 1rem;",
   "        }",
   "        .book-card-item {",
   "            position: relative;",
@@ -744,15 +733,49 @@ const PAGE_STYLES = [
   "            border-color: #B8860B;",
   "        }",
   "        #trending-section #trending-shelf {",
-  "            gap: 1.25rem;",
+  "            gap: 1rem;",
+  "            padding-top: 1.5rem !important;",
+  "            padding-bottom: 1.5rem !important;",
+  "            padding-left: 1rem !important;",
+  "            padding-right: 1.5rem !important;",
+  "            scroll-behavior: auto !important;",
+  "        }",
+  "        .trending-card-custom {",
+  "            overflow: visible !important;",
+  "            position: relative;",
+  "            z-index: 10;",
+  "        }",
+  "        .trending-card-custom:hover {",
+  "            z-index: 30 !important;",
   "        }",
   "",
-  "        /* Trending Shelf: Exactly 4 cards visible on desktop (no 4.5 book overflow) */",
-  "        @media (min-width: 1024px) {",
+  "        /* Trending Shelf: Compact 6 cards on desktop with dedicated ranking badges */",
+  "        @media (min-width: 1280px) {",
   "            #trending-shelf > div {",
-  "                flex: 0 0 calc((100% - (3 * 1.25rem)) / 4) !important;",
-  "                width: calc((100% - (3 * 1.25rem)) / 4) !important;",
-  "                max-width: calc((100% - (3 * 1.25rem)) / 4) !important;",
+  "                flex: 0 0 calc((100% - (5 * 1rem)) / 6) !important;",
+  "                width: calc((100% - (5 * 1rem)) / 6) !important;",
+  "                max-width: calc((100% - (5 * 1rem)) / 6) !important;",
+  "            }",
+  "        }",
+  "        @media (min-width: 1024px) and (max-width: 1279px) {",
+  "            #trending-shelf > div {",
+  "                flex: 0 0 calc((100% - (4 * 1rem)) / 5) !important;",
+  "                width: calc((100% - (4 * 1rem)) / 5) !important;",
+  "                max-width: calc((100% - (4 * 1rem)) / 5) !important;",
+  "            }",
+  "        }",
+  "        @media (min-width: 640px) and (max-width: 1023px) {",
+  "            #trending-shelf > div {",
+  "                flex: 0 0 calc((100% - (2 * 0.75rem)) / 3) !important;",
+  "                width: calc((100% - (2 * 0.75rem)) / 3) !important;",
+  "                max-width: calc((100% - (2 * 0.75rem)) / 3) !important;",
+  "            }",
+  "        }",
+  "        @media (max-width: 639px) {",
+  "            #trending-shelf > div {",
+  "                flex: 0 0 160px !important;",
+  "                width: 160px !important;",
+  "                max-width: 160px !important;",
   "            }",
   "        }",
   "",
@@ -939,29 +962,31 @@ const PAGE_SCRIPT = [
   "            const bookCover = book.img || book.img_url || '/logo.png';",
   "            const bookAuthor = book.author || 'HALM BOOK';",
   "            const bookRating = book.rating || '5.0';",
-  "            const bookPrice = book.price ? (Number(book.price).toLocaleString('vi-VN') + ' đ') : '';",
+  "            const priceKhoai = (book.price !== undefined && book.price > 0) ? `${book.price} Khoai` : 'Miễn phí';",
   "            return `",
-  "                <div class=\"book-card-item w-40 sm:w-48 lg:w-[210px] xl:w-[220px] shrink-0 snap-start p-3 rounded-xl bg-paper dark:bg-night-card border border-paper-border dark:border-night-border group flex flex-col justify-between hover:-translate-y-1.5 transition-all duration-300 shadow-sm\" data-book-id=\"${encodeURIComponent(bookId)}\" data-book-title=\"${encodeURIComponent(bookTitle)}\" data-book-author=\"${encodeURIComponent(bookAuthor)}\" data-book-rating=\"${encodeURIComponent(bookRating)}\" data-book-price=\"${encodeURIComponent(bookPrice)}\" data-book-description=\"${encodeURIComponent(book.desc || 'Chưa có mô tả cho tác phẩm này.')}\">",
-  "                    <div class=\"relative w-full aspect-[2/3] rounded-lg overflow-hidden bg-night-card shadow-md mb-3\">",
+  "                <div class=\"book-card-item w-40 sm:w-48 lg:w-[210px] xl:w-[220px] shrink-0 snap-start p-3 rounded-xl bg-paper dark:bg-night-card border border-paper-border dark:border-night-border group flex flex-col justify-between hover:-translate-y-1.5 transition-all duration-300 shadow-sm cursor-pointer\" data-book-id=\"${encodeURIComponent(bookId)}\" data-book-title=\"${encodeURIComponent(bookTitle)}\" data-book-author=\"${encodeURIComponent(bookAuthor)}\" data-book-rating=\"${encodeURIComponent(bookRating)}\" data-book-price=\"${encodeURIComponent(priceKhoai)}\" data-book-description=\"${encodeURIComponent(book.desc || 'Chưa có mô tả cho tác phẩm này.')}\" onclick=\"window.location.href='/chitietsach/${bookId}'\">",
+  "                    <a href=\"/chitietsach/${bookId}\" class=\"block relative w-full aspect-[2/3] rounded-lg overflow-hidden bg-night-card shadow-md mb-3 cursor-pointer\" onclick=\"event.stopPropagation();\">",
   "                        <img src=\"${bookCover}\" alt=\"${bookTitle}\" class=\"w-full h-full object-cover group-hover:scale-105 transition-transform duration-500\" loading=\"lazy\" onerror=\"this.onerror=null;this.src='/logo.png';\">",
   "                        <div class=\"font-metadata-spec absolute top-2 right-2 px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-sm text-[10px] text-gold font-bold flex items-center gap-0.5\">",
   "                            <i class=\"ph-fill ph-star\"></i> ${bookRating}",
   "                        </div>",
-  "                    </div>",
+  "                    </a>",
   "                    <div class=\"space-y-1\">",
   "                        <h4 class=\"font-display font-bold text-sm text-ink dark:text-night-text line-clamp-1 group-hover:text-wine dark:group-hover:text-gold transition-colors\" title=\"${bookTitle}\">",
-  "                            ${bookTitle}",
+  "                            <a href=\"/chitietsach/${bookId}\" onclick=\"event.stopPropagation();\">${bookTitle}</a>",
   "                        </h4>",
   "                        <p class=\"font-metadata-spec text-xs text-ink-muted dark:text-night-muted line-clamp-1\">",
   "                            ${bookAuthor}",
   "                        </p>",
-  "                        ${bookPrice ? `<p class=\"font-metadata-spec text-[11px] font-bold text-wine dark:text-gold pt-0.5\">${bookPrice}</p>` : ''}",
+  "                        <p class=\"font-metadata-spec text-[11px] font-black text-wine dark:text-gold pt-0.5 flex items-center gap-1\">",
+  "                            <span>🥔</span> ${priceKhoai}",
+  "                        </p>",
   "                    </div>",
   "                    <div class=\"pt-3 mt-3 border-t border-paper-border/70 dark:border-night-border/70 flex items-center justify-between\">",
-  "                        <a href=\"/chitietsach/${bookId}\" class=\"font-metadata-spec text-xs font-bold text-wine dark:text-gold hover:underline\">",
+  "                        <a href=\"/chitietsach/${bookId}\" class=\"font-metadata-spec text-xs font-bold text-wine dark:text-gold hover:underline\" onclick=\"event.stopPropagation();\">",
   "                            Chi tiết",
   "                        </a>",
-  "                        <a href=\"/chitietsach/${bookId}\" class=\"w-7 h-7 rounded-full bg-paper-200 dark:bg-night-border hover:bg-wine hover:text-white dark:hover:bg-gold dark:hover:text-ink flex items-center justify-center text-xs transition-colors\" title=\"Chi tiết sách\">",
+  "                        <a href=\"/chitietsach/${bookId}\" class=\"w-7 h-7 rounded-full bg-paper-200 dark:bg-night-border hover:bg-wine hover:text-white dark:hover:bg-gold dark:hover:text-ink flex items-center justify-center text-xs transition-colors\" title=\"Chi tiết sách\" onclick=\"event.stopPropagation();\">",
   "                            <i class=\"ph-bold ph-book-open\"></i>",
   "                        </a>",
   "                    </div>",
@@ -1007,42 +1032,47 @@ const PAGE_SCRIPT = [
   "            });",
   "        }",
   "",
-  "        // Render discovery end-of-shelf card (revealed when reaching last book)",
+  "        // Render discovery end-of-shelf card (gateway to full category page)",
+  "        // Render discovery end-of-shelf card (gateway to full category page)",
   "        function renderDiscoveryCard(categoryName, topicKey, iconName = 'ph-arrow-right') {",
+  "            const cleanTopic = topicKey || 'all';",
+  "            const cleanName = categoryName || 'Kho Sách';",
+  "            const cleanIcon = iconName || 'ph-arrow-right';",
   "            return `",
-  "                <div class=\"shelf-discovery-card w-40 sm:w-48 lg:w-[210px] xl:w-[220px] shrink-0 snap-start p-5 rounded-xl border border-dashed border-wine/40 dark:border-gold/40 bg-paper-surface/70 dark:bg-night-surface/70 hover:border-wine dark:hover:border-gold hover:bg-wine/5 dark:hover:bg-gold/5 group flex flex-col items-center justify-between text-center transition-all duration-300 shadow-sm cursor-pointer\" onclick=\"filterTopic('${topicKey}')\" role=\"button\" aria-label=\"Khám phá ${categoryName}\">",
+  "                <div class=\"shelf-discovery-card w-40 sm:w-48 lg:w-[210px] xl:w-[220px] shrink-0 snap-start p-4 sm:p-5 rounded-2xl border border-paper-border dark:border-night-border bg-[#FAF7F2] dark:bg-night-card hover:border-wine dark:hover:border-gold hover:shadow-xl hover:-translate-y-1.5 group flex flex-col items-center justify-between text-center transition-all duration-300 shadow-sm cursor-pointer\" onclick=\"window.filterTopic('${cleanTopic}')\" role=\"button\" aria-label=\"Khám phá toàn bộ ${cleanName}\">",
   "                    <div class=\"w-full flex justify-end\">",
-  "                        <span class=\"font-metadata-spec text-[9px] font-bold text-wine dark:text-gold uppercase tracking-[0.2em] px-2 py-0.5 rounded-full bg-wine/10 dark:bg-gold/15\">",
-  "                            Hết Danh Mục",
+  "                        <span class=\"font-metadata-spec text-[9px] font-black text-wine dark:text-gold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-wine/10 dark:bg-gold/15 border border-wine/20 dark:border-gold/30\">",
+  "                            TRỌN BỘ",
   "                        </span>",
   "                    </div>",
-  "                    <div class=\"my-auto py-2 flex flex-col items-center\">",
-  "                        <div class=\"w-14 h-14 rounded-full bg-wine/10 dark:bg-gold/15 text-wine dark:text-gold flex items-center justify-center mb-3 group-hover:scale-110 group-hover:bg-wine group-hover:text-white dark:group-hover:bg-gold dark:group-hover:text-night-bg transition-all duration-300 shadow-sm\">",
-  "                            <i class=\"ph-bold ${iconName} text-2xl\"></i>",
+  "                    <div class=\"my-auto py-3 sm:py-4 flex flex-col items-center\">",
+  "                        <div class=\"w-14 h-14 rounded-full bg-[#F3E8E6] dark:bg-gold/15 text-wine dark:text-gold flex items-center justify-center mb-3 group-hover:scale-110 transition-transform duration-300 shadow-sm\">",
+  "                            <i class=\"ph-bold ${cleanIcon} text-2xl\"></i>",
   "                        </div>",
-  "                        <h4 class=\"font-display font-black text-sm sm:text-base text-ink dark:text-night-text group-hover:text-wine dark:group-hover:text-gold transition-colors leading-snug mb-1.5 px-1\">",
-  "                            ${categoryName}",
+  "                        <h4 class=\"font-display font-black text-sm sm:text-base text-ink dark:text-night-text group-hover:text-wine dark:group-hover:text-gold transition-colors leading-tight mb-1.5 px-1\">",
+  "                            ${cleanName}",
   "                        </h4>",
   "                        <p class=\"font-metadata-spec text-[11px] text-ink-muted dark:text-night-muted\">",
   "                            Xem trọn bộ tác phẩm",
   "                        </p>",
   "                    </div>",
-  "                    <div class=\"pt-3 w-full border-t border-paper-border/70 dark:border-night-border/70 flex items-center justify-center gap-1.5 text-xs font-bold text-wine dark:text-gold font-metadata-spec\">",
+  "                    <div class=\"pt-3 w-full border-t border-paper-border dark:border-night-border flex items-center justify-center gap-1.5 text-xs font-bold text-wine dark:text-gold font-metadata-spec\">",
   "                        <span>Khám phá ngay</span>",
-  "                        <i class=\"ph-bold ph-arrow-right group-hover:translate-x-1 transition-transform\"></i>",
+  "                        <i class=\"ph-bold ph-arrow-right group-hover:translate-x-1.5 transition-transform duration-300\"></i>",
   "                    </div>",
   "                </div>",
   "            `;",
   "        }",
-  "",
+  "        window.renderDiscoveryCard = renderDiscoveryCard;",
+  "        ",
   "        // Horizontal shelf scroll",
+  "        ",
   "        function scrollShelf(shelfId, offset) {",
   "            const el = document.getElementById(shelfId);",
   "            if (el) el.scrollBy({ left: offset, behavior: 'smooth' });",
   "        }",
   "",
-  "        // Scroll precisely by 1 book card step",
-  "        function scrollShelfByCard(shelfId, direction) {",
+  "        function scrollShelfByBook(shelfId, direction) {",
   "            const el = document.getElementById(shelfId);",
   "            if (!el) return;",
   "            const firstCard = el.querySelector('[data-book-id]') || el.firstElementChild;",
@@ -1052,11 +1082,12 @@ const PAGE_SCRIPT = [
   "            el.scrollBy({ left: direction * cardWidth, behavior: 'smooth' });",
   "        }",
   "",
-  "        // Category filter scroll",
+  "        // Category filter / Gateway to category page",
   "        function filterTopic(topicKey) {",
-  "            const shelf = document.getElementById('topic-section') || document.getElementById('trending-section');",
-  "            if (shelf) shelf.scrollIntoView({ behavior: 'smooth' });",
+  "            const target = topicKey ? encodeURIComponent(topicKey) : 'all';",
+  "            window.location.href = '/danhmuc/' + target;",
   "        }",
+  "        window.filterTopic = filterTopic;",
   "",
   "        // Live Search Handler",
   "        function handleSearch() {",
@@ -1078,7 +1109,7 @@ const PAGE_SCRIPT = [
   "            ].map(book => [book.id || `${book.title}-${book.author}`, book])).values());",
   "            const found = allBooks.find(b => b.title.toLowerCase().includes(query) || b.author.toLowerCase().includes(query));",
   "            if (found) {",
-  "                window.location.href = `../book-detail.html?id=${found.id}`;",
+  "                window.location.href = `/chitietsach/${found.id}`;",
   "            } else {",
   "                window.location.href = `#trending-section`;",
   "            }",
@@ -1111,19 +1142,82 @@ const PAGE_SCRIPT = [
   "                'kinh-dien': (book) => book.category_id === 1 || /kinh điển|hoàng tử|đắc nhân|epictetus|exupéry/i.test((book.title || '') + ' ' + (book.author || ''))",
   "            };",
   "            let isTrendingInitialRender = true;",
+  "            function renderTrendingCard(book, idx) {",
+  "                const bookId = book.id || book.book_id || '';",
+  "                const bookTitle = book.title || book.bookName || 'Tác phẩm';",
+  "                const bookCover = book.img || book.img_url || '/logo.png';",
+  "                const bookAuthor = book.author || 'HALM BOOK';",
+  "                const bookRating = book.rating || '5.0';",
+  "                const priceKhoai = (book.price !== undefined && book.price > 0) ? `${book.price} Khoai` : 'Miễn phí';",
+  "                const weeklyReads = (1.9 - (idx % 8) * 0.18).toFixed(1);",
+  "",
+  "                let rankBadge = '';",
+  "                let rankBorder = 'border-paper-border dark:border-night-border';",
+  "                let rankGlow = '';",
+  "                if (idx === 0) {",
+  "                    rankBadge = `<div class=\"absolute -top-2.5 -left-2 z-20 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 text-slate-950 font-outfit font-black text-[10px] tracking-wider shadow-lg shadow-amber-500/40 border border-yellow-100\"><span>👑</span><span>TOP 1</span></div>`;",
+  "                    rankBorder = 'border-amber-400/80 ring-1 ring-amber-400/30';",
+  "                    rankGlow = 'shadow-[0_4px_20px_rgba(245,158,11,0.18)]';",
+  "                } else if (idx === 1) {",
+  "                    rankBadge = `<div class=\"absolute -top-2.5 -left-2 z-20 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-slate-200 via-gray-100 to-slate-300 text-slate-900 font-outfit font-black text-[10px] tracking-wider shadow-lg shadow-slate-400/30 border border-white\"><span>🥈</span><span>TOP 2</span></div>`;",
+  "                    rankBorder = 'border-slate-300 dark:border-slate-400/60 ring-1 ring-slate-300/30';",
+  "                } else if (idx === 2) {",
+  "                    rankBadge = `<div class=\"absolute -top-2.5 -left-2 z-20 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-700 via-amber-600 to-orange-700 text-white font-outfit font-black text-[10px] tracking-wider shadow-lg shadow-orange-900/30 border border-amber-300/50\"><span>🥉</span><span>TOP 3</span></div>`;",
+  "                    rankBorder = 'border-amber-600/60 dark:border-amber-600/60 ring-1 ring-amber-600/30';",
+  "                } else {",
+  "                    rankBadge = `<div class=\"absolute -top-2 -left-1.5 z-20 flex items-center gap-0.5 px-2 py-0.5 rounded-lg bg-black/80 dark:bg-black/90 backdrop-blur-md text-amber-300 font-outfit font-black text-[9px] border border-amber-500/40 shadow\"><span>🔥</span><span>#${idx + 1}</span></div>`;",
+  "                }",
+  "",
+  "                return `",
+  "                    <div class=\"book-card-item trending-card-custom relative shrink-0 snap-start p-2.5 sm:p-3 rounded-2xl bg-paper-surface dark:bg-night-card border ${rankBorder} ${rankGlow} group flex flex-col justify-between hover:-translate-y-2 hover:shadow-xl transition-all duration-300 cursor-pointer\" data-book-id=\"${encodeURIComponent(bookId)}\" data-book-title=\"${encodeURIComponent(bookTitle)}\" data-book-author=\"${encodeURIComponent(bookAuthor)}\" data-book-rating=\"${encodeURIComponent(bookRating)}\" data-book-price=\"${encodeURIComponent(priceKhoai)}\" data-book-description=\"${encodeURIComponent(book.desc || 'Tác phẩm đang thịnh hành nhất tuần trên HALM Book.')}\" onclick=\"window.location.href='/chitietsach/${bookId}'\">",
+  "                        ${rankBadge}",
+  "                        <div>",
+  "                            <div class=\"relative w-full aspect-[2/3] rounded-xl overflow-hidden bg-night-card shadow-md mb-2.5\">",
+  "                                <img src=\"${bookCover}\" alt=\"${bookTitle}\" class=\"w-full h-full object-cover group-hover:scale-105 transition-transform duration-500\" loading=\"lazy\" onerror=\"this.onerror=null;this.src='/logo.png';\">",
+  "                                <div class=\"font-metadata-spec absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full bg-black/70 backdrop-blur-sm text-[9px] text-amber-300 font-bold flex items-center gap-0.5 shadow\">",
+  "                                    <i class=\"ph-fill ph-star text-amber-400\"></i> ${bookRating}",
+  "                                </div>",
+  "                                <div class=\"font-metadata-spec absolute bottom-1.5 inset-x-1.5 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-sm text-[9px] text-emerald-300 font-medium flex items-center justify-between\">",
+  "                                    <span class=\"flex items-center gap-1\">🔥 ${weeklyReads}k đọc</span>",
+  "                                    <span class=\"text-[8px] text-gray-300 uppercase\">Tuần</span>",
+  "                                </div>",
+  "                            </div>",
+  "                            <div class=\"space-y-0.5\">",
+  "                                <h4 class=\"font-display font-bold text-xs sm:text-[13px] text-ink dark:text-night-text line-clamp-1 group-hover:text-wine dark:group-hover:text-gold transition-colors\" title=\"${bookTitle}\">",
+  "                                    ${bookTitle}",
+  "                                </h4>",
+  "                                <p class=\"font-metadata-spec text-[11px] text-ink-muted dark:text-night-muted line-clamp-1\">",
+  "                                    ${bookAuthor}",
+  "                                </p>",
+  "                            </div>",
+  "                        </div>",
+  "                        <div class=\"pt-2 mt-2 border-t border-paper-border/70 dark:border-night-border/70 flex items-center justify-between\">",
+  "                            <div>",
+  "                                <span class=\"font-display font-black text-[11px] sm:text-xs text-wine dark:text-gold flex items-center gap-0.5\">",
+  "                                    <span>🥔</span> ${priceKhoai}",
+  "                                </span>",
+  "                                <span class=\"text-[9px] text-ink-muted dark:text-night-muted block leading-none\">",
+  "                                    ${book.price > 0 ? '/ tuần' : 'Trọn đời'}",
+  "                                </span>",
+  "                            </div>",
+  "                            <span class=\"w-6 h-6 rounded-full bg-paper-200 dark:bg-night-border hover:bg-wine hover:text-white dark:hover:bg-gold dark:hover:text-ink flex items-center justify-center text-[10px] text-ink dark:text-night-text transition-colors\">",
+  "                                <i class=\"ph-bold ph-caret-right\"></i>",
+  "                            </span>",
+  "                        </div>",
+  "                    </div>",
+  "                `;",
+  "            }",
+  "",
   "            function renderTrendingShelf(catKey) {",
   "                const targetShelf = document.getElementById('trending-shelf');",
-  "                if (!targetShelf) return;",
-  "                const list = (libraryCatalog.trending || []).filter(trendingCatMatch[catKey] || trendingCatMatch.all);",
-  "                const books = list.length ? list : (libraryCatalog.trending || []);",
-  "                targetShelf.innerHTML = books.map(renderBookCard).join('') + (books.length ? renderDiscoveryCard('Toàn Bộ Sách Thịnh Hành', 'all', 'ph-fire') : '');",
-  "                bindBookHoverPopups();",
-  "                if (!isTrendingInitialRender && typeof gsap !== 'undefined') {",
-  "                    const cards = Array.from(targetShelf.children).slice(0, 6);",
-  "                    gsap.fromTo(cards,",
-  "                        { y: 24, opacity: 0, scale: 0.95 },",
-  "                        { y: 0, opacity: 1, scale: 1, stagger: 0.05, duration: 0.42, ease: 'power2.out', clearProps: 'transform' }",
-  "                    );",
+  "                if (targetShelf) {",
+  "                    targetShelf.scrollLeft = 0;",
+  "                    if (typeof targetShelf.scrollTo === 'function') {",
+  "                        targetShelf.scrollTo({ left: 0, behavior: 'instant' });",
+  "                    }",
+  "                }",
+  "                if (typeof window.__setTrendingCat === 'function') {",
+  "                    window.__setTrendingCat(catKey);",
   "                }",
   "            }",
   "            window.renderTrendingShelf = renderTrendingShelf;",
@@ -1144,28 +1238,28 @@ const PAGE_SCRIPT = [
   "                }",
   "                const childrenContainer = document.getElementById('children-shelf');",
   "                if (childrenContainer && libraryCatalog.children && libraryCatalog.children.length) {",
-  "                    childrenContainer.innerHTML = libraryCatalog.children.map(renderBookCard).join('') + renderDiscoveryCard('Kho Sách Thiếu Nhi', 'thieu-nhi', 'ph-balloon');",
+  "                    childrenContainer.innerHTML = libraryCatalog.children.slice(0, 8).map(renderBookCard).join('') + renderDiscoveryCard('Kho Sách Thiếu Nhi', 'thieu-nhi', 'ph-balloon');",
   "                }",
   "                const literatureContainer = document.getElementById('literature-shelf');",
   "                if (literatureContainer && libraryCatalog.literature && libraryCatalog.literature.length) {",
-  "                    literatureContainer.innerHTML = libraryCatalog.literature.map(renderBookCard).join('') + renderDiscoveryCard('Kho Văn Học & Tiểu Thuyết', 'van-hoc', 'ph-feather');",
+  "                    literatureContainer.innerHTML = libraryCatalog.literature.slice(0, 8).map(renderBookCard).join('') + renderDiscoveryCard('Kho Văn Học & Tiểu Thuyết', 'van-hoc', 'ph-feather');",
   "                }",
   "                const selfgrowthShelf = document.getElementById('selfgrowth-shelf') || document.getElementById('selfgrowth-grid');",
   "                if (selfgrowthShelf && libraryCatalog.selfgrowth && libraryCatalog.selfgrowth.length) {",
-  "                    selfgrowthShelf.innerHTML = libraryCatalog.selfgrowth.map(renderBookCard).join('') + renderDiscoveryCard('Kho Sách Kỹ Năng', 'phat-trien', 'ph-brain');",
+  "                    selfgrowthShelf.innerHTML = libraryCatalog.selfgrowth.map(renderBookCard).join('') + renderDiscoveryCard('Kho Sách Kỹ Năng', 'ky-nang', 'ph-brain');",
   "                }",
   "                const shelfList = [",
   "                    { id: 'science-shelf', books: libraryCatalog.science, name: 'Khoa Học & Vũ Trụ', key: 'khoa-hoc', icon: 'ph-planet' },",
   "                    { id: 'business-shelf', books: libraryCatalog.business, name: 'Kinh Tế & Khởi Nghiệp', key: 'kinh-doanh', icon: 'ph-briefcase' },",
   "                    { id: 'history-shelf', books: libraryCatalog.history, name: 'Lịch Sử & Văn Hóa', key: 'lich-su', icon: 'ph-hourglass-high' },",
-  "                    { id: 'philosophy-shelf', books: libraryCatalog.philosophy, name: 'Tâm Lý & Triết Học', key: 'van-hoc', icon: 'ph-compass' },",
-  "                    { id: 'artlifestyle-shelf', books: libraryCatalog.artlifestyle, name: 'Nghệ Thuật & Lối Sống', key: 'van-hoc', icon: 'ph-palette' },",
-  "                    { id: 'biography-shelf', books: libraryCatalog.biography, name: 'Hồi Ký & Danh Nhân', key: 'van-hoc', icon: 'ph-user-focus' }",
+  "                    { id: 'philosophy-shelf', books: libraryCatalog.philosophy, name: 'Tâm Lý & Triết Học', key: 'triet-hoc', icon: 'ph-compass' },",
+  "                    { id: 'artlifestyle-shelf', books: libraryCatalog.artlifestyle, name: 'Nghệ Thuật & Lối Sống', key: 'nghe-thuat', icon: 'ph-palette' },",
+  "                    { id: 'biography-shelf', books: libraryCatalog.biography, name: 'Hồi Ký & Danh Nhân', key: 'hoi-ky', icon: 'ph-user-focus' }",
   "                ];",
   "                shelfList.forEach(item => {",
   "                    const el = document.getElementById(item.id);",
   "                    if (el && item.books && item.books.length) {",
-  "                        el.innerHTML = item.books.map(renderBookCard).join('') + renderDiscoveryCard(item.name, item.key, item.icon);",
+  "                        el.innerHTML = item.books.slice(0, 8).map(renderBookCard).join('') + renderDiscoveryCard(item.name, item.key, item.icon);",
   "                    }",
   "                });",
   "                bindBookHoverPopups();",
@@ -2390,7 +2484,7 @@ const PAGE_SCRIPT = [
   "                        let spotlightCard = null;",
   "",
   "                        if (content.id === 'trending-shelf-combo') {",
-  "                            spotlightCard = content.firstElementChild;",
+  "                            spotlightCard = null;",
   "                            shelfRow = content.querySelector('#trending-shelf') || content;",
   "                        }",
   "",
@@ -2884,200 +2978,10 @@ const PAGE_SCRIPT = [
   "                window.handleHeaderAutoScrollSwitch(checked);",
   "            };",
   "",
-  "            (function setupSmartChapterFlipping() {",
-  "                const chapterSelectors = [",
-  "                    '#chapter-0-broadcast',",
-  "                    '#about-section',",
-  "                    '#trending-section',",
-  "                    '#children-section',",
-  "                    '#values-section',",
-  "                    '#literature-section',",
-  "                    '#selfgrowth-section',",
-  "                    '#reading-space-section',",
-  "                    '#science-section',",
-  "                    '#business-section',",
-  "                    '#habit-section',",
-  "                    '#history-section',",
-  "                    '#philosophy-section',",
-  "                    '#smartreading-section',",
-  "                    '#artlifestyle-section',",
-  "                    '#biography-section',",
-  "                    '#topic-section',",
-  "                    '#invitation-section',",
-  "                    '#publishers-section'",
-  "                ];",
-  "",
-  "                const chapterEls = chapterSelectors",
-  "                    .map(sel => document.querySelector(sel))",
-  "                    .filter(el => Boolean(el));",
-  "",
-  "                if (!chapterEls.length) return;",
-  "",
-  "                const flipCue = document.getElementById('chapter-flip-cue');",
-  "                let isFlipping = false;",
-  "                let flipFallbackTimer = null;",
-  "                let touchStartY = 0;",
-  "                let isListenersBound = false;",
-  "",
-  "                function getCurrentChapterIndex() {",
-  "                    const scrollY = window.scrollY;",
-  "                    const navbar = document.getElementById('navbar');",
-  "                    const chapterMarker = scrollY + Math.min((navbar?.offsetHeight || 0) + 16, window.innerHeight * 0.2);",
-  "                    let activeIndex = 0;",
-  "",
-  "                    for (let i = 0; i < chapterEls.length; i++) {",
-  "                        const top = chapterEls[i].getBoundingClientRect().top + scrollY;",
-  "                        if (chapterMarker >= top - 20) {",
-  "                            activeIndex = i;",
-  "                        }",
-  "                    }",
-  "                    return activeIndex;",
-  "                }",
-  "",
-  "                function finishChapterFlip() {",
-  "                    if (!isFlipping) return;",
-  "                    isFlipping = false;",
-  "                    clearTimeout(flipFallbackTimer);",
-  "                }",
-  "",
-  "                function flipToChapter(targetIndex) {",
-  "                    if (targetIndex < 0 || targetIndex >= chapterEls.length || isFlipping) return;",
-  "                    isFlipping = true;",
-  "                    clearTimeout(flipFallbackTimer);",
-  "",
-  "                    // Show subtle visual transition cue",
-  "                    if (flipCue) {",
-  "                        flipCue.classList.add('is-active');",
-  "                        setTimeout(() => flipCue.classList.remove('is-active'), 400);",
-  "                    }",
-  "",
-  "                    const targetEl = chapterEls[targetIndex];",
-  "                    const requestedTop = targetIndex === 0 ? 0 : (targetEl.getBoundingClientRect().top + window.scrollY);",
-  "                    const maxScrollTop = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);",
-  "                    const targetTop = Math.max(0, Math.min(requestedTop, maxScrollTop));",
-  "                    const scrollDistance = Math.abs(window.scrollY - targetTop);",
-  "",
-  "                    window.scrollTo({",
-  "                        top: targetTop,",
-  "                        behavior: 'smooth'",
-  "                    });",
-  "",
-  "                    // Keep input locked until smooth scrolling actually ends; retain a fallback for older browsers.",
-  "                    flipFallbackTimer = setTimeout(finishChapterFlip, Math.min(1800, Math.max(700, scrollDistance / 1.5 + 300)));",
-  "                }",
-  "",
-  "                function onChapterScrollEnd() {",
-  "                    finishChapterFlip();",
-  "                }",
-  "",
-  "                function shouldIgnoreScrollTarget(target) {",
-  "                    const chatWin = document.getElementById('chat-window');",
-  "                    if (chatWin && chatWin.contains(target)) return true;",
-  "                    const searchDrop = document.getElementById('search-dropdown');",
-  "                    if (searchDrop && !searchDrop.classList.contains('hidden') && searchDrop.contains(target)) return true;",
-  "                    const setModal = document.getElementById('settings-modal');",
-  "                    return Boolean(setModal && !setModal.classList.contains('hidden') && setModal.contains(target));",
-  "                }",
-  "",
-  "                // Handle Wheel Event with Intent Threshold",
-  "                function onSmartWheel(e) {",
-  "                    // Do not hijack scrolling inside interactive popups, chat window or settings modal",
-  "                    if (shouldIgnoreScrollTarget(e.target)) return;",
-  "",
-  "                    // Require deliberate scroll intent (delta threshold > 18px for snappy response)",
-  "                    if (Math.abs(e.deltaY) < 18) return;",
-  "",
-  "                    if (isFlipping) {",
-  "                        e.preventDefault();",
-  "                        return;",
-  "                    }",
-  "",
-  "                    const currentIndex = getCurrentChapterIndex();",
-  "                    if (e.deltaY > 0) {",
-  "                        // Scrolling Down -> Flip forward to next chapter",
-  "                        if (currentIndex < chapterEls.length - 1) {",
-  "                            e.preventDefault();",
-  "                            flipToChapter(currentIndex + 1);",
-  "                        }",
-  "                    } else if (e.deltaY < 0) {",
-  "                        // Scrolling Up -> Flip backward to previous chapter",
-  "                        if (currentIndex > 0) {",
-  "                            e.preventDefault();",
-  "                            flipToChapter(currentIndex - 1);",
-  "                        }",
-  "                    }",
-  "                }",
-  "",
-  "                // Handle Mobile / Touch Gestures",
-  "                function onSmartTouchStart(e) {",
-  "                    if (shouldIgnoreScrollTarget(e.target)) {",
-  "                        touchStartY = 0;",
-  "                        return;",
-  "                    }",
-  "                    if (e.touches && e.touches[0]) {",
-  "                        touchStartY = e.touches[0].clientY;",
-  "                    }",
-  "                }",
-  "",
-  "                function onSmartTouchMove(e) {",
-  "                    if (!touchStartY || !e.touches || !e.touches[0]) return;",
-  "                    if (shouldIgnoreScrollTarget(e.target)) return;",
-  "                    const deltaY = touchStartY - e.touches[0].clientY;",
-  "                    if (Math.abs(deltaY) < 45) return;",
-  "",
-  "                    const currentIndex = getCurrentChapterIndex();",
-  "                    const targetIndex = deltaY > 0 ? currentIndex + 1 : currentIndex - 1;",
-  "                    if (targetIndex >= 0 && targetIndex < chapterEls.length) {",
-  "                        e.preventDefault();",
-  "                        touchStartY = 0;",
-  "                        flipToChapter(targetIndex);",
-  "                    }",
-  "                }",
-  "",
-  "                function onSmartTouchEnd() {",
-  "                    touchStartY = 0;",
-  "                }",
-  "",
-  "                function bindListeners() {",
-  "                    if (isListenersBound) return;",
-  "                    window.addEventListener('wheel', onSmartWheel, { passive: false });",
-  "                    window.addEventListener('touchstart', onSmartTouchStart, { passive: true });",
-  "                    window.addEventListener('touchmove', onSmartTouchMove, { passive: false });",
-  "                    window.addEventListener('touchend', onSmartTouchEnd, { passive: true });",
-  "                    window.addEventListener('scrollend', onChapterScrollEnd);",
-  "                    isListenersBound = true;",
-  "                }",
-  "",
-  "                function unbindListeners() {",
-  "                    if (!isListenersBound) return;",
-  "                    window.removeEventListener('wheel', onSmartWheel);",
-  "                    window.removeEventListener('touchstart', onSmartTouchStart);",
-  "                    window.removeEventListener('touchmove', onSmartTouchMove);",
-  "                    window.removeEventListener('touchend', onSmartTouchEnd);",
-  "                    window.removeEventListener('scrollend', onChapterScrollEnd);",
-  "                    clearTimeout(flipFallbackTimer);",
-  "                    finishChapterFlip();",
-  "                    if (flipCue) flipCue.classList.remove('is-active');",
-  "                    isListenersBound = false;",
-  "                }",
-  "",
-  "                // Global updater hooked directly to settings switch",
-  "                window.updateChapterFlippingState = function(isEnabled) {",
-  "                    if (typeof isEnabled === 'undefined') {",
-  "                        isEnabled = getAutoChapterScrollPreference();",
-  "                    }",
-  "                    if (isEnabled) {",
-  "                        bindListeners();",
-  "                    } else {",
-  "                        unbindListeners();",
-  "                    }",
-  "                };",
-  "",
-  "                // Initialize state upon page load",
-  "                const initialPref = getAutoChapterScrollPreference();",
-  "                window.updateChapterFlippingState(initialPref);",
-  "                syncAllAutoScrollUI(initialPref);",
-  "            })();",
+  "            // Chapter flipping completely removed per user request - native smooth free scroll only",
+  "            window.updateChapterFlippingState = function() {};",
+  "            window.handleHeaderAutoScrollSwitch = function() {};",
+  "            window.toggleHeaderAutoScroll = function() {};",
   "",
   "            // Ensure window always rests at the top on full reload / page show",
   "            window.addEventListener('pageshow', function(e) {",
@@ -3214,22 +3118,28 @@ export default function Test() {
     });
   }, []);
 
-  // 1. State quản lý chat
-  const [isOpen, setIsOpen] = useState(false);
-  const [inputText, setInputText] = useState("");
-  const [messages, setMessages] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
+  // 1. State quản lý Banners & Sách Trang Chủ
+  const [banners, setBanners] = useState(() => getBanners());
+  const [realPromotions, setRealPromotions] = useState([]);
+  const [copiedCode, setCopiedCode] = useState("");
+  const [trendingCategory, setTrendingCategory] = useState("all");
   const [books, setBooks] = useState([]);
   const [isBooksLoading, setIsBooksLoading] = useState(true);
   const [booksError, setBooksError] = useState("");
   const [pageNumber, setPageNumber] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [totalElements, setTotalElements] = useState(0);
-  const chatRequestRef = useRef(null);
-  const chatRequestIdRef = useRef(0);
 
   useEffect(() => {
     const controller = new AbortController();
+
+    const fetchPromotions = async () => {
+      try {
+        const res = await axiosInstance.get('/api/home/promotions');
+        if (Array.isArray(res.data)) setRealPromotions(res.data);
+      } catch (_) {}
+    };
+    fetchPromotions();
 
     const fetchBooks = async () => {
       try {
@@ -3316,10 +3226,32 @@ export default function Test() {
     }
   }, [books]);
 
-  useEffect(() => () => {
-    chatRequestIdRef.current += 1;
-    chatRequestRef.current?.abort();
+  // Đồng bộ Banner động thời gian thực từ Admin (QLGiaoDien)
+  useEffect(() => {
+    const handleBannersUpdated = (e) => {
+      if (Array.isArray(e.detail?.banners)) {
+        setBanners([...e.detail.banners]);
+      } else {
+        setBanners(getBanners());
+      }
+      setTimeout(() => {
+        if (typeof window.initBroadcastCarousel === "function") {
+          window.initBroadcastCarousel();
+        }
+      }, 100);
+    };
+    window.addEventListener("halm-banners-updated", handleBannersUpdated);
+    return () => window.removeEventListener("halm-banners-updated", handleBannersUpdated);
   }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (typeof window.initBroadcastCarousel === "function") {
+        window.initBroadcastCarousel();
+      }
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [banners]);
 
   useEffect(() => {
     const handleThemeChange = (e) => {
@@ -3334,89 +3266,103 @@ export default function Test() {
     return () => window.removeEventListener("halm-theme-change", handleThemeChange);
   }, []);
 
-  const handleSendMessage = async (text = inputText) => {
-    const message = text.trim();
-    if (!message || chatRequestRef.current) return;
+  // Lọc sách cho Line "Sách đang được quan tâm" theo danh mục
+  const filteredTrendingBooks = useMemo(() => {
+    if (!Array.isArray(books) || books.length === 0) return [];
+    const matchCategory = (book, catKey) => {
+      if (catKey === "all") return true;
+      const text = `${book.title || ""} ${book.author || ""} ${book.desc || ""}`.toLowerCase();
+      const cId = Number(book.category_id);
+      if (catKey === "van-hoc") {
+        return cId === 1 || /văn học|tiểu thuyết|truyện|nhật ánh|hoa nở|chuyện tình/i.test(text);
+      }
+      if (catKey === "thieu-nhi") {
+        return cId === 2 || /thiếu nhi|tuổi thơ|dế mèn|hoàng tử|alice|cổ tích|tô hoài/i.test(text);
+      }
+      if (catKey === "ky-nang") {
+        return cId === 3 || /kỹ năng|phát triển|sống|thói quen|đắc nhân|carnegie|tư duy/i.test(text);
+      }
+      if (catKey === "kinh-dien") {
+        return cId === 1 || /kinh điển|hoàng tử|đắc nhân|epictetus|exupéry/i.test(text);
+      }
+      return true;
+    };
+    const list = books.filter((b) => matchCategory(b, trendingCategory));
+    return list.length > 0 ? list.slice(0, 16) : books.slice(0, 16);
+  }, [books, trendingCategory]);
 
-    const requestId = ++chatRequestIdRef.current;
-    const controller = new AbortController();
-    chatRequestRef.current = controller;
-    setMessages((previous) => [...previous, { sender: "user", text: message }]);
-    setInputText("");
-    setIsLoading(true);
+  // Đăng ký setter danh mục trending cho script ngoài gọi đồng bộ
+  useEffect(() => {
+    window.__setTrendingCat = (catKey) => {
+      setTrendingCategory(catKey);
+    };
+    return () => {
+      window.__setTrendingCat = null;
+    };
+  }, []);
 
-   try {
-      const currentToken = sessionStorage.getItem("token") || localStorage.getItem("token");
-      
-      // Khai báo cấu hình mặc định tường minh
-      const config = {
-        signal: controller.signal,
-        headers: {
-          "Content-Type": "application/json"
+  // Đảm bảo Line sách đang được quan tâm luôn bắt đầu từ Top 1 (scrollLeft = 0)
+  useEffect(() => {
+    const resetTrendingShelf = () => {
+      const shelf = document.getElementById("trending-shelf");
+      if (shelf) {
+        shelf.scrollLeft = 0;
+        if (typeof shelf.scrollTo === "function") {
+          shelf.scrollTo({ left: 0, behavior: "instant" });
         }
-      };
-
-      // 2. Chỉ gắn Header bảo mật khi thực sự cầm Token trong tay
-      if (currentToken) {
-        config.headers["Authorization"] = `Bearer ${currentToken}`;
-      } else {
-        console.warn("CẢNH BÁO: Không tìm thấy Token! Yêu cầu này chắc chắn sẽ bị Backend trả về 401.");
       }
+    };
+    resetTrendingShelf();
+    const t1 = setTimeout(resetTrendingShelf, 60);
+    const t2 = setTimeout(resetTrendingShelf, 250);
+    const t3 = setTimeout(resetTrendingShelf, 600);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+    };
+  }, [books, trendingCategory]);
 
-      //
-      const response = await axiosInstance.post(
-        "/api/chat",
-        { message: message },
-        config
-      );
+  // Chặn cử chỉ history back của trình duyệt khi vuốt trackpad / chuột ngang ở mép kệ
+  useEffect(() => {
+    const handleWheelOverscroll = (e) => {
+      const target = e.target;
+      const shelf = target?.closest?.(".shelf-scroll-row") || target?.closest?.("#trending-shelf");
+      if (shelf && e.type === "wheel") {
+        if (shelf.scrollLeft <= 0 && e.deltaX < 0) {
+          e.preventDefault();
+        } else if (shelf.scrollLeft + shelf.clientWidth >= shelf.scrollWidth - 1 && e.deltaX > 0) {
+          e.preventDefault();
+        }
+      }
+    };
+    window.addEventListener("wheel", handleWheelOverscroll, { passive: false });
+    return () => {
+      window.removeEventListener("wheel", handleWheelOverscroll);
+    };
+  }, []);
 
-      const reply = response.data?.reply;
-      
-      if (typeof reply !== "string" || !reply.trim()) {
-        throw new Error("Chat API trả về dữ liệu không hợp lệ.");
-      }
-
-      if (requestId === chatRequestIdRef.current) {
-        setMessages((previous) => [...previous, { sender: "bot", text: reply }]);
-      }
-      
-    } catch (error) {
-      if (controller.signal.aborted) return;
-      
-      const errorMessage = error.response?.status === 401
-        ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
-        : "Xin lỗi, hiện chưa thể kết nối với trợ lý. Vui lòng thử lại.";
-
-      if (error.response?.status !== 401) {
-          console.error("Lỗi gọi API Chat:", error);
-      }
-
-      if (requestId === chatRequestIdRef.current) {
-        setMessages((previous) => [
-          ...previous,
-          { sender: "bot", text: errorMessage },
-        ]);
-      }
-    } finally {
-      if (requestId === chatRequestIdRef.current) {
-        chatRequestRef.current = null;
-        setIsLoading(false);
-      }
+  const handleScrollTrending = (direction) => {
+    const shelf = document.getElementById("trending-shelf");
+    if (shelf) {
+      shelf.scrollBy({ left: direction * 320, behavior: "smooth" });
     }
   };
 
-  const handleClearChat = () => {
-    chatRequestIdRef.current += 1;
-    chatRequestRef.current?.abort();
-    chatRequestRef.current = null;
-    setIsLoading(false);
-    setMessages([]);
-    setInputText("");
+  const handleCopyVoucher = (code) => {
+    if (!code) return;
+    navigator.clipboard?.writeText(code);
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode(""), 2000);
   };
 
+  // Kích hoạt Mascot Chatbot Khoai Tây AI (PotatoChatbot)
   const openChatbot = (prefillMessage) => {
-    setIsOpen(true);
-    if (prefillMessage) handleSendMessage(prefillMessage);
+    window.dispatchEvent(
+      new CustomEvent("halm-open-chatbot", {
+        detail: { message: prefillMessage },
+      })
+    );
   };
   return (
     <>
@@ -3428,8 +3374,7 @@ export default function Test() {
       <UserLayout className="selection:bg-wine selection:text-white" onOpenChatbot={openChatbot}>
 
 
-        {/* Subtle Vignette Flash Cue during Chapter Flipping */}
-        <div id="chapter-flip-cue" aria-hidden="true"></div>
+
 
         {/* Starry background in Dark Mode */}
         <div id="starry-background"></div>
@@ -3452,120 +3397,286 @@ export default function Test() {
           <section id="chapter-0-broadcast" className="chapter-ambient-wrapper ambient-glow-a bg-paper dark:bg-night-bg transition-colors">
             <div id="hero-broadcast" className="hero-broadcast pt-[76px]">
               <div className="hero-broadcast-viewport">
-                {[
-                  {
-                    eyebrow: "HALM BOOK · KHÔNG GIAN ĐỌC SÁCH",
-                    title: "Mở ra thế giới mới",
-                    description: "Khám phá những cuốn sách truyền cảm hứng, mở rộng tri thức và tìm thấy hành trình đọc dành riêng cho bạn.",
-                    action: "Khám phá thư viện",
-                    actionLink: "#trending-section",
-                    icon: "ph-books",
-                    books: [
-                      { title: "Văn học", subtitle: "NHỮNG CÂU CHUYỆN ĐỂ ĐỜI", color: "linear-gradient(145deg,#6e2530,#b75c42)" },
-                      { title: "Tri thức", subtitle: "MỞ RỘNG TẦM NHÌN", color: "linear-gradient(145deg,#1f4051,#6f9b93)" },
-                      { title: "Phát triển", subtitle: "MỖI NGÀY TỐT HƠN", color: "linear-gradient(145deg,#946525,#dfb95f)" },
-                    ],
-                  },
-                  {
-                    eyebrow: "TUYỂN CHỌN DÀNH CHO BẠN",
-                    title: "Một cuốn sách, ngàn cảm hứng",
-                    description: "Từ văn học, thiếu nhi đến khoa học và phát triển bản thân — bắt đầu với chủ đề khiến bạn tò mò nhất.",
-                    action: "Tìm sách yêu thích",
-                    actionLink: "#trending-section",
-                    icon: "ph-sparkle",
-                    books: [
-                      { title: "Tuổi thơ", subtitle: "NUÔI DƯỠNG TRÍ TƯỞNG TƯỢNG", color: "linear-gradient(145deg,#315b54,#7fac82)" },
-                      { title: "Khám phá", subtitle: "CHẠM ĐẾN CHÂN TRỜI MỚI", color: "linear-gradient(145deg,#344b77,#8293c1)" },
-                      { title: "Sáng tạo", subtitle: "Ý TƯỞNG BẮT ĐẦU TỪ ĐÂY", color: "linear-gradient(145deg,#783d67,#c17ca2)" },
-                    ],
-                  },
-                  {
-                    eyebrow: "ĐỒNG HÀNH CÙNG TRỢ LÝ AI",
-                    title: "Tìm đúng cuốn sách cho bạn",
-                    description: "Chia sẻ điều bạn quan tâm, trợ lý HALM BOOK sẽ cùng bạn khám phá những lựa chọn phù hợp.",
-                    action: "Trò chuyện cùng AI",
-                    actionLink: "#",
-                    icon: "ph-chat-circle-dots",
-                    books: [
-                      { title: "Gợi ý", subtitle: "ĐÚNG GU · ĐÚNG CHỦ ĐỀ", color: "linear-gradient(145deg,#57376e,#987ab6)" },
-                      { title: "Khám phá", subtitle: "ĐỌC THEO CÁCH CỦA BẠN", color: "linear-gradient(145deg,#83412f,#d08b60)" },
-                      { title: "Bắt đầu", subtitle: "HÀNH TRÌNH ĐỌC MỚI", color: "linear-gradient(145deg,#305762,#70a6a1)" },
-                    ],
-                  },
-                  {
-                    eyebrow: "HỘI VIÊN & ĐẶC QUYỀN VIP",
-                    title: "Nâng tầm trải nghiệm đọc",
-                    description: "Tích lũy Khoai Tây mỗi ngày, mở khóa kho sách độc bản, mượn sách không giới hạn và thăng hạng thành viên danh giá.",
-                    action: "Khám phá đặc quyền",
-                    actionLink: "/hang",
-                    icon: "ph-crown",
-                    books: [
-                      { title: "Khoai Tây", subtitle: "TÍCH ĐIỂM ĐỔI QUÀ", color: "linear-gradient(145deg,#946525,#d4af37)" },
-                      { title: "Cấp Bậc", subtitle: "LỘ TRÌNH 5 HẠNG", color: "linear-gradient(145deg,#8e3038,#c15c5c)" },
-                      { title: "Đặc Quyền", subtitle: "ƯU ĐÃI KHÔNG GIỚI HẠN", color: "linear-gradient(145deg,#1f4e38,#529a6e)" },
-                    ],
-                  },
-                  {
-                    eyebrow: "TỦ SÁCH CÁ NHÂN & GIA HẠN",
-                    title: "Không gian đọc của riêng bạn",
-                    description: "Theo dõi tiến độ đọc, lưu giữ trích dẫn sâu sắc, quản lý thời hạn thuê sách và gia hạn tiện lợi ngay trong tầm tay.",
-                    action: "Vào tủ sách của tôi",
-                    actionLink: "/tusachcn",
-                    icon: "ph-book-bookmark",
-                    books: [
-                      { title: "Đang đọc", subtitle: "TIẾP TỤC HÀNH TRÌNH", color: "linear-gradient(145deg,#1f4051,#4a90e2)" },
-                      { title: "Gia hạn", subtitle: "LINH HOẠT VỚI KHOAI", color: "linear-gradient(145deg,#5e2a84,#9b51e0)" },
-                      { title: "Trích dẫn", subtitle: "LƯU TRỮ TRÍ TUỆ", color: "linear-gradient(145deg,#844722,#e67e22)" },
-                    ],
-                  },
-                ].map((slide, index) => (
-                  <article key={slide.title} className={`hero-broadcast-slide ${index === 0 ? "is-active" : ""}`}>
-                    <div className="relative z-10 space-y-5 text-center lg:text-left">
-                      <span className="inline-flex items-center gap-2 rounded-full border border-gold/40 bg-gold/10 px-3 py-1.5 font-metadata-spec text-[10px] font-bold tracking-[0.2em] text-wine dark:text-gold">
-                        <i className={`ph-bold ${slide.icon}`}></i>{slide.eyebrow}
-                      </span>
-                      <div>
-                        <h1 className="font-display-hero text-3xl font-black leading-tight text-ink dark:text-night-text sm:text-4xl lg:text-6xl">
-                          {slide.title}
-                          <span className="mt-1 block text-wine dark:text-gold">Cùng HALM BOOK</span>
-                        </h1>
-                        <p className="font-editorial-body mx-auto mt-4 max-w-3xl text-sm leading-relaxed text-ink-muted dark:text-night-muted sm:text-base lg:mx-0 lg:text-lg">
-                          {slide.description}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center justify-center gap-3 lg:justify-start">
-                        {slide.icon === "ph-chat-circle-dots" ? (
-                          <button type="button" onClick={() => openChatbot("Tôi muốn được gợi ý sách phù hợp với sở thích.")} className="rounded-full bg-wine px-6 py-3 text-xs font-bold uppercase tracking-wider text-white shadow-md transition hover:-translate-y-0.5 hover:bg-wine-dark">
-                            {slide.action}<i className="ph-bold ph-arrow-up-right ml-2"></i>
-                          </button>
-                        ) : (
-                          <a href={slide.actionLink} className="rounded-full bg-wine px-6 py-3 text-xs font-bold uppercase tracking-wider text-white shadow-md transition hover:-translate-y-0.5 hover:bg-wine-dark">
-                            {slide.action}<i className="ph-bold ph-arrow-right ml-2"></i>
-                          </a>
-                        )}
-                        <span className="font-metadata-spec text-xs font-semibold text-ink-muted dark:text-night-muted">
-                          <i className="ph-fill ph-star mr-1 text-gold"></i>Đọc theo cách của riêng bạn
-                        </span>
-                      </div>
-                    </div>
-                    <div className="hero-broadcast-books relative z-10" aria-label="Các chủ đề sách nổi bật">
-                      {slide.books.map((book, bookIndex) => (
-                        <a
-                          key={book.title}
-                          href={slide.actionLink}
-                          className="hero-broadcast-book-card flex flex-col items-center justify-center p-2.5 text-center text-white"
-                          style={{ background: book.color }}
-                          aria-label={`Khám phá sách chủ đề ${book.title}`}
-                        >
-                          <span className="card-badge">{bookIndex === 0 ? "Nổi bật" : "Khám phá"}</span>
-                          <i className={`ph-bold ${slide.icon} mb-2 text-3xl text-[#F5D77F] sm:text-4xl`}></i>
-                          <span className="font-display text-sm font-black leading-tight sm:text-base">{book.title}</span>
-                          <span className="mt-2 text-[7px] font-bold leading-tight tracking-[0.12em] text-white/75 sm:text-[8px]">{book.subtitle}</span>
+                {banners.filter(b => b.isActive !== false).map((slide, index) => {
+                  const isCustomImage = slide.layoutType === 'custom_image' || (slide.imageUrl && !slide.layoutType);
+                  const isPureImage = isCustomImage && slide.imageMode === 'pure' && slide.imageUrl;
+
+                  if (isPureImage) {
+                    return (
+                      <article key={slide.id || index} className={`hero-broadcast-slide relative overflow-hidden rounded-2xl ${index === 0 ? "is-active" : ""}`}>
+                        <a href={slide.actionLink || "#trending-section"} className="block w-full h-full min-h-[380px] lg:min-h-[440px]">
+                          <img src={slide.imageUrl} alt={slide.title || "Banner"} className="w-full h-full object-cover rounded-2xl transition-transform duration-700 hover:scale-[1.02]" />
                         </a>
-                      ))}
-                    </div>
-                  </article>
-                ))}
+                      </article>
+                    );
+                  }
+
+                  return (
+                    <article
+                      key={slide.id || index}
+                      className={`hero-broadcast-slide relative overflow-hidden rounded-2xl ${index === 0 ? "is-active" : ""}`}
+                      style={slide.imageUrl && slide.imageMode === 'overlay' ? {
+                        backgroundImage: `linear-gradient(rgba(17, 18, 16, 0.78), rgba(17, 18, 16, 0.88)), url(${slide.imageUrl})`,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center'
+                      } : {}}
+                    >
+                      <div className="relative z-10 space-y-5 text-center lg:text-left max-w-2xl">
+                        <span className="inline-flex items-center gap-2 rounded-full border border-gold/40 bg-gold/10 px-3 py-1.5 font-metadata-spec text-[10px] font-bold tracking-[0.2em] text-wine dark:text-gold uppercase">
+                          <i className={`ph-bold ${slide.icon || 'ph-sparkle'}`}></i>
+                          {slide.eyebrow || 'HALM BOOK · ĐẶC QUYỀN'}
+                        </span>
+                        <div>
+                          <h1 className="font-display-hero text-3xl font-black leading-tight text-ink dark:text-night-text sm:text-4xl lg:text-5xl">
+                            {slide.title}
+                            {slide.titleHighlight && (
+                              <span className="mt-1 block text-wine dark:text-gold">
+                                {slide.titleHighlight}
+                              </span>
+                            )}
+                          </h1>
+                          <p className="font-editorial-body mx-auto mt-4 max-w-xl text-sm leading-relaxed text-ink-muted dark:text-night-muted sm:text-base lg:mx-0">
+                            {slide.description}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center justify-center gap-3 lg:justify-start pt-1">
+                          {slide.layoutType === 'mascot_ai' || slide.actionLink === '#chat' ? (
+                            <button
+                              type="button"
+                              onClick={() => openChatbot(slide.mascotQuote || "Xin chào Mascot Khoai Nhỏ! Hãy gợi ý cho mình sách hay nhé.")}
+                              className="rounded-full bg-wine hover:bg-wine-dark px-6 py-3 text-xs font-bold uppercase tracking-wider text-white shadow-lg transition-all hover:-translate-y-0.5 flex items-center gap-2 cursor-pointer"
+                            >
+                              <span>{slide.actionText || 'Trò Chuyện Cùng AI'}</span>
+                              <i className="ph-bold ph-chat-circle-dots text-sm"></i>
+                            </button>
+                          ) : (
+                            <a
+                              href={slide.actionLink || '#trending-section'}
+                              className="rounded-full bg-wine hover:bg-wine-dark px-6 py-3 text-xs font-bold uppercase tracking-wider text-white shadow-lg transition-all hover:-translate-y-0.5 flex items-center gap-2"
+                            >
+                              <span>{slide.actionText || 'Khám Phá Ngay'}</span>
+                              <i className="ph-bold ph-arrow-right text-sm"></i>
+                            </a>
+                          )}
+                          <span className="font-metadata-spec text-xs font-semibold text-ink-muted dark:text-night-muted hidden sm:inline-flex items-center">
+                            <i className="ph-fill ph-star mr-1 text-gold"></i>Đọc theo cách của riêng bạn
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Mascot AI layout */}
+                      {slide.layoutType === 'mascot_ai' && (
+                        <div className="relative z-10 w-full lg:max-w-md bg-paper-surface/90 dark:bg-night-surface/90 backdrop-blur-md rounded-2xl p-5 border border-paper-border dark:border-night-border shadow-xl space-y-4">
+                          <div className="flex items-center justify-between pb-3 border-b border-paper-border/70 dark:border-night-border/70">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-10 h-10 rounded-full bg-amber-500/20 text-2xl flex items-center justify-center animate-bounce">
+                                🥔
+                              </div>
+                              <div>
+                                <h4 className="font-display font-bold text-sm text-ink dark:text-night-text">Mascot Khoai Nhỏ AI</h4>
+                                <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                                  <span>Online sẵn sàng hỗ trợ</span>
+                                </div>
+                              </div>
+                            </div>
+                            <span className="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-gold text-[10px] font-bold uppercase tracking-wider">
+                              Trợ lý 24/7
+                            </span>
+                          </div>
+
+                          <div className="relative bg-paper-50 dark:bg-night-card p-3.5 rounded-xl border border-paper-border/60 dark:border-night-border/60 text-xs text-ink dark:text-night-text font-editorial-body leading-relaxed">
+                            <div className="absolute -top-2 left-6 w-3 h-3 bg-paper-50 dark:bg-night-card border-t border-l border-paper-border/60 dark:border-night-border/60 transform rotate-45"></div>
+                            {slide.mascotQuote || 'Chào bạn đọc! Mình là Khoai Nhỏ HALM 🥔. Hôm nay bạn muốn tìm sách hay giải đáp điều gì nào?'}
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <p className="text-[11px] font-metadata-spec font-bold text-ink-muted dark:text-night-muted uppercase tracking-wider">
+                              Gợi ý câu hỏi tương tác nhanh:
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {(slide.promptChips || [
+                                'Gợi ý sách kỹ năng sống hot nhất?',
+                                'Tóm tắt ý chính cuốn Nhà Giả Kim',
+                                'Các tác phẩm phí thuê dưới 30 Khoai?',
+                                'Bí quyết duy trì Streak đọc 7 ngày'
+                              ]).map((chip, chipIdx) => (
+                                <button
+                                  key={chipIdx}
+                                  type="button"
+                                  onClick={() => openChatbot(chip)}
+                                  className="p-2 rounded-lg bg-paper-200/60 dark:bg-night-card hover:bg-wine/10 dark:hover:bg-gold/15 hover:border-wine/40 dark:hover:border-gold/40 border border-paper-border dark:border-night-border text-left text-[11px] text-ink dark:text-night-text transition-all flex items-center justify-between group cursor-pointer"
+                                >
+                                  <span className="line-clamp-1">{chip}</span>
+                                  <i className="ph-bold ph-arrow-up-right text-xs text-wine dark:text-gold opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-1"></i>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* VIP Potato layout */}
+                      {slide.layoutType === 'vip_potato' && (
+                        <div className="relative z-10 w-full lg:max-w-md bg-paper-surface/90 dark:bg-night-surface/90 backdrop-blur-md rounded-2xl p-5 border border-paper-border dark:border-night-border shadow-xl space-y-4">
+                          <div className="flex items-center justify-between pb-3 border-b border-paper-border/70 dark:border-night-border/70">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xl">👑</span>
+                              <h4 className="font-display font-bold text-sm text-ink dark:text-night-text">4 Cấp Bậc Hội Viên Hoàng Gia</h4>
+                            </div>
+                            <a href="/hang" className="text-[11px] font-bold text-wine dark:text-gold hover:underline">
+                              Chi tiết →
+                            </a>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2.5">
+                            {(slide.tierHighlights || [
+                              { name: 'Thợ Cày', icon: '🌱', discount: '0%', badge: 'Hạng Khởi Đầu' },
+                              { name: 'Cao Thủ Cày', icon: '🚜', discount: '-5%', badge: 'Hạng Bạc' },
+                              { name: 'Lão Nông', icon: '🌾', discount: '-10%', badge: 'Hạng Vàng' },
+                              { name: 'Đại Điền Chủ', icon: '👑', discount: '-20%', badge: 'Hoàng Gia VIP' }
+                            ]).map((tier, tierIdx) => (
+                              <div key={tierIdx} className="p-3 rounded-xl bg-paper-50 dark:bg-night-card border border-paper-border/60 dark:border-night-border/60 hover:border-gold/50 transition-all flex flex-col justify-between">
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <span className="text-2xl">{tier.icon}</span>
+                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-extrabold bg-wine/10 dark:bg-gold/15 text-wine dark:text-gold">
+                                    {tier.discount}
+                                  </span>
+                                </div>
+                                <div>
+                                  <p className="font-display font-black text-xs text-ink dark:text-night-text">{tier.name}</p>
+                                  <p className="text-[10px] text-ink-muted dark:text-night-muted font-metadata-spec">{tier.badge}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between text-xs font-metadata-spec">
+                            <span className="flex items-center gap-2 text-ink dark:text-night-text">
+                              <span className="text-base">🥔</span>
+                              <span className="font-bold">Ví Khoai Tây:</span> Đọc tích lũy trọn đời
+                            </span>
+                            <a href="/canhan?tab=wallet" className="text-wine dark:text-gold font-bold hover:underline">
+                              Vào ví →
+                            </a>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Hot deal layout */}
+                      {slide.layoutType === 'hot_deal' && (
+                        <div className="relative z-10 w-full lg:max-w-md bg-paper-surface/90 dark:bg-night-surface/90 backdrop-blur-md rounded-2xl p-5 border border-paper-border dark:border-night-border shadow-xl space-y-3.5">
+                          <div className="flex items-center justify-between pb-2 border-b border-paper-border/70 dark:border-night-border/70">
+                            <span className="px-2.5 py-1 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-400 font-extrabold text-[11px] uppercase tracking-wider flex items-center gap-1.5">
+                              <i className="ph-fill ph-fire"></i>
+                              {slide.dealBadge || 'HOT DEAL TUẦN NÀY 🔥'}
+                            </span>
+                            <a href="/uudai" className="text-xs font-bold text-wine dark:text-gold hover:underline">
+                              Xem tất cả →
+                            </a>
+                          </div>
+
+                          <div className="space-y-2.5">
+                            {((realPromotions.length > 0 ? realPromotions.map(p => ({
+                              code: p.promotion_id,
+                              label: `-${p.discount_percent || 0}%`,
+                              desc: p.description || p.promotion_name || 'Ưu đãi thuê sách đặc quyền'
+                            })) : (slide.vouchers || [])).slice(0, 3)).map((v, vIdx) => (
+                              <div key={vIdx} className="p-3 rounded-xl bg-paper-50 dark:bg-night-card border border-dashed border-rose-400/50 dark:border-rose-500/40 flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="px-2.5 py-1.5 rounded-lg bg-rose-500/15 text-rose-600 dark:text-rose-400 font-black text-xs font-display">
+                                    {v.label}
+                                  </div>
+                                  <div>
+                                    <p className="font-mono font-bold text-xs text-ink dark:text-night-text tracking-wider">{v.code}</p>
+                                    <p className="text-[10px] text-ink-muted dark:text-night-muted">{v.desc}</p>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyVoucher(v.code)}
+                                  className="px-2.5 py-1 rounded-md bg-paper-200 dark:bg-night-border hover:bg-wine hover:text-white dark:hover:bg-gold dark:hover:text-ink text-[11px] font-bold font-metadata-spec transition-colors shrink-0 cursor-pointer"
+                                  title="Sao chép mã"
+                                >
+                                  {copiedCode === v.code ? 'Đã chép ✓' : 'Sao chép'}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Reader 3D layout */}
+                      {slide.layoutType === 'reader_3d' && (
+                        <div className="relative z-10 w-full lg:max-w-md bg-paper-surface/90 dark:bg-night-surface/90 backdrop-blur-md rounded-2xl p-5 border border-paper-border dark:border-night-border shadow-xl space-y-4">
+                          <div className="flex items-center justify-between pb-3 border-b border-paper-border/70 dark:border-night-border/70">
+                            <div className="flex items-center gap-2 text-wine dark:text-gold font-display font-bold text-sm">
+                              <i className="ph-bold ph-book-open-text text-lg"></i>
+                              <span>HALM Reader 3D & Focus Audio</span>
+                            </div>
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-500/15 text-teal-600 dark:text-teal-400 uppercase">
+                              Độc Quyền
+                            </span>
+                          </div>
+
+                          <div className="space-y-2">
+                            <p className="text-[11px] font-metadata-spec font-bold text-ink-muted dark:text-night-muted uppercase">
+                              Tính năng nổi bật:
+                            </p>
+                            <div className="grid grid-cols-1 gap-2">
+                              {['Lật trang 3D chân thực theo thời gian thực', 'Chữ động Reflow Text chống tràn màn hình', 'Ghi chú, Highlight & Đồng bộ tiến độ'].map((feat, fIdx) => (
+                                <div key={fIdx} className="flex items-center gap-2 text-xs text-ink dark:text-night-text">
+                                  <i className="ph-bold ph-check-circle text-emerald-500 text-sm"></i>
+                                  <span>{feat}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="p-3 rounded-xl bg-paper-50 dark:bg-night-card border border-paper-border/60 dark:border-night-border/60 space-y-2">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="flex items-center gap-1.5 font-bold text-ink dark:text-night-text">
+                                <i className="ph-bold ph-headphones text-teal-500"></i> Nhạc nền Focus:
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <span className="w-1.5 h-3 bg-teal-500 animate-pulse"></span>
+                                <span className="w-1.5 h-4 bg-teal-400 animate-pulse delay-75"></span>
+                                <span className="w-1.5 h-2 bg-teal-600 animate-pulse delay-150"></span>
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-ink-muted dark:text-night-muted">
+                              4 giai điệu tập trung: Tiếng mưa rơi · Lofi Chill · Sóng não Deep Focus · Thiên nhiên.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Showcase 3 books (hoặc default) */}
+                      {(slide.layoutType === 'showcase' || (!['mascot_ai', 'vip_potato', 'hot_deal', 'reader_3d', 'custom_image'].includes(slide.layoutType))) && (
+                        <div className="hero-broadcast-books relative z-10" aria-label="Các chủ đề sách nổi bật">
+                          {(slide.books || [
+                            { title: "Văn học", subtitle: "NHỮNG CÂU CHUYỆN ĐỂ ĐỜI", color: "linear-gradient(145deg,#6e2530,#b75c42)", tag: "Nổi bật" },
+                            { title: "Tri thức", subtitle: "MỞ RỘNG TẦM NHÌN", color: "linear-gradient(145deg,#1f4051,#6f9b93)", tag: "Mới nhất" },
+                            { title: "Phát triển", subtitle: "MỖI NGÀY TỐT HƠN", color: "linear-gradient(145deg,#946525,#dfb95f)", tag: "Top 1" },
+                          ]).map((book, bookIndex) => (
+                            <a
+                              key={book.title || bookIndex}
+                              href={slide.actionLink || "#trending-section"}
+                              className="hero-broadcast-book-card flex flex-col items-center justify-center p-2.5 text-center text-white"
+                              style={{ background: book.color }}
+                              aria-label={`Khám phá chủ đề ${book.title}`}
+                            >
+                              <span className="card-badge">{book.tag || (bookIndex === 0 ? "Nổi bật" : "Khám phá")}</span>
+                              <i className={`ph-bold ${slide.icon || 'ph-sparkle'} mb-2 text-3xl text-[#F5D77F] sm:text-4xl`}></i>
+                              <span className="font-display text-sm font-black leading-tight sm:text-base">{book.title}</span>
+                              <span className="mt-2 text-[7px] font-bold leading-tight tracking-[0.12em] text-white/75 sm:text-[8px]">{book.subtitle}</span>
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
               </div>
               <div className="hero-broadcast-controls">
                 <button type="button" data-broadcast-prev aria-label="Banner trước"><i className="ph-bold ph-caret-left"></i></button>
@@ -3707,38 +3818,172 @@ export default function Test() {
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
-                      <button onClick={(event) => { window.scrollShelfByCard('trending-shelf', -1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn lùi 1 sách" title="Lùi 1 sách">
+                      <button onClick={() => handleScrollTrending(-1)} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors cursor-pointer" aria-label="Cuộn lùi 1 sách" title="Lùi 1 sách">
                         <i className="ph-bold ph-caret-left"></i>
                       </button>
-                      <button onClick={(event) => { window.scrollShelfByCard('trending-shelf', 1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn tiến 1 sách" title="Tiến 1 sách">
+                      <button onClick={() => handleScrollTrending(1)} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors cursor-pointer" aria-label="Cuộn tiến 1 sách" title="Tiến 1 sách">
                         <i className="ph-bold ph-caret-right"></i>
                       </button>
                     </div>
                   </div>
 
                   <nav id="trending-cat-nav" className="flex items-center gap-2.5 overflow-x-auto pb-1 mb-6" aria-label="Danh mục sách thịnh hành">
-                    <button type="button" className="trending-cat-btn is-active shrink-0 px-4 py-2 rounded-full border border-paper-border dark:border-night-border bg-paper dark:bg-night-card text-xs font-metadata-spec font-semibold text-ink dark:text-night-text transition-colors" data-cat="all">Tất cả</button>
-                    <button type="button" className="trending-cat-btn shrink-0 px-4 py-2 rounded-full border border-paper-border dark:border-night-border bg-paper dark:bg-night-card text-xs font-metadata-spec font-semibold text-ink dark:text-night-text transition-colors" data-cat="van-hoc">Văn học</button>
-                    <button type="button" className="trending-cat-btn shrink-0 px-4 py-2 rounded-full border border-paper-border dark:border-night-border bg-paper dark:bg-night-card text-xs font-metadata-spec font-semibold text-ink dark:text-night-text transition-colors" data-cat="thieu-nhi">Thiếu nhi</button>
-                    <button type="button" className="trending-cat-btn shrink-0 px-4 py-2 rounded-full border border-paper-border dark:border-night-border bg-paper dark:bg-night-card text-xs font-metadata-spec font-semibold text-ink dark:text-night-text transition-colors" data-cat="ky-nang">Kỹ năng</button>
-                    <button type="button" className="trending-cat-btn shrink-0 px-4 py-2 rounded-full border border-paper-border dark:border-night-border bg-paper dark:bg-night-card text-xs font-metadata-spec font-semibold text-ink dark:text-night-text transition-colors" data-cat="kinh-dien">Kinh điển</button>
+                    {[
+                      { key: 'all', label: 'Tất cả' },
+                      { key: 'van-hoc', label: 'Văn học' },
+                      { key: 'thieu-nhi', label: 'Thiếu nhi' },
+                      { key: 'ky-nang', label: 'Kỹ năng' },
+                      { key: 'kinh-dien', label: 'Kinh điển' }
+                    ].map(cat => (
+                      <button
+                        key={cat.key}
+                        type="button"
+                        onClick={() => setTrendingCategory(cat.key)}
+                        className={`trending-cat-btn shrink-0 px-4 py-2 rounded-full border border-paper-border dark:border-night-border text-xs font-metadata-spec font-semibold transition-all cursor-pointer ${
+                          trendingCategory === cat.key
+                            ? 'bg-wine text-white border-wine dark:bg-gold dark:text-night-bg dark:border-gold shadow-sm'
+                            : 'bg-paper dark:bg-night-card text-ink dark:text-night-text hover:border-wine/50 dark:hover:border-gold/50'
+                        }`}
+                      >
+                        {cat.label}
+                      </button>
+                    ))}
                   </nav>
 
                   {/* Spotlight + Horizontal Shelf Combo */}
                   <div id="trending-shelf-combo" className="grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-6 items-stretch mb-2">
-
-                    {/* TODO(API): Populate this shelf from the database-backed trending-books endpoint. */}
                     <div className="lg:col-span-12 relative min-w-0 flex items-center">
-                      <div id="trending-shelf" className="shelf-scroll-row flex gap-4 sm:gap-5 overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth w-full">
-                        {/* Populated by JS */}
+                      <div id="trending-shelf" className="shelf-scroll-row flex gap-4 sm:gap-5 overflow-x-auto pt-6 pb-6 pl-4 pr-6 w-full">
+                        {filteredTrendingBooks.slice(0, 10).map((book, idx) => {
+                          const priceKhoai = (book.price !== undefined && book.price > 0) ? `${book.price} Khoai` : "Miễn phí";
+                          const weeklyReads = (1.9 - (idx % 8) * 0.18).toFixed(1);
+                          const isTop1 = idx === 0;
+                          const isTop2 = idx === 1;
+                          const isTop3 = idx === 2;
+                          return (
+                            <div
+                              key={book.id || idx}
+                              onClick={() => { window.location.href = `/chitietsach/${book.id}`; }}
+                              className={`book-card-item trending-card-custom relative shrink-0 p-2.5 sm:p-3 rounded-2xl bg-paper-surface dark:bg-night-card border transition-all duration-300 group flex flex-col justify-between hover:-translate-y-2 hover:shadow-xl cursor-pointer ${
+                                isTop1
+                                  ? "border-amber-400/80 ring-1 ring-amber-400/30 shadow-[0_4px_20px_rgba(245,158,11,0.18)]"
+                                  : isTop2
+                                  ? "border-slate-300 dark:border-slate-400/60 ring-1 ring-slate-300/30"
+                                  : isTop3
+                                  ? "border-amber-600/60 ring-1 ring-amber-600/30"
+                                  : "border-paper-border dark:border-night-border"
+                              }`}
+                            >
+                              {/* Huy hiệu Top Xếp Hạng Độc Quyền */}
+                              {isTop1 && (
+                                <div className="absolute -top-2.5 -left-2 z-20 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 text-slate-950 font-outfit font-black text-[10px] tracking-wider shadow-lg shadow-amber-500/40 border border-yellow-100">
+                                  <span>👑</span><span>TOP 1</span>
+                                </div>
+                              )}
+                              {isTop2 && (
+                                <div className="absolute -top-2.5 -left-2 z-20 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-slate-200 via-gray-100 to-slate-300 text-slate-900 font-outfit font-black text-[10px] tracking-wider shadow-lg shadow-slate-400/30 border border-white">
+                                  <span>🥈</span><span>TOP 2</span>
+                                </div>
+                              )}
+                              {isTop3 && (
+                                <div className="absolute -top-2.5 -left-2 z-20 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-700 via-amber-600 to-orange-700 text-white font-outfit font-black text-[10px] tracking-wider shadow-lg shadow-orange-900/30 border border-amber-300/50">
+                                  <span>🥉</span><span>TOP 3</span>
+                                </div>
+                              )}
+                              {!isTop1 && !isTop2 && !isTop3 && (
+                                <div className="absolute -top-2 -left-1.5 z-20 flex items-center gap-0.5 px-2 py-0.5 rounded-lg bg-black/80 dark:bg-black/90 backdrop-blur-md text-amber-300 font-outfit font-black text-[9px] border border-amber-500/40 shadow">
+                                  <span>🔥</span><span>#{idx + 1}</span>
+                                </div>
+                              )}
+
+                              <div>
+                                <div className="relative w-full aspect-[2/3] rounded-xl overflow-hidden bg-night-card shadow-md mb-2.5">
+                                  <img
+                                    src={book.img || "/logo.png"}
+                                    alt={book.title}
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                    loading="lazy"
+                                    onError={(e) => {
+                                      e.currentTarget.onerror = null;
+                                      e.currentTarget.src = "/logo.png";
+                                    }}
+                                  />
+                                  <div className="font-metadata-spec absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full bg-black/70 backdrop-blur-sm text-[9px] text-amber-300 font-bold flex items-center gap-0.5 shadow">
+                                    <i className="ph-fill ph-star text-amber-400"></i> {book.rating || "5.0"}
+                                  </div>
+                                  <div className="font-metadata-spec absolute bottom-1.5 inset-x-1.5 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-sm text-[9px] text-emerald-300 font-medium flex items-center justify-between">
+                                    <span className="flex items-center gap-1">🔥 {weeklyReads}k đọc</span>
+                                    <span className="text-[8px] text-gray-300 uppercase">Tuần</span>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-0.5">
+                                  <h4
+                                    className="font-display font-bold text-xs sm:text-[13px] text-ink dark:text-night-text line-clamp-1 group-hover:text-wine dark:group-hover:text-gold transition-colors"
+                                    title={book.title}
+                                  >
+                                    {book.title}
+                                  </h4>
+                                  <p className="font-metadata-spec text-[11px] text-ink-muted dark:text-night-muted line-clamp-1">
+                                    {book.author}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="pt-2 mt-2 border-t border-paper-border/70 dark:border-night-border/70 flex items-center justify-between">
+                                <div>
+                                  <span className="font-display font-black text-[11px] sm:text-xs text-wine dark:text-gold flex items-center gap-0.5">
+                                    <span>🥔</span> {priceKhoai}
+                                  </span>
+                                  <span className="text-[9px] text-ink-muted dark:text-night-muted block leading-none">
+                                    {book.price > 0 ? "/ tuần" : "Trọn đời"}
+                                  </span>
+                                </div>
+                                <span className="w-6 h-6 rounded-full bg-paper-200 dark:bg-night-border hover:bg-wine hover:text-white dark:hover:bg-gold dark:hover:text-ink flex items-center justify-center text-[10px] text-ink dark:text-night-text transition-colors">
+                                  <i className="ph-bold ph-caret-right"></i>
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                        {/* Thẻ card Khám phá toàn bộ bảng xếp hạng */}
+                        <div
+                          onClick={() => {
+                            window.location.href = "/danhmuc/trending";
+                          }}
+                          className="shelf-discovery-card relative shrink-0 p-4 sm:p-5 rounded-2xl border border-paper-border dark:border-night-border bg-[#FAF7F2] dark:bg-night-card hover:border-wine dark:hover:border-gold hover:shadow-xl hover:-translate-y-1.5 group flex flex-col items-center justify-between text-center transition-all duration-300 shadow-sm cursor-pointer w-40 sm:w-48 lg:w-[210px] xl:w-[220px]"
+                          role="button"
+                          aria-label="Khám phá toàn bộ Sách Thịnh Hành"
+                        >
+                          <div className="w-full flex justify-end">
+                            <span className="font-metadata-spec text-[9px] font-black text-wine dark:text-gold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-wine/10 dark:bg-gold/15 border border-wine/20 dark:border-gold/30">
+                              TRỌN BỘ
+                            </span>
+                          </div>
+                          <div className="my-auto py-3 sm:py-4 flex flex-col items-center">
+                            <div className="w-14 h-14 rounded-full bg-[#F3E8E6] dark:bg-gold/15 text-wine dark:text-gold flex items-center justify-center mb-3 group-hover:scale-110 transition-transform duration-300 shadow-sm">
+                              <i className="ph-bold ph-fire text-2xl"></i>
+                            </div>
+                            <h4 className="font-display font-black text-sm sm:text-base text-ink dark:text-night-text group-hover:text-wine dark:group-hover:text-gold transition-colors leading-tight mb-1.5">
+                              Sách Thịnh Hành
+                            </h4>
+                            <p className="font-metadata-spec text-[11px] text-ink-muted dark:text-night-muted">
+                              Xem trọn bộ tác phẩm
+                            </p>
+                          </div>
+                          <div className="pt-3 w-full border-t border-paper-border dark:border-night-border flex items-center justify-center gap-1.5 text-xs font-bold text-wine dark:text-gold font-metadata-spec">
+                            <span>Khám phá ngay</span>
+                            <i className="ph-bold ph-arrow-right group-hover:translate-x-1.5 transition-transform duration-300"></i>
+                          </div>
+                        </div>
+                        </div>
                       </div>
                     </div>
-
                   </div>
 
                 </div>
               </div>
-            </div>
           </section>
 
 
@@ -3781,7 +4026,7 @@ export default function Test() {
                   </div>
 
                   {/* Children's Shelf Horizontal Row */}
-                  <div id="children-shelf" className="shelf-scroll-row flex gap-5 overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth">
+                  <div id="children-shelf" className="shelf-scroll-row flex gap-5 overflow-x-auto pb-2 snap-x snap-proximity scroll-smooth">
                     {/* Populated by JS */}
                   </div>
 
@@ -3926,7 +4171,7 @@ export default function Test() {
                   </div>
 
                   {/* Literature Horizontal Shelf */}
-                  <div id="literature-shelf" className="shelf-scroll-row flex gap-5 overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth">
+                  <div id="literature-shelf" className="shelf-scroll-row flex gap-5 overflow-x-auto pb-2 snap-x snap-proximity scroll-smooth">
                     {/* Populated by JS */}
                   </div>
 
@@ -3986,7 +4231,7 @@ export default function Test() {
                   </div>
 
                   {/* Self-Growth Horizontal Shelf: 1 hàng ngang duy nhất hiển thị đúng 6 sách */}
-                  <div id="selfgrowth-shelf" className="shelf-scroll-row flex gap-5 overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth">
+                  <div id="selfgrowth-shelf" className="shelf-scroll-row flex gap-5 overflow-x-auto pb-2 snap-x snap-proximity scroll-smooth">
                     {/* Populated by JS */}
                   </div>
 
@@ -4127,7 +4372,7 @@ export default function Test() {
                     </div>
                   </div>
 
-                  <div id="science-shelf" className="shelf-scroll-row flex gap-5 overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth">
+                  <div id="science-shelf" className="shelf-scroll-row flex gap-5 overflow-x-auto pb-2 snap-x snap-proximity scroll-smooth">
                     {/* Populated by JS */}
                   </div>
 
@@ -4175,7 +4420,7 @@ export default function Test() {
                     </div>
                   </div>
 
-                  <div id="business-shelf" className="shelf-scroll-row flex gap-5 overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth">
+                  <div id="business-shelf" className="shelf-scroll-row flex gap-5 overflow-x-auto pb-2 snap-x snap-proximity scroll-smooth">
                     {/* Populated by JS */}
                   </div>
 
@@ -4316,7 +4561,7 @@ export default function Test() {
                     </div>
                   </div>
 
-                  <div id="history-shelf" className="shelf-scroll-row flex gap-5 overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth">
+                  <div id="history-shelf" className="shelf-scroll-row flex gap-5 overflow-x-auto pb-2 snap-x snap-proximity scroll-smooth">
                     {/* Populated by JS */}
                   </div>
 
@@ -4364,7 +4609,7 @@ export default function Test() {
                     </div>
                   </div>
 
-                  <div id="philosophy-shelf" className="shelf-scroll-row flex gap-5 overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth">
+                  <div id="philosophy-shelf" className="shelf-scroll-row flex gap-5 overflow-x-auto pb-2 snap-x snap-proximity scroll-smooth">
                     {/* Populated by JS */}
                   </div>
 
@@ -4504,7 +4749,7 @@ export default function Test() {
                     </div>
                   </div>
 
-                  <div id="artlifestyle-shelf" className="shelf-scroll-row flex gap-5 overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth">
+                  <div id="artlifestyle-shelf" className="shelf-scroll-row flex gap-5 overflow-x-auto pb-2 snap-x snap-proximity scroll-smooth">
                     {/* Populated by JS */}
                   </div>
 
@@ -4552,7 +4797,7 @@ export default function Test() {
                     </div>
                   </div>
 
-                  <div id="biography-shelf" className="shelf-scroll-row flex gap-5 overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth">
+                  <div id="biography-shelf" className="shelf-scroll-row flex gap-5 overflow-x-auto pb-2 snap-x snap-proximity scroll-smooth">
                     {/* Populated by JS */}
                   </div>
 
@@ -4597,7 +4842,7 @@ export default function Test() {
                   </div>
 
                   {/* 6 Topic Cards styled in 1 Horizontal Shelf (Displays exactly 3 per view on desktop) */}
-                  <div id="topic-shelf" className="shelf-scroll-row flex gap-6 overflow-x-auto pb-4 snap-x snap-mandatory scroll-smooth">
+                  <div id="topic-shelf" className="shelf-scroll-row flex gap-6 overflow-x-auto pb-4 snap-x snap-proximity scroll-smooth">
 
                     {/* Topic 1 */}
                     <div onClick={(event) => { window.filterTopic('van-hoc') }} className="shrink-0 snap-start cursor-pointer p-8 rounded-2xl bg-paper dark:bg-night-card border border-paper-border dark:border-night-border shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all group flex flex-col justify-between min-h-[230px]">
@@ -4819,104 +5064,6 @@ export default function Test() {
 
 
         {/* ========================================================
-         CHATBOT AI WIDGET (BẢO TOÀN TOÀN BỘ CHỨC NĂNG)
-         ======================================================== */}
-        <div id="chatbot-container" className="fixed bottom-6 right-10 z-50">
-
-          {/* 1. ĐIỀU KIỆN HIỂN THỊ CỬA SỔ CHAT */}
-          {isOpen && (
-            <div id="chat-window" className="w-110 bg-[#181916] rounded-xl shadow-2xl overflow-hidden flex flex-col mb-16 border border-night-border h-140">
-
-              {/* Header */}
-              <div className="bg-gradient-to-r from-wine to-wine-light text-white px-5 py-3.5 flex justify-between items-center shrink-0">
-                <div className="flex items-center gap-2.5">
-                  <span className="w-8 h-8 rounded-full bg-white/15 flex items-center justify-center"><i className="ph-bold ph-sparkle"></i></span>
-                  <div>
-                    <p className="font-bold text-[16px]">Trợ lý HALM BOOK</p>
-                    <p className="text-[12px] text-white/75">Tư vấn sách cùng bạn</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <button onClick={handleClearChat} className="hover:text-gold transition-colors" aria-label="Xóa hội thoại">
-                    <i className="ph-bold ph-arrows-clockwise text-lg"></i>
-                  </button>
-                  {/* Nút đóng chat */}
-                  <button onClick={() => setIsOpen(false)} className="hover:text-gold transition-colors">
-                    <i className="ph-bold ph-x text-lg"></i>
-                  </button>
-                </div>
-              </div>
-
-              {/* Body Message Thread */}
-              <div
-                className="flex-grow overflow-y-auto p-4 flex flex-col relative space-y-3"
-                style={{ fontSize: CHAT_MESSAGE_FONT_SIZE }}
-              >
-
-                {/* Nếu chưa có tin nhắn nào -> Hiện Welcome View */}
-                {messages.length === 0 && (
-                  <div id="chat-welcome" className="text-center py-6 space-y-3">
-                    <div className="mx-auto w-17 h-17 rounded-full bg-wine/20 text-gold flex items-center justify-center">
-                      <i className="ph-bold ph-sparkle text-xl"></i>
-                    </div>
-                    <p className="text-white font-bold">Xin chào! Tôi có thể giúp gì?</p>
-
-                    <div className="space-y-2 pt-2 text-left font-metadata-spec">
-                      {/* Bắt sự kiện bấm vào câu hỏi gợi ý */}
-                      <button onClick={() => handleSendMessage("Gợi ý sách phát triển bản thân?")} className="suggestion-btn w-full p-2.5 rounded-xl bg-night-card hover:bg-night-border border border-night-border text-xs text-white flex items-center justify-between transition-colors">
-                        <span>Gợi ý sách phát triển bản thân?</span>
-                        <i className="ph-bold ph-arrow-right text-gold"></i>
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* 2. RENDER VÒNG LẶP TIN NHẮN */}
-                {messages.map((msg, index) => (
-                  <div key={index} className={`max-w-[85%] p-3 rounded-xl ${msg.sender === 'user' ? 'bg-wine text-white self-end rounded-tr-sm' : 'bg-night-card text-gray-200 border border-night-border self-start rounded-tl-sm'}`}>
-                    {msg.text}
-                  </div>
-                ))}
-
-                {/* Hiệu ứng loading khi chờ API */}
-                {isLoading && <div className="text-gray-400 text-[10px] italic self-start">AI đang suy nghĩ...</div>}
-              </div>
-
-              {/* 3. KHU VỰC NHẬP LIỆU */}
-              <div className="p-3 bg-[#141512] border-t border-night-border shrink-0">
-                <div className="relative flex items-center">
-                  <input
-                    type="text"
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()} // Gửi khi ấn Enter
-                    disabled={isLoading}
-                    placeholder="Nhập câu hỏi của bạn..."
-                    className="w-full bg-night-card text-white placeholder-night-muted text-xs rounded-xl pl-3.5 pr-10 py-3 border border-night-border focus:outline-none focus:border-wine transition-colors font-metadata-spec"
-                  />
-                  <button
-                    onClick={() => handleSendMessage()}
-                    disabled={isLoading || !inputText.trim()}
-                    className="absolute right-2 text-gold hover:text-white p-1.5 transition-colors"
-                    aria-label="Gửi tin nhắn"
-                  >
-                    <i className="ph-bold ph-paper-plane-tilt text-lg"></i>
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* 4. NÚT KÍCH HOẠT CHAT BONG BÓNG */}
-          <button
-            onClick={() => setIsOpen(!isOpen)}
-            className="w-14 h-14 rounded-full bg-wine hover:bg-wine-dark text-white p-1 shadow-2xl flex items-center justify-center transition-transform hover:scale-105 absolute bottom-0 right-0"
-          >
-            <img src={logo} alt="Chatbot" className="w-full h-full rounded-full object-cover" />
-          </button>
-        </div>
-
-        {/* ========================================================
          MODAL: CÀI ĐẶT TRẢI NGHIỆM ĐỘC GIẢ (EDITORIAL SETTINGS)
          ======================================================== */}
         <div id="settings-modal" className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden items-center justify-center p-4">
@@ -4932,34 +5079,23 @@ export default function Test() {
             </div>
 
             <div className="space-y-4">
-              {/* Option: Cuộn theo từng mục */}
-              <div className="p-4 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border space-y-3">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-1">
-                    <span className="font-display font-bold text-sm text-ink dark:text-night-text block">Cuộn theo từng mục</span>
-                    <p className="font-editorial-body text-xs text-ink-muted dark:text-night-muted leading-relaxed">
-                      Tự động chuyển đến từng khu vực nội dung khi cuộn.
-                    </p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
-                    <input type="checkbox" id="modal-auto-scroll-toggle" className="sr-only peer" defaultChecked onChange={(event) => { window.handleModalAutoScrollToggle(event.currentTarget.checked) }} />
-                    <div className="w-12 h-6 bg-paper-200 dark:bg-night-card peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-6 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white dark:after:bg-night-text after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-wine dark:peer-checked:bg-gold border border-paper-border dark:border-night-border transition-colors"></div>
-                  </label>
+              <div className="p-4 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border space-y-2">
+                <div className="flex items-center gap-2 text-wine dark:text-gold font-bold text-sm">
+                  <i className="ph-bold ph-arrows-down-up text-base"></i>
+                  <span>Chế độ cuộn trang</span>
                 </div>
+                <p className="font-editorial-body text-xs text-ink-muted dark:text-night-muted leading-relaxed">
+                  Trang web hỗ trợ cuộn dọc tự do, mượt mà và tự nhiên theo tốc độ cuộn chuột / cảm ứng của bạn.
+                </p>
                 <div className="pt-2 border-t border-paper-border/60 dark:border-night-border/60 flex items-center justify-between text-[11px] font-metadata-spec">
                   <span className="text-ink-muted dark:text-night-muted">Trạng thái:</span>
-                  <span id="modal-auto-scroll-badge" className="font-bold text-wine dark:text-gold uppercase tracking-wider">Đang Bật (Mặc định)</span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Cuộn tự do (Mặc định)</span>
                 </div>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-wine/5 dark:bg-gold/10 border border-wine/20 dark:border-gold/25 flex items-start gap-2.5 text-xs text-ink dark:text-night-text font-editorial-body">
-                <i className="ph-bold ph-info text-wine dark:text-gold text-base shrink-0 mt-0.5"></i>
-                <span>Khi tắt, bạn có thể cuộn trang tự do bình thường theo tốc độ mong muốn. Hiệu ứng hoạt ảnh và hiển thị sách vẫn được bảo toàn.</span>
               </div>
             </div>
 
             <div className="flex items-center justify-between pt-2 border-t border-paper-border dark:border-night-border">
-              <a href="../settings.html" className="text-xs font-metadata-spec font-bold text-wine dark:text-gold hover:underline flex items-center gap-1">
+              <a href="/canhan" className="text-xs font-metadata-spec font-bold text-wine dark:text-gold hover:underline flex items-center gap-1">
                 <span>Xem trang Cài đặt tài khoản</span>
                 <i className="ph-bold ph-arrow-up-right text-[11px]"></i>
               </a>

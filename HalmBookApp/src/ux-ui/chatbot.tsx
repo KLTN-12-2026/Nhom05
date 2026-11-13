@@ -1,14 +1,24 @@
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, BookOpen, Bot, Image as ImageIcon, Mic, MoreVertical, Send } from 'lucide-react-native';
-import { useRef, useState } from 'react';
+import { 
+  ArrowLeft, 
+  BookOpen, 
+  Bot, 
+  RotateCcw, 
+  Send, 
+  Sparkles 
+} from 'lucide-react-native';
+import { useEffect, useRef, useState } from 'react';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { useAppNavigation, useAppThemeStyles } from './navigation';
 import {
+  ActivityIndicator,
+  Alert,
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  SafeAreaView,
   StatusBar,
-  StyleSheet, Text,
+  StyleSheet,
+  Text,
   TextInput,
   TouchableOpacity,
   View
@@ -34,61 +44,105 @@ export interface ChatBotUIProps {
   messages: ChatMessage[];               // Mảng dữ liệu tin nhắn
   botName?: string;                      // Tên Bot 
   statusText?: string;                   // Trạng thái
+  isLoading?: boolean;                   // Đang chờ AI phản hồi
   onBack: () => void;                    // Hàm xử lý quay lại
   onSendMessage: (text: string) => void; // Hàm phát tín hiệu gửi tin nhắn
+  onClearChat?: () => void;              // Hàm làm mới cuộc trò chuyện
 }
 
 // ==========================================
-// 2. GIAO DIỆN (UI COMPONENT)
+// 2. GIAO DIỆN CHATBOT CAO CẤP (UI COMPONENT)
 // ==========================================
 export default function ChatBotScreen({ 
   messages, 
-  botName = "Trợ lý HALM", 
-  statusText = "🟢 Đang hoạt động",
+  botName = "HALM.AI", 
+  statusText = "Sẵn sàng hỗ trợ",
+  isLoading = false,
   onBack, 
-  onSendMessage 
+  onSendMessage,
+  onClearChat
 }: ChatBotUIProps) {
   const themeStyles = useAppThemeStyles(styles);
   const { navigate, isDarkMode } = useAppNavigation();
   const [inputText, setInputText] = useState('');
-  // Khai báo ref cho FlatList
   const flatListRef = useRef<FlatList<any>>(null);
 
-  // Xử lý gửi tin nhắn
-  const handleSend = () => {
-    if (inputText.trim().length > 0) {
-      onSendMessage(inputText.trim());
-      setInputText('');
+  // Tự động cuộn xuống tin nhắn mới nhất
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [messages.length, isLoading]);
+
+  // Gửi tin nhắn
+  const handleSend = (textToSend?: string) => {
+    const query = (textToSend || inputText).trim();
+    if (query.length > 0 && !isLoading) {
+      onSendMessage(query);
+      if (!textToSend) {
+        setInputText('');
+      }
     }
   };
 
-  // Hàm vẽ từng bong bóng chat
+  // Menu tùy chọn làm mới cuộc trò chuyện
+  const handleMorePress = () => {
+    Alert.alert(
+      'Cuộc trò chuyện với HALM.AI',
+      'Bạn muốn làm gì với cuộc trò chuyện hiện tại?',
+      [
+        {
+          text: 'Làm mới cuộc trò chuyện',
+          style: 'destructive',
+          onPress: () => onClearChat?.(),
+        },
+        { text: 'Đóng', style: 'cancel' },
+      ]
+    );
+  };
+
+  // Vẽ từng bong bóng tin nhắn
   const renderMessageItem = ({ item }: { item: ChatMessage }) => {
     const isUser = item.sender === 'user';
 
     return (
       <View style={[themeStyles.messageWrapper, isUser ? themeStyles.messageWrapperUser : themeStyles.messageWrapperBot]}>
         
-        {/* Avatar Bot */}
+        {/* Avatar của Bot */}
         {!isUser && (
-          <View style={themeStyles.botAvatarSmall}>
-            <Bot size={16} color="#fff" />
+          <View style={themeStyles.botAvatarWrapper}>
+            <View style={themeStyles.botAvatarInner}>
+              <Sparkles size={15} color="#fff" />
+            </View>
           </View>
         )}
 
+        {/* Khung nội dung tin nhắn */}
         <View style={[themeStyles.messageBubble, isUser ? themeStyles.userBubble : themeStyles.botBubble]}>
-          {/* Tin nhắn chữ */}
+          
+          {/* Header nhỏ cho Bot */}
+          {!isUser && (
+            <View style={themeStyles.botBadgeRow}>
+              <Text style={themeStyles.botBadgeName}>HALM.AI</Text>
+              <View style={themeStyles.aiBadge}>
+                <Text style={themeStyles.aiBadgeText}>AI Assistant</Text>
+              </View>
+            </View>
+          )}
+
+          {/* Nội dung tin nhắn văn bản */}
           {item.text && (
             <Text style={[themeStyles.messageText, isUser ? themeStyles.userText : themeStyles.botText]}>
               {item.text}
             </Text>
           )}
 
-          {/* Tin nhắn thẻ sách */}
+          {/* Thẻ gợi ý sách nếu có */}
           {item.type === 'book_recommendation' && item.book && (
             <TouchableOpacity
               style={themeStyles.bookSuggestCard}
-              activeOpacity={0.9}
+              activeOpacity={0.88}
               onPress={() => navigate('bookDetail', {
                 id: item.book!.title,
                 title: item.book!.title,
@@ -97,7 +151,7 @@ export default function ChatBotScreen({
               })}
             >
               <View style={themeStyles.bookSuggestCover}>
-                <BookOpen size={20} color="#888" />
+                <BookOpen size={20} color="#2c3a7a" />
               </View>
               <View style={themeStyles.bookSuggestInfo}>
                 <Text style={themeStyles.bookSuggestTitle} numberOfLines={2}>{item.book.title}</Text>
@@ -110,8 +164,40 @@ export default function ChatBotScreen({
             </TouchableOpacity>
           )}
 
-          <Text style={[themeStyles.timeText, isUser ? { color: '#888', textAlign: 'right' } : { color: '#aaa' }]}>
+          {/* Thời gian gửi */}
+          <Text style={[themeStyles.timeText, isUser ? themeStyles.userTimeText : themeStyles.botTimeText]}>
             {item.time}
+          </Text>
+        </View>
+      </View>
+    );
+  };
+
+  // Header danh sách: hiển thị phân cách bắt đầu phiên hội thoại
+  const renderListHeader = () => (
+    <View style={themeStyles.listHeaderContainer}>
+      <View style={themeStyles.dateDivider}>
+        <View style={themeStyles.dateDividerLine} />
+        <Text style={themeStyles.dateDividerText}>Bắt đầu phiên hội thoại</Text>
+        <View style={themeStyles.dateDividerLine} />
+      </View>
+    </View>
+  );
+
+  // Footer danh sách: hiển thị khi AI đang xử lý
+  const renderListFooter = () => {
+    if (!isLoading) return null;
+    return (
+      <View style={[themeStyles.messageWrapper, themeStyles.messageWrapperBot]}>
+        <View style={themeStyles.botAvatarWrapper}>
+          <View style={themeStyles.botAvatarInner}>
+            <Sparkles size={15} color="#fff" />
+          </View>
+        </View>
+        <View style={[themeStyles.messageBubble, themeStyles.botBubble, themeStyles.loadingBubble]}>
+          <ActivityIndicator size="small" color="#2c3a7a" style={{ marginRight: 10 }} />
+          <Text style={themeStyles.loadingText}>
+            HALM.AI đang phân tích & soạn câu trả lời...
           </Text>
         </View>
       </View>
@@ -122,33 +208,39 @@ export default function ChatBotScreen({
     <SafeAreaView style={themeStyles.safeArea}>
       <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'} />
 
-      {/* Header */}
+      {/* 1. Header cao cấp */}
       <View style={themeStyles.header}>
-        <TouchableOpacity style={themeStyles.iconButton} onPress={onBack} activeOpacity={0.8}>
-          <ArrowLeft size={20} color="#1a1a1a" />
+        <TouchableOpacity 
+          style={themeStyles.headerBackBtn} 
+          onPress={onBack} 
+          activeOpacity={0.7}
+        >
+          <ArrowLeft size={22} color="#1e293b" />
         </TouchableOpacity>
         
-        <View style={themeStyles.headerTitleContainer}>
+        <View style={themeStyles.headerProfile}>
           <View style={themeStyles.headerAvatar}>
-            <Bot size={20} color="#fff" />
+            <Bot size={22} color="#fff" />
+            <View style={[themeStyles.statusDot, isLoading && themeStyles.statusDotLoading]} />
           </View>
-          <View>
+          <View style={themeStyles.headerTextWrap}>
             <Text style={themeStyles.headerTitle}>{botName}</Text>
-            <Text style={themeStyles.headerSubtitle}>{statusText}</Text>
+            <Text style={themeStyles.headerSubtitle} numberOfLines={1}>
+              {isLoading ? 'Đang soạn câu trả lời...' : statusText}
+            </Text>
           </View>
         </View>
 
-        <TouchableOpacity style={themeStyles.iconButton} activeOpacity={0.8}>
-          <MoreVertical size={20} color="#1a1a1a" />
+        <TouchableOpacity 
+          style={themeStyles.headerActionBtn} 
+          activeOpacity={0.7} 
+          onPress={handleMorePress}
+        >
+          <RotateCcw size={18} color="#475569" />
         </TouchableOpacity>
       </View>
 
-      {/* 
-        Sử dụng KeyboardAvoidingView với cấu hình chuẩn cho Chat.
-        - iOS: behavior="padding"
-        - Android: Không set behavior hoặc set "height" tùy layout, 
-          nhưng thường không cần thiết nếu AndroidManifest đã có windowSoftInputMode="adjustResize"
-      */}
+      {/* 2. Khung hội thoại */}
       <KeyboardAvoidingView 
         style={themeStyles.keyboardAvoid} 
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -161,45 +253,41 @@ export default function ChatBotScreen({
           style={themeStyles.chatArea}
           contentContainerStyle={themeStyles.chatContent}
           showsVerticalScrollIndicator={false}
-          // Tự động cuộn xuống dưới cùng khi có tin nhắn mới
           onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-          ListHeaderComponent={
-            <View style={themeStyles.systemMessage}>
-              <Text style={themeStyles.systemMessageText}>Bắt đầu phiên hội thoại</Text>
-            </View>
-          }
+          ListHeaderComponent={renderListHeader}
+          ListFooterComponent={renderListFooter}
         />
 
-        {/* Khung Nhập Liệu */}
-        <View style={themeStyles.inputArea}>
-          <TouchableOpacity style={themeStyles.attachBtn}>
-            <ImageIcon size={20} color="#1a1a1a" />
-          </TouchableOpacity>
-          
-          <View style={themeStyles.inputContainer}>
+        {/* 3. Khung nhập tin nhắn hiện đại */}
+        <View style={themeStyles.inputAreaWrapper}>
+          <View style={themeStyles.inputBarContainer}>
             <TextInput 
-              style={themeStyles.input}
-              placeholder="Nhắn tin cho trợ lý..."
-              placeholderTextColor="#888"
+              style={themeStyles.textInput}
+              placeholder={isLoading ? "HALM.AI đang suy nghĩ..." : "Nhắn tin hoặc hỏi về sách..."}
+              placeholderTextColor="#94a3b8"
               value={inputText}
               onChangeText={setInputText}
               multiline={true}
               scrollEnabled={true}
+              editable={!isLoading}
             />
-            {inputText.length === 0 && (
-              <TouchableOpacity style={themeStyles.micBtn}>
-                <Mic size={18} color="#888" />
-              </TouchableOpacity>
-            )}
-          </View>
 
-          <TouchableOpacity 
-            style={[themeStyles.sendBtn, inputText.trim().length > 0 && themeStyles.sendBtnActive]} 
-            activeOpacity={0.8}
-            onPress={handleSend}
-          >
-            <Send size={18} color={inputText.trim().length > 0 ? "#1a1a1a" : "#fff"} />
-          </TouchableOpacity>
+            <TouchableOpacity 
+              style={[
+                themeStyles.sendButton, 
+                inputText.trim().length > 0 && !isLoading && themeStyles.sendButtonActive
+              ]} 
+              activeOpacity={0.8}
+              onPress={() => handleSend()}
+              disabled={isLoading || inputText.trim().length === 0}
+            >
+              {isLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Send size={18} color={inputText.trim().length > 0 ? "#fff" : "#94a3b8"} />
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -207,100 +295,353 @@ export default function ChatBotScreen({
 }
 
 // ==========================================
-// 3. STYLESHEET (Neo-Brutalism)
+// 3. STYLESHEET CHUẨN HIỆN ĐẠI (MODERN SLEEK)
 // ==========================================
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#f9f9f9' },
-  keyboardAvoid: { flex: 1 },
+  safeArea: { 
+    flex: 1, 
+    backgroundColor: '#f8fafc' 
+  },
+  keyboardAvoid: { 
+    flex: 1 
+  },
   
+  // Header
   header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 16, paddingVertical: 12,
-    backgroundColor: '#fff', borderBottomWidth: 3, borderBottomColor: '#1a1a1a',
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between',
+    paddingHorizontal: 16, 
+    paddingVertical: 12,
+    backgroundColor: '#ffffff', 
+    borderBottomWidth: 1, 
+    borderBottomColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 3,
     zIndex: 10
   },
-  iconButton: {
-    width: 40, height: 40, backgroundColor: '#fff',
-    borderWidth: 2, borderColor: '#1a1a1a', borderRadius: 20,
-    justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#1a1a1a', shadowOffset: { width: 2, height: 2 }, shadowOpacity: 1, elevation: 2
+  headerBackBtn: {
+    width: 38, 
+    height: 38, 
+    borderRadius: 19, 
+    backgroundColor: '#f1f5f9',
+    justifyContent: 'center', 
+    alignItems: 'center'
   },
-  headerTitleContainer: { flexDirection: 'row', alignItems: 'center', flex: 1, marginLeft: 15 },
+  headerProfile: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    flex: 1, 
+    marginHorizontal: 12 
+  },
   headerAvatar: {
-    width: 36, height: 36, backgroundColor: '#1dd1a1',
-    borderWidth: 2, borderColor: '#1a1a1a', borderRadius: 18,
-    justifyContent: 'center', alignItems: 'center', marginRight: 10,
-    shadowColor: '#1a1a1a', shadowOffset: { width: 2, height: 2 }, shadowOpacity: 1, elevation: 2
+    width: 42, 
+    height: 42, 
+    borderRadius: 21, 
+    backgroundColor: '#2c3a7a',
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginRight: 10,
+    shadowColor: '#2c3a7a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3
   },
-  headerTitle: { fontSize: 16, fontWeight: '900', color: '#1a1a1a' },
-  headerSubtitle: { fontSize: 11, fontWeight: '700', color: '#666', marginTop: 2 },
-
-  chatArea: { flex: 1, backgroundColor: '#f4f4f4' },
-  chatContent: { padding: 16, paddingBottom: 20 },
-  systemMessage: { alignItems: 'center', marginBottom: 20, marginTop: 10 },
-  systemMessageText: { fontSize: 11, fontWeight: '700', color: '#aaa', backgroundColor: '#e5e5e5', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, overflow: 'hidden' },
-
-  messageWrapper: { flexDirection: 'row', marginBottom: 16, alignItems: 'flex-end' },
-  messageWrapperUser: { justifyContent: 'flex-end' },
-  messageWrapperBot: { justifyContent: 'flex-start' },
-  
-  botAvatarSmall: {
-    width: 28, height: 28, backgroundColor: '#1dd1a1',
-    borderWidth: 1.5, borderColor: '#1a1a1a', borderRadius: 14,
-    justifyContent: 'center', alignItems: 'center', marginRight: 8, marginBottom: 15
+  statusDot: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#10b981',
+    borderWidth: 2,
+    borderColor: '#ffffff'
+  },
+  statusDotLoading: {
+    backgroundColor: '#f59e0b'
+  },
+  headerTextWrap: {
+    flex: 1
+  },
+  headerTitle: { 
+    fontSize: 16, 
+    fontWeight: '800', 
+    color: '#0f172a' 
+  },
+  headerSubtitle: { 
+    fontSize: 12, 
+    fontWeight: '500', 
+    color: '#64748b', 
+    marginTop: 2 
+  },
+  headerActionBtn: {
+    width: 38, 
+    height: 38, 
+    borderRadius: 19, 
+    backgroundColor: '#f1f5f9',
+    justifyContent: 'center', 
+    alignItems: 'center'
   },
 
+  // Danh sách tin nhắn
+  chatArea: { 
+    flex: 1, 
+    backgroundColor: '#f8fafc' 
+  },
+  chatContent: { 
+    paddingHorizontal: 16, 
+    paddingTop: 12, 
+    paddingBottom: 20 
+  },
+
+  // Divider phân cách phiên hội thoại
+  listHeaderContainer: {
+    marginBottom: 16
+  },
+  dateDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 10
+  },
+  dateDividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#e2e8f0'
+  },
+  dateDividerText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#94a3b8',
+    marginHorizontal: 12
+  },
+
+  // Từng khối tin nhắn
+  messageWrapper: { 
+    flexDirection: 'row', 
+    marginBottom: 14, 
+    alignItems: 'flex-end' 
+  },
+  messageWrapperUser: { 
+    justifyContent: 'flex-end' 
+  },
+  messageWrapperBot: { 
+    justifyContent: 'flex-start' 
+  },
+
+  botAvatarWrapper: {
+    marginRight: 8,
+    marginBottom: 4
+  },
+  botAvatarInner: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#2c3a7a',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#2c3a7a',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2
+  },
+
+  // Bong bóng tin nhắn
   messageBubble: {
-    maxWidth: '75%', padding: 12, paddingBottom: 8,
-    borderWidth: 2, borderColor: '#1a1a1a', borderRadius: 16,
-    shadowColor: '#1a1a1a', shadowOffset: { width: 3, height: 3 }, shadowOpacity: 1, elevation: 3
+    maxWidth: '80%', 
+    paddingHorizontal: 15, 
+    paddingTop: 12, 
+    paddingBottom: 9,
+    borderRadius: 20,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 2
   },
-  userBubble: { backgroundColor: '#ffde59', borderBottomRightRadius: 4 },
-  botBubble: { backgroundColor: '#fff', borderBottomLeftRadius: 4 },
-  
-  messageText: { fontSize: 14, fontWeight: '600', lineHeight: 20, marginBottom: 4 },
-  userText: { color: '#1a1a1a' },
-  botText: { color: '#1a1a1a' },
-  timeText: { fontSize: 10, fontWeight: '700', marginTop: 2 },
+  userBubble: { 
+    backgroundColor: '#2c3a7a', 
+    borderBottomRightRadius: 4,
+    shadowColor: '#2c3a7a'
+  },
+  botBubble: { 
+    backgroundColor: '#ffffff', 
+    borderBottomLeftRadius: 4,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    shadowColor: '#000'
+  },
 
+  // Bot badge bên trong tin nhắn
+  botBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 5
+  },
+  botBadgeName: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#2c3a7a'
+  },
+  aiBadge: {
+    backgroundColor: '#ecfdf5',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4
+  },
+  aiBadgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#059669'
+  },
+
+  // Văn bản tin nhắn
+  messageText: { 
+    fontSize: 14.5, 
+    lineHeight: 22, 
+    marginBottom: 4 
+  },
+  userText: { 
+    color: '#ffffff',
+    fontWeight: '500' 
+  },
+  botText: { 
+    color: '#1e293b',
+    fontWeight: '500' 
+  },
+
+  // Giờ gửi
+  timeText: { 
+    fontSize: 10, 
+    fontWeight: '600', 
+    marginTop: 2 
+  },
+  userTimeText: { 
+    color: '#cbd5e1', 
+    textAlign: 'right' 
+  },
+  botTimeText: { 
+    color: '#94a3b8', 
+    textAlign: 'left' 
+  },
+
+  // Thẻ gợi ý sách
   bookSuggestCard: {
-    flexDirection: 'row', backgroundColor: '#f9f9f9',
-    borderWidth: 2, borderColor: '#1a1a1a', borderRadius: 12,
-    padding: 8, marginTop: 8, marginBottom: 4,
-    shadowColor: '#1a1a1a', shadowOffset: { width: 2, height: 2 }, shadowOpacity: 1, elevation: 2
+    flexDirection: 'row', 
+    backgroundColor: '#f1f5f9',
+    borderRadius: 12, 
+    padding: 10, 
+    marginTop: 8, 
+    marginBottom: 6,
+    borderWidth: 1, 
+    borderColor: '#e2e8f0'
   },
-  bookSuggestCover: { width: 45, height: 60, backgroundColor: '#e5e5e5', borderRadius: 6, borderWidth: 1, borderColor: '#1a1a1a', justifyContent: 'center', alignItems: 'center' },
-  bookSuggestInfo: { flex: 1, marginLeft: 10, justifyContent: 'center' },
-  bookSuggestTitle: { fontSize: 13, fontWeight: '900', color: '#1a1a1a', marginBottom: 2 },
-  bookSuggestAuthor: { fontSize: 11, fontWeight: '600', color: '#666', marginBottom: 6 },
-  bookSuggestTagRow: { flexDirection: 'row', gap: 6 },
-  bookSuggestTag: { fontSize: 9, fontWeight: '800', backgroundColor: '#a29bfe', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: '#1a1a1a', overflow: 'hidden' },
+  bookSuggestCover: { 
+    width: 44, 
+    height: 58, 
+    backgroundColor: '#e2e8f0', 
+    borderRadius: 8, 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  bookSuggestInfo: { 
+    flex: 1, 
+    marginLeft: 10, 
+    justifyContent: 'center' 
+  },
+  bookSuggestTitle: { 
+    fontSize: 13, 
+    fontWeight: '800', 
+    color: '#0f172a', 
+    marginBottom: 3 
+  },
+  bookSuggestAuthor: { 
+    fontSize: 11, 
+    fontWeight: '500', 
+    color: '#64748b', 
+    marginBottom: 6 
+  },
+  bookSuggestTagRow: { 
+    flexDirection: 'row', 
+    gap: 6 
+  },
+  bookSuggestTag: { 
+    fontSize: 10, 
+    fontWeight: '700', 
+    backgroundColor: '#e0e7ff', 
+    color: '#3730a3',
+    paddingHorizontal: 7, 
+    paddingVertical: 2, 
+    borderRadius: 6, 
+    overflow: 'hidden' 
+  },
 
-  inputArea: {
-    flexDirection: 'row', alignItems: 'flex-end',
-    paddingHorizontal: 12, paddingVertical: 12,
-    backgroundColor: '#fff', borderTopWidth: 3, borderTopColor: '#1a1a1a',
-    paddingBottom: Platform.OS === 'ios' ? 25 : 12
+  // Loading bubble
+  loadingBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16
   },
-  attachBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center', marginRight: 8, marginBottom: 2 },
-  inputContainer: {
-    flex: 1, flexDirection: 'row', alignItems: 'flex-end',
-    backgroundColor: '#f4f4f4', borderWidth: 2, borderColor: '#1a1a1a', borderRadius: 20,
-    paddingHorizontal: 12, minHeight: 45, maxHeight: 120
+  loadingText: {
+    fontSize: 13,
+    fontStyle: 'italic',
+    color: '#475569',
+    fontWeight: '500'
   },
-  input: { 
-    flex: 1, fontSize: 14, fontWeight: '600', color: '#1a1a1a', 
-    paddingVertical: Platform.OS === 'ios' ? 12 : 8, 
+
+  // Khung nhập tin nhắn
+  inputAreaWrapper: {
+    backgroundColor: '#ffffff',
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 12
+  },
+  inputBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    backgroundColor: '#f1f5f9',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    minHeight: 46
+  },
+  textInput: { 
+    flex: 1, 
+    fontSize: 14.5, 
+    color: '#0f172a', 
+    fontWeight: '500',
+    paddingTop: Platform.OS === 'ios' ? 10 : 8,
+    paddingBottom: Platform.OS === 'ios' ? 10 : 8,
+    paddingHorizontal: 6,
     maxHeight: 110
   },
-  micBtn: { padding: 8, marginBottom: Platform.OS === 'ios' ? 2 : 0 },
-  
-  sendBtn: {
-    width: 45, height: 45, backgroundColor: '#ccc',
-    borderWidth: 2, borderColor: '#1a1a1a', borderRadius: 25,
-    justifyContent: 'center', alignItems: 'center', marginLeft: 8,
-    shadowColor: '#1a1a1a', shadowOffset: { width: 2, height: 2 }, shadowOpacity: 1, elevation: 2,
-    marginBottom: 2
+  sendButton: {
+    width: 38, 
+    height: 38, 
+    backgroundColor: '#e2e8f0',
+    borderRadius: 19,
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    marginLeft: 6,
+    marginBottom: 3
   },
-  sendBtnActive: { backgroundColor: '#1dd1a1' }
+  sendButtonActive: { 
+    backgroundColor: '#2c3a7a',
+    shadowColor: '#2c3a7a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3
+  }
 });

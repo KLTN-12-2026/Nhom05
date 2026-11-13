@@ -141,9 +141,19 @@ public class CustomerServiceImpl implements CustomerService {
     @Override
     public int getCurrentAccountId() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication != null && authentication.getPrincipal() instanceof CustomUserDetails) {
-            CustomUserDetails customUserDetails = (CustomUserDetails) authentication.getPrincipal();
-            return customUserDetails.getAccount().getAccount_id();
+        if (authentication != null && authentication.isAuthenticated() && !"anonymousUser".equals(authentication.getPrincipal())) {
+            if (authentication.getPrincipal() instanceof CustomUserDetails customUserDetails) {
+                if (customUserDetails.getAccount() != null) {
+                    return customUserDetails.getAccount().getAccount_id();
+                }
+            }
+            String username = authentication.getName();
+            if (username != null && !username.isBlank()) {
+                Account acc = accountRepository.findByUsername(username).orElse(null);
+                if (acc != null) {
+                    return acc.getAccount_id();
+                }
+            }
         }
         throw new RuntimeException("Khong tim thay thong tin dang nhap !");
     }

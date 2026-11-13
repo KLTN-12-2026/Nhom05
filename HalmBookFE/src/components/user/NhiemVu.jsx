@@ -1,11 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import UserLayout from './layout/UserLayout';
 import StreakDiemDanh from './StreakDiemDanh';
 import { getCurrentCustomer } from '@/services/customerService';
 import { getCustomerBookshelf } from '@/services/orderService';
+import { checkinDailyStreak, getMyTierSummary } from '@/services/tierService';
 import { isDarkMode, applyTheme } from '@/utils/theme';
-import { getTierInfo } from '@/utils/tierUtils';
+import { getTierInfo, formatCustomerId, getTierAvatarFrame, getTierBadgeClass, getTierLevel } from '@/utils/tierUtils';
+import AvatarWithFrame from '@/components/common/AvatarWithFrame';
+import { getClaimedMissions, claimMissionReward } from '@/services/userFeatureService';
+import { clearAuthSession } from '@/services/authToken';
 
 const halmTailwindConfig = {
     darkMode: 'class',
@@ -159,88 +163,317 @@ export default function NhiemVu() {
         };
     }, []);
 
+    const userTierLevel = getTierLevel(customer?.membershipTier);
+    const avatarFrame = getTierAvatarFrame(userTierLevel);
+    const tierBadgeClass = getTierBadgeClass(userTierLevel);
     const tierInfo = getTierInfo(customer?.membershipTier);
     const potatoBalance = customer?.potatoBalance ?? 0;
     const streakDays = customer?.streakDays ?? 0;
     const customerName = customer?.customerName || customer?.name || 'Bạn đọc HALM';
     const customerInitial = customerName.charAt(0).toUpperCase();
     const avatarSrc = customer?.avatar || customer?.avatarUrl;
-    const customerIdDisplay = customer?.customerId 
-        ? `id#C${String(customer.customerId).replace(/^C/i, '').padStart(5, '0')}`
-        : (customer?.customer_id 
-            ? `id#C${String(customer.customer_id).replace(/^C/i, '').padStart(5, '0')}`
-            : 'id#C00007');
+    const customerIdDisplay = formatCustomerId(customer?.customerId || customer?.customer_id);
+
+    const navigate = useNavigate();
+    const todayKey = new Date().toISOString().slice(0, 10);
+
+    const getInitialDailyTasks = () => {
+        try {
+            return {
+                checkin: localStorage.getItem(`halm_daily_action_checkin_${todayKey}`) === 'true',
+                read: localStorage.getItem(`halm_daily_action_read_${todayKey}`) === 'true',
+                chat: localStorage.getItem(`halm_daily_action_chat_${todayKey}`) === 'true',
+                search: localStorage.getItem(`halm_daily_action_search_${todayKey}`) === 'true',
+                offers: localStorage.getItem(`halm_daily_action_offers_${todayKey}`) === 'true',
+                bookshelf: localStorage.getItem(`halm_daily_action_bookshelf_${todayKey}`) === 'true'
+            };
+        } catch {
+            return { checkin: false, read: false, chat: false, search: false, offers: false, bookshelf: false };
+        }
+    };
+
+    const [dailyTasks, setDailyTasks] = useState(getInitialDailyTasks);
+
+    useEffect(() => {
+        const handleTaskCompleted = (e) => {
+            const task = e.detail?.task;
+            if (task) {
+                setDailyTasks(prev => ({ ...prev, [task]: true }));
+            } else {
+                setDailyTasks(getInitialDailyTasks());
+            }
+        };
+
+        const checkStreakOnMount = async () => {
+            try {
+                const summary = await getMyTierSummary();
+                if (summary?.hasCheckedInToday) {
+                    try {
+                        localStorage.setItem(`halm_daily_action_checkin_${todayKey}`, 'true');
+                    } catch {}
+                    setDailyTasks(prev => ({ ...prev, checkin: true }));
+                }
+            } catch (err) {
+                // ignore
+            }
+        };
+        checkStreakOnMount();
+
+        window.addEventListener('halm-daily-task-completed', handleTaskCompleted);
+        return () => window.removeEventListener('halm-daily-task-completed', handleTaskCompleted);
+    }, [todayKey]);
+
+    const markTaskDone = (key) => {
+        try {
+            localStorage.setItem(`halm_daily_action_${key}_${todayKey}`, 'true');
+        } catch {}
+        setDailyTasks(prev => ({ ...prev, [key]: true }));
+        window.dispatchEvent(new CustomEvent('halm-daily-task-completed', { detail: { task: key } }));
+    };
+
+    const handleExecuteMission = async (m) => {
+        if (m.taskKey === 'checkin') {
+            try {
+                const res = await checkinDailyStreak();
+                markTaskDone('checkin');
+                if (res && res.success) {
+                    setCustomer(prev => prev ? {
+                        ...prev,
+                        streakDays: res.streakDays || ((prev.streakDays || 0) + 1),
+                        potatoBalance: res.potatoBalance || prev.potatoBalance
+                    } : prev);
+                    showToast("Điểm Danh Thành Công!", res.message || "Bạn đã điểm danh thắp lửa hôm nay! Hãy nhận thưởng nhé 🔥");
+                } else {
+                    showToast("Điểm Danh Hằng Ngày", res?.message || "Đã ghi nhận điểm danh hôm nay! Nhận thưởng nhé 🔥");
+                }
+            } catch (err) {
+                markTaskDone('checkin');
+                showToast("Điểm Danh Hằng Ngày", "Đã ghi nhận điểm danh thành công! Nhận thưởng nhé 🔥");
+            }
+        } else if (m.taskKey === 'chat') {
+            markTaskDone('chat');
+            window.dispatchEvent(new CustomEvent('halm-open-chatbot', {
+                detail: "Chào Khoai Nhỏ! Giới thiệu sách hay cho tôi nhé 🥔"
+            }));
+            showToast("Trợ Lý AI Đã Sẵn Sàng", "Đã kết nối cùng AI Khoai Nhỏ! Bạn có thể nhận thưởng ngay.");
+        } else if (m.taskKey === 'search') {
+            markTaskDone('search');
+            showToast("Đã Ghi Nhận Tìm Kiếm!", "Đã ghi nhận nhiệm vụ tìm kiếm. Nhận thưởng ngay!");
+            const input = document.getElementById('header-search-input');
+            if (input) {
+                input.focus();
+                input.scrollIntoView({ behavior: 'smooth' });
+            } else {
+                navigate('/');
+            }
+        } else if (m.taskKey === 'read') {
+            markTaskDone('read');
+            showToast("Đã Ghi Nhận Đọc Sách!", "Đã ghi nhận nhiệm vụ đọc sách. Nhận thưởng ngay!");
+            navigate('/tusachcn');
+        } else if (m.taskKey === 'offers') {
+            markTaskDone('offers');
+            showToast("Đã Ghi Nhận Khám Phá!", "Đã ghi nhận khám phá ưu đãi. Nhận thưởng ngay!");
+            navigate('/uudai');
+        } else if (m.taskKey === 'bookshelf') {
+            markTaskDone('bookshelf');
+            showToast("Đã Ghi Nhận Tủ Sách!", "Đã ghi nhận kiểm tra tủ sách. Nhận thưởng ngay!");
+            navigate('/tusachcn');
+        }
+    };
+
+    const [claimedMissions, setClaimedMissions] = useState(() => {
+        try {
+            const saved = localStorage.getItem(`halm_claimed_missions_${todayKey}`);
+            return saved ? JSON.parse(saved) : {};
+        } catch {
+            return {};
+        }
+    });
+
+    const [claimedMilestones, setClaimedMilestones] = useState(() => {
+        try {
+            const saved = localStorage.getItem('halm_claimed_milestones');
+            return saved ? JSON.parse(saved) : {};
+        } catch {
+            return {};
+        }
+    });
+
+    // Đồng bộ các nhiệm vụ đã nhận thưởng từ Database
+    useEffect(() => {
+        getClaimedMissions().then(data => {
+            if (data) {
+                if (Array.isArray(data.dailyClaimed)) {
+                    const dailyMap = {};
+                    data.dailyClaimed.forEach(id => { dailyMap[id] = true; });
+                    setClaimedMissions(prev => ({ ...prev, ...dailyMap }));
+                }
+                if (Array.isArray(data.milestoneClaimed)) {
+                    const msMap = {};
+                    data.milestoneClaimed.forEach(id => { msMap[id] = true; });
+                    setClaimedMilestones(prev => ({ ...prev, ...msMap }));
+                }
+                if (data.potatoBalance !== undefined) {
+                    setCustomer(prev => prev ? { ...prev, potatoBalance: data.potatoBalance } : prev);
+                }
+            }
+        }).catch(() => {});
+    }, []);
+
+    const handleClaimMission = async (mission) => {
+        if (claimedMissions[mission.id]) return;
+        try {
+            const res = await claimMissionReward({
+                missionId: mission.id,
+                isMilestone: false,
+                rewardPotato: mission.rewardPotato,
+                rewardXp: mission.rewardXp
+            });
+            const newBalance = res.newBalance ?? (potatoBalance + mission.rewardPotato);
+            setCustomer(prev => prev ? { ...prev, potatoBalance: newBalance } : prev);
+
+            const updated = { ...claimedMissions, [mission.id]: true };
+            setClaimedMissions(updated);
+            try {
+                localStorage.setItem(`halm_claimed_missions_${todayKey}`, JSON.stringify(updated));
+            } catch {}
+
+            window.dispatchEvent(new CustomEvent('halm-potato-updated', {
+                detail: { potatoBalance: newBalance }
+            }));
+
+            showToast("Nhận Thưởng Thành Công!", `+${mission.rewardPotato} Khoai Tây đã được cộng vào tài khoản của bạn! 🎉`);
+        } catch (err) {
+            const msg = err.response?.data?.message || 'Không thể nhận thưởng lúc này!';
+            showToast("Thông Báo", msg);
+        }
+    };
+
+    const handleClaimMilestone = async (ms) => {
+        if (claimedMilestones[ms.id]) return;
+        try {
+            const res = await claimMissionReward({
+                missionId: ms.id,
+                isMilestone: true,
+                rewardPotato: ms.rewardPotato,
+                rewardXp: ms.rewardXp
+            });
+            const newBalance = res.newBalance ?? (potatoBalance + ms.rewardPotato);
+            setCustomer(prev => prev ? { ...prev, potatoBalance: newBalance } : prev);
+
+            const updated = { ...claimedMilestones, [ms.id]: true };
+            setClaimedMilestones(updated);
+            try {
+                localStorage.setItem('halm_claimed_milestones', JSON.stringify(updated));
+            } catch {}
+
+            window.dispatchEvent(new CustomEvent('halm-potato-updated', {
+                detail: { potatoBalance: newBalance }
+            }));
+
+            showToast("Mở Khóa Thành Tựu!", `Chúc mừng bạn nhận +${ms.rewardPotato} Khoai Tây! 🏆`);
+        } catch (err) {
+            const msg = err.response?.data?.message || 'Không thể nhận thưởng lúc này!';
+            showToast("Thông Báo", msg);
+        }
+    };
 
     const DAILY_MISSIONS = [
         {
             id: 'm1',
+            taskKey: 'checkin',
             title: 'Điểm danh đọc sách hằng ngày',
-            description: 'Đăng nhập vào HALM BOOK mỗi ngày để thắp lửa chuỗi đọc.',
+            description: 'Thắp lửa chuỗi đọc sách mỗi ngày để rèn luyện thói quen tri thức bền bỉ.',
             rewardPotato: 5,
             rewardXp: 20,
             icon: 'ph-calendar-check',
             iconColor: 'text-amber-500 bg-amber-500/10',
-            currentProgress: 1,
+            currentProgress: dailyTasks.checkin ? 1 : 0,
             maxProgress: 1,
-            isCompleted: true,
-            actionLabel: 'Đã Điểm Danh',
-            actionLink: null,
+            isCompleted: Boolean(claimedMissions['m1']),
+            canClaim: Boolean(dailyTasks.checkin && !claimedMissions['m1']),
+            actionLabel: 'Điểm Danh Ngay',
+            actionIcon: 'ph-check-circle',
         },
         {
             id: 'm2',
-            title: 'Đọc sách 30 phút trên trình đọc số',
-            description: 'Duy trì thói quen đọc sách hàng ngày trên trình đọc số của HALM BOOK.',
-            rewardPotato: 15,
-            rewardXp: 50,
+            taskKey: 'read',
+            title: 'Đọc sách hoặc khám phá chương mới',
+            description: 'Mở đọc ít nhất 1 tác phẩm sách đọc hôm nay trong kho tàng HALM BOOK.',
+            rewardPotato: 10,
+            rewardXp: 30,
             icon: 'ph-book-open',
             iconColor: 'text-wine bg-wine/10 dark:text-gold dark:bg-gold/15',
-            currentProgress: 15,
-            maxProgress: 30,
-            isCompleted: false,
-            actionLabel: 'Đến Tủ Sách',
-            actionLink: '/tusachcn',
+            currentProgress: dailyTasks.read ? 1 : 0,
+            maxProgress: 1,
+            isCompleted: Boolean(claimedMissions['m2']),
+            canClaim: Boolean(dailyTasks.read && !claimedMissions['m2']),
+            actionLabel: 'Đọc Sách Ngay',
+            actionIcon: 'ph-book-bookmark',
         },
         {
             id: 'm3',
-            title: 'Để lại cảm nhận hoặc đánh giá sách',
-            description: 'Viết nhận xét chân thực cho cuốn sách bạn vừa đọc để chia sẻ cùng cộng đồng.',
-            rewardPotato: 10,
-            rewardXp: 30,
-            icon: 'ph-chat-circle-dots',
+            taskKey: 'chat',
+            title: 'Đàm đạo cùng Trợ lý AI Khoai Nhỏ',
+            description: 'Gửi ít nhất 1 câu hỏi hoặc trò chuyện cùng AI Khoai Nhỏ để gợi ý sách hay.',
+            rewardPotato: 5,
+            rewardXp: 20,
+            icon: 'ph-sparkle',
             iconColor: 'text-blue-500 bg-blue-500/10',
-            currentProgress: 0,
+            currentProgress: dailyTasks.chat ? 1 : 0,
             maxProgress: 1,
-            isCompleted: false,
-            actionLabel: 'Khám Phá Sách',
-            actionLink: '/trangchu#trending-section',
+            isCompleted: Boolean(claimedMissions['m3']),
+            canClaim: Boolean(dailyTasks.chat && !claimedMissions['m3']),
+            actionLabel: 'Trò Chuyện AI',
+            actionIcon: 'ph-chat-circle-dots',
         },
         {
             id: 'm4',
-            title: 'Thuê hoặc gia hạn 1 cuốn sách',
-            description: 'Mượn thêm tác phẩm mới vào tủ sách cá nhân bằng Khoai Tây.',
-            rewardPotato: 20,
-            rewardXp: 60,
-            icon: 'ph-shopping-bag',
-            iconColor: 'text-emerald-600 bg-emerald-500/10',
-            currentProgress: 0,
+            taskKey: 'search',
+            title: 'Tìm kiếm tác phẩm yêu thích',
+            description: 'Tìm kiếm ít nhất 1 cuốn sách, chủ đề hoặc tác giả trên thanh tra cứu tác phẩm.',
+            rewardPotato: 5,
+            rewardXp: 20,
+            icon: 'ph-magnifying-glass',
+            iconColor: 'text-indigo-500 bg-indigo-500/10',
+            currentProgress: dailyTasks.search ? 1 : 0,
             maxProgress: 1,
-            isCompleted: false,
-            actionLabel: 'Thuê Sách Ngay',
-            actionLink: '/trangchu#trending-section',
+            isCompleted: Boolean(claimedMissions['m4']),
+            canClaim: Boolean(dailyTasks.search && !claimedMissions['m4']),
+            actionLabel: 'Tìm Kiếm Ngay',
+            actionIcon: 'ph-magnifying-glass',
         },
         {
             id: 'm5',
-            title: 'Tặng Khoai sẻ chia tri thức',
-            description: 'Chuyển tặng Khoai Tây cho bạn bè cùng đọc sách.',
+            taskKey: 'offers',
+            title: 'Khám phá kho Ưu Đãi & Gói Khoai',
+            description: 'Khám phá các gói combo và chiết khấu đọc sách độc quyền dành cho bạn.',
             rewardPotato: 5,
             rewardXp: 20,
             icon: 'ph-gift',
-            iconColor: 'text-purple-500 bg-purple-500/10',
-            currentProgress: 0,
+            iconColor: 'text-emerald-600 bg-emerald-500/10',
+            currentProgress: dailyTasks.offers ? 1 : 0,
             maxProgress: 1,
-            isCompleted: false,
-            actionLabel: 'Tặng Khoai',
-            actionLink: '/canhan?tab=wallet',
+            isCompleted: Boolean(claimedMissions['m5']),
+            canClaim: Boolean(dailyTasks.offers && !claimedMissions['m5']),
+            actionLabel: 'Xem Ưu Đãi',
+            actionIcon: 'ph-tag',
+        },
+        {
+            id: 'm6',
+            taskKey: 'bookshelf',
+            title: 'Kiểm tra Tủ Sách Cá Nhân',
+            description: 'Ghé thăm không gian tủ sách cá nhân để kiểm tra các tác phẩm của bạn.',
+            rewardPotato: 5,
+            rewardXp: 20,
+            icon: 'ph-books',
+            iconColor: 'text-purple-500 bg-purple-500/10',
+            currentProgress: dailyTasks.bookshelf ? 1 : 0,
+            maxProgress: 1,
+            isCompleted: Boolean(claimedMissions['m6']),
+            canClaim: Boolean(dailyTasks.bookshelf && !claimedMissions['m6']),
+            actionLabel: 'Vào Tủ Sách',
+            actionIcon: 'ph-caret-right',
         },
     ];
 
@@ -255,6 +488,8 @@ export default function NhiemVu() {
             maxProgress: 7,
             icon: 'ph-fire',
             badge: 'Cột Mốc',
+            isCompleted: Boolean(claimedMilestones['ms1']),
+            canClaim: streakDays >= 7 && !claimedMilestones['ms1'],
         },
         {
             id: 'ms2',
@@ -266,21 +501,25 @@ export default function NhiemVu() {
             maxProgress: 3,
             icon: 'ph-books',
             badge: 'Tủ Sách',
+            isCompleted: Boolean(claimedMilestones['ms2']),
+            canClaim: bookshelfCount >= 3 && !claimedMilestones['ms2'],
         },
         {
             id: 'ms3',
-            title: 'Thành tựu: Nhà Nghiên Cứu Sách (10 Ghi Chú)',
-            description: 'Lưu lại 10 đoạn trích dẫn và ghi chú khi thưởng thức sách.',
+            title: 'Thành tựu: Nhà Tích Lũy Tri Thức (100 Khoai)',
+            description: 'Tích lũy số dư đạt mốc 100 Khoai Tây trong ví.',
             rewardPotato: 40,
             rewardXp: 120,
-            currentProgress: 2,
-            maxProgress: 10,
-            icon: 'ph-note-pencil',
+            currentProgress: Math.min(potatoBalance, 100),
+            maxProgress: 100,
+            icon: 'ph-coins',
             badge: 'Tri Thức',
+            isCompleted: Boolean(claimedMilestones['ms3']),
+            canClaim: potatoBalance >= 100 && !claimedMilestones['ms3'],
         },
         {
             id: 'ms4',
-            title: 'Thành tựu: Đại Sứ HALM BOOK',
+            title: 'Thành tựu: Đại Sứ HALM BOOK (500 Khoai)',
             description: 'Tích lũy tổng cộng 500 Khoai Tây từ nhiệm vụ và nạp.',
             rewardPotato: 100,
             rewardXp: 300,
@@ -288,6 +527,8 @@ export default function NhiemVu() {
             maxProgress: 500,
             icon: 'ph-crown',
             badge: 'Huy Hiệu Vàng',
+            isCompleted: Boolean(claimedMilestones['ms4']),
+            canClaim: potatoBalance >= 500 && !claimedMilestones['ms4'],
         },
     ];
 
@@ -334,6 +575,54 @@ export default function NhiemVu() {
                 html.dark .nhiem-vu-page [class~="dark:text-night-text"] { color: #EDE9DF; }
                 html.dark .nhiem-vu-page [class~="dark:text-night-muted"] { color: #96938B; }
                 html.dark .nhiem-vu-page [class~="potato-badge"] { background: rgb(212 175 55/.15); color: #D4AF37; border-color: rgb(212 175 55/.3); }
+
+                html.dark .nhiem-vu-page [class*="user-sidebar-card"],
+                html.dark .nhiem-vu-page [class*="dark:bg-night-surface"],
+                html.dark .nhiem-vu-page [class*="dark:bg-[#181916]"] {
+                    background-color: #181916 !important;
+                    border-color: #2C2E29 !important;
+                }
+                html.dark .nhiem-vu-page [class*="user-sidebar-box"] {
+                    background-color: #181916 !important;
+                    border-color: #2C2E29 !important;
+                }
+                html.dark .nhiem-vu-page [class*="user-sidebar-card"] h2,
+                html.dark .nhiem-vu-page [class*="user-sidebar-card"] [class*="font-display"],
+                html.dark .nhiem-vu-page [class*="user-sidebar-box"] span.text-2xl,
+                html.dark .nhiem-vu-page [class*="user-sidebar-box"] span:first-child {
+                    color: #EDE9DF !important;
+                }
+                html.dark .nhiem-vu-page [class*="user-sidebar-box"] span:last-child,
+                html.dark .nhiem-vu-page [class*="user-sidebar-card"] p {
+                    color: #9CA3AF !important;
+                }
+                html.dark .nhiem-vu-page [class*="dark:border-night-border"],
+                html.dark .nhiem-vu-page [class*="dark:border-[#2C2E29]"] {
+                    border-color: #2C2E29 !important;
+                }
+                html.dark .nhiem-vu-page [class*="dark:bg-[#242116]"] {
+                    background-color: #242116 !important;
+                }
+                html.dark .nhiem-vu-page [class*="dark:border-[#52441D]"] {
+                    border-color: #52441D !important;
+                }
+                html.dark .nhiem-vu-page [class~="bg-paper-surface"] {
+                    background-color: #181916 !important;
+                }
+                html.dark .nhiem-vu-page [class~="bg-paper"] {
+                    background-color: #111210 !important;
+                }
+                html.dark .nhiem-vu-page [class~="border-paper-border"] {
+                    border-color: #2C2E29 !important;
+                }
+                html.dark .nhiem-vu-page [class~="text-ink"],
+                html.dark .nhiem-vu-page .text-ink {
+                    color: #EDE9DF !important;
+                }
+                html.dark .nhiem-vu-page [class~="text-ink-muted"],
+                html.dark .nhiem-vu-page .text-ink-muted {
+                    color: #9CA3AF !important;
+                }
             `}</style>
 
             <UserLayout className="nhiem-vu-page" onThemeChange={setIsDark}>
@@ -358,129 +647,141 @@ export default function NhiemVu() {
                     <div className="flex flex-col lg:flex-row gap-6 items-start">
 
                         {/* ====================================================
-                            SIDEBAR TRÁI: HỒ SƠ & ĐIỀU HƯỚNG TÀI KHOẢN (ĐỒNG BỘ)
+                            SIDEBAR TRÁI: HỒ SƠ & ĐIỀU HƯỚNG TÀI KHOẢN (ĐỒNG BỘ 100%)
                             ==================================================== */}
-                        <aside className="w-full lg:w-80 shrink-0 space-y-5 lg:sticky lg:top-24 lg:self-start">
+                        <aside className="w-full lg:w-80 shrink-0 space-y-4 lg:sticky lg:top-24 lg:self-start">
                             {/* 1. Profile Avatar Card */}
-                            <div className="rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-6 shadow-sm flex flex-col items-center text-center relative overflow-hidden group">
-                                <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-36 h-36 bg-wine/10 dark:bg-gold/10 rounded-full blur-2xl pointer-events-none"></div>
+                            <div className="rounded-3xl user-sidebar-card bg-paper-surface dark:bg-night-surface border border-paper-border dark:border-night-border p-6 shadow-sm flex flex-col items-center text-center relative overflow-hidden group">
+                                <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-36 h-36 bg-amber-500/10 rounded-full blur-2xl pointer-events-none"></div>
 
-                                <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-wine to-wine-light dark:from-gold dark:to-gold-light p-1 shadow-md mb-3.5 relative">
-                                    <div className="w-full h-full rounded-full bg-paper-surface dark:bg-night-surface flex items-center justify-center font-display font-black text-2xl text-wine dark:text-gold overflow-hidden">
-                                        {avatarSrc ? (
-                                            <img src={avatarSrc} alt="Avatar" className="w-full h-full object-cover rounded-full" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '/logo.png'; }} />
-                                        ) : (
-                                            customerInitial
-                                        )}
-                                    </div>
-                                    <span className="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-emerald-500 border-2 border-white dark:border-night-card flex items-center justify-center text-[10px] text-white" title="Trực tuyến">
-                                        <i className="ph-bold ph-check text-[9px]"></i>
-                                    </span>
-                                </div>
+                                {/* Dynamic Avatar Frame with Tier Prestige - Bo theo viền tròn Tu Tiên */}
+                                <AvatarWithFrame
+                                    avatarSrc={avatarSrc}
+                                    name={customerName}
+                                    tier={customer?.membershipTier}
+                                    potatoBalance={potatoBalance}
+                                    booksCount={bookshelfCount}
+                                    size="lg"
+                                />
 
-                                <h2 className="font-display font-black text-lg text-ink dark:text-night-text leading-tight">
+                                <h2 className="font-display font-black text-2xl text-stone-900 dark:!text-[#EDE9DF] leading-tight">
                                     {customerName}
                                 </h2>
-                                <p className="font-metadata-spec text-xs text-ink-muted dark:text-night-muted mt-0.5">
+                                <p className="font-metadata-spec text-xs text-stone-500 dark:!text-[#9CA3AF] mt-1">
                                     {customerIdDisplay}
                                 </p>
 
-                                <Link to="/hang" className="mt-3.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25 text-xs font-metadata-spec font-bold hover:scale-105 transition-transform" title="Xem cấp bậc hội viên">
-                                    <i className={`ph-bold ${tierInfo.icon} text-emerald-600 dark:text-emerald-400`}></i>
-                                    <span>{tierInfo.name}</span>
+                                {/* Tier Pill */}
+                                <Link to="/hang" className={`mt-3.5 inline-flex items-center gap-1.5 px-4 py-1 rounded-full text-xs font-metadata-spec font-bold hover:scale-105 transition-transform ${getTierBadgeClass(customer?.membershipTier, potatoBalance)}`} title="Xem cấp bậc hội viên">
+                                    <i className={`ph-bold ${getTierInfo(customer?.membershipTier, potatoBalance).icon}`}></i>
+                                    <span>{getTierInfo(customer?.membershipTier, potatoBalance).name}</span>
                                 </Link>
 
-                                <div className="grid grid-cols-2 gap-2 w-full pt-4 mt-4 border-t border-paper-border dark:border-night-border text-center">
-                                    <Link to="/canhan?tab=wallet" className="p-2.5 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-gold transition-colors">
-                                        <span className="block font-metadata-spec text-base font-black text-ink dark:text-night-text">{potatoBalance.toLocaleString()}</span>
-                                        <span className="font-metadata-spec text-[10px] text-ink-muted dark:text-night-muted">Khoai Tích Lũy</span>
+                                {/* Divider */}
+                                <div className="w-full h-px bg-paper-border dark:bg-night-border my-5"></div>
+
+                                {/* Stat Boxes */}
+                                <div className="grid grid-cols-2 gap-3 w-full text-center">
+                                    <Link to="/canhan?tab=wallet" className="py-4 px-3 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-gold transition-colors flex flex-col justify-center">
+                                        <span className="block font-metadata-spec text-2xl font-black text-stone-900 dark:!text-[#EDE9DF]" style={{ color: isDark ? '#EDE9DF' : undefined }}>{potatoBalance.toLocaleString()}</span>
+                                        <span className="font-metadata-spec text-xs text-stone-500 dark:!text-[#9CA3AF] mt-1" style={{ color: isDark ? '#9CA3AF' : undefined }}>Khoai Tích Lũy</span>
                                     </Link>
-                                    <Link to="/tusachcn" className="p-2.5 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-wine dark:hover:border-gold transition-colors">
-                                        <span className="block font-metadata-spec text-base font-black text-ink dark:text-night-text">{bookshelfCount}</span>
-                                        <span className="font-metadata-spec text-[10px] text-ink-muted dark:text-night-muted">Sách Trong Tủ</span>
+                                    <Link to="/tusachcn" className="py-4 px-3 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-wine dark:hover:border-gold transition-colors flex flex-col justify-center">
+                                        <span className="block font-metadata-spec text-2xl font-black text-stone-900 dark:!text-[#EDE9DF]" style={{ color: isDark ? '#EDE9DF' : undefined }}>{bookshelfCount}</span>
+                                        <span className="font-metadata-spec text-xs text-stone-500 dark:!text-[#9CA3AF] mt-1" style={{ color: isDark ? '#9CA3AF' : undefined }}>Sách Trong Tủ</span>
                                     </Link>
                                 </div>
                             </div>
 
-                            {/* 2. Navigation Menu Card - STRICT ORDER (1: Profile, 2: Bookshelf, 3: Tiers, 4: Missions, 5: Wallet, 6: History, Divider, 7: Logout) */}
-                            <div className="rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-3 shadow-sm space-y-1">
+                            {/* 2. Navigation Menu Card */}
+                            <div className="rounded-3xl user-sidebar-card bg-paper-surface dark:bg-night-surface border border-paper-border dark:border-night-border p-3.5 shadow-sm space-y-1.5">
                                 {/* 1. Thông Tin Cá Nhân */}
                                 <Link
                                     to="/canhan"
-                                    className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface hover:text-ink dark:hover:text-night-text transition-colors"
+                                    className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-stone-300 hover:bg-paper-200 dark:hover:bg-stone-800/40 hover:text-ink dark:hover:text-white transition-colors"
                                 >
-                                    <i className="ph-bold ph-user text-base"></i>
+                                    <i className="ph-bold ph-user text-lg text-stone-400"></i>
                                     <span>Thông Tin Cá Nhân</span>
                                 </Link>
 
                                 {/* 2. Tủ Sách Cá Nhân */}
                                 <Link
                                     to="/tusachcn"
-                                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface hover:text-ink dark:hover:text-night-text transition-colors"
+                                    className="w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-stone-300 hover:bg-paper-200 dark:hover:bg-stone-800/40 hover:text-ink dark:hover:text-white transition-colors"
                                 >
-                                    <div className="flex items-center gap-3">
-                                        <i className="ph-bold ph-book-bookmark text-base"></i>
+                                    <div className="flex items-center gap-3.5">
+                                        <i className="ph-bold ph-book-bookmark text-lg text-stone-400"></i>
                                         <span>Tủ Sách Cá Nhân</span>
                                     </div>
-                                    <span className="potato-badge text-[11px] py-0 px-2">{bookshelfCount} cuốn</span>
+                                    <span className="px-3 py-1 rounded-full bg-paper-200 dark:bg-[#242116] border border-paper-border dark:border-[#52441D] text-amber-600 dark:text-[#D8B44A] text-xs font-bold font-metadata-spec">{bookshelfCount} cuốn</span>
                                 </Link>
 
                                 {/* 3. Hạng Thành Viên */}
                                 <Link
                                     to="/hang"
-                                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface hover:text-ink dark:hover:text-night-text transition-colors"
+                                    className="w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-stone-300 hover:bg-paper-200 dark:hover:bg-stone-800/40 hover:text-ink dark:hover:text-white transition-colors"
                                 >
-                                    <div className="flex items-center gap-3">
-                                        <i className="ph-bold ph-trophy text-base"></i>
+                                    <div className="flex items-center gap-3.5">
+                                        <i className="ph-bold ph-trophy text-lg text-stone-400"></i>
                                         <span>Hạng Thành Viên</span>
                                     </div>
-                                    <span className="potato-badge text-[11px] py-0.5 px-2 inline-flex items-center gap-1.5 whitespace-nowrap font-bold">
-                                        <i className={`ph-bold ${tierInfo.icon} text-[12px] text-amber-600 dark:text-amber-400 shrink-0`}></i>
-                                        <span>{tierInfo.name}</span>
-                                    </span>
+                                    <i className="ph-bold ph-caret-right text-xs text-stone-400"></i>
                                 </Link>
 
                                 {/* 4. Nhiệm Vụ Hằng Ngày (ACTIVE TAB TRÊN TRANG NÀY) */}
                                 <div
-                                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold bg-wine text-white dark:bg-gold dark:text-night-bg shadow-sm transition-colors cursor-default"
+                                    className="w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-metadata-spec font-black bg-[#C28807] text-[#111210] shadow-md transition-colors cursor-default"
                                 >
-                                    <div className="flex items-center gap-3">
-                                        <i className="ph-bold ph-target text-base"></i>
+                                    <div className="flex items-center gap-3.5">
+                                        <i className="ph-bold ph-target text-lg text-[#111210]"></i>
                                         <span>Nhiệm Vụ Hằng Ngày</span>
                                     </div>
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/20 text-white dark:bg-black/20 dark:text-night-bg text-[10px] font-bold">Streak 🔥</span>
+                                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-black/25 text-black text-xs font-black">Streak 🔥</span>
                                 </div>
 
                                 {/* 5. Ví Khoai Tây */}
                                 <Link
                                     to="/canhan?tab=wallet"
-                                    className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface hover:text-ink dark:hover:text-night-text transition-colors"
+                                    className="w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-stone-300 hover:bg-paper-200 dark:hover:bg-stone-800/40 hover:text-ink dark:hover:text-white transition-colors"
                                 >
-                                    <div className="flex items-center gap-3">
-                                        <i className="ph-bold ph-wallet text-base"></i>
+                                    <div className="flex items-center gap-3.5">
+                                        <i className="ph-bold ph-wallet text-lg text-stone-400"></i>
                                         <span>Ví Khoai Tây</span>
                                     </div>
-                                    <span className="potato-badge text-[11px] py-0 px-2">{potatoBalance.toLocaleString()} 🥔</span>
+                                    <span className="px-3 py-1 rounded-full bg-paper-200 dark:bg-[#242116] border border-paper-border dark:border-[#52441D] text-amber-600 dark:text-[#D8B44A] text-xs font-bold font-metadata-spec">{potatoBalance.toLocaleString()} 🥔</span>
                                 </Link>
 
                                 {/* 6. Lịch Sử Giao Dịch */}
                                 <Link
                                     to="/canhan?tab=history"
-                                    className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-night-muted hover:bg-paper-200 dark:hover:bg-night-surface hover:text-ink dark:hover:text-night-text transition-colors"
+                                    className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-stone-300 hover:bg-paper-200 dark:hover:bg-stone-800/40 hover:text-ink dark:hover:text-white transition-colors"
                                 >
-                                    <i className="ph-bold ph-clock-counter-clockwise text-base"></i>
+                                    <i className="ph-bold ph-clock-counter-clockwise text-lg text-stone-400"></i>
                                     <span>Lịch Sử Giao Dịch</span>
                                 </Link>
 
+                                {/* 7. Khiếu Nại & Hỗ Trợ */}
+                                <Link
+                                    to="/canhan?tab=support"
+                                    className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-stone-300 hover:bg-paper-200 dark:hover:bg-stone-800/40 hover:text-ink dark:hover:text-white transition-colors"
+                                >
+                                    <i className="ph-bold ph-headset text-lg text-stone-400"></i>
+                                    <span>Khiếu Nại & Hỗ Trợ</span>
+                                </Link>
+
                                 {/* Divider Line */}
-                                <div className="pt-2 border-t border-paper-border dark:border-night-border mt-2">
-                                    <Link
-                                        to="/dangnhap"
-                                        className="w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-metadata-spec font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors"
+                                <div className="pt-2 border-t border-paper-border dark:border-[#2C2E29] mt-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            clearAuthSession();
+                                            window.location.assign('/');
+                                        }}
+                                        className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-metadata-spec font-bold text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
                                     >
-                                        <i className="ph-bold ph-sign-out text-base"></i>
+                                        <i className="ph-bold ph-sign-out text-lg text-rose-500"></i>
                                         <span>Đăng Xuất</span>
-                                    </Link>
+                                    </button>
                                 </div>
                             </div>
                         </aside>
@@ -494,7 +795,7 @@ export default function NhiemVu() {
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                 <div>
                                     <div className="flex items-center gap-2 text-xs font-metadata-spec text-ink-muted dark:text-night-muted mb-1">
-                                        <Link to="/trangchu" className="hover:underline">Trang chủ</Link>
+                                        <Link to="/" className="hover:underline">Trang chủ</Link>
                                         <i className="ph-bold ph-caret-right text-[10px]"></i>
                                         <span>Tài khoản</span>
                                         <i className="ph-bold ph-caret-right text-[10px]"></i>
@@ -613,22 +914,28 @@ export default function NhiemVu() {
                                                     {/* Khu vực nút hành động (sắp xếp liền mạch, không gạch ngang) */}
                                                     <div className="flex items-center justify-end">
                                                         {m.isCompleted ? (
-                                                            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-metadata-spec font-bold text-xs">
+                                                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-metadata-spec font-bold text-xs">
                                                                 <i className="ph-bold ph-check text-xs"></i>
                                                                 <span>Đã Nhận</span>
                                                             </span>
-                                                        ) : m.actionLink ? (
-                                                            <Link
-                                                                to={m.actionLink}
-                                                                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-paper-100 hover:bg-wine hover:text-white dark:bg-night-surface dark:hover:bg-gold dark:hover:text-night-bg text-ink dark:text-night-text font-metadata-spec font-bold text-xs transition-all shadow-sm"
+                                                        ) : m.canClaim ? (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleClaimMission(m)}
+                                                                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-stone-900 font-metadata-spec font-black text-xs shadow-md animate-pulse cursor-pointer hover:scale-105 transition-all"
                                                             >
-                                                                <span>{m.actionLabel}</span>
-                                                                <i className="ph-bold ph-caret-right text-xs"></i>
-                                                            </Link>
+                                                                <i className="ph-bold ph-gift text-sm"></i>
+                                                                <span>Nhận Thưởng +{m.rewardPotato} 🥔</span>
+                                                            </button>
                                                         ) : (
-                                                            <span className="text-xs text-ink-muted dark:text-night-muted italic">
-                                                                Đang diễn ra
-                                                            </span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleExecuteMission(m)}
+                                                                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-paper-100 hover:bg-wine hover:text-white dark:bg-night-surface dark:hover:bg-gold dark:hover:text-night-bg text-ink dark:text-night-text font-metadata-spec font-bold text-xs transition-all shadow-sm cursor-pointer hover:scale-105"
+                                                            >
+                                                                <i className={`ph-bold ${m.actionIcon || 'ph-caret-right'} text-xs`}></i>
+                                                                <span>{m.actionLabel}</span>
+                                                            </button>
                                                         )}
                                                     </div>
                                                 </div>
@@ -701,14 +1008,23 @@ export default function NhiemVu() {
 
                                                     <div className="flex items-center justify-between text-xs">
                                                         <span className="text-[11px] font-metadata-spec text-ink-muted dark:text-night-muted">
-                                                            {percent >= 100 ? 'Đã đạt mốc' : `Còn ${ms.maxProgress - ms.currentProgress} bước`}
+                                                            {ms.isCompleted ? 'Đã hoàn thành' : (percent >= 100 ? 'Sẵn sàng nhận thưởng' : `Còn ${ms.maxProgress - ms.currentProgress} bước`)}
                                                         </span>
-                                                        {percent >= 100 ? (
+                                                        {ms.isCompleted ? (
                                                             <span className="inline-flex items-center gap-1 font-bold text-emerald-600 dark:text-emerald-400">
-                                                                <i className="ph-bold ph-seal-check text-sm"></i> Đã Mở Khóa
+                                                                <i className="ph-bold ph-seal-check text-sm"></i> Đã Nhận
                                                             </span>
+                                                        ) : ms.canClaim ? (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleClaimMilestone(ms)}
+                                                                className="inline-flex items-center gap-1 px-3 py-1 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-md animate-pulse cursor-pointer hover:scale-105 transition-all"
+                                                            >
+                                                                <i className="ph-bold ph-gift"></i>
+                                                                <span>Nhận +{ms.rewardPotato} 🥔</span>
+                                                            </button>
                                                         ) : (
-                                                            <Link to="/trangchu" className="font-bold text-wine dark:text-gold hover:underline flex items-center gap-1">
+                                                            <Link to="/" className="font-bold text-wine dark:text-gold hover:underline flex items-center gap-1">
                                                                 <span>Tiếp tục</span>
                                                                 <i className="ph-bold ph-arrow-right text-xs"></i>
                                                             </Link>

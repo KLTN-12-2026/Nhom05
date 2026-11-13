@@ -1,15 +1,17 @@
 export const ROUTES = {
-  // Public: không yêu cầu đăng nhập
+  // Public: không yêu cầu đăng nhập (Khách vãng lai và thành viên đều truy cập được)
   ROOT: '/',
+  HOME: '/',
   LOGIN: '/dangnhap',
   FORGOT_PASSWORD: '/quenmatkhau',
   TIERS: '/hang',
   OFFERS: '/uudai',
+  CATEGORY: '/danhmuc',
+  CATEGORY_BY_TOPIC: '/danhmuc/:topic',
   BOOK_DETAIL: '/chitietsach',
   BOOK_DETAIL_BY_ID: '/chitietsach/:id',
 
-  // User protected: bắt buộc đăng nhập
-  HOME: '/trangchu',
+  // User protected: bắt buộc đăng nhập (Khách vãng lai bị chuyển hướng sang màn Đăng Nhập)
   PROFILE: '/canhan',
   MY_BOOKSHELF: '/tusachcn',
   READ_BOOK: '/docsach',
@@ -19,7 +21,7 @@ export const ROUTES = {
   WALLET: '/vi-khoai',
   MISSIONS: '/nhiemvu',
 
-  // Admin Protected
+  // Admin Protected: bắt buộc quyền Quản trị viên
   ADMIN: '/admin',
   ADMIN_STATISTICS: '/admin/thong-ke',
   ADMIN_BOOKS: '/admin/quan-ly-sach',

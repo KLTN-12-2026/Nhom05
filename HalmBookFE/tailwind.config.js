@@ -50,11 +50,12 @@ export default {
       fontFamily: {
         heading: ['"Fredoka"', "sans-serif"],
         body: ['"Quicksand"', "sans-serif"],
-        sans: ['var(--font-ui)', 'Inter', 'sans-serif'],
-        display: ['var(--font-display)', 'Inter', 'sans-serif'],
-        metadata: ['var(--font-metadata)', 'Roboto', 'sans-serif'],
-        editorial: ['var(--font-editorial)', 'Open Sans', 'sans-serif'],
+        sans: ['var(--font-ui, "Inter")', 'Inter', 'sans-serif'],
+        display: ['var(--font-display, "Plus Jakarta Sans")', '"Plus Jakarta Sans"', '"Be Vietnam Pro"', 'Inter', 'sans-serif'],
+        metadata: ['var(--font-metadata, "Roboto")', 'Roboto', 'sans-serif'],
+        editorial: ['var(--font-editorial, "Open Sans")', 'Open Sans', 'sans-serif'],
         nunito: ['Nunito', 'sans-serif'],
+        outfit: ['var(--font-outfit, "Plus Jakarta Sans")', '"Plus Jakarta Sans"', '"Be Vietnam Pro"', 'Inter', 'sans-serif'],
       },
 
       boxShadow: {

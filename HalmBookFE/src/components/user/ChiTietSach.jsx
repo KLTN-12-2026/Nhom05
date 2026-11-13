@@ -1,8 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import axiosInstance from '@/services/axiosClient';
+import { isTokenValid } from '@/services/authToken';
+import { openAuthModal } from '@/components/common/AuthModal';
 import UserLayout from './layout/UserLayout';
 import { openBookReaderTransition } from './bookReaderTransition';
+import { checkIsFavorite, toggleFavorite } from '@/services/userFeatureService';
 
 const STAR_FEEDBACK_TEXTS = ["Rất tệ", "Tệ", "Bình thường", "Rất hay", "Tuyệt tác!"];
 
@@ -640,6 +643,11 @@ const pageStyles = `
         }
 
         function openRentalModal() {
+            if (!isTokenValid()) {
+                openAuthModal({ mode: 'login', message: 'Vui lòng đăng nhập để thuê hoặc mua ấn phẩm này!' });
+                return;
+            }
+
             const modal = document.getElementById('rentalModal');
             const backdrop = document.getElementById('rentalModalBackdrop');
             const userKhoaiEl = document.getElementById('rentalModalUserKhoai');
@@ -708,6 +716,11 @@ const pageStyles = `
         }
 
         async function confirmRentalModalAddToCart() {
+            if (!isTokenValid()) {
+                openAuthModal({ mode: 'login', message: 'Vui lòng đăng nhập để thêm ấn phẩm vào giỏ hàng!' });
+                return;
+            }
+
             const plan = rentalPlans[currentRentalPlanKey];
             if (!plan) return;
 
@@ -851,6 +864,11 @@ const pageStyles = `
 
         // Thanh toán toàn bộ Giỏ Hàng bằng Khoai Tây thực tế
         async function handleCheckoutCart() {
+            if (!isTokenValid()) {
+                openAuthModal({ mode: 'login', message: 'Vui lòng đăng nhập để thực hiện thanh toán giỏ hàng!' });
+                return;
+            }
+
             if (cartItems.length === 0) {
                 showToast('Giỏ hàng đang trống!', 'error');
                 return;
@@ -1399,6 +1417,38 @@ export default function ChiTietSach() {
     const [isSubmittingReply, setIsSubmittingReply] = useState(false);
 
     // ==========================================
+    // STATE QUẢN LÝ SÁCH YÊU THÍCH (WISHLIST)
+    // ==========================================
+    const [isFavorite, setIsFavorite] = useState(false);
+    const [isFavoriteLoading, setIsFavoriteLoading] = useState(false);
+
+    useEffect(() => {
+        if (!bookId || !isTokenValid()) return;
+        checkIsFavorite(bookId).then(setIsFavorite).catch(() => {});
+    }, [bookId]);
+
+    const handleToggleFavorite = async () => {
+        if (!isTokenValid()) {
+            openAuthModal({ mode: 'login', message: 'Vui lòng đăng nhập để lưu tác phẩm vào danh sách Yêu Thích!' });
+            return;
+        }
+        try {
+            setIsFavoriteLoading(true);
+            const res = await toggleFavorite(bookId);
+            setIsFavorite(res.isFavorite);
+            window.dispatchEvent(new CustomEvent('halm-favorites-updated', {
+                detail: { bookId, isFavorite: res.isFavorite }
+            }));
+            const toastFn = window.showToast || alert;
+            toastFn(res.message || (res.isFavorite ? 'Đã thêm tác phẩm vào danh sách Yêu Thích!' : 'Đã xóa khỏi danh sách Yêu Thích!'));
+        } catch (err) {
+            console.error('Lỗi khi thao tác yêu thích:', err);
+        } finally {
+            setIsFavoriteLoading(false);
+        }
+    };
+
+    // ==========================================
     // 2. STATE QUẢN LÝ CHATBOT TRỢ LÝ AI
     // ==========================================
     const [isChatbotOpen, setIsChatbotOpen] = useState(false);
@@ -1425,6 +1475,13 @@ export default function ChiTietSach() {
 
     // Gửi đánh giá mới kèm số sao lên Backend
     const handlePostReview = async () => {
+        // CHẶN KHÁCH VÃNG LAI: Yêu cầu đăng nhập trước khi đánh giá
+        if (!isTokenValid()) {
+            showToast('Vui lòng đăng nhập để gửi cảm nhận và đánh giá sách!', 'error');
+            openAuthModal({ mode: 'login', message: 'Vui lòng đăng nhập để gửi đánh giá cho tác phẩm này!' });
+            return;
+        }
+
         const text = commentInput.trim();
         if (!text) {
             showToast('Vui lòng nhập nội dung cảm nhận của bạn!', 'error');
@@ -1470,6 +1527,11 @@ export default function ChiTietSach() {
 
     // Tăng lượt thích cho 1 đánh giá
     const handleLikeReview = async (evaluateId) => {
+        if (!isTokenValid()) {
+            showToast('Vui lòng đăng nhập để tương tác thích đánh giá!', 'error');
+            openAuthModal({ mode: 'login', message: 'Vui lòng đăng nhập để tương tác cùng bạn đọc!' });
+            return;
+        }
         try {
             const res = await axiosInstance.post(`/api/home/evaluates/${evaluateId}/like`);
             const newCount = res.data?.likesCount;
@@ -1481,6 +1543,11 @@ export default function ChiTietSach() {
 
     // Gửi phản hồi (reply) cho 1 đánh giá
     const handleSubmitReply = async (parentId) => {
+        if (!isTokenValid()) {
+            showToast('Vui lòng đăng nhập để gửi phản hồi đánh giá!', 'error');
+            openAuthModal({ mode: 'login', message: 'Vui lòng đăng nhập để tham gia thảo luận!' });
+            return;
+        }
         const text = replyInputText.trim();
         if (!text) {
             showToast('Vui lòng nhập nội dung phản hồi!', 'error');
@@ -1571,10 +1638,28 @@ export default function ChiTietSach() {
             return;
         }
 
+        // Mở chức năng đọc thử: Khách vãng lai và người chưa thuê đều được đọc thử miễn phí với mode=trial
+        const hasFullAccess = isTokenValid() && rentStatus.hasAccess;
+        const readModeParam = hasFullAccess ? 'full' : 'trial';
+
         const bookCard = document.getElementById('book-card');
         const coverUrl = book.img_url || book.img || '/logo.png';
         const targetBookId = book.book_id || book.id || bookId;
-        const readModeParam = rentStatus.hasAccess ? 'full' : 'trial';
+
+        // Lưu thông tin sách đầy đủ vào sessionStorage trước khi mở reader
+        try {
+            sessionStorage.setItem('halm-reader-book', JSON.stringify({
+                ...book,
+                book_id: targetBookId,
+                id: targetBookId,
+                title: book.bookName || book.title,
+                bookName: book.bookName || book.title,
+                author: book.author || book.authorName,
+                authorName: book.author || book.authorName,
+                img_url: coverUrl,
+                coverImage: coverUrl
+            }));
+        } catch (_) {}
 
         openBookReaderTransition({
             bookCard,
@@ -1891,7 +1976,7 @@ export default function ChiTietSach() {
             
             {/* Brand Logo */}
             <div className="flex items-center gap-3 shrink-0">
-                <a href="/trangchu" className="flex items-center gap-2.5 group">
+                <a href="/" className="flex items-center gap-2.5 group">
                     <img src="/logo.png" alt="HALM BOOK Mascot" className="w-10 h-10 object-contain group-hover:scale-110 group-hover:rotate-6 transition-transform duration-300" />
                     <div className="flex flex-col">
                         <span className="font-outfit font-black tracking-tight text-xl sm:text-2xl text-ink dark:text-night-text uppercase leading-none group-hover:text-wine dark:group-hover:text-gold transition-colors">
@@ -1906,7 +1991,7 @@ export default function ChiTietSach() {
 
             {/* Desktop Nav Links */}
             <nav className="hidden lg:flex items-center gap-6 xl:gap-8 text-xs font-bold tracking-wider uppercase" aria-label="Main Navigation">
-                <a href="/trangchu" className="text-ink/75 dark:text-night-muted hover:text-wine dark:hover:text-gold transition-colors">Trang Chủ</a>
+                <a href="/" className="text-ink/75 dark:text-night-muted hover:text-wine dark:hover:text-gold transition-colors">Trang Chủ</a>
                 <a href="offers_end.html" className="text-ink/75 dark:text-night-muted hover:text-wine dark:hover:text-gold transition-colors">Ưu Đãi</a>
                 <a href="/chitietsach" className="text-wine dark:text-gold font-black transition-colors relative py-1 after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-full after:h-[2.5px] after:bg-wine dark:after:bg-gold after:rounded-full">
                     Chi Tiết Sách
@@ -1967,7 +2052,7 @@ export default function ChiTietSach() {
                 <span className="text-xs font-bold text-gold flex items-center gap-1 cursor-pointer" onClick={() => navigate('/canhan?tab=wallet')}>{userKhoai.toLocaleString()} Khoai <i className="ph-fill ph-coins"></i></span>
             </div>
             <nav className="flex flex-col gap-2.5 text-xs font-bold uppercase tracking-wider">
-                <a href="/trangchu" className="py-1 text-ink dark:text-night-text hover:text-wine">Trang Chủ</a>
+                <a href="/" className="py-1 text-ink dark:text-night-text hover:text-wine">Trang Chủ</a>
                 <a href="offers_end.html" className="py-1 text-ink dark:text-night-text hover:text-wine">Ưu Đãi Đặc Quyền</a>
                 <a href="/chitietsach" className="py-1 text-wine dark:text-gold">Chi Tiết Sách</a>
                 <a href="#tuy-chon-thue" className="py-1 text-ink dark:text-night-text hover:text-wine">Bảng Giá Thuê</a>
@@ -1994,7 +2079,7 @@ export default function ChiTietSach() {
                         <i className="ph-bold ph-warning-circle text-base"></i>
                         <span>{error}</span>
                     </div>
-                    <button type="button" onClick={() => navigate('/trangchu')} className="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs hover:bg-rose-700 transition">
+                    <button type="button" onClick={() => navigate('/')} className="px-4 py-2 rounded-xl bg-rose-600 text-white text-xs hover:bg-rose-700 transition">
                         Về Trang Chủ
                     </button>
                 </div>
@@ -2148,16 +2233,32 @@ export default function ChiTietSach() {
                                             <span>Đã Sở Hữu Trọn Đời</span>
                                         </div>
                                     ) : (
-                                        <button 
-                                            id="btn-rent-book" 
-                                            type="button" 
-                                            onClick={() => openRentalModal()} 
-                                            className="w-full bg-wine hover:bg-wine-dark text-white font-outfit font-extrabold py-3.5 px-4 rounded-2xl transition-colors flex items-center justify-center gap-2 text-sm cursor-pointer group" 
-                                            title="Gia hạn thời hạn thuê cuốn sách"
-                                        >
-                                            <i className="ph-bold ph-calendar-plus text-base text-amber-300 group-hover:scale-110 transition-transform"></i>
-                                            <span>Gia Hạn Thuê Thêm</span>
-                                        </button>
+                                        <div className="flex items-center gap-2.5">
+                                            <button 
+                                                id="btn-rent-book" 
+                                                type="button" 
+                                                onClick={() => openRentalModal()} 
+                                                className="flex-1 bg-wine hover:bg-wine-dark text-white font-outfit font-extrabold py-3.5 px-4 rounded-2xl transition-colors flex items-center justify-center gap-2 text-sm cursor-pointer group shadow-sm" 
+                                                title="Gia hạn thời hạn thuê cuốn sách"
+                                            >
+                                                <i className="ph-bold ph-calendar-plus text-base text-amber-300 group-hover:scale-110 transition-transform"></i>
+                                                <span>Gia Hạn Thuê Thêm</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={handleToggleFavorite}
+                                                disabled={isFavoriteLoading}
+                                                className={`h-[50px] w-[50px] rounded-2xl border flex items-center justify-center text-xl transition-all cursor-pointer shrink-0 shadow-xs ${
+                                                    isFavorite
+                                                        ? 'bg-rose-500/15 border-rose-500/40 text-rose-500 shadow-sm'
+                                                        : 'bg-paper-surface hover:bg-paper-100 dark:bg-night-surface dark:hover:bg-night-card border-paper-border dark:border-night-border text-stone-400 hover:text-rose-500'
+                                                }`}
+                                                title={isFavorite ? "Bỏ khỏi danh sách Yêu Thích" : "Lưu vào danh sách Yêu Thích"}
+                                                aria-label="Yêu thích tác phẩm"
+                                            >
+                                                <i className={`ph-fill ph-heart ${isFavorite ? 'text-rose-500 animate-pulse' : 'text-stone-400 group-hover:text-rose-500'}`}></i>
+                                            </button>
+                                        </div>
                                     )}
                                 </>
                             ) : (
@@ -2168,11 +2269,33 @@ export default function ChiTietSach() {
                                         <span className="group-hover:text-wine dark:group-hover:text-gold transition-colors">Đọc Thử {book?.pdf_url ? '(PDF)' : ''}</span>
                                     </button>
 
-                                    {/* 2. Thêm Vào Giỏ Hàng (Nút chính) */}
-                                    <button id="btn-rent-book" type="button" onClick={() => { openRentalModal() }} className="w-full bg-wine hover:bg-wine-dark text-white font-outfit font-extrabold py-3.5 px-4 rounded-2xl transition-colors flex items-center justify-center gap-2 text-sm cursor-pointer group" title="Chọn gói thuê hoặc mua sách">
-                                        <i className="ph-bold ph-shopping-cart-simple text-base text-amber-300 group-hover:scale-110 transition-transform"></i>
-                                        <span>Thêm Vào Giỏ Hàng</span>
-                                    </button>
+                                    {/* 2. Thêm Vào Giỏ Hàng & Yêu Thích */}
+                                    <div className="flex items-center gap-2.5">
+                                        <button
+                                            id="btn-rent-book"
+                                            type="button"
+                                            onClick={() => { openRentalModal() }}
+                                            className="flex-1 bg-wine hover:bg-wine-dark text-white font-outfit font-extrabold py-3.5 px-4 rounded-2xl transition-colors flex items-center justify-center gap-2 text-sm cursor-pointer group shadow-sm"
+                                            title="Chọn gói thuê hoặc mua sách"
+                                        >
+                                            <i className="ph-bold ph-shopping-cart-simple text-base text-amber-300 group-hover:scale-110 transition-transform"></i>
+                                            <span>Thêm Vào Giỏ Hàng</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={handleToggleFavorite}
+                                            disabled={isFavoriteLoading}
+                                            className={`h-[50px] w-[50px] rounded-2xl border flex items-center justify-center text-xl transition-all cursor-pointer shrink-0 shadow-xs ${
+                                                isFavorite
+                                                    ? 'bg-rose-500/15 border-rose-500/40 text-rose-500 shadow-sm'
+                                                    : 'bg-paper-surface hover:bg-paper-100 dark:bg-night-surface dark:hover:bg-night-card border-paper-border dark:border-night-border text-stone-400 hover:text-rose-500'
+                                            }`}
+                                            title={isFavorite ? "Bỏ khỏi danh sách Yêu Thích" : "Lưu vào danh sách Yêu Thích"}
+                                            aria-label="Yêu thích tác phẩm"
+                                        >
+                                            <i className={`ph-fill ph-heart ${isFavorite ? 'text-rose-500 animate-pulse' : 'text-stone-400 group-hover:text-rose-500'}`}></i>
+                                        </button>
+                                    </div>
                                 </>
                             )}
                         </div>
@@ -2396,7 +2519,7 @@ export default function ChiTietSach() {
                         <button type="button" onClick={(event) => { scrollAuthorBooks(1) }} className="w-8 h-8 rounded-full border border-paper-border dark:border-night-border bg-paper-surface dark:bg-night-card hover:bg-wine hover:text-white dark:hover:bg-gold dark:hover:text-night text-ink dark:text-night-text flex items-center justify-center transition-colors cursor-pointer shadow-xs" title="Lướt sang phải">
                             <i className="ph-bold ph-caret-right"></i>
                         </button>
-                        <a href="/trangchu" className="ml-2 text-xs font-bold text-wine dark:text-gold hover:underline hidden sm:inline-flex items-center gap-1">
+                        <a href="/" className="ml-2 text-xs font-bold text-wine dark:text-gold hover:underline hidden sm:inline-flex items-center gap-1">
                             Tất cả <i className="ph-bold ph-arrow-right text-[10px]"></i>
                         </a>
                     </div>
@@ -2818,7 +2941,7 @@ export default function ChiTietSach() {
                 <div>
                     <h4 className="font-outfit font-bold text-xs uppercase tracking-wider text-ink dark:text-night-text mb-3">Khám Phá</h4>
                     <ul className="space-y-2 text-xs text-ink-muted dark:text-night-muted">
-                        <li><a href="/trangchu" className="hover:text-wine dark:hover:text-gold transition">Trang Chủ</a></li>
+                        <li><a href="/" className="hover:text-wine dark:hover:text-gold transition">Trang Chủ</a></li>
                         <li><a href="offers_end.html" className="hover:text-wine dark:hover:text-gold transition">Ưu Đãi Đặc Quyền</a></li>
                         <li><a href="/chitietsach" className="hover:text-wine dark:hover:text-gold transition">Chi Tiết Sách</a></li>
                         <li><a href="#" className="hover:text-wine dark:hover:text-gold transition">Bestseller Tuần</a></li>

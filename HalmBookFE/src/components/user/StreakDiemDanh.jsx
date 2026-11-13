@@ -48,6 +48,13 @@ export default function StreakDiemDanh({ onCheckinSuccess, onShowToast, compact 
                 setStreakDays(res.streakDays || (streakDays + 1));
                 setHasCheckedInToday(true);
 
+                // Ghi nhận hoàn thành nhiệm vụ hằng ngày: Điểm danh
+                const todayKey = new Date().toISOString().slice(0, 10);
+                try {
+                    localStorage.setItem(`halm_daily_action_checkin_${todayKey}`, 'true');
+                } catch {}
+                window.dispatchEvent(new CustomEvent('halm-daily-task-completed', { detail: { task: 'checkin' } }));
+
                 if (onShowToast) {
                     onShowToast("Điểm Danh Thành Công!", res.message || "Bạn nhận được Khoai Tây & XP hôm nay! 🔥");
                 }

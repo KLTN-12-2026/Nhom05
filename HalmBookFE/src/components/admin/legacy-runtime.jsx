@@ -141,6 +141,13 @@ export function useLegacyAdminPage(pageName, pageCode, needsChart = false) {
 
     return () => {
       disposed = true;
+      if (window.Chart && window.Chart.instances) {
+        Object.values(window.Chart.instances).forEach((instance) => {
+          try {
+            instance?.destroy();
+          } catch (_) {}
+        });
+      }
     };
   }, [pageName, pageCode, needsChart, navigate]);
 }

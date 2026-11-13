@@ -1,5 +1,6 @@
 package com.example.demochatbot.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -28,6 +29,7 @@ public class Promotion {
     @JoinColumn(name = "category_id" , referencedColumnName = "category_id")
     private Category category;
 
+    @JsonIgnore
     @OneToMany(mappedBy = "promotion")
     private List<Orders> orders;
 

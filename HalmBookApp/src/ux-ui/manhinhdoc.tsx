@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Dimensions,
   Modal,
@@ -38,10 +39,17 @@ import {
   Highlighter,
   FileText,
   Languages,
+  Lock,
   Trash2,
 } from 'lucide-react-native';
 import { getBookRealChapters, Chapter } from './bookContentService';
 import { useAppNavigation } from './navigation';
+import {
+  BookAccessDetail,
+  checkBookAccessDetailApi,
+  isPersonalOrLocalBook,
+  syncReadingProgressApi,
+} from './rentalService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -379,7 +387,17 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
     };
   }, [setFooterVisible]);
 
-  // 2. Dữ liệu chương sách từ tác phẩm thực tế
+  // 2. Dữ liệu chương sách từ tác phẩm thực tế & kiểm tra quyền thuê sách
+  const isPersonalBook = useMemo(() => isPersonalOrLocalBook(book), [book]);
+  const [accessInfo, setAccessInfo] = useState<BookAccessDetail>({
+    hasAccess: false,
+    currentPage: 1,
+    readingPercentage: 0,
+    remainingDays: 0,
+    isForever: false,
+    status: 'NONE',
+    checkedFromServer: false,
+  });
   const chapters = useMemo(() => getBookRealChapters(book), [book]);
   const [currentChapterIndex, setCurrentChapterIndex] = useState(
     typeof book?.initialChapterIndex === 'number' ? book.initialChapterIndex : 0
@@ -390,6 +408,87 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
       setCurrentChapterIndex(book.initialChapterIndex);
     }
   }, [book?.initialChapterIndex]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const bookIdStr = String(book?.id || '');
+    if (!bookIdStr || isPersonalBook) {
+      setAccessInfo({
+        hasAccess: true,
+        currentPage: 1,
+        readingPercentage: 0,
+        remainingDays: 0,
+        isForever: true,
+        status: 'PERSONAL',
+        checkedFromServer: false,
+      });
+      return;
+    }
+
+    checkBookAccessDetailApi(bookIdStr)
+      .then((detail) => {
+        if (!isMounted) return;
+        setAccessInfo(detail);
+        if (
+          typeof book?.initialChapterIndex !== 'number' &&
+          detail.hasAccess &&
+          detail.currentPage > 1 &&
+          detail.currentPage <= chapters.length
+        ) {
+          setCurrentChapterIndex(detail.currentPage - 1);
+        } else if (detail.checkedFromServer && !detail.hasAccess) {
+          setCurrentChapterIndex((prev: number) => (prev > 0 ? 0 : prev));
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, [book?.id, book?.initialChapterIndex, chapters.length, isPersonalBook]);
+
+  const isTrialRestricted =
+    !isPersonalBook &&
+    accessInfo.checkedFromServer &&
+    !accessInfo.hasAccess &&
+    chapters.length > 1;
+
+  // Đồng bộ tiến độ đọc lên Backend khi người dùng có quyền thuê hợp lệ
+  useEffect(() => {
+    const bookIdStr = String(book?.id || '');
+    if (!bookIdStr || isPersonalBook || !accessInfo.hasAccess || chapters.length === 0) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      syncReadingProgressApi(bookIdStr, currentChapterIndex + 1, chapters.length);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [accessInfo.hasAccess, book?.id, chapters.length, currentChapterIndex, isPersonalBook]);
+
+  const handleSelectChapterIndex = useCallback(
+    (targetIdx: number) => {
+      const bounded = Math.max(0, Math.min(chapters.length - 1, targetIdx));
+      if (isTrialRestricted && bounded > 0) {
+        Alert.alert(
+          'Cần thuê sách để đọc tiếp',
+          'Bạn đang xem bản đọc thử (Chương 1). Hãy thuê sách để mở khóa toàn bộ nội dung tác phẩm.',
+          [
+            { text: 'Để sau', style: 'cancel' },
+            {
+              text: 'Thuê ngay',
+              onPress: () => {
+                setIsTocOpen(false);
+                onBack();
+              },
+            },
+          ]
+        );
+        return;
+      }
+      setCurrentChapterIndex(bounded);
+    },
+    [chapters.length, isTrialRestricted, onBack]
+  );
 
   const activeChapter: Chapter = chapters[currentChapterIndex] || chapters[0] || {
     id: 1,
@@ -1010,13 +1109,19 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
     showToast(`Đã chuyển tới Trang ${bm.page} (${bm.percent}%)`);
   };
 
+  const lastReportedPercentRef = useRef<number>(-1);
+
   const handleScroll = (event: any) => {
     const { contentOffset, layoutMeasurement, contentSize } = event.nativeEvent;
     currentScrollYRef.current = contentOffset.y;
     const maxScroll = contentSize.height - layoutMeasurement.height;
     if (maxScroll > 0) {
       const p = Math.max(0, Math.min(1, contentOffset.y / maxScroll));
-      setScrollProgress(p);
+      const intPercent = Math.round(p * 100);
+      if (intPercent !== lastReportedPercentRef.current) {
+        lastReportedPercentRef.current = intPercent;
+        setScrollProgress(p);
+      }
     }
     if (selectedRange) {
       updateToolbarPosition(
@@ -1173,7 +1278,7 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
           },
         ]}
         onScroll={handleScroll}
-        scrollEventThrottle={16}
+        scrollEventThrottle={32}
         showsVerticalScrollIndicator={true}
         onScrollBeginDrag={() => {
           // LƯỚT XUỐNG HOẶC LƯỚT LÊN LÀ TỰ ĐỘNG ẨN NGAY ĐIỀU KHIỂN!
@@ -1288,7 +1393,7 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
               { borderColor: currentTheme.border, backgroundColor: currentTheme.cardBg },
               currentChapterIndex <= 0 && { opacity: 0.3 },
             ]}
-            onPress={() => setCurrentChapterIndex((prev: number) => Math.max(0, prev - 1))}
+            onPress={() => handleSelectChapterIndex(currentChapterIndex - 1)}
           >
             <Text style={[styles.prevNextChapterText, { color: currentTheme.text }]}>
               ‹ Chương trước
@@ -1302,12 +1407,10 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
               { borderColor: currentTheme.border, backgroundColor: currentTheme.cardBg },
               currentChapterIndex >= chapters.length - 1 && { opacity: 0.3 },
             ]}
-            onPress={() =>
-              setCurrentChapterIndex((prev: number) => Math.min(chapters.length - 1, prev + 1))
-            }
+            onPress={() => handleSelectChapterIndex(currentChapterIndex + 1)}
           >
             <Text style={[styles.prevNextChapterText, { color: currentTheme.text }]}>
-              Chương sau ›
+              {isTrialRestricted && currentChapterIndex === 0 ? 'Thuê để đọc tiếp ›' : 'Chương sau ›'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -1851,9 +1954,16 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
         <View style={styles.tocBackdrop}>
           <View style={[styles.tocCard, { backgroundColor: currentTheme.cardBg }]}>
             <View style={[styles.tocHeader, { borderBottomColor: currentTheme.border }]}>
-              <Text style={[styles.tocHeaderTitle, { color: currentTheme.text }]}>
-                Mục Lục ({chapters.length} chương)
-              </Text>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.tocHeaderTitle, { color: currentTheme.text }]}>
+                  Mục Lục ({chapters.length} chương)
+                </Text>
+                {isTrialRestricted && (
+                  <Text style={{ fontSize: 11, color: '#d97706', fontWeight: '600', marginTop: 2 }}>
+                    Bản đọc thử (Chương 1) • Thuê sách để mở khóa toàn bộ
+                  </Text>
+                )}
+              </View>
               <TouchableOpacity onPress={() => setIsTocOpen(false)} style={styles.tocCloseBtn}>
                 <X size={20} color={currentTheme.text} />
               </TouchableOpacity>
@@ -1862,6 +1972,7 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
             <ScrollView style={styles.tocScrollView} showsVerticalScrollIndicator={false}>
               {chapters.map((ch, idx) => {
                 const isSelected = idx === currentChapterIndex;
+                const isLocked = isTrialRestricted && idx > 0;
                 return (
                   <TouchableOpacity
                     key={ch.id || idx}
@@ -1869,9 +1980,14 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
                       styles.tocItemRow,
                       { borderBottomColor: currentTheme.border },
                       isSelected && { backgroundColor: currentTheme.bg },
+                      isLocked && { opacity: 0.5 },
                     ]}
                     onPress={() => {
-                      setCurrentChapterIndex(idx);
+                      if (isLocked) {
+                        handleSelectChapterIndex(idx);
+                        return;
+                      }
+                      handleSelectChapterIndex(idx);
                       setIsTocOpen(false);
                     }}
                   >
@@ -1893,7 +2009,11 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
                     >
                       {ch.title}
                     </Text>
-                    {isSelected && <Check size={18} color="#007AFF" />}
+                    {isLocked ? (
+                      <Lock size={15} color={currentTheme.subText} />
+                    ) : (
+                      isSelected && <Check size={18} color="#007AFF" />
+                    )}
                   </TouchableOpacity>
                 );
               })}

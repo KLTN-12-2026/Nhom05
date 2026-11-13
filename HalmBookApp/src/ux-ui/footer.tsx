@@ -1,5 +1,5 @@
+import React, { useEffect, useRef, useCallback } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppNavigation } from './navigation';
@@ -18,12 +18,12 @@ interface FooterProps {
   visible?: boolean;
 }
 
-export default function Footer({ activeNav, floating = false, visible = true }: FooterProps) {
+function FooterComponent({ activeNav, floating = false, visible = true }: FooterProps) {
   // ============================================================================
   // [GIẢI THÍCH CODE]: Lấy trạng thái `isLoggedIn` và hàm `showLoginAlert` từ navigation
   // để kiểm tra xem người dùng hiện tại có phải khách vãng lai hay không.
   // ============================================================================
-  const { navigateTab, isDarkMode, isLoggedIn, showLoginAlert } = useAppNavigation();
+  const { navigateTab, isDarkMode, isLoggedIn, showLoginAlert, lang } = useAppNavigation();
   const insets = useSafeAreaInsets();
   const animTranslateY = useRef(new Animated.Value(0)).current;
 
@@ -48,15 +48,15 @@ export default function Footer({ activeNav, floating = false, visible = true }: 
   const handleTabPress = (tabId: (typeof PRIMARY_TABS)[number]['id']) => {
     if (!isLoggedIn) {
       if (tabId === 'upload') {
-        showLoginAlert('Bạn phải đăng nhập mới dùng được chức năng uploadfile');
+        showLoginAlert(lang === 'en' ? 'Please log in to use upload file feature' : 'Bạn phải đăng nhập mới dùng được chức năng uploadfile');
         return;
       }
       if (tabId === 'bookshelf') {
-        showLoginAlert('Bạn phải đăng nhập để dùng chức năng tủ sách');
+        showLoginAlert(lang === 'en' ? 'Please log in to use bookshelf feature' : 'Bạn phải đăng nhập để dùng chức năng tủ sách');
         return;
       }
       if (tabId === 'profile') {
-        showLoginAlert('Bạn phải đăng nhập để dùng chức năng trang cá nhân');
+        showLoginAlert(lang === 'en' ? 'Please log in to use profile feature' : 'Bạn phải đăng nhập để dùng chức năng trang cá nhân');
         return;
       }
     }
@@ -70,7 +70,7 @@ export default function Footer({ activeNav, floating = false, visible = true }: 
         styles.footerWrap,
         floating && styles.footerWrapFloating,
         {
-          paddingBottom: Math.max(insets.bottom, 8) + 6,
+          paddingBottom: Math.max(insets.bottom, 6),
           transform: [{ translateY: animTranslateY }],
         },
       ]}
@@ -85,12 +85,12 @@ export default function Footer({ activeNav, floating = false, visible = true }: 
               onPress={() => handleTabPress(tab.id)}
               activeOpacity={0.7}
               accessibilityRole="button"
-              accessibilityLabel={tab.title}
+              accessibilityLabel={lang === 'en' ? (tab.id === 'home' ? 'Home' : tab.id === 'offers' ? 'Offers' : tab.id === 'upload' ? 'Upload' : tab.id === 'bookshelf' ? 'Bookshelf' : 'Profile') : tab.title}
               accessibilityState={{ selected: isActive }}
             >
               <Ionicons
                 name={tab.icon}
-                size={25}
+                size={22}
                 color={isActive ? '#1473E6' : isDarkMode ? '#AAB1C0' : '#6F7684'}
               />
             </TouchableOpacity>
@@ -100,6 +100,8 @@ export default function Footer({ activeNav, floating = false, visible = true }: 
     </Animated.View>
   );
 }
+
+export default React.memo(FooterComponent);
 
 const styles = StyleSheet.create({
   footerWrap: {
@@ -121,9 +123,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 38,
-    paddingHorizontal: 9,
-    height: 68,
+    borderRadius: 30,
+    paddingHorizontal: 8,
+    height: 56,
     shadowColor: '#1a1a1a',
     shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.16,
@@ -136,14 +138,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.38,
   },
   navItem: {
-    width: 55,
-    height: 52,
-    borderRadius: 28,
+    width: 52,
+    height: 44,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
   navItemActive: {
-    width: 72,
+    width: 66,
     backgroundColor: 'rgba(20, 115, 230, 0.12)',
   },
   navItemActiveDark: {

@@ -1,24 +1,27 @@
 import { useEffect } from 'react';
 import UserLayout from './layout/UserLayout';
 import axiosInstance from '@/services/axiosClient';
+import { getTierInfo } from '@/utils/tierUtils';
 
 const cartThemeStyles = `
-    .bg-paper-surface { background-color: #FFFEFA; }
-    .bg-paper-200 { background-color: #EAE5D9; }
-    .bg-paper { background-color: #F7F4EE; }
-    .bg-wine { background-color: #8E3038; }
-    .bg-gold { background-color: #B8860B; }
-    .bg-night-bg { background-color: #111210; }
-    .bg-night-surface { background-color: #181916; }
-    .bg-night-card { background-color: #20221E; }
-    .text-ink { color: #1E1F1D; }
-    .text-ink-muted { color: #66645E; }
-    .text-night-text { color: #EDE9DF; }
-    .text-night-muted { color: #96938B; }
-    .text-wine { color: #8E3038; }
-    .text-gold { color: #B8860B; }
-    .border-paper-border { border-color: #E3DDD0; }
-    .border-night-border { border-color: #2C2E29; }
+    html:not(.dark) .bg-paper-surface { background-color: #FFFEFA; }
+    html:not(.dark) .bg-paper-200 { background-color: #EAE5D9; }
+    html:not(.dark) .bg-paper { background-color: #F7F4EE; }
+    html:not(.dark) .bg-wine { background-color: #8E3038; }
+    html:not(.dark) .bg-gold { background-color: #B8860B; }
+    html:not(.dark) .text-ink { color: #1E1F1D; }
+    html:not(.dark) .text-ink-muted { color: #66645E; }
+    html:not(.dark) .border-paper-border { border-color: #E3DDD0; }
+
+    html.dark .bg-night-bg { background-color: #111210 !important; }
+    html.dark .bg-night-surface { background-color: #181916 !important; }
+    html.dark .bg-night-card { background-color: #20221E !important; }
+    html.dark .border-night-border { border-color: #2C2E29 !important; }
+    html.dark .text-night-text { color: #EDE9DF !important; }
+    html.dark .text-night-muted { color: #96938B !important; }
+    html.dark [class*="bg-paper-surface"] { background-color: #181916 !important; }
+    html.dark [class*="text-ink"] { color: #EDE9DF !important; }
+    html.dark [class*="border-paper-border"] { border-color: #2C2E29 !important; }
     .dark .dark\\:bg-paper-surface { background-color: #FFFEFA; }
     .dark .dark\\:bg-paper-200 { background-color: #EAE5D9; }
     .dark .dark\\:bg-night-surface { background-color: #181916; }
@@ -72,6 +75,8 @@ export default function CartEnd() {
 
         // --- 1. CART STATE MANAGEMENT ---
         let userWalletBalance = 0; // Lấy số dư Khoai thực tế từ tài khoản đăng nhập
+        let userTierDiscountPercent = 0; // Chiết khấu theo hạng hội viên (5%, 10%, 20%)
+        let userTierName = 'Thợ Cày';
         let appliedCouponDiscount = 5; // Default coupon discount active
         let appliedCouponName = 'HALM2026';
         let giftTargetThreshold = 30; // Khoai threshold to receive Golden Bookmark
@@ -88,8 +93,16 @@ export default function CartEnd() {
             // Subtotal
             const subtotal = selectedItems.reduce((sum, item) => sum + item.price, 0);
 
-            // Discount
-            const discount = (subtotal > 0 && appliedCouponDiscount > 0) ? Math.min(appliedCouponDiscount, subtotal) : 0;
+            // Tier Discount (Chiết khấu hạng thành viên độc quyền)
+            const tierDiscount = (subtotal > 0 && userTierDiscountPercent > 0)
+                ? Math.round(subtotal * userTierDiscountPercent / 100)
+                : 0;
+
+            // Coupon Discount
+            const couponDiscount = (subtotal > 0 && appliedCouponDiscount > 0) ? Math.min(appliedCouponDiscount, subtotal) : 0;
+
+            // Combined Discount
+            const discount = Math.min(tierDiscount + couponDiscount, subtotal);
 
             // Final Total
             const total = Math.max(0, subtotal - discount);
@@ -113,6 +126,15 @@ export default function CartEnd() {
             // Summary values
             const subtotalEl = document.getElementById('summary-subtotal');
             if (subtotalEl) subtotalEl.textContent = subtotal;
+
+            const tierLabelEl = document.getElementById('summary-tier-label');
+            if (tierLabelEl) {
+                tierLabelEl.textContent = `Ưu đãi ${userTierName} (-${userTierDiscountPercent}%):`;
+            }
+            const tierValEl = document.getElementById('summary-tier-val');
+            if (tierValEl) {
+                tierValEl.textContent = tierDiscount > 0 ? `-${tierDiscount} Khoai` : (userTierDiscountPercent > 0 ? `-${userTierDiscountPercent}%` : 'Đã kích hoạt');
+            }
 
             const discountEl = document.getElementById('summary-discount');
             if (discountEl) discountEl.textContent = discount > 0 ? `-${discount}` : '0';
@@ -547,7 +569,11 @@ export default function CartEnd() {
             }
 
             const subtotal = selectedItems.reduce((sum, item) => sum + item.price, 0);
-            const discount = (subtotal > 0 && appliedCouponDiscount > 0) ? Math.min(appliedCouponDiscount, subtotal) : 0;
+            const tierDiscount = (subtotal > 0 && userTierDiscountPercent > 0)
+                ? Math.round(subtotal * userTierDiscountPercent / 100)
+                : 0;
+            const couponDiscount = (subtotal > 0 && appliedCouponDiscount > 0) ? Math.min(appliedCouponDiscount, subtotal) : 0;
+            const discount = Math.min(tierDiscount + couponDiscount, subtotal);
             const total = Math.max(0, subtotal - discount);
 
             if (userWalletBalance < total) {
@@ -992,6 +1018,10 @@ export default function CartEnd() {
                 const res = await axiosInstance.get('/api/home/customer/info');
                 if (res.data) {
                     userWalletBalance = Number(res.data.potatoBalance ?? res.data.khoai ?? res.data.walletBalance ?? 0);
+                    const tierInfo = getTierInfo(res.data.membershipTier, userWalletBalance);
+                    userTierDiscountPercent = tierInfo.discount;
+                    userTierName = tierInfo.cleanName;
+
                     const navEl = document.getElementById('user-khoai-nav');
                     if (navEl) navEl.textContent = userWalletBalance.toLocaleString();
                     const drawerEl = document.getElementById('drawer-potato-balance');
@@ -1555,8 +1585,8 @@ export default function CartEnd() {
                                             <span className="font-bold text-emerald-600 dark:text-emerald-400">Miễn phí</span>
                                         </div>
                                         <div className="flex items-center justify-between text-ink-muted dark:text-night-muted">
-                                            <span>Ưu đãi Hạng Kim Cương:</span>
-                                            <span className="font-bold text-wine dark:text-gold">Đã kích hoạt</span>
+                                            <span id="summary-tier-label">Ưu đãi Hội Viên:</span>
+                                            <span className="font-bold text-wine dark:text-gold" id="summary-tier-val">Đã kích hoạt</span>
                                         </div>
                                     </div>
                 

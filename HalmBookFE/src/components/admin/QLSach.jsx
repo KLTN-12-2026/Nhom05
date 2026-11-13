@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import axiosInstance from '@/services/axiosClient';
 import { useLegacyAdminPage } from './legacy-runtime';
+import { confirmDialog } from '@/components/common/CustomConfirmModal';
 
 const DEFAULT_CATEGORIES = [
   { category_id: 1, category_name: 'Phát triển bản thân' },
@@ -269,11 +271,42 @@ export default function QuanLySach() {
     setIsModalOpen(true);
   };
 
+  const location = useLocation();
+
+  // Tự động tìm kiếm hoặc mở xem chi tiết sách nếu URL có param ?search=... hoặc ?bookId=... (tránh bị điều hướng sang user)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const searchParam = params.get('search');
+    const bookIdParam = params.get('bookId') || params.get('id');
+
+    if (searchParam) {
+      setQuery(searchParam);
+    }
+
+    if (bookIdParam && books.length > 0) {
+      const targetBook = books.find((b) => String(b.id) === String(bookIdParam));
+      if (targetBook) {
+        openEditModal(targetBook);
+      }
+    }
+  }, [location.search, books]);
+
+  useEffect(() => {
+    return () => {
+      if (imagePreview) {
+        URL.revokeObjectURL(imagePreview);
+      }
+    };
+  }, [imagePreview]);
+
   const closeModal = () => {
     if (isSaving) return;
     setIsModalOpen(false);
     setForm(EMPTY_FORM);
-    setImagePreview(null);
+    setImagePreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
   };
 
   const updateForm = (event) => {
@@ -282,7 +315,10 @@ export default function QuanLySach() {
       const file = files[0];
       if (name === 'image') {
         setForm((current) => ({ ...current, image: file }));
-        setImagePreview(URL.createObjectURL(file));
+        setImagePreview((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return URL.createObjectURL(file);
+        });
       } else if (name === 'pdf') {
         const lowerName = file.name.toLowerCase();
         const detectedFormat = lowerName.endsWith('.epub') ? 'EPUB' : 'PDF';
@@ -344,7 +380,14 @@ export default function QuanLySach() {
   };
 
   const deleteBook = async (book) => {
-    if (!window.confirm(`Bạn có chắc chắn muốn xoá sách "${book.title}" khỏi hệ thống không? Toàn bộ file nội dung trên Cloudinary cũng sẽ được xoá.`)) return;
+    const confirmed = await confirmDialog({
+      title: 'Xóa Sách Khỏi Hệ Thống',
+      message: `Bạn có chắc chắn muốn xoá cuốn sách "${book.title}" khỏi hệ thống không? Toàn bộ file nội dung trên Cloudinary cũng sẽ được xoá vĩnh viễn.`,
+      confirmText: 'Xóa sách',
+      cancelText: 'Hủy bỏ',
+      type: 'danger',
+    });
+    if (!confirmed) return;
     setError('');
     try {
       await axiosInstance.delete(`/api/admin/books/${encodeURIComponent(book.id)}`);
