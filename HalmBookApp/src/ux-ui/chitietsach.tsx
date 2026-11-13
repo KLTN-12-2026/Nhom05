@@ -33,6 +33,7 @@ import Constants from 'expo-constants';
 import { getBookCoverSource } from './bookCovers';
 import { useAppNavigation } from './navigation';
 import { getBookRealChapters, getBookChapterLabel } from './bookContentService';
+import { useBookFavorite } from './useBookFavorite';
 
 const { width, height } = Dimensions.get('window');
 
@@ -254,6 +255,7 @@ interface BookDetailProps {
     id: string;
     title: string;
     img_url?: string;
+    coverImage?: string | null;
     author?: string;
     chapter?: string;
     tag?: string;
@@ -455,7 +457,17 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
   const [isAddingToCart, setIsAddingToCart] = useState(false);
   const [realBookId, setRealBookId] = useState<string>(book.id || 'KD001');
   const [dbBookDetails, setDbBookDetails] = useState<any>(null);
-  const [isLiked, setIsLiked] = useState(false);
+  // Use the selected book ID, never the cart resolver's fallback to a different book.
+  const favoriteBook = useMemo(() => ({
+    id: String(book.id),
+    title: book.title,
+    author: book.author,
+    chapter: book.chapter,
+    category_name: book.category_name,
+    img_url: book.img_url,
+    coverImage: book.coverImage || undefined,
+  }), [book.id, book.title, book.author, book.chapter, book.category_name, book.img_url, book.coverImage]);
+  const { isLiked, isBusy: isFavoriteBusy, message: favoriteMessage, toggle: toggleFavorite } = useBookFavorite(favoriteBook, isLoggedIn);
   const [savedChapter, setSavedChapter] = useState<{ chapterNum: number; title: string } | null>(null);
   const [showAllChapters, setShowAllChapters] = useState(false);
   const scrollOffset = useRef(0);
@@ -680,17 +692,28 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
         </Text>
         <TouchableOpacity
           style={themeStyles.iconButton}
-          onPress={() => setIsLiked(!isLiked)}
+          onPress={() => {
+            if (!isLoggedIn) {
+              showLoginAlert('Vui lòng đăng nhập để lưu sách vào mục Yêu thích.');
+              return;
+            }
+            void toggleFavorite();
+          }}
+          disabled={isFavoriteBusy}
+          accessibilityRole="button"
+          accessibilityLabel={isLiked ? 'Bỏ yêu thích sách' : 'Thêm sách vào yêu thích'}
+          accessibilityState={{ selected: isLiked, disabled: isFavoriteBusy, busy: isFavoriteBusy }}
           activeOpacity={0.8}
         >
-          <Heart
+          {isFavoriteBusy ? <ActivityIndicator size="small" color="#e11d48" /> : <Heart
             size={20}
             color={isDarkMode ? '#E8656F' : '#e11d48'}
             fill={isLiked ? (isDarkMode ? '#E8656F' : '#e11d48') : 'none'}
-          />
+          />}
         </TouchableOpacity>
       </View>
 
+      {favoriteMessage ? <Text accessibilityLiveRegion="polite" style={{ color: isDarkMode ? '#EDE9DF' : '#7B3037', paddingHorizontal: 20, paddingVertical: 10 }}>{favoriteMessage}</Text> : null}
       <ScrollView
         style={themeStyles.scrollView}
         contentContainerStyle={{ paddingBottom: 110 }}

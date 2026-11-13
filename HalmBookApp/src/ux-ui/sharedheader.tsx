@@ -1,10 +1,10 @@
-import React, { ComponentRef, RefObject, useEffect, useState } from 'react';
+import React, { ComponentRef, RefObject } from 'react';
 import { MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAppNavigation } from './navigation';
-import { getUnreadNotificationCount } from './notificationService';
+import { useUnreadNotificationCount } from './useUnreadNotificationCount';
 
 interface SharedHeaderProps {
   isDarkMode: boolean;
@@ -26,11 +26,7 @@ function SharedHeaderComponent({
   const isProfileAvatarScreen = ['offers', 'upload', 'bookshelf'].includes(currentScreen || '');
   const foreground = isDarkMode ? '#F5F1E8' : '#11131A';
 
-  const [unreadCount, setUnreadCount] = useState(0);
-
-  useEffect(() => {
-    getUnreadNotificationCount().then(setUnreadCount).catch(() => {});
-  }, [currentScreen]);
+  const unreadCount = useUnreadNotificationCount(isLoggedIn);
 
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>
