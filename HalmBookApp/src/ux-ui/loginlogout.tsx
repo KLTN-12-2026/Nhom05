@@ -1,34 +1,27 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useAppNavigation, useAppThemeStyles } from './navigation';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-  setCurrentUsername,
-  extractUsernameFromToken,
-  clearLegacyBookshelfKeys,
-  clearUserDataForAccount,
-  recordUserInDirectory,
-} from './userStorage';
-import { fetchFavoriteBooksFromApi } from './favoriteService';
-import axios from 'axios';
-import Constants from 'expo-constants';
 import { useEffect, useRef, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import * as Linking from 'expo-linking';
-import * as WebBrowser from 'expo-web-browser';
-
-WebBrowser.maybeCompleteAuthSession();
-
-// Client ID Google OAuth (đồng bộ với Web Frontend HalmBookFE)
-const GOOGLE_CLIENT_ID =
-  process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID ||
-  process.env.EXPO_GOOGLE_CLIENT_ID ||
-  '994619857768-6ipg7lvdn9voai235f4e7gdtheuclds4.apps.googleusercontent.com';
-
-import { API_BASE_URL } from './apiService';
-
-const axiosAppInstance = axios.create({
-  baseURL: API_BASE_URL,
-});
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import {
+  AUTH_ENDPOINTS,
+  AuthSession,
+  loginWithFacebookOAuth,
+  loginWithGoogleOAuth,
+  postToAuthBackend,
+  saveMobileAuthSession,
+} from './authService';
+import { useAppNavigation } from './navigation';
 
 type ScreenState = 'login' | 'register' | 'forgot' | 'otp' | 'reset';
 
@@ -37,16 +30,44 @@ interface AuthProps {
 }
 
 export default function Auth({ onLoginSuccess }: AuthProps) {
-  const themeStyles = useAppThemeStyles(styles);
-  const { isDarkMode, goBack, lang } = useAppNavigation();
+  const {
+    isDarkMode,
+    setIsLoggedIn,
+    setUserAvatarUrl,
+    setUserInitial,
+  } = useAppNavigation();
+
   const [currentScreen, setCurrentScreen] = useState<ScreenState>('login');
   const [successMessage, setSuccessMessage] = useState('');
   const [isLoginSubmitting, setIsLoginSubmitting] = useState(false);
-  const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
+  const [socialSubmitting, setSocialSubmitting] = useState<'google' | 'facebook' | null>(null);
   const transitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => () => {
-    if (transitionTimer.current) clearTimeout(transitionTimer.current);
+  // ==============================================================
+  // HỆ MÀU DUAL-THEME (LIGHT MODE & DARK MODE)
+  // ==============================================================
+  const isDark = isDarkMode;
+  const colors = {
+    screenBg: isDark ? '#181716' : '#F7F5F0',
+    cardBg: isDark ? '#242321' : '#FFFFFF',
+    cardBorder: isDark ? '#383633' : '#E6E1D8',
+    textPrimary: isDark ? '#F7F5F0' : '#242321',
+    textSecondary: isDark ? '#A39F99' : '#85817A',
+    accent: isDark ? '#E5A93C' : '#8B4A3C',
+    accentText: isDark ? '#181716' : '#FFFFFF',
+    inputBg: isDark ? '#1E1D1B' : '#F7F5F0',
+    placeholder: isDark ? '#6E6A63' : '#9E9A92',
+    divider: isDark ? '#383633' : '#E6E1D8',
+    orbTop: isDark ? '#8B4A3C' : '#E6CFC8',
+    orbBottom: isDark ? '#E5A93C' : '#E8D9B5',
+  };
+
+  useEffect(() => {
+    const redirectUri = AuthSession.makeRedirectUri({ useProxy: true });
+    console.warn('EXPO_AUTH_REDIRECT_URI:', redirectUri);
+    return () => {
+      if (transitionTimer.current) clearTimeout(transitionTimer.current);
+    };
   }, []);
 
   const showSuccess = (message: string, onComplete: () => void) => {
@@ -56,330 +77,199 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
       setSuccessMessage('');
       transitionTimer.current = null;
       onComplete();
-    }, 1500);
+    }, 1200);
+  };
+
+  const syncUserToContext = (fullName?: string, avatarUrl?: string) => {
+    setIsLoggedIn?.(true);
+    if (avatarUrl) {
+      setUserAvatarUrl?.(avatarUrl);
+    }
+    if (fullName && fullName.trim().length > 0) {
+      setUserInitial?.(fullName.trim().charAt(0).toUpperCase());
+    }
   };
 
   // ----------------------------------------------------
   // QUẢN LÝ DỮ LIỆU (STATE)
   // ----------------------------------------------------
-  // State Đăng nhập
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
 
-  // State Đăng ký
   const [regUsername, setRegUsername] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
 
-  // State Quên Mật Khẩu (Dùng chung xuyên suốt 3 màn hình)
   const [forgotEmail, setForgotEmail] = useState('');
   const [otpCode, setOtpCode] = useState('');
   const [resetPassword, setResetPassword] = useState('');
   const [resetConfirmPassword, setResetConfirmPassword] = useState('');
 
-
-  // ============================================================================
-  // [GIẢI THÍCH CODE]: SERVICE XỬ LÝ ĐĂNG NHẬP GOOGLE BẰNG API BACKEND CÓ SẴN
-  // 1. Phía Backend Spring Boot có API: POST /api/auth/google
-  //    - Nhận body JSON: SocialLoginRequest { token: "<access_token>" }
-  //    - Backend AuthServiceImpl: Gọi Google UserInfo API:
-  //      https://www.googleapis.com/oauth2/v3/userinfo?access_token=<token>
-  //    - Tự động lấy email, tên, ảnh đại diện, lưu/tìm trong database
-  //    - Trả về: AuthResponse { systemToken, account, customer, role }
-  // 2. Phía Mobile App:
-  //    - Dùng WebBrowser.openAuthSessionAsync mở luồng Google OAuth2 (Implicit Flow)
-  //    - Google trả về URL chứa fragment '#access_token=ya29...'
-  //    - Trích xuất `access_token` và gửi thẳng lên API /api/auth/google của Backend
-  //    - Lấy JWT token từ `systemToken` lưu vào AsyncStorage
-  //    - Kích hoạt onLoginSuccess chuyển vào màn hình chính
-  // ============================================================================
-  // Gửi Google access_token về Backend xác thực giống HalmBookFE
-  const sendGoogleTokenToBackend = async (accessToken: string) => {
-    try {
-      const response = await axiosAppInstance.post('/api/auth/google', {
-        token: accessToken,
-      });
-
-      const token = response.data?.systemToken || response.data?.token;
-      const role = response.data?.role;
-
-      if (typeof token !== 'string' || !token) {
-        Alert.alert('Đăng nhập thất bại', 'Phản hồi từ máy chủ không có mã xác thực JWT.');
-        setIsGoogleSubmitting(false);
-        return;
-      }
-
-      await AsyncStorage.setItem('userToken', token);
-      if (role) await AsyncStorage.setItem('userRole', role);
-
-      const googleUsername = extractUsernameFromToken(token);
-      if (googleUsername) {
-        await setCurrentUsername(googleUsername);
-      }
-      await clearLegacyBookshelfKeys();
-
-      // [GIẢI THÍCH CODE]: Lấy avatar & họ tên từ DB để đồng bộ cho các màn được chỉ định
-      try {
-        const custRes = await axiosAppInstance.get('/api/home/customer/info', {
-          headers: { Authorization: `Bearer ${token}` },
-          timeout: 4000,
-        });
-        if (custRes.data) {
-          const avatar = custRes.data.avatarUrl || custRes.data.avatar || '';
-          const name = custRes.data.customerName || '';
-          const initial = (name || 'H').charAt(0).toUpperCase();
-          if (avatar) await AsyncStorage.setItem('userAvatarUrl', avatar);
-          await AsyncStorage.setItem('userInitial', initial);
-        }
-      } catch (custErr) {
-        // Bỏ qua nếu mạng yếu
-      }
-
-      // [GIẢI THÍCH CODE]: Tự động tải trước danh sách sách yêu thích từ MySQL về App
-      fetchFavoriteBooksFromApi().catch(() => {});
-
-      showSuccess('Đăng nhập Google thành công! Chào mừng bạn đến với HALM BOOK.', onLoginSuccess);
-    } catch (error: any) {
-      console.error('Lỗi Backend xác thực Google:', error);
-      const errorMsg = error.response?.data || error.message || 'Xác thực Google thất bại ở máy chủ.';
-      Alert.alert('Đăng nhập thất bại', typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
-    } finally {
-      setIsGoogleSubmitting(false);
-    }
-  };
-
-  // ============================================================================
-  // [GIẢI THÍCH CODE]: SERVICE XỬ LÝ ĐĂNG NHẬP GOOGLE BẰNG API BACKEND CÓ SẴN
-  // 1. Phía Backend Spring Boot có API: POST /api/auth/google
-  //    - Nhận body JSON: SocialLoginRequest { token: "<access_token>" }
-  //    - Backend AuthServiceImpl: Gọi Google UserInfo API để lấy email, name, avatar
-  //    - Trả về: AuthResponse { systemToken, account, customer, role }
-  // 2. Phía Client:
-  //    - Khi chạy Web: dùng Google Identity Services (GSI popup) giống hệt HalmBookFE
-  //    - Khi chạy Mobile: dùng WebBrowser.openAuthSessionAsync
-  // ============================================================================
-  const handleGoogleLogin = async () => {
-    if (isLoginSubmitting || isGoogleSubmitting) return;
-    setIsGoogleSubmitting(true);
-
-    // --- CÁCH 1: NẾU ĐANG CHẠY TRÊN WEB (Áp dụng đúng cơ chế của HalmBookFE) ---
-    if (Platform.OS === 'web' && typeof (window as any)?.google?.accounts?.oauth2 !== 'undefined') {
-      try {
-        const client = (window as any).google.accounts.oauth2.initTokenClient({
-          client_id: GOOGLE_CLIENT_ID,
-          scope: 'openid email profile',
-          callback: async (tokenResponse: any) => {
-            if (tokenResponse?.error) {
-              setIsGoogleSubmitting(false);
-              Alert.alert('Đăng nhập Google thất bại', tokenResponse.error_description || tokenResponse.error);
-              return;
-            }
-            if (tokenResponse?.access_token) {
-              await sendGoogleTokenToBackend(tokenResponse.access_token);
-            } else {
-              setIsGoogleSubmitting(false);
-            }
-          },
-        });
-        client.requestAccessToken({ prompt: 'select_account' });
-        return;
-      } catch (webErr) {
-        console.warn('Lỗi GSI web popup, chuyển sang fallback WebBrowser:', webErr);
-      }
-    }
-
-    // --- CÁCH 2: NẾU ĐANG CHẠY TRÊN MOBILE APP (Dùng WebBrowser Session) ---
-    try {
-      const redirectUrl = Linking.createURL('google-auth');
-      const authUrl =
-        `https://accounts.google.com/o/oauth2/v2/auth?` +
-        `client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}` +
-        `&redirect_uri=${encodeURIComponent(redirectUrl)}` +
-        `&response_type=token` +
-        `&scope=${encodeURIComponent('openid email profile')}` +
-        `&prompt=select_account`;
-
-      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
-
-      if (result.type === 'success' && result.url) {
-        const tokenMatch = result.url.match(/[#?&]access_token=([^&]+)/);
-        const accessToken = tokenMatch ? decodeURIComponent(tokenMatch[1]) : null;
-
-        if (!accessToken) {
-          Alert.alert('Đăng nhập thất bại', 'Không nhận được access token từ Google.');
-          setIsGoogleSubmitting(false);
-          return;
-        }
-
-        await sendGoogleTokenToBackend(accessToken);
-      } else {
-        setIsGoogleSubmitting(false);
-      }
-    } catch (error: any) {
-      console.error('Lỗi khi đăng nhập Google:', error);
-      const errorMsg = error.response?.data || error.message || 'Xác thực Google thất bại ở máy chủ.';
-      Alert.alert('Đăng nhập Google thất bại', typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg));
-      setIsGoogleSubmitting(false);
-    }
-  };
-
   // ----------------------------------------------------
-  // SERVICE 1 : ĐĂNG NHẬP
+  // SERVICE 1: ĐĂNG NHẬP TÀI KHOẢN NỘI BỘ (POST /api/auth/login)
   // ----------------------------------------------------
   const handleLogin = async () => {
-    // 1. Tiền xử lý: Dọn dẹp khoảng trắng
     const userVal = loginUsername.trim();
     const passVal = loginPassword.trim();
 
-    // 2. Validate cơ bản để giảm tải cho Server
     if (!userVal || !passVal) {
-      Alert.alert("Lỗi", "Vui lòng nhập đầy đủ tài khoản và mật khẩu.");
+      Alert.alert('Lỗi', 'Vui lòng nhập đầy đủ tài khoản và mật khẩu.');
       return;
     }
 
-    if (isLoginSubmitting) return;
+    if (isLoginSubmitting || socialSubmitting) return;
     setIsLoginSubmitting(true);
 
     try {
-      // 3. Gọi API đăng nhập (Gửi JSON) 
-      const response = await axiosAppInstance.post("/api/auth/login", {
+      const responseData = await postToAuthBackend(AUTH_ENDPOINTS.LOGIN, {
         username: userVal,
-        password: passVal
+        password: passVal,
       });
 
-      // Mặc định Spring Boot (JWT) sẽ trả token về ở response.data.token
-      // (Bạn cần kiểm tra lại Backend xem key chính xác là gì)
-      const token = response.data.token;
-      const role = response.data.role; // Lấy role nếu có
+      const session = await saveMobileAuthSession(responseData, userVal);
+      syncUserToContext(session.user.fullName, session.user.avatar);
 
-      if (typeof token !== 'string' || !token) {
-        Alert.alert("Đăng nhập thất bại", "Phản hồi đăng nhập không có mã xác thực.");
-        setIsLoginSubmitting(false);
-        return;
-      }
-
-      // 4. LƯU TRỮ VĨNH VIỄN VÀO ĐIỆN THOẠI
-      await AsyncStorage.setItem('userToken', token);
-      if (role) await AsyncStorage.setItem('userRole', role);
-      if (userVal) await AsyncStorage.setItem('username', userVal);
-
-      const loginUsername = extractUsernameFromToken(token) || userVal;
-      if (loginUsername) {
-        await setCurrentUsername(loginUsername);
-      }
-      await clearLegacyBookshelfKeys();
-
-      // [GIẢI THÍCH CODE]: Lấy avatar & họ tên từ DB để đồng bộ cho các màn được chỉ định
-      try {
-        const custRes = await axiosAppInstance.get('/api/home/customer/info', {
-          headers: { Authorization: `Bearer ${token}` },
-          timeout: 4000,
-        });
-        if (custRes.data) {
-          const avatar = custRes.data.avatarUrl || custRes.data.avatar || '';
-          const name = custRes.data.customerName || userVal;
-          const initial = (name || userVal || 'H').charAt(0).toUpperCase();
-          const custId = custRes.data.customer_id || '';
-          if (avatar) await AsyncStorage.setItem('userAvatarUrl', avatar);
-          await AsyncStorage.setItem('userInitial', initial);
-          if (custId) await AsyncStorage.setItem('@halm_current_customer_id', custId);
-          recordUserInDirectory({
-            id: custId || userVal,
-            customerId: custId,
-            name: name,
-            username: userVal,
-          }).catch(() => {});
-        } else {
-          const initial = (userVal || 'H').charAt(0).toUpperCase();
-          await AsyncStorage.setItem('userInitial', initial);
-        }
-      } catch (custErr) {
-        const initial = (userVal || 'H').charAt(0).toUpperCase();
-        await AsyncStorage.setItem('userInitial', initial);
-      }
-
-      // [GIẢI THÍCH CODE]: Tự động tải trước danh sách sách yêu thích từ MySQL về App
-      fetchFavoriteBooksFromApi().catch(() => {});
-
-      showSuccess('Đăng nhập thành công! Chào mừng bạn đến với HALM BOOK.', onLoginSuccess);
-
-    } catch (error: any) {
-      // 5. Bắt lỗi chuẩn mực
-      const errorMsg = error.response?.data || "lỗi đăng nhập. Vui lòng thử lại.";
-      Alert.alert("Đăng nhập thất bại", errorMsg);
+      showSuccess(
+        'Đăng nhập thành công! Chào mừng bạn đến với HALM BOOK.',
+        onLoginSuccess
+      );
+    } catch {
+      Alert.alert('Đăng nhập thất bại', 'Đăng nhập thất bại, vui lòng thử lại');
       setIsLoginSubmitting(false);
     }
   };
 
   // ----------------------------------------------------
-  // SERVICE 2 : ĐĂNG KÝ
+  // SERVICE 1B: ĐĂNG NHẬP GOOGLE (POST /api/auth/google)
+  // ----------------------------------------------------
+  const handleGoogleLogin = async () => {
+    if (isLoginSubmitting || socialSubmitting) return;
+    setSocialSubmitting('google');
+
+    try {
+      const result = await loginWithGoogleOAuth();
+
+      // Nếu người dùng đóng/hủy cửa sổ xác thực giữa chừng -> thoát êm, không báo lỗi
+      if (result.cancelled || !result.session) {
+        setSocialSubmitting(null);
+        return;
+      }
+
+      syncUserToContext(
+        result.session.user.fullName,
+        result.session.user.avatar
+      );
+      setSocialSubmitting(null);
+      showSuccess(
+        `Đăng nhập Google thành công! Xin chào ${result.session.user.fullName}.`,
+        onLoginSuccess
+      );
+    } catch {
+      setSocialSubmitting(null);
+      Alert.alert('Thông báo', 'Đăng nhập thất bại, vui lòng thử lại');
+    }
+  };
+
+  // ----------------------------------------------------
+  // SERVICE 1C: ĐĂNG NHẬP FACEBOOK (POST /api/auth/facebook)
+  // ----------------------------------------------------
+  const handleFacebookLogin = async () => {
+    if (isLoginSubmitting || socialSubmitting) return;
+    setSocialSubmitting('facebook');
+
+    try {
+      const result = await loginWithFacebookOAuth();
+
+      // Nếu người dùng đóng/hủy cửa sổ xác thực giữa chừng -> thoát êm, không báo lỗi
+      if (result.cancelled || !result.session) {
+        setSocialSubmitting(null);
+        return;
+      }
+
+      syncUserToContext(
+        result.session.user.fullName,
+        result.session.user.avatar
+      );
+      setSocialSubmitting(null);
+      showSuccess(
+        `Đăng nhập Facebook thành công! Xin chào ${result.session.user.fullName}.`,
+        onLoginSuccess
+      );
+    } catch {
+      setSocialSubmitting(null);
+      Alert.alert('Thông báo', 'Đăng nhập thất bại, vui lòng thử lại');
+    }
+  };
+
+  // ----------------------------------------------------
+  // SERVICE 2: ĐĂNG KÝ (POST /api/auth/register)
   // ----------------------------------------------------
   const handleRegister = async () => {
     const userVal = regUsername.trim();
     const emailVal = regEmail.trim();
 
-    // 1. Validate phòng thủ nhiều lớp
     if (!userVal || !emailVal || !regPassword) {
-      Alert.alert("Lỗi", "Vui lòng điền đầy đủ thông tin.");
+      Alert.alert('Lỗi', 'Vui lòng điền đầy đủ thông tin.');
       return;
     }
     if (regPassword !== regConfirmPassword) {
-      Alert.alert("Lỗi", "Mật khẩu xác nhận không khớp.");
+      Alert.alert('Lỗi', 'Mật khẩu xác nhận không khớp.');
       return;
     }
 
     try {
-      // 2. Định dạng cục Payload đẩy lên Server
-      const payload = {
+      await postToAuthBackend(AUTH_ENDPOINTS.REGISTER, {
         username: userVal,
         email: emailVal,
-        password: regPassword
-      };
+        password: regPassword,
+      });
 
-      // 3. Thực thi API
-      await axiosAppInstance.post("/api/auth/register", payload);
-
-      // [GIẢI THÍCH CODE]: Đảm bảo tài khoản mới tạo có Tủ sách hoàn toàn sạch 100%
-      await clearUserDataForAccount(userVal);
-      recordUserInDirectory({ id: userVal, customerId: '', name: userVal, username: userVal }).catch(() => {});
-
-      Alert.alert("Thành công", "Đăng ký tài khoản thành công! Vui lòng đăng nhập.", [
-        {
-          text: "OK",
-          onPress: () => {
-            // Dọn dẹp form
-            setRegUsername('');
-            setRegEmail('');
-            setRegPassword('');
-            setRegConfirmPassword('');
-            // Chuyển màn hình
-            setCurrentScreen('login');
-          }
-        }
-      ]);
-
+      Alert.alert(
+        'Thành công',
+        'Đăng ký tài khoản thành công! Vui lòng đăng nhập.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              setRegUsername('');
+              setRegEmail('');
+              setRegPassword('');
+              setRegConfirmPassword('');
+              setCurrentScreen('login');
+            },
+          },
+        ]
+      );
     } catch (error: any) {
-      const errorMsg = error.response?.data || "Đăng ký thất bại. Vui lòng thử lại.";
-      Alert.alert("Lỗi", errorMsg);
+      const errorMsg =
+        typeof error?.response?.data === 'string'
+          ? error.response.data
+          : 'Đăng ký thất bại. Vui lòng thử lại.';
+      Alert.alert('Lỗi', errorMsg);
     }
   };
+
+  // ----------------------------------------------------
   // SERVICE 3: QUÊN MẬT KHẨU (GỬI MÃ OTP)
   // ----------------------------------------------------
   const handleSendOTP = async () => {
     const emailVal = forgotEmail.trim();
     if (!emailVal) {
-      Alert.alert("Lỗi", "Vui lòng nhập Email của bạn.");
+      Alert.alert('Lỗi', 'Vui lòng nhập Email của bạn.');
       return;
     }
 
     try {
-      await axiosAppInstance.post("/api/password/send-otp", { email: emailVal });
-      Alert.alert("Thành công", `Đã gửi mã OTP tới ${emailVal}`);
-      setCurrentScreen('otp'); // Chuyển sang màn nhập OTP
+      await postToAuthBackend('/api/password/send-otp', { email: emailVal });
+      Alert.alert('Thành công', `Đã gửi mã OTP tới ${emailVal}`);
+      setCurrentScreen('otp');
     } catch (error: any) {
-      const errorMsg = error.response?.data || "Lỗi gửi OTP. Không tìm thấy Email này.";
-      Alert.alert("Lỗi", errorMsg);
+      const errorMsg =
+        typeof error?.response?.data === 'string'
+          ? error.response.data
+          : 'Lỗi gửi OTP. Không tìm thấy Email này.';
+      Alert.alert('Lỗi', errorMsg);
     }
   };
 
@@ -388,21 +278,24 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
   // ----------------------------------------------------
   const handleVerifyOTP = async () => {
     if (otpCode.trim().length !== 6) {
-      Alert.alert("Lỗi", "Vui lòng nhập đủ 6 chữ số OTP.");
+      Alert.alert('Lỗi', 'Vui lòng nhập đủ 6 chữ số OTP.');
       return;
     }
 
     try {
-      await axiosAppInstance.post("/api/password/verify-otp", {
+      await postToAuthBackend('/api/password/verify-otp', {
         email: forgotEmail.trim(),
-        otp: otpCode.trim()
+        otp: otpCode.trim(),
       });
 
-      Alert.alert("Thành công", "Mã OTP chính xác!");
-      setCurrentScreen('reset'); // Chuyển sang màn đổi pass
+      Alert.alert('Thành công', 'Mã OTP chính xác!');
+      setCurrentScreen('reset');
     } catch (error: any) {
-      const errorMsg = error.response?.data || "Mã OTP không đúng hoặc đã hết hạn.";
-      Alert.alert("Lỗi", errorMsg);
+      const errorMsg =
+        typeof error?.response?.data === 'string'
+          ? error.response.data
+          : 'Mã OTP không đúng hoặc đã hết hạn.';
+      Alert.alert('Lỗi', errorMsg);
     }
   };
 
@@ -411,129 +304,252 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
   // ----------------------------------------------------
   const handleResetPassword = async () => {
     if (resetPassword.length < 6) {
-      Alert.alert("Lỗi", "Mật khẩu cần có ít nhất 6 ký tự.");
+      Alert.alert('Lỗi', 'Mật khẩu cần có ít nhất 6 ký tự.');
       return;
     }
     if (resetPassword !== resetConfirmPassword) {
-      Alert.alert("Lỗi", "Mật khẩu xác nhận không khớp!");
+      Alert.alert('Lỗi', 'Mật khẩu xác nhận không khớp!');
       return;
     }
 
     try {
-      await axiosAppInstance.post("/api/password/reset-password", {
+      await postToAuthBackend('/api/password/reset-password', {
         email: forgotEmail.trim(),
-        newPassword: resetPassword
+        newPassword: resetPassword,
       });
 
-      Alert.alert("Thành công", "Đổi mật khẩu thành công! Hãy đăng nhập lại.", [
-        {
-          text: "OK",
-          onPress: () => {
-            // Dọn dẹp dữ liệu rác để bảo mật
-            setForgotEmail(''); setOtpCode(''); setResetPassword(''); setResetConfirmPassword('');
-            setCurrentScreen('login');
-          }
-        }
-      ]);
+      Alert.alert(
+        'Thành công',
+        'Đổi mật khẩu thành công! Hãy đăng nhập lại.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              setForgotEmail('');
+              setOtpCode('');
+              setResetPassword('');
+              setResetConfirmPassword('');
+              setCurrentScreen('login');
+            },
+          },
+        ]
+      );
     } catch (error: any) {
-      const errorMsg = error.response?.data || "Đổi mật khẩu thất bại.";
-      Alert.alert("Lỗi", errorMsg);
+      const errorMsg =
+        typeof error?.response?.data === 'string'
+          ? error.response.data
+          : 'Đổi mật khẩu thất bại.';
+      Alert.alert('Lỗi', errorMsg);
     }
   };
 
-  // Render Logo
   const renderHeader = () => (
-    <View style={themeStyles.headerContainer}>
-      <Text style={themeStyles.logoText}>HALM <Text style={{ color: '#9b51e0' }}>BOOK</Text></Text>
-      <Text style={themeStyles.sloganText}>{lang === 'en' ? 'Discover the world through every page' : 'Khám phá thế giới qua từng trang sách'}</Text>
+    <View style={styles.headerContainer}>
+      <Text style={[styles.logoText, { color: colors.textPrimary }]}>
+        HALM <Text style={{ color: colors.accent }}>BOOK</Text>
+      </Text>
+      <Text style={[styles.sloganText, { color: colors.textSecondary }]}>
+        Khám phá thế giới qua từng trang sách
+      </Text>
     </View>
   );
 
   return (
     <KeyboardAvoidingView
-      style={themeStyles.container}
+      style={[styles.container, { backgroundColor: colors.screenBg }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <StatusBar {...({ translucent: true, backgroundColor: "transparent" } as any)} barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      <StatusBar
+        {...({ translucent: true, backgroundColor: 'transparent' } as any)}
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+      />
 
-      {/* Background Trang trí */}
-      <View style={themeStyles.bgCircleTop} />
-      <View style={themeStyles.bgCircleBottom} />
+      {/* Background Trang trí Dual-Theme */}
+      <View
+        style={[
+          styles.bgCircleTop,
+          { backgroundColor: colors.orbTop, opacity: isDark ? 0.14 : 0.25 },
+        ]}
+      />
+      <View
+        style={[
+          styles.bgCircleBottom,
+          { backgroundColor: colors.orbBottom, opacity: isDark ? 0.12 : 0.25 },
+        ]}
+      />
 
-      <ScrollView contentContainerStyle={themeStyles.scrollContent} showsVerticalScrollIndicator={false}>
-
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {renderHeader()}
 
-        <View style={themeStyles.card}>
-
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: colors.cardBg,
+              borderColor: colors.cardBorder,
+            },
+          ]}
+        >
           {/* ===================== MÀN HÌNH ĐĂNG NHẬP ===================== */}
           {currentScreen === 'login' && (
-            <View style={themeStyles.formContainer}>
-              {/* ============================================================================
-                  [GIẢI THÍCH CODE]: Nút quay lại dành cho khách vãng lai
-                  Nếu khách chưa muốn đăng nhập lúc này, có thể nhấn nút quay lại để về Trang chủ
-                  ============================================================================ */}
-              <TouchableOpacity
-                onPress={() => goBack()}
-                style={themeStyles.backBtn}
-                accessibilityRole="button"
-                accessibilityLabel="Quay lại"
-              >
-                <Ionicons name="arrow-back" size={24} color={isDarkMode ? '#fff' : '#1a1a1a'} />
-              </TouchableOpacity>
-              <Text style={themeStyles.authTitle}>{lang === 'en' ? 'Sign In' : 'Đăng nhập'}</Text>
+            <View style={styles.formContainer}>
+              <Text style={[styles.authTitle, { color: colors.textPrimary }]}>
+                Đăng nhập
+              </Text>
 
-              <View style={themeStyles.inputGroup}>
-                <Ionicons name="person-outline" size={20} color="#888" style={themeStyles.inputIcon} />
+              <View
+                style={[
+                  styles.inputGroup,
+                  {
+                    backgroundColor: colors.inputBg,
+                    borderColor: colors.cardBorder,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="person-outline"
+                  size={20}
+                  color={colors.textSecondary}
+                  style={styles.inputIcon}
+                />
                 <TextInput
-                  style={themeStyles.input}
-                  placeholder={lang === 'en' ? 'Username' : 'Tên đăng nhập'}
-                  placeholderTextColor="#a4b0be"
-                  value={loginUsername} // Gắn dây diện lấy dữ liệu
-                  onChangeText={setLoginUsername} // Gắn sự kiện thay đổi
-                  autoCapitalize="none" // Chống tự động viết hoa chữ cái đầu (rất dễ sai tên đăng nhập)
+                  style={[styles.input, { color: colors.textPrimary }]}
+                  placeholder="Tên đăng nhập"
+                  placeholderTextColor={colors.placeholder}
+                  value={loginUsername}
+                  onChangeText={setLoginUsername}
+                  autoCapitalize="none"
                 />
               </View>
 
-              <View style={themeStyles.inputGroup}>
-                <Ionicons name="lock-closed-outline" size={20} color="#888" style={themeStyles.inputIcon} />
+              <View
+                style={[
+                  styles.inputGroup,
+                  {
+                    backgroundColor: colors.inputBg,
+                    borderColor: colors.cardBorder,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={20}
+                  color={colors.textSecondary}
+                  style={styles.inputIcon}
+                />
                 <TextInput
-                  style={themeStyles.input}
-                  placeholder={lang === 'en' ? 'Password' : 'Mật khẩu'}
-                  placeholderTextColor="#a4b0be"
+                  style={[styles.input, { color: colors.textPrimary }]}
+                  placeholder="Mật khẩu"
+                  placeholderTextColor={colors.placeholder}
                   secureTextEntry
                   value={loginPassword}
                   onChangeText={setLoginPassword}
                 />
               </View>
 
-              <View style={themeStyles.formActions}>
+              <View style={styles.formActions}>
                 <TouchableOpacity onPress={() => setCurrentScreen('forgot')}>
-                  <Text style={themeStyles.linkText}>{lang === 'en' ? 'Forgot password?' : 'Quên mật khẩu?'}</Text>
+                  <Text style={[styles.linkText, { color: colors.textSecondary }]}>
+                    Quên mật khẩu?
+                  </Text>
                 </TouchableOpacity>
               </View>
 
-              {/* BẮN SỰ KIỆN: Gắn hàm handleLogin vào nút bấm */}
-              <TouchableOpacity style={themeStyles.btnSubmit} onPress={handleLogin} disabled={isLoginSubmitting}>
-                <Text style={themeStyles.btnSubmitText}>{isLoginSubmitting ? (lang === 'en' ? 'Signing in...' : 'Đang đăng nhập...') : 'Here We Go'}</Text>
+              <TouchableOpacity
+                style={[styles.btnSubmit, { backgroundColor: colors.accent }]}
+                onPress={handleLogin}
+                disabled={isLoginSubmitting || socialSubmitting !== null}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.btnSubmitText, { color: colors.accentText }]}>
+                  {isLoginSubmitting ? 'Đang đăng nhập...' : 'Đăng nhập'}
+                </Text>
               </TouchableOpacity>
 
-              <View style={themeStyles.dividerBox}>
-                <View style={themeStyles.dividerLine} />
-                <Text style={themeStyles.dividerText}>{lang === 'en' ? 'Or sign in with' : 'Hoặc đăng nhập bằng'}</Text>
-                <View style={themeStyles.dividerLine} />
+              <View style={styles.dividerBox}>
+                <View
+                  style={[styles.dividerLine, { backgroundColor: colors.divider }]}
+                />
+                <Text style={[styles.dividerText, { color: colors.textSecondary }]}>
+                  Hoặc đăng nhập bằng
+                </Text>
+                <View
+                  style={[styles.dividerLine, { backgroundColor: colors.divider }]}
+                />
               </View>
 
-              <View style={themeStyles.socialLogins}>
-                <TouchableOpacity style={themeStyles.socialBtn}><Ionicons name="logo-google" size={22} color="#DB4437" /></TouchableOpacity>
-                <TouchableOpacity style={themeStyles.socialBtn}><Ionicons name="logo-facebook" size={22} color="#1877F2" /></TouchableOpacity>
-                <TouchableOpacity style={themeStyles.socialBtn}><Ionicons name="logo-apple" size={22} color="#000" /></TouchableOpacity>
+              {/* SOCIAL LOGIN: CHỈ GOOGLE & FACEBOOK NẰM NGANG (50% - 50%, ĐÃ LƯỢC BỎ APPLE) */}
+              <View style={styles.socialRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.socialBtn,
+                    {
+                      backgroundColor: colors.cardBg,
+                      borderColor: colors.cardBorder,
+                    },
+                  ]}
+                  onPress={handleGoogleLogin}
+                  disabled={isLoginSubmitting || socialSubmitting !== null}
+                  activeOpacity={0.8}
+                >
+                  {socialSubmitting === 'google' ? (
+                    <ActivityIndicator size="small" color="#DB4437" />
+                  ) : (
+                    <>
+                      <Ionicons name="logo-google" size={20} color="#DB4437" />
+                      <Text
+                        style={[
+                          styles.socialBtnLabel,
+                          { color: colors.textPrimary },
+                        ]}
+                      >
+                        Google
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.socialBtn,
+                    {
+                      backgroundColor: colors.cardBg,
+                      borderColor: colors.cardBorder,
+                    },
+                  ]}
+                  onPress={handleFacebookLogin}
+                  disabled={isLoginSubmitting || socialSubmitting !== null}
+                  activeOpacity={0.8}
+                >
+                  {socialSubmitting === 'facebook' ? (
+                    <ActivityIndicator size="small" color="#1877F2" />
+                  ) : (
+                    <>
+                      <Ionicons name="logo-facebook" size={20} color="#1877F2" />
+                      <Text
+                        style={[
+                          styles.socialBtnLabel,
+                          { color: colors.textPrimary },
+                        ]}
+                      >
+                        Facebook
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
               </View>
 
-              <View style={themeStyles.switchFormText}>
-                <Text style={themeStyles.mutedText}>{lang === 'en' ? "Don't have an account? " : 'Chưa có tài khoản? '}</Text>
+              <View style={styles.switchFormText}>
+                <Text style={[styles.mutedText, { color: colors.textSecondary }]}>
+                  Chưa có tài khoản?{' '}
+                </Text>
                 <TouchableOpacity onPress={() => setCurrentScreen('register')}>
-                  <Text style={themeStyles.boldLinkText}>{lang === 'en' ? 'Sign up now' : 'Đăng ký ngay'}</Text>
+                  <Text style={[styles.boldLinkText, { color: colors.accent }]}>
+                    Đăng ký ngay
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -541,27 +557,55 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
 
           {/* ===================== MÀN HÌNH ĐĂNG KÝ ===================== */}
           {currentScreen === 'register' && (
-            <View style={themeStyles.formContainer}>
-              <Text style={themeStyles.authTitle}>{lang === 'en' ? 'Sign Up' : 'Đăng ký'}</Text>
+            <View style={styles.formContainer}>
+              <Text style={[styles.authTitle, { color: colors.textPrimary }]}>
+                Đăng ký
+              </Text>
 
-              <View style={themeStyles.inputGroup}>
-                <Ionicons name="person-outline" size={20} color="#888" style={themeStyles.inputIcon} />
+              <View
+                style={[
+                  styles.inputGroup,
+                  {
+                    backgroundColor: colors.inputBg,
+                    borderColor: colors.cardBorder,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="person-outline"
+                  size={20}
+                  color={colors.textSecondary}
+                  style={styles.inputIcon}
+                />
                 <TextInput
-                  style={themeStyles.input}
+                  style={[styles.input, { color: colors.textPrimary }]}
                   placeholder="Tên đăng nhập"
-                  placeholderTextColor="#a4b0be"
+                  placeholderTextColor={colors.placeholder}
                   value={regUsername}
                   onChangeText={setRegUsername}
                   autoCapitalize="none"
                 />
               </View>
 
-              <View style={themeStyles.inputGroup}>
-                <Ionicons name="mail-outline" size={20} color="#888" style={themeStyles.inputIcon} />
+              <View
+                style={[
+                  styles.inputGroup,
+                  {
+                    backgroundColor: colors.inputBg,
+                    borderColor: colors.cardBorder,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="mail-outline"
+                  size={20}
+                  color={colors.textSecondary}
+                  style={styles.inputIcon}
+                />
                 <TextInput
-                  style={themeStyles.input}
+                  style={[styles.input, { color: colors.textPrimary }]}
                   placeholder="Email"
-                  placeholderTextColor="#a4b0be"
+                  placeholderTextColor={colors.placeholder}
                   keyboardType="email-address"
                   value={regEmail}
                   onChangeText={setRegEmail}
@@ -569,60 +613,122 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
                 />
               </View>
 
-              <View style={themeStyles.inputGroup}>
-                <Ionicons name="lock-closed-outline" size={20} color="#888" style={themeStyles.inputIcon} />
+              <View
+                style={[
+                  styles.inputGroup,
+                  {
+                    backgroundColor: colors.inputBg,
+                    borderColor: colors.cardBorder,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={20}
+                  color={colors.textSecondary}
+                  style={styles.inputIcon}
+                />
                 <TextInput
-                  style={themeStyles.input}
+                  style={[styles.input, { color: colors.textPrimary }]}
                   placeholder="Mật khẩu"
-                  placeholderTextColor="#a4b0be"
+                  placeholderTextColor={colors.placeholder}
                   secureTextEntry
                   value={regPassword}
                   onChangeText={setRegPassword}
                 />
               </View>
 
-              <View style={themeStyles.inputGroup}>
-                <Ionicons name="shield-checkmark-outline" size={20} color="#888" style={themeStyles.inputIcon} />
+              <View
+                style={[
+                  styles.inputGroup,
+                  {
+                    backgroundColor: colors.inputBg,
+                    borderColor: colors.cardBorder,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="shield-checkmark-outline"
+                  size={20}
+                  color={colors.textSecondary}
+                  style={styles.inputIcon}
+                />
                 <TextInput
-                  style={themeStyles.input}
+                  style={[styles.input, { color: colors.textPrimary }]}
                   placeholder="Nhập lại mật khẩu"
-                  placeholderTextColor="#a4b0be"
+                  placeholderTextColor={colors.placeholder}
                   secureTextEntry
                   value={regConfirmPassword}
                   onChangeText={setRegConfirmPassword}
                 />
               </View>
 
-              {/* BẮN SỰ KIỆN: Gắn hàm handleRegister vào nút bấm */}
-              <TouchableOpacity style={[themeStyles.btnSubmit, { marginTop: 10 }]} onPress={handleRegister}>
-                <Text style={themeStyles.btnSubmitText}>Here We Go</Text>
+              <TouchableOpacity
+                style={[
+                  styles.btnSubmit,
+                  { backgroundColor: colors.accent, marginTop: 10 },
+                ]}
+                onPress={handleRegister}
+              >
+                <Text style={[styles.btnSubmitText, { color: colors.accentText }]}>
+                  Đăng ký tài khoản
+                </Text>
               </TouchableOpacity>
 
-              <View style={[themeStyles.switchFormText, { marginTop: 20 }]}>
-                <Text style={themeStyles.mutedText}>{lang === 'en' ? 'Already have an account? ' : 'Đã có tài khoản? '}</Text>
+              <View style={[styles.switchFormText, { marginTop: 20 }]}>
+                <Text style={[styles.mutedText, { color: colors.textSecondary }]}>
+                  Đã có tài khoản?{' '}
+                </Text>
                 <TouchableOpacity onPress={() => setCurrentScreen('login')}>
-                  <Text style={themeStyles.boldLinkText}>Đăng nhập</Text>
+                  <Text style={[styles.boldLinkText, { color: colors.accent }]}>
+                    Đăng nhập
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
           )}
 
-          {/* CÁC MÀN HÌNH KHÁC (FORGOT, OTP, RESET) giữ nguyên như cũ... */}
           {/* ===================== BƯỚC 1: QUÊN MẬT KHẨU ===================== */}
           {currentScreen === 'forgot' && (
-            <View style={themeStyles.formContainer}>
-              <TouchableOpacity onPress={() => setCurrentScreen('login')} style={themeStyles.backBtn}>
-                <Ionicons name="arrow-back" size={24} color="#1a1a1a" />
+            <View style={styles.formContainer}>
+              <TouchableOpacity
+                onPress={() => setCurrentScreen('login')}
+                style={styles.backBtn}
+              >
+                <Ionicons
+                  name="arrow-back"
+                  size={24}
+                  color={colors.textPrimary}
+                />
               </TouchableOpacity>
-              <Text style={themeStyles.authTitle}>Quên mật khẩu</Text>
-              <Text style={themeStyles.instructionText}>Vui lòng nhập Email để nhận mã xác thực (OTP).</Text>
+              <Text style={[styles.authTitle, { color: colors.textPrimary }]}>
+                Quên mật khẩu
+              </Text>
+              <Text
+                style={[styles.instructionText, { color: colors.textSecondary }]}
+              >
+                Vui lòng nhập Email để nhận mã xác thực (OTP).
+              </Text>
 
-              <View style={themeStyles.inputGroup}>
-                <Ionicons name="mail-outline" size={20} color="#888" style={themeStyles.inputIcon} />
+              <View
+                style={[
+                  styles.inputGroup,
+                  {
+                    backgroundColor: colors.inputBg,
+                    borderColor: colors.cardBorder,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="mail-outline"
+                  size={20}
+                  color={colors.textSecondary}
+                  style={styles.inputIcon}
+                />
                 <TextInput
-                  style={themeStyles.input}
+                  style={[styles.input, { color: colors.textPrimary }]}
                   placeholder="Nhập Email của bạn"
-                  placeholderTextColor="#a4b0be"
+                  placeholderTextColor={colors.placeholder}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   value={forgotEmail}
@@ -630,27 +736,61 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
                 />
               </View>
 
-              <TouchableOpacity style={themeStyles.btnSubmit} onPress={handleSendOTP}>
-                <Text style={themeStyles.btnSubmitText}>Gửi mã OTP</Text>
+              <TouchableOpacity
+                style={[styles.btnSubmit, { backgroundColor: colors.accent }]}
+                onPress={handleSendOTP}
+              >
+                <Text style={[styles.btnSubmitText, { color: colors.accentText }]}>
+                  Gửi mã OTP
+                </Text>
               </TouchableOpacity>
             </View>
           )}
 
           {/* ===================== BƯỚC 2: NHẬP MÃ OTP ===================== */}
           {currentScreen === 'otp' && (
-            <View style={themeStyles.formContainer}>
-              <TouchableOpacity onPress={() => setCurrentScreen('forgot')} style={themeStyles.backBtn}>
-                <Ionicons name="arrow-back" size={24} color="#1a1a1a" />
+            <View style={styles.formContainer}>
+              <TouchableOpacity
+                onPress={() => setCurrentScreen('forgot')}
+                style={styles.backBtn}
+              >
+                <Ionicons
+                  name="arrow-back"
+                  size={24}
+                  color={colors.textPrimary}
+                />
               </TouchableOpacity>
-              <Text style={themeStyles.authTitle}>Nhập mã OTP</Text>
-              <Text style={themeStyles.instructionText}>Mã 6 chữ số đã được gửi đến {forgotEmail}</Text>
+              <Text style={[styles.authTitle, { color: colors.textPrimary }]}>
+                Nhập mã OTP
+              </Text>
+              <Text
+                style={[styles.instructionText, { color: colors.textSecondary }]}
+              >
+                Mã 6 chữ số đã được gửi đến {forgotEmail}
+              </Text>
 
-              {/* Đã tái cấu trúc: 1 ô nhập duy nhất, UX mượt mà, giãn chữ mô phỏng 6 ô */}
-              <View style={themeStyles.inputGroup}>
+              <View
+                style={[
+                  styles.inputGroup,
+                  {
+                    backgroundColor: colors.inputBg,
+                    borderColor: colors.cardBorder,
+                  },
+                ]}
+              >
                 <TextInput
-                  style={[themeStyles.input, { fontSize: 22, fontWeight: 'bold', letterSpacing: 15, textAlign: 'center' }]}
+                  style={[
+                    styles.input,
+                    {
+                      color: colors.textPrimary,
+                      fontSize: 22,
+                      fontWeight: 'bold',
+                      letterSpacing: 15,
+                      textAlign: 'center',
+                    },
+                  ]}
                   placeholder="••••••"
-                  placeholderTextColor="#a4b0be"
+                  placeholderTextColor={colors.placeholder}
                   keyboardType="number-pad"
                   maxLength={6}
                   value={otpCode}
@@ -658,64 +798,115 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
                 />
               </View>
 
-              <TouchableOpacity style={themeStyles.btnSubmit} onPress={handleVerifyOTP}>
-                <Text style={themeStyles.btnSubmitText}>Xác nhận</Text>
+              <TouchableOpacity
+                style={[styles.btnSubmit, { backgroundColor: colors.accent }]}
+                onPress={handleVerifyOTP}
+              >
+                <Text style={[styles.btnSubmitText, { color: colors.accentText }]}>
+                  Xác nhận
+                </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={{ marginTop: 20, alignItems: 'center' }} onPress={handleSendOTP}>
-                <Text style={themeStyles.linkText}>Gửi lại mã</Text>
+              <TouchableOpacity
+                style={{ marginTop: 20, alignItems: 'center' }}
+                onPress={handleSendOTP}
+              >
+                <Text style={[styles.linkText, { color: colors.accent }]}>
+                  Gửi lại mã
+                </Text>
               </TouchableOpacity>
             </View>
           )}
 
           {/* ===================== BƯỚC 3: ĐẶT LẠI MẬT KHẨU ===================== */}
           {currentScreen === 'reset' && (
-            <View style={themeStyles.formContainer}>
-              <TouchableOpacity onPress={() => setCurrentScreen('login')} style={themeStyles.backBtn}>
-                <Ionicons name="close" size={24} color="#1a1a1a" />
+            <View style={styles.formContainer}>
+              <TouchableOpacity
+                onPress={() => setCurrentScreen('login')}
+                style={styles.backBtn}
+              >
+                <Ionicons name="close" size={24} color={colors.textPrimary} />
               </TouchableOpacity>
-              <Text style={themeStyles.authTitle}>Tạo mật khẩu mới</Text>
-              <Text style={themeStyles.instructionText}>Vui lòng tạo mật khẩu mới cho tài khoản của bạn.</Text>
+              <Text style={[styles.authTitle, { color: colors.textPrimary }]}>
+                Tạo mật khẩu mới
+              </Text>
+              <Text
+                style={[styles.instructionText, { color: colors.textSecondary }]}
+              >
+                Vui lòng tạo mật khẩu mới cho tài khoản của bạn.
+              </Text>
 
-              <View style={themeStyles.inputGroup}>
-                <Ionicons name="lock-closed-outline" size={20} color="#888" style={themeStyles.inputIcon} />
+              <View
+                style={[
+                  styles.inputGroup,
+                  {
+                    backgroundColor: colors.inputBg,
+                    borderColor: colors.cardBorder,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="lock-closed-outline"
+                  size={20}
+                  color={colors.textSecondary}
+                  style={styles.inputIcon}
+                />
                 <TextInput
-                  style={themeStyles.input}
+                  style={[styles.input, { color: colors.textPrimary }]}
                   placeholder="Mật khẩu mới"
-                  placeholderTextColor="#a4b0be"
+                  placeholderTextColor={colors.placeholder}
                   secureTextEntry
                   value={resetPassword}
                   onChangeText={setResetPassword}
                 />
               </View>
 
-              <View style={themeStyles.inputGroup}>
-                <Ionicons name="shield-checkmark-outline" size={20} color="#888" style={themeStyles.inputIcon} />
+              <View
+                style={[
+                  styles.inputGroup,
+                  {
+                    backgroundColor: colors.inputBg,
+                    borderColor: colors.cardBorder,
+                  },
+                ]}
+              >
+                <Ionicons
+                  name="shield-checkmark-outline"
+                  size={20}
+                  color={colors.textSecondary}
+                  style={styles.inputIcon}
+                />
                 <TextInput
-                  style={themeStyles.input}
+                  style={[styles.input, { color: colors.textPrimary }]}
                   placeholder="Xác nhận mật khẩu mới"
-                  placeholderTextColor="#a4b0be"
+                  placeholderTextColor={colors.placeholder}
                   secureTextEntry
                   value={resetConfirmPassword}
                   onChangeText={setResetConfirmPassword}
                 />
               </View>
 
-              <TouchableOpacity style={themeStyles.btnSubmit} onPress={handleResetPassword}>
-                <Text style={themeStyles.btnSubmitText}>Cập nhật mật khẩu</Text>
+              <TouchableOpacity
+                style={[styles.btnSubmit, { backgroundColor: colors.accent }]}
+                onPress={handleResetPassword}
+              >
+                <Text style={[styles.btnSubmitText, { color: colors.accentText }]}>
+                  Cập nhật mật khẩu
+                </Text>
               </TouchableOpacity>
             </View>
           )}
         </View>
       </ScrollView>
+
       {!!successMessage && (
-        <View style={themeStyles.successToast} accessibilityRole="alert">
-          <View style={themeStyles.successToastIcon}>
+        <View style={styles.successToast} accessibilityRole="alert">
+          <View style={styles.successToastIcon}>
             <Ionicons name="checkmark" size={20} color="#fff" />
           </View>
-          <View style={themeStyles.successToastContent}>
-            <Text style={themeStyles.successToastTitle}>Thành công</Text>
-            <Text style={themeStyles.successToastText}>{successMessage}</Text>
+          <View style={styles.successToastContent}>
+            <Text style={styles.successToastTitle}>Thành công</Text>
+            <Text style={styles.successToastText}>{successMessage}</Text>
           </View>
         </View>
       )}
@@ -724,18 +915,31 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f3e5f5' },
+  container: {
+    flex: 1,
+  },
   bgCircleTop: {
-    position: 'absolute', top: -100, left: -50,
-    width: 300, height: 300, borderRadius: 150,
-    backgroundColor: '#ffb6c1', opacity: 0.3,
+    position: 'absolute',
+    top: -100,
+    left: -50,
+    width: 300,
+    height: 300,
+    borderRadius: 150,
   },
   bgCircleBottom: {
-    position: 'absolute', bottom: -100, right: -50,
-    width: 350, height: 350, borderRadius: 175,
-    backgroundColor: '#90caf9', opacity: 0.3,
+    position: 'absolute',
+    bottom: -100,
+    right: -50,
+    width: 350,
+    height: 350,
+    borderRadius: 175,
   },
-  instructionText: { fontSize: 14, color: '#666', textAlign: 'center', marginBottom: 20, lineHeight: 20 }, // <-- Chính là nó đây
+  instructionText: {
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
   successToast: {
     position: 'absolute',
     top: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 52,
@@ -762,9 +966,20 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)',
     marginRight: 11,
   },
-  successToastContent: { flex: 1 },
-  successToastTitle: { color: '#fff', fontSize: 14, fontWeight: '800', marginBottom: 2 },
-  successToastText: { color: '#fff', fontSize: 13, lineHeight: 18 },
+  successToastContent: {
+    flex: 1,
+  },
+  successToastTitle: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 2,
+  },
+  successToastText: {
+    color: '#fff',
+    fontSize: 13,
+    lineHeight: 18,
+  },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
@@ -772,52 +987,128 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 20 : 60,
     paddingBottom: 40,
   },
-  headerContainer: { alignItems: 'center', marginBottom: 30 },
-  logoText: { fontSize: 32, fontWeight: '900', color: '#1e3c72', letterSpacing: 1 },
-  sloganText: { fontSize: 13, color: '#636e72', marginTop: 5 },
-  card: {
-    backgroundColor: 'rgba(255, 255, 255, 0.85)',
-    borderRadius: 24,
-    padding: 25,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.1, shadowRadius: 20, elevation: 10,
-    borderWidth: 1, borderColor: '#fff'
+  headerContainer: {
+    alignItems: 'center',
+    marginBottom: 28,
   },
-  backBtn: { position: 'absolute', top: 0, left: 0, zIndex: 10 }, // <-- Chính là nó
-  formContainer: { width: '100%' },
-  authTitle: { fontSize: 26, fontWeight: '800', color: '#1a1a1a', textAlign: 'center', marginBottom: 25 },
+  logoText: {
+    fontSize: 32,
+    fontWeight: '900',
+    letterSpacing: 1,
+  },
+  sloganText: {
+    fontSize: 13,
+    marginTop: 5,
+  },
+  card: {
+    borderRadius: 20,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 6,
+    borderWidth: 1,
+  },
+  backBtn: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    zIndex: 10,
+  },
+  formContainer: {
+    width: '100%',
+  },
+  authTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: 22,
+  },
   inputGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f1f4f8',
-    borderRadius: 14,
-    marginBottom: 15,
-    paddingHorizontal: 15,
-    borderWidth: 1, borderColor: '#e1e8f0',
+    borderRadius: 12,
+    marginBottom: 14,
+    paddingHorizontal: 14,
+    borderWidth: 1,
   },
-  inputIcon: { marginRight: 10 },
-  input: { flex: 1, paddingVertical: 15, fontSize: 15, color: '#1a1a1a', fontWeight: '500' },
-  formActions: { alignItems: 'flex-end', marginBottom: 25, marginTop: -5 },
-  linkText: { color: '#636e72', fontSize: 13, fontWeight: '600' },
-  boldLinkText: { color: '#1976d2', fontSize: 14, fontWeight: '800' },
+  inputIcon: {
+    marginRight: 10,
+  },
+  input: {
+    flex: 1,
+    paddingVertical: 14,
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  formActions: {
+    alignItems: 'flex-end',
+    marginBottom: 20,
+    marginTop: -2,
+  },
+  linkText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  boldLinkText: {
+    fontSize: 14,
+    fontWeight: '800',
+  },
   btnSubmit: {
-    backgroundColor: '#64b5f6',
-    borderRadius: 14,
-    paddingVertical: 16,
+    borderRadius: 12,
+    paddingVertical: 15,
     alignItems: 'center',
-    shadowColor: '#64b5f6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8, elevation: 5,
+    justifyContent: 'center',
   },
-  btnSubmitText: { color: '#1e3c72', fontSize: 18, fontWeight: '800' },
-  dividerBox: { flexDirection: 'row', alignItems: 'center', marginVertical: 25 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: '#ddd' },
-  dividerText: { marginHorizontal: 10, color: '#888', fontSize: 12, fontWeight: '600' },
-  socialLogins: { flexDirection: 'row', justifyContent: 'center', marginBottom: 10 },
-  socialBtn: {
-    width: 50, height: 50, borderRadius: 25,
-    backgroundColor: '#fff',
-    justifyContent: 'center', alignItems: 'center',
+  btnSubmitText: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  dividerBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 22,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
     marginHorizontal: 10,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 5, elevation: 3,
+    fontSize: 12,
+    fontWeight: '600',
   },
-  switchFormText: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 15 },
-  mutedText: { color: '#636e72', fontSize: 14 },
+
+  // Khu vực Social Login mới (2 nút Google & Facebook nằm ngang 50%-50%)
+  socialRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 10,
+  },
+  socialBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 10,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  socialBtnLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+
+  switchFormText: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  mutedText: {
+    fontSize: 14,
+  },
 });

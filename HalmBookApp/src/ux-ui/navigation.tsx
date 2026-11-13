@@ -40,7 +40,7 @@ export interface BookData {
   fileName?: string;
   chapters?: any[];
   initialChapterIndex?: number;
-  totalChapters?: number;
+totalChapters?: number;
 }
 
 export type AppLanguage = 'vi' | 'en';
