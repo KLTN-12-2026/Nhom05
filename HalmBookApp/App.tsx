@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurTargetView } from 'expo-blur';
 import { ComponentRef, ComponentType, useEffect, useRef, useState } from 'react';
-import { Alert, BackHandler, Platform, View } from 'react-native';
+import { Alert, Animated, BackHandler, Easing, Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import ChatBotScreen, { ChatMessage } from './src/ux-ui/chatbot';
 import BookDetailScreen from './src/ux-ui/chitietsach';
@@ -31,9 +31,18 @@ const SCREENS_WITH_SHARED_HEADER: AppScreen[] = [
   'upload',
   'bookshelf',
   'categories',
-  'search',
   'transactions',
 ];
+
+// Cấu hình hiệu ứng chuyển trang mượt mà (Navigation Transition Options)
+const SCREEN_TRANSITION_OPTIONS: Partial<
+  Record<AppScreen, { headerShown: boolean; animation: 'fade' | 'default' }>
+> = {
+  search: {
+    headerShown: false,
+    animation: 'fade',
+  },
+};
 
 const LoginLogoutWithSuccess = LoginLogout as ComponentType<{ onLoginSuccess: () => void }>;
 
@@ -62,6 +71,9 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isFooterVisible, setIsFooterVisible] = useState(true);
   const [homeRefreshKey, setHomeRefreshKey] = useState(0);
+  const [isLoggedInState, setIsLoggedInState] = useState<boolean>(isSessionActive());
+  const [userAvatarUrl, setUserAvatarUrl] = useState<string>('');
+  const [userInitial, setUserInitial] = useState<string>('H');
 
   const blurTargetRef = useRef<ComponentRef<typeof View> | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
@@ -82,9 +94,16 @@ export default function App() {
 
         // Nếu đây là phiên chạy mới (Fresh launch / Mở app từ đầu)
         if (!sessionActive) {
-          // Xóa token cũ và vị trí màn hình cũ để đảm bảo đăng nhập mới cấp token chuẩn từ MySQL
-          await AsyncStorage.multiRemove(['userToken', 'userRole', 'savedRoutes']);
+          await AsyncStorage.multiRemove([
+            'userToken',
+            'accessToken',
+            'refreshToken',
+            'userRole',
+            'userProfile',
+            'savedRoutes',
+          ]);
           if (isMounted) {
+            setIsLoggedInState(false);
             setRoutes([{ name: 'auth' }]);
             setIsReady(true);
           }
@@ -93,7 +112,21 @@ export default function App() {
 
         // Nếu là reload trong cùng phiên làm việc (FE & BE vẫn đang chạy liên tục)
         const token = await AsyncStorage.getItem('userToken');
+        const profileStr = await AsyncStorage.getItem('userProfile');
+        if (profileStr && isMounted) {
+          try {
+            const profile = JSON.parse(profileStr);
+            if (profile?.avatar) setUserAvatarUrl(profile.avatar);
+            if (profile?.fullName) {
+              setUserInitial(String(profile.fullName).trim().charAt(0).toUpperCase());
+            }
+          } catch {
+            // Bỏ qua lỗi parse profile
+          }
+        }
+
         if (token && isMounted) {
+          setIsLoggedInState(true);
           const savedRoutesStr = await AsyncStorage.getItem('savedRoutes');
           if (savedRoutesStr) {
             const parsed = JSON.parse(savedRoutesStr);
@@ -105,11 +138,15 @@ export default function App() {
           }
           setRoutes([{ name: 'home' }]);
         } else if (isMounted) {
+          setIsLoggedInState(false);
           setRoutes([{ name: 'auth' }]);
         }
       } catch (err) {
         console.warn('Lỗi khôi phục session Expo:', err);
-        if (isMounted) setRoutes([{ name: 'auth' }]);
+        if (isMounted) {
+          setIsLoggedInState(false);
+          setRoutes([{ name: 'auth' }]);
+        }
       } finally {
         if (isMounted) setIsReady(true);
       }
@@ -131,6 +168,31 @@ export default function App() {
   }, [routes, isReady]);
 
   const currentRoute = routes[routes.length - 1];
+  const screenFadeAnim = useRef(new Animated.Value(1)).current;
+  const prevRouteNameRef = useRef<AppScreen>(currentRoute.name);
+
+  useEffect(() => {
+    const prevName = prevRouteNameRef.current;
+    const nextName = currentRoute.name;
+    prevRouteNameRef.current = nextName;
+
+    const usesFade =
+      SCREEN_TRANSITION_OPTIONS[nextName]?.animation === 'fade' ||
+      SCREEN_TRANSITION_OPTIONS[prevName]?.animation === 'fade';
+
+    if (usesFade) {
+      screenFadeAnim.setValue(0);
+      Animated.timing(screenFadeAnim, {
+        toValue: 1,
+        duration: 180,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    } else {
+      screenFadeAnim.setValue(1);
+    }
+  }, [currentRoute.name, screenFadeAnim]);
+
   const activeTabRoute = [...routes].reverse().find((route) =>
     PRIMARY_TABS.some((tab) => tab.id === route.name),
   );
@@ -157,6 +219,7 @@ export default function App() {
 
   const finishLogin = () => {
     setSessionActive(true);
+    setIsLoggedInState(true);
     const nextRoutes: ScreenRoute[] = [{ name: 'home' }];
     setRoutes(nextRoutes);
     AsyncStorage.setItem('savedRoutes', JSON.stringify(nextRoutes)).catch(() => {});
@@ -174,7 +237,15 @@ export default function App() {
   const logout = async () => {
     try {
       setSessionActive(false);
-      await AsyncStorage.multiRemove(['userToken', 'userRole', 'savedRoutes']);
+      setIsLoggedInState(false);
+      await AsyncStorage.multiRemove([
+        'userToken',
+        'accessToken',
+        'refreshToken',
+        'userRole',
+        'userProfile',
+        'savedRoutes',
+      ]);
       setRoutes([{ name: 'auth' }]);
     } catch {
       Alert.alert('Không thể đăng xuất', 'Đã xảy ra lỗi khi xóa thông tin đăng nhập.');
@@ -204,7 +275,15 @@ export default function App() {
     logout,
     isDarkMode,
     toggleDarkMode,
-    isLoggedIn: isSessionActive(),
+    isLoggedIn: isLoggedInState || isSessionActive(),
+    setIsLoggedIn: (val: boolean) => {
+      setSessionActive(val);
+      setIsLoggedInState(val);
+    },
+    userAvatarUrl,
+    setUserAvatarUrl,
+    userInitial,
+    setUserInitial,
     showLoginAlert: (message: string) => {
       Alert.alert(
         'Yêu cầu đăng nhập',
@@ -320,7 +399,9 @@ export default function App() {
               ref={blurTargetRef}
               style={{ flex: 1, backgroundColor: isDarkMode ? '#101319' : '#fff' }}
             >
-              {screen}
+              <Animated.View style={{ flex: 1, opacity: screenFadeAnim }}>
+                {screen}
+              </Animated.View>
             </BlurTargetView>
             {!['auth', 'reader', 'chatbot'].includes(currentRoute.name) && (
               <Footer

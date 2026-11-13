@@ -534,9 +534,9 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
     : { 1: '#ff9ff3', 2: '#1dd1a1', 3: '#ffde59', 4: '#48dbfb' };
 
   return (
-    <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: isDarkMode ? BRAND.black : '#fff' }]}>
+    <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: isDarkMode ? '#1F2228' : '#4A7C72' }]}>
       <Animated.View style={[styles.container, { backgroundColor: animatedBg }]}>
-      <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'} />
+      <ExpoStatusBar style="light" />
       
       {/* TRUNG TÂM HIỆU ỨNG DARK MODE */}
       <DarkModeBackgroundEffects visible={isDarkMode} />
@@ -583,33 +583,59 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
         
         <View style={styles.topBackground}>
           <View style={styles.header}>
-            <View style={styles.searchContainer}>
-              <Ionicons name="search" size={18} color={isDarkMode ? BRAND.bg : '#fff'} style={{ marginRight: 8 }} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Tìm kiếm truyện..."
-                placeholderTextColor={isDarkMode ? '#a1a1aa' : '#ccc'}
-                onFocus={() => navigate('search')}
+            <TouchableOpacity
+              style={styles.menuBtn}
+              onPress={() => {
+                console.log('Open Filter');
+                navigate('categories');
+              }}
+              activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityLabel="Mở bộ lọc"
+            >
+              <Ionicons name="menu" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.searchContainer}
+              activeOpacity={0.9}
+              onPress={() => navigate('search')}
+              accessibilityRole="button"
+              accessibilityLabel="Tìm kiếm sách, tác giả"
+            >
+              <Ionicons
+                name="search-outline"
+                size={18}
+                color={isDarkMode ? '#9BA3B2' : '#7A8291'}
+                style={{ marginRight: 8 }}
               />
-            </View>
+              <Text style={styles.searchInput} numberOfLines={1}>
+                Tìm kiếm sách, tác giả...
+              </Text>
+            </TouchableOpacity>
+
             <TouchableOpacity
               style={styles.darkModeToggle}
               onPress={onToggleDarkMode}
-              activeOpacity={0.7}
+              activeOpacity={0.75}
               accessibilityRole="button"
               accessibilityLabel={isDarkMode ? 'Bật chế độ sáng' : 'Bật chế độ tối'}
             >
               <Ionicons
-                name={isDarkMode ? 'moon' : 'sunny'}
-                size={22}
-                color={isDarkMode ? '#161920' : '#1a1a1a'}
+                name={isDarkMode ? 'sunny' : 'moon'}
+                size={20}
+                color={isDarkMode ? '#FFD166' : '#FFF8E7'}
               />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.darkModeToggle} onPress={() => navigate('cart')}>
-              <Ionicons name="cart-outline" size={22} color={isDarkMode ? BRAND.bg : '#1a1a1a'} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.avatarBtn} onPress={() => navigate('profile')}>
-              <Text style={styles.avatarText}>A</Text>
+
+            <TouchableOpacity
+              style={[styles.darkModeToggle, { marginLeft: 4 }]}
+              onPress={() => navigate('cart')}
+              activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityLabel="Giỏ hàng"
+            >
+              <Ionicons name="cart-outline" size={21} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
           <ScrollView 
@@ -923,7 +949,7 @@ const getStyles = (isDark: boolean) => {
   const textSub = isDark ? '#A7ABB5' : '#666';
   const pageBg = isDark ? '#101319' : '#ffffff';
   
-  const topBg = isDark ? '#1F2228' : '#5a8b82'; 
+  const topBg = isDark ? '#1F2228' : '#4A7C72'; 
   
   const cardBg = isDark ? '#1B1F28' : '#ffffff';
   const cardRaised = isDark ? '#232833' : '#ffffff';
@@ -938,7 +964,7 @@ const getStyles = (isDark: boolean) => {
       backgroundColor: topBg,
       borderBottomLeftRadius: isDark ? 34 : 30,
       borderBottomRightRadius: isDark ? 34 : 30,
-      paddingTop: 15,
+      paddingTop: 0,
       paddingBottom: 20,
       marginBottom: isDark ? 14 : 10,
       borderBottomWidth: isDark ? 1 : 3,
@@ -947,49 +973,41 @@ const getStyles = (isDark: boolean) => {
     header: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 15,
-      marginBottom: 20,
+      height: 52,
+      paddingHorizontal: 12,
+      marginBottom: 14,
+    },
+    menuBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 10,
+      justifyContent: 'center',
+      alignItems: 'center',
     },
     searchContainer: {
       flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: isDark ? '#272B33' : 'rgba(255,255,255,0.2)',
-      borderRadius: 18,
-      paddingHorizontal: 15,
-      height: 45,
-      borderWidth: isDark ? 1 : 2,
-      borderColor: isDark ? '#4F5766' : '#1a1a1a',
+      backgroundColor: isDark ? '#272B33' : '#FFFFFF',
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      height: 40,
+      marginHorizontal: 8,
     },
     searchInput: {
       flex: 1,
-      color: isDark ? textMain : '#fff',
-      fontWeight: '600',
-      fontSize: 15,
+      color: isDark ? '#9BA3B2' : '#7A8291',
+      fontWeight: '400',
+      fontSize: 14,
     },
     darkModeToggle: {
-      width: 42,
-      height: 42,
-      backgroundColor: isDark ? '#D8B36A' : '#fff',
-      borderRadius: 21,
-      borderWidth: isDark ? 1 : 2,
-      borderColor: isDark ? '#E5CA98' : '#1a1a1a',
+      width: 40,
+      height: 40,
+      backgroundColor: isDark ? '#272B33' : 'rgba(255,255,255,0.18)',
+      borderRadius: 10,
       justifyContent: 'center',
       alignItems: 'center',
-      marginLeft: 10,
     },
-    avatarBtn: {
-      width: 45,
-      height: 45,
-      backgroundColor: isDark ? '#8E80B6' : '#ffde59',
-      borderRadius: 25,
-      borderWidth: isDark ? 1 : 2,
-      borderColor: isDark ? '#B7ADD1' : '#1a1a1a',
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginLeft: 10,
-    },
-    avatarText: { fontSize: 20, fontWeight: '900', color: '#1a1a1a' },
 
     carouselContainer: { paddingLeft: 15, paddingRight: 5 },
     bannerCard: {

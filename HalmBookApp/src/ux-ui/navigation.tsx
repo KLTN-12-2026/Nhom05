@@ -28,6 +28,11 @@ export interface BookData {
   reads?: string;
   rating?: string;
   initialChapterIndex?: number;
+  img_url?: string;
+  description?: string;
+  price?: number;
+  category_name?: string;
+  rent_price?: number;
 }
 
 export interface NavigationContextValue {
