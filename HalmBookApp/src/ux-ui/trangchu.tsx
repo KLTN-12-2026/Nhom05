@@ -24,6 +24,7 @@ import { BookData, useAppNavigation } from './navigation';
 import { getBookCoverSource } from './bookCovers';
 import { getBookChapterLabel } from './bookContentService';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
+import { useUnreadNotificationCount } from './useUnreadNotificationCount';
 
 const { width, height } = Dimensions.get('window');
 
@@ -241,7 +242,8 @@ interface TrangChuProps {
 }
 
 export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: TrangChuProps) {
-  const { navigate, setFooterVisible } = useAppNavigation();
+  const { navigate, setFooterVisible, isLoggedIn } = useAppNavigation();
+  const unreadNotifications = useUnreadNotificationCount(isLoggedIn);
   const [selectedPreviewBook, setSelectedPreviewBook] = useState<HomeBookItem | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const scrollOffset = useRef(0);
@@ -486,7 +488,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
     {
       icon: 'trophy',
       label: 'Xếp Hạng',
-      screen: 'transactions',
+      screen: 'leaderboard',
       bgLight: '#FEF3C7',
       iconLight: '#D97706',
       borderLight: '#FDE68A',
@@ -498,6 +500,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
       icon: 'bookmarks',
       label: 'Đã Lưu',
       screen: 'bookshelf',
+      initialBookshelfTab: 'yeuthich' as const,
       bgLight: '#EEF2FF',
       iconLight: '#6366F1',
       borderLight: '#E0E7FF',
@@ -637,6 +640,15 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
             >
               <Ionicons name="cart-outline" size={21} color="#FFFFFF" />
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.darkModeToggle, { marginLeft: 4 }]}
+              onPress={() => navigate('notifications')}
+              accessibilityRole="button"
+              accessibilityLabel={`Thông báo${unreadNotifications ? `, ${unreadNotifications} chưa đọc` : ''}`}
+            >
+              <Ionicons name="notifications-outline" size={21} color="#FFFFFF" />
+              {unreadNotifications > 0 && <View style={{ position: 'absolute', top: 3, right: 2, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 3, backgroundColor: '#D5AC56', alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 9, fontWeight: '800', color: '#382F23' }}>{unreadNotifications > 99 ? '99+' : unreadNotifications}</Text></View>}
+            </TouchableOpacity>
           </View>
           <ScrollView 
             horizontal 
@@ -678,7 +690,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
               key={idx}
               style={styles.toolbarItem}
               activeOpacity={0.8}
-              onPress={() => navigate(item.screen as any)}
+              onPress={() => navigate(item.screen as any, undefined, { initialBookshelfTab: item.initialBookshelfTab })}
             >
               <View style={[
                 styles.toolbarIconBox,

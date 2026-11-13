@@ -1,3 +1,4 @@
+import PotatoChatbot from '@/components/common/PotatoChatbot';
 import { BrowserRouter } from 'react-router-dom';
 import AppRoutes from '@/routes/AppRoutes';
 import AccountLockedCountdownModal from '@/components/common/AccountLockedCountdownModal';
@@ -8,6 +9,7 @@ function App() {
   return (
     <BrowserRouter>
       <AppRoutes />
+      <PotatoChatbot />
       <AccountLockedCountdownModal />
       <CustomConfirmModal />
       <CustomExportModal />

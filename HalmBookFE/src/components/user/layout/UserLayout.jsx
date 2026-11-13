@@ -6,7 +6,6 @@ import axiosInstance from "@/services/axiosClient";
 import { getCurrentCustomer } from "@/services/customerService";
 import { triggerAirplaneBannerAnimation } from "./helicopterAnimation";
 import { isDarkMode, applyTheme } from "@/utils/theme";
-import PotatoChatbot from "@/components/common/PotatoChatbot";
 import AvatarWithFrame from "@/components/common/AvatarWithFrame";
 import UploadBookModal from "@/components/common/UploadBookModal";
 import AuthModal, { openAuthModal } from "@/components/common/AuthModal";
@@ -1526,7 +1525,6 @@ export default function UserLayout({ children, className = "", onOpenChatbot, on
       <UserHeader onOpenChatbot={handleOpenChat} onThemeChange={onThemeChange} />
       {children}
       <UserFooter onOpenChatbot={handleOpenChat} />
-      <PotatoChatbot />
       <AuthModal />
     </div>
   );

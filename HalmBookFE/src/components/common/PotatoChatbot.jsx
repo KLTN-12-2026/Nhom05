@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
+import useFloatingBubble from '@/hooks/useFloatingBubble';
 import { useLocation } from 'react-router-dom';
 import { sendChatMessage, getChatHistory } from '@/services/chatService';
 
@@ -86,6 +88,7 @@ const BUBBLE_GREETINGS = [
 
 export default function PotatoChatbot() {
     const location = useLocation();
+    const { position, isDragging, edge, buttonProps } = useFloatingBubble();
     const [isOpen, setIsOpen] = useState(false);
     const [messages, setMessages] = useState([]);
     const [inputValue, setInputValue] = useState('');
@@ -221,10 +224,14 @@ export default function PotatoChatbot() {
         }
     };
 
-    return (
-        <aside aria-label="Trợ lý ảo Khoai Nhỏ" className="fixed bottom-6 right-6 z-50 flex flex-col items-end pointer-events-auto font-sans">
+    return createPortal(
+        <aside aria-label="Trợ lý ảo Khoai Nhỏ" className="potato-widget fixed z-[10000] font-sans"
+            style={{ left: position.x, top: position.y, width: 60, height: 60, transition: isDragging ? 'none' : 'left 280ms cubic-bezier(0.22, 1, 0.36, 1), top 280ms cubic-bezier(0.22, 1, 0.36, 1)' }}>
             {/* CSS TÙY BIẾN CHO CÁC HIỆU ỨNG SỐNG ĐỘNG */}
             <style>{`
+                @media (prefers-reduced-motion: reduce) {
+                    .potato-widget, .potato-widget * { animation: none !important; transition: none !important; }
+                }
                 @keyframes potato-float {
                     0%, 100% { transform: translateY(0px) rotate(0deg); }
                     50% { transform: translateY(-7px) rotate(2.5deg); }
@@ -262,6 +269,7 @@ export default function PotatoChatbot() {
             {isOpen && (
                 <div
                     id="potato-chatbot-panel"
+                    style={{ position: 'fixed', right: 12, bottom: 84, width: 'min(410px, calc(100vw - 24px))', maxHeight: 'calc(100dvh - 108px)' }}
                     className="mb-4 w-[95vw] sm:w-[410px] h-[590px] max-h-[86vh] rounded-3xl bg-[#FFFDF9]/95 dark:bg-[#161714]/95 backdrop-blur-2xl border border-[#D4AF37]/50 shadow-[0_25px_70px_-15px_rgba(212,175,55,0.3)] dark:shadow-[0_25px_80px_-15px_rgba(0,0,0,0.95)] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200 transition-all z-50"
                 >
                     {/* Header Hoàng Gia Rực Rỡ */}
@@ -487,13 +495,14 @@ export default function PotatoChatbot() {
             {/* =========================================================
                 BONG BÓNG GỢI Ý MỞ CHAT LƠ LỬNG (FLOATING SPEECH BUBBLE)
                 ========================================================= */}
-            {!isOpen && showBubble && (
+            {!isOpen && showBubble && !isDragging && (
                 <div
                     onClick={() => {
                         setShowBubble(false);
                         setIsOpen(true);
                     }}
-                    className="potato-floating mb-2.5 px-3.5 py-2 rounded-2xl bg-white/95 dark:bg-[#1E201B]/95 backdrop-blur-md border border-[#D4AF37]/60 shadow-[0_10px_25px_-5px_rgba(212,175,55,0.3)] text-xs font-bold text-[#8E3038] dark:text-[#D4AF37] flex items-center gap-2 cursor-pointer hover:scale-105 transition-all select-none group"
+                    style={{ position: 'absolute', bottom: 76, [edge === 'left' ? 'left' : 'right']: 0, width: 'min(280px, calc(100vw - 24px))', display: position.y < 100 ? 'none' : undefined }}
+                    className="mb-2.5 px-3.5 py-2 rounded-2xl bg-white/95 dark:bg-[#1E201B]/95 backdrop-blur-md border border-[#D4AF37]/60 shadow-[0_10px_25px_-5px_rgba(212,175,55,0.3)] text-xs font-bold text-[#8E3038] dark:text-[#D4AF37] flex items-center gap-2 cursor-pointer hover:scale-105 transition-all select-none group"
                 >
                     <span className="text-base animate-bounce">🥔</span>
                     <span className="text-xs font-medium text-[#1E1F1D] dark:text-[#EDE9DF]">
@@ -523,18 +532,22 @@ export default function PotatoChatbot() {
                 )}
 
                 <button
+                    {...buttonProps}
+                    style={{ touchAction: 'none', userSelect: 'none', cursor: isDragging ? 'grabbing' : 'grab' }}
+                    aria-expanded={isOpen}
+                    aria-controls="potato-chatbot-panel"
                     type="button"
                     onClick={() => {
                         setShowBubble(false);
                         setIsOpen((prev) => !prev);
                     }}
-                    className={`relative w-15 h-15 rounded-full p-0.5 shadow-[0_12px_35px_rgba(212,175,55,0.35)] flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 cursor-pointer ${
+                    className={`relative w-15 h-15 rounded-full p-0.5 shadow-[0_12px_35px_rgba(212,175,55,0.35)] flex items-center justify-center transition-colors duration-300 ${
                         isOpen
                             ? 'bg-gradient-to-tr from-[#7B1E26] to-[#8E3038] ring-2 ring-[#D4AF37]/50'
-                            : 'bg-gradient-to-tr from-[#B8860B] via-[#D4AF37] to-[#F5E096] ring-2 ring-[#D4AF37]/60 potato-floating'
+                            : 'bg-gradient-to-tr from-[#B8860B] via-[#D4AF37] to-[#F5E096] ring-2 ring-[#D4AF37]/60'
                     }`}
                     title={isOpen ? "Thu nhỏ trợ lý ảo" : "Trò chuyện cùng Khoai Nhỏ AI"}
-                    aria-label="Mở Trợ lý ảo Khoai Nhỏ"
+                    aria-label={isOpen ? "Thu nhỏ trợ lý ảo Khoai Nhỏ" : "Mở trợ lý ảo Khoai Nhỏ (kéo để di chuyển)"}
                 >
                     {isOpen ? (
                         <div className="w-full h-full rounded-full flex items-center justify-center text-white text-lg">
@@ -559,6 +572,7 @@ export default function PotatoChatbot() {
                     )}
                 </button>
             </div>
-        </aside>
+        </aside>,
+        document.body
     );
 }
