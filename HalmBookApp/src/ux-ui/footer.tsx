@@ -70,7 +70,7 @@ function FooterComponent({ activeNav, floating = false, visible = true }: Footer
         styles.footerWrap,
         floating && styles.footerWrapFloating,
         {
-          paddingBottom: Math.max(insets.bottom, 8) + 6,
+          paddingBottom: Math.max(insets.bottom, 6),
           transform: [{ translateY: animTranslateY }],
         },
       ]}
@@ -90,7 +90,7 @@ function FooterComponent({ activeNav, floating = false, visible = true }: Footer
             >
               <Ionicons
                 name={tab.icon}
-                size={25}
+                size={22}
                 color={isActive ? '#1473E6' : isDarkMode ? '#AAB1C0' : '#6F7684'}
               />
             </TouchableOpacity>
@@ -123,9 +123,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 38,
-    paddingHorizontal: 9,
-    height: 68,
+    borderRadius: 30,
+    paddingHorizontal: 8,
+    height: 56,
     shadowColor: '#1a1a1a',
     shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.16,
@@ -138,14 +138,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.38,
   },
   navItem: {
-    width: 55,
-    height: 52,
-    borderRadius: 28,
+    width: 52,
+    height: 44,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
   navItemActive: {
-    width: 72,
+    width: 66,
     backgroundColor: 'rgba(20, 115, 230, 0.12)',
   },
   navItemActiveDark: {

@@ -9,13 +9,21 @@ import {
   Image,
   Modal,
   ActivityIndicator,
+  Alert,
   Dimensions,
   useWindowDimensions,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAppNavigation } from "./navigation";
+import { useAppNavigation, useAutoHideFooter } from "./navigation";
+import {
+  calculateDynamicKhoai,
+  checkoutBooksApi,
+  fetchWalletBalanceApi,
+  RENTAL_DURATION_OPTIONS,
+  RentalDurationDays,
+} from "./rentalService";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import * as Font from "expo-font";
 import axios from "axios";
@@ -525,36 +533,6 @@ function SectionHeader({
       </Text>
     </View>
   );
-
-function Card({ item }:{ item:Offer }) {
-  const { lang } = useAppNavigation();
-  const { navigate } = useAppNavigation();
-  const s = useAppThemeStyles(baseStyles);
-
-  return <View style={s.card}>
-    {item.tag && <View style={s.tag}><Text style={s.tagText}>{item.tag}</Text></View>}
-    <MaterialCommunityIcons name={item.icon} size={42} color={item.color}/>
-    <Text style={s.cardTitle}>{item.title}</Text>
-    <Text numberOfLines={3} style={s.desc}>{item.description}</Text>
-    <View style={s.priceBox}>
-      {item.oldPrice && <Text style={s.oldPrice}>{item.oldPrice}</Text>}
-      <Text style={s.price}>{item.price}</Text>
-    </View>
-    <TouchableOpacity style={s.button} onPress={() => navigate(item.id === 'u1' ? 'upload' : 'payment')}>
-      <Text style={s.buttonText}>
-        {lang === 'en'
-          ? (item.action === 'Xác Thực Ngay' ? 'Verify Now'
-            : item.action === 'Đổi Khoai Ngay' ? 'Redeem Now'
-            : item.action === 'Sử Dụng Ngay' ? 'Use Now'
-            : item.action === 'Tìm Hiểu Thêm' ? 'Learn More'
-            : item.action === 'Nâng Cấp Gói' ? 'Upgrade'
-            : item.action === 'Mua Combo' ? 'Buy Combo'
-            : item.action === 'Mua Sách' ? 'Buy Book'
-            : item.action)
-          : item.action}
-      </Text>
-    </TouchableOpacity>
-  </View>;
 }
 
 // Wrapper component để inject theme vào SectionHeader
@@ -641,6 +619,7 @@ export default function OffersScreen() {
 
   const { navigate, navigateTab, isDarkMode, toggleDarkMode, isLoggedIn, showLoginAlert } =
     useAppNavigation();
+  const { onScroll: handleFooterScroll } = useAutoHideFooter();
   const insets = useSafeAreaInsets();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const contentWidth = Math.max(0, windowWidth - insets.left - insets.right);
@@ -689,7 +668,11 @@ export default function OffersScreen() {
     isChallenge?: boolean;
     badgeText?: string;
     badgeColor?: string;
+    bookId?: string;
+    basePrice?: number;
   } | null>(null);
+  const [selectedRentalDays, setSelectedRentalDays] = useState<RentalDurationDays>(7);
+  const [isSubmittingModal, setIsSubmittingModal] = useState(false);
 
   // Toast State
   const [toast, setToast] = useState<{
@@ -717,12 +700,18 @@ export default function OffersScreen() {
     loadTypographyFonts();
   }, []);
 
-  // Load khoai balance from AsyncStorage
+  // Load khoai balance from live wallet API (với fallback cache local)
   useEffect(() => {
+    let isMounted = true;
     const loadBalance = async () => {
       try {
+        const liveBal = await fetchWalletBalanceApi();
+        if (isMounted && liveBal !== null) {
+          setKhoaiBalance(liveBal);
+          return;
+        }
         const raw = await AsyncStorage.getItem("cachedUserProfile");
-        if (raw) {
+        if (isMounted && raw) {
           const profile = JSON.parse(raw);
           if (typeof profile?.potatoBalance === "number") {
             setKhoaiBalance(profile.potatoBalance);
@@ -733,7 +722,10 @@ export default function OffersScreen() {
       }
     };
     loadBalance();
-  }, []);
+    return () => {
+      isMounted = false;
+    };
+  }, [isLoggedIn]);
 
   // Fetch real books from API GET /api/home/books (tái sử dụng pattern trangchu.tsx)
   useEffect(() => {
@@ -838,19 +830,104 @@ export default function OffersScreen() {
     setTimeout(() => setToast((p) => ({ ...p, visible: false })), 3000);
   };
 
-  const handleConfirmAction = () => {
-    if (!modalItem) return;
-    const balance = khoaiBalance ?? 0;
-    if (balance >= modalItem.priceNumeric) {
-      if (modalItem.priceNumeric > 0) {
-        setKhoaiBalance((prev) => (prev ?? 0) - modalItem.priceNumeric);
-      }
-      const { successMsg, isUploadLink, isChallenge } = modalItem;
+  const handleConfirmAction = async () => {
+    if (!modalItem || isSubmittingModal) return;
+
+    if (modalItem.isUploadLink) {
       setModalItem(null);
-      showToast("Thao Tác Thành Công!", successMsg);
-      if (isUploadLink) setTimeout(() => navigate("upload"), 600);
-      else if (isChallenge) setTimeout(() => navigate("bookshelf"), 600);
+      setTimeout(() => navigate("upload"), 300);
+      return;
     }
+    if (modalItem.isChallenge) {
+      setModalItem(null);
+      setTimeout(() => navigateTab("bookshelf"), 300);
+      return;
+    }
+
+    // Nếu là thuê sách thật từ catalog DB (/api/home/books)
+    if (modalItem.bookId) {
+      if (!isLoggedIn) {
+        setModalItem(null);
+        showLoginAlert("Bạn phải đăng nhập để thuê sách và đồng bộ vào Tủ sách!");
+        return;
+      }
+
+      const base = modalItem.basePrice ?? modalItem.priceNumeric;
+      const finalPrice = calculateDynamicKhoai(base, selectedRentalDays);
+      const balance = khoaiBalance ?? 0;
+
+      if (balance < finalPrice) {
+        Alert.alert(
+          "Số dư Khoai không đủ",
+          `Bạn cần ${finalPrice} 🥔 cho gói ${selectedRentalDays} ngày (hiện có ${balance} 🥔). Bạn có muốn nạp thêm Khoai không?`,
+          [
+            { text: "Đóng", style: "cancel" },
+            {
+              text: "Nạp Khoai",
+              onPress: () => {
+                setModalItem(null);
+                navigate("payment");
+              },
+            },
+          ]
+        );
+        return;
+      }
+
+      setIsSubmittingModal(true);
+      try {
+        const res = await checkoutBooksApi([
+          {
+            bookId: modalItem.bookId,
+            durationDays: selectedRentalDays,
+            price: finalPrice,
+          },
+        ]);
+
+        if (res.requireLogin) {
+          setModalItem(null);
+          showLoginAlert(res.message);
+          return;
+        }
+        if (!res.success) {
+          Alert.alert("Không thể thuê sách", res.message);
+          return;
+        }
+
+        if (typeof res.remainingPotatoBalance === "number") {
+          setKhoaiBalance(res.remainingPotatoBalance);
+        } else {
+          const freshBal = await fetchWalletBalanceApi();
+          if (freshBal !== null) setKhoaiBalance(freshBal);
+        }
+
+        const bookTitle = modalItem.title;
+        setModalItem(null);
+        showToast("Thuê Sách Thành Công!", `Đã thêm "${bookTitle}" (${selectedRentalDays} ngày) vào Tủ sách.`);
+        Alert.alert(
+          "Thuê sách thành công!",
+          `Đã thanh toán ${res.totalKhoaiPaid ?? finalPrice} 🥔 để thuê "${bookTitle}" trong ${selectedRentalDays} ngày.`,
+          [
+            { text: "Xem Tủ sách", onPress: () => navigateTab("bookshelf") },
+            { text: "Đóng", style: "cancel" },
+          ]
+        );
+      } finally {
+        setIsSubmittingModal(false);
+      }
+      return;
+    }
+
+    // Các gói combo/ưu đãi chưa có endpoint thanh toán riêng trên BE -> hướng dẫn dùng Giỏ hàng
+    setModalItem(null);
+    Alert.alert(
+      "Áp dụng ưu đãi qua Giỏ hàng",
+      "Các gói ưu đãi được tính khi bạn chọn sách vào Giỏ hàng để thuê.",
+      [
+        { text: "Đóng", style: "cancel" },
+        { text: "Mở Giỏ hàng", onPress: () => navigate("cart") },
+      ]
+    );
   };
 
   const handleCartPress = () => {
@@ -1423,7 +1500,13 @@ export default function OffersScreen() {
             borderColor: colors.cardBorder,
           },
         ]}
-        onPress={() =>
+        onPress={async () => {
+          setSelectedRentalDays(7);
+          if (isLoggedIn) {
+            fetchWalletBalanceApi().then((bal) => {
+              if (bal !== null) setKhoaiBalance(bal);
+            });
+          }
           setModalItem({
             title: book.bookName,
             description: `${book.description || "Chưa có mô tả."}\n\nTác giả: ${book.author}${
@@ -1435,8 +1518,10 @@ export default function OffersScreen() {
             successMsg: `Thuê sách "${book.bookName}" thành công!`,
             badgeText: book.category_name || undefined,
             badgeColor: colors.accent,
-          })
-        }
+            bookId: book.book_id,
+            basePrice: priceNum,
+          });
+        }}
         activeOpacity={0.82}
       >
         {book.category_name ? (
@@ -1686,12 +1771,14 @@ export default function OffersScreen() {
           ============================================================ */}
       <ScrollView
         showsVerticalScrollIndicator={false}
+        onScroll={handleFooterScroll}
+        scrollEventThrottle={16}
         onTouchStart={() => {
           if (isKhoaiExpanded) setIsKhoaiExpanded(false);
         }}
         contentContainerStyle={{
           paddingTop: 6,
-          paddingBottom: 68 + Math.max(insets.bottom, 8) + 18,
+          paddingBottom: 68 + Math.max(insets.bottom, 8) + 26,
         }}
       >
         {/* TẦNG 1: GÓI CƯỚC ĐẶC QUYỀN — HERO CARD CAROUSEL */}
@@ -1876,22 +1963,75 @@ export default function OffersScreen() {
                   </Text>
                 </View>
 
-                {!modalItem.isChallenge && (
-                  <View style={styles.modalMetaRow}>
-                    <View style={[styles.modalMetaCol, { backgroundColor: colors.chipBg, borderColor: colors.cardBorder }]}>
-                      <Text style={[styles.modalMetaLabel, { color: colors.textSecondary }]}>Chi phí:</Text>
-                      <Text style={[styles.modalMetaVal, { color: colors.accent }]}>
-                        {modalItem.price}
-                      </Text>
-                    </View>
-                    <View style={[styles.modalMetaCol, { backgroundColor: colors.chipBg, borderColor: colors.cardBorder }]}>
-                      <Text style={[styles.modalMetaLabel, { color: colors.textSecondary }]}>Số dư ví:</Text>
-                      <Text style={[styles.modalMetaVal, { color: colors.textPrimary }]}>
-                        {khoaiBalance !== null ? khoaiBalance : "—"} 🥔
-                      </Text>
+                {modalItem.bookId && (
+                  <View style={styles.durationPickerWrap}>
+                    <Text style={[styles.modalDescLabel, { color: colors.textSecondary, marginBottom: 6 }]}>
+                      Chọn thời hạn thuê sách:
+                    </Text>
+                    <View style={styles.durationChipRow}>
+                      {RENTAL_DURATION_OPTIONS.map((opt) => {
+                        const isActive = selectedRentalDays === opt.days;
+                        const optPrice = calculateDynamicKhoai(
+                          modalItem.basePrice ?? modalItem.priceNumeric,
+                          opt.days
+                        );
+                        return (
+                          <TouchableOpacity
+                            key={opt.days}
+                            style={[
+                              styles.durationChip,
+                              {
+                                backgroundColor: isActive ? colors.accent : colors.chipBg,
+                                borderColor: isActive ? colors.accent : colors.cardBorder,
+                              },
+                            ]}
+                            onPress={() => setSelectedRentalDays(opt.days)}
+                          >
+                            <Text
+                              style={[
+                                styles.durationChipTitle,
+                                { color: isActive ? colors.accentText : colors.textPrimary },
+                              ]}
+                            >
+                              {opt.label}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.durationChipPrice,
+                                { color: isActive ? colors.accentText : colors.accent },
+                              ]}
+                            >
+                              {optPrice} 🥔
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
                     </View>
                   </View>
                 )}
+
+                {!modalItem.isChallenge && (() => {
+                  const effectiveCost = modalItem.bookId
+                    ? calculateDynamicKhoai(modalItem.basePrice ?? modalItem.priceNumeric, selectedRentalDays)
+                    : modalItem.priceNumeric;
+                  const effectivePriceLabel = modalItem.bookId ? `${effectiveCost} 🥔` : modalItem.price;
+                  return (
+                    <View style={styles.modalMetaRow}>
+                      <View style={[styles.modalMetaCol, { backgroundColor: colors.chipBg, borderColor: colors.cardBorder }]}>
+                        <Text style={[styles.modalMetaLabel, { color: colors.textSecondary }]}>Chi phí:</Text>
+                        <Text style={[styles.modalMetaVal, { color: colors.accent }]}>
+                          {effectivePriceLabel}
+                        </Text>
+                      </View>
+                      <View style={[styles.modalMetaCol, { backgroundColor: colors.chipBg, borderColor: colors.cardBorder }]}>
+                        <Text style={[styles.modalMetaLabel, { color: colors.textSecondary }]}>Số dư ví:</Text>
+                        <Text style={[styles.modalMetaVal, { color: colors.textPrimary }]}>
+                          {khoaiBalance !== null ? khoaiBalance : "—"} 🥔
+                        </Text>
+                      </View>
+                    </View>
+                  );
+                })()}
 
                 {modalItem.isChallenge ? (
                   <View style={styles.challengeActions}>
@@ -1914,47 +2054,48 @@ export default function OffersScreen() {
                       </Text>
                     </TouchableOpacity>
                   </View>
-                ) : (
-                  <View style={styles.modalBtnRow}>
-                    <TouchableOpacity
-                      style={[styles.modalCancelBtn, { borderColor: colors.cardBorder }]}
-                      onPress={() => setModalItem(null)}
-                    >
-                      <Text style={[styles.modalCancelText, { color: colors.textPrimary }]}>Hủy</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.modalConfirmBtn,
-                        {
-                          backgroundColor:
-                            (khoaiBalance ?? 0) >= modalItem.priceNumeric
-                              ? colors.accent
-                              : colors.cardBorder,
-                        },
-                      ]}
-                      disabled={(khoaiBalance ?? 0) < modalItem.priceNumeric}
-                      onPress={handleConfirmAction}
-                    >
-                      <Text
+                ) : (() => {
+                  const effectiveCost = modalItem.bookId
+                    ? calculateDynamicKhoai(modalItem.basePrice ?? modalItem.priceNumeric, selectedRentalDays)
+                    : modalItem.priceNumeric;
+                  const canAfford = !modalItem.bookId || !isLoggedIn || (khoaiBalance ?? 0) >= effectiveCost;
+                  return (
+                    <View style={styles.modalBtnRow}>
+                      <TouchableOpacity
+                        style={[styles.modalCancelBtn, { borderColor: colors.cardBorder }]}
+                        onPress={() => !isSubmittingModal && setModalItem(null)}
+                        disabled={isSubmittingModal}
+                      >
+                        <Text style={[styles.modalCancelText, { color: colors.textPrimary }]}>Hủy</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
                         style={[
-                          styles.modalConfirmText,
+                          styles.modalConfirmBtn,
                           {
-                            color:
-                              (khoaiBalance ?? 0) >= modalItem.priceNumeric
-                                ? colors.accentText
-                                : colors.textSecondary,
+                            backgroundColor: colors.accent,
+                            opacity: isSubmittingModal ? 0.7 : 1,
                           },
                         ]}
+                        disabled={isSubmittingModal}
+                        onPress={handleConfirmAction}
                       >
-                        {(khoaiBalance ?? 0) < modalItem.priceNumeric
-                          ? "Số Dư Không Đủ"
-                          : modalItem.priceNumeric > 0
-                          ? `Xác Nhận (${modalItem.price})`
-                          : "Xác Nhận Ngay"}
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
+                        {isSubmittingModal ? (
+                          <ActivityIndicator size="small" color={colors.accentText} />
+                        ) : (
+                          <Text style={[styles.modalConfirmText, { color: colors.accentText }]}>
+                            {modalItem.bookId && isLoggedIn && !canAfford
+                              ? `Nạp Khoai (Thiếu ${effectiveCost - (khoaiBalance ?? 0)} 🥔)`
+                              : effectiveCost > 0
+                              ? modalItem.bookId
+                                ? `Thuê Ngay (${effectiveCost} 🥔)`
+                                : `Mở Giỏ Hàng`
+                              : "Xác Nhận Ngay"}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })()}
               </>
             )}
           </View>
@@ -2748,6 +2889,34 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   modalConfirmText: { fontFamily: FONTS.jakarta, color: "#FFF", fontSize: 11, fontWeight: "800" },
+  durationPickerWrap: {
+    marginBottom: 12,
+  },
+  durationChipRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  durationChip: {
+    width: "48%",
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  durationChipTitle: {
+    fontFamily: FONTS.inter,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  durationChipPrice: {
+    fontFamily: FONTS.inter,
+    fontSize: 11,
+    fontWeight: "800",
+  },
 
   // Unused — keeping for compat
   cardInnerBg: {},

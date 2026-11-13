@@ -20,6 +20,14 @@ import axios from 'axios';
 import Constants from 'expo-constants';
 import { BookData, useAppNavigation } from './navigation';
 import { getBookChapterLabel } from './bookContentService';
+import {
+  RENTAL_DURATION_OPTIONS,
+  RentalDurationDays,
+  calculateDynamicKhoai,
+  normalizeRentalDays,
+  resolveBaseKhoaiForBook,
+} from './rentalService';
+import { getUserItem, KEY_POTATO_BALANCE, setUserItem } from './userStorage';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -40,7 +48,8 @@ const CANDIDATE_URLS = [
 
 const CART_DB_SEEDED_KEY = '@halm_cart_db_seeded_v2';
 
-export type RentalDurationDays = 7 | 14 | 30 | 90;
+export type { RentalDurationDays };
+export { RENTAL_DURATION_OPTIONS, calculateDynamicKhoai, normalizeRentalDays };
 
 export interface CartItemModel {
   cartItemId: number;
@@ -54,49 +63,6 @@ export interface CartItemModel {
   priceKhoai: number;
   bookData: BookData;
 }
-
-export const RENTAL_DURATION_OPTIONS: Array<{
-  days: RentalDurationDays;
-  label: string;
-  multiplier: number;
-  subtitle: string;
-}> = [
-  { days: 7, label: '7 ngày', multiplier: 1.0, subtitle: '100% giá gốc (Mặc định)' },
-  { days: 14, label: '14 ngày', multiplier: 1.8, subtitle: 'Tiết kiệm 10% (x1.8)' },
-  { days: 30, label: '30 ngày', multiplier: 3.5, subtitle: 'Gói tháng phổ biến (x3.5)' },
-  { days: 90, label: '90 ngày', multiplier: 9.0, subtitle: 'Gói quý siêu tiết kiệm (x9.0)' },
-];
-
-/**
- * Công thức tính giá Khoai động chuẩn Backend:
- * - 7 ngày:  100% baseKhoai
- * - 14 ngày: làm tròn(baseKhoai * 1.8)
- * - 30 ngày: làm tròn(baseKhoai * 3.5)
- * - 90 ngày: làm tròn(baseKhoai * 9.0)
- */
-export const calculateDynamicKhoai = (baseKhoai: number, days: number): number => {
-  switch (days) {
-    case 14:
-      return Math.round(baseKhoai * 1.8);
-    case 30:
-      return Math.round(baseKhoai * 3.5);
-    case 90:
-      return Math.round(baseKhoai * 9.0);
-    case 7:
-    default:
-      return Math.round(baseKhoai * 1.0);
-  }
-};
-
-export const normalizeRentalDays = (days?: number | null): RentalDurationDays => {
-  if (days === 14 || days === 30 || days === 90 || days === 7) {
-    return days;
-  }
-  if (days && days > 60) return 90;
-  if (days && days >= 25) return 30;
-  if (days && days >= 12) return 14;
-  return 7;
-};
 
 /**
  * Chuẩn hóa giá gốc (baseKhoai) và tóm tắt sách từ dữ liệu thật trong DB
@@ -237,21 +203,6 @@ const BOOK_SUMMARY_MAP: Record<string, { baseKhoai: number; summary: string }> =
     summary:
       'Tiểu thuyết hiện thực của Vũ Trọng Phụng phản ánh cuộc sống cơ cực của người dân lao động trước thiên tai và bất công xã hội.',
   },
-};
-
-const resolveBaseKhoaiForBook = (bookId: string, rawRentPrice?: number | null): number => {
-  if (typeof rawRentPrice === 'number' && rawRentPrice > 0) {
-    return Math.round(rawRentPrice);
-  }
-  const upper = (bookId || '').toUpperCase();
-  if (BOOK_SUMMARY_MAP[upper]) {
-    return BOOK_SUMMARY_MAP[upper].baseKhoai;
-  }
-  if (upper.startsWith('KD')) return 25;
-  if (upper.startsWith('LS')) return 22;
-  if (upper.startsWith('VH')) return 20;
-  if (upper.startsWith('TT')) return 18;
-  return 15;
 };
 
 const resolveSummaryForBook = (
@@ -506,7 +457,7 @@ export default function GioHang() {
 
       // 3. Nếu user đã đăng nhập và giỏ hàng trong DB chưa từng được seed mẫu lần đầu tiên,
       //    tự động khởi tạo 4 cuốn sách thật từ bảng `book` vào bảng `cart_item` trong MySQL
-      const alreadySeeded = await AsyncStorage.getItem(CART_DB_SEEDED_KEY);
+      const alreadySeeded = await getUserItem(CART_DB_SEEDED_KEY);
       const realBooksList = Object.values(catalogMap).filter(
         (b: any) => b && b.status !== 'DELETED'
       );
@@ -543,7 +494,7 @@ export default function GioHang() {
             }
           }
         }
-        await AsyncStorage.setItem(CART_DB_SEEDED_KEY, 'true');
+        await setUserItem(CART_DB_SEEDED_KEY, 'true');
 
         // Đọc lại danh sách từ MySQL sau khi seed
         try {
@@ -572,7 +523,7 @@ export default function GioHang() {
       // 4. Nếu tài khoản đã có dữ liệu thật trong bảng cart_item MySQL
       if (rawCartItems !== null) {
         if (rawCartItems.length > 0) {
-          await AsyncStorage.setItem(CART_DB_SEEDED_KEY, 'true');
+          await setUserItem(CART_DB_SEEDED_KEY, 'true');
         }
         const mapped = rawCartItems.map((item, idx) =>
           mapRawCartDtoToModel(item, idx, workingBaseUrl, catalogMap)
@@ -813,6 +764,17 @@ export default function GioHang() {
 
       if (typeof remainingKhoai === 'number') {
         setPotatoBalance(remainingKhoai);
+        await setUserItem(KEY_POTATO_BALANCE, String(remainingKhoai));
+        try {
+          const cachedRaw = await AsyncStorage.getItem('cachedUserProfile');
+          if (cachedRaw) {
+            const parsed = JSON.parse(cachedRaw);
+            if (parsed && typeof parsed === 'object') {
+              parsed.potatoBalance = remainingKhoai;
+              await AsyncStorage.setItem('cachedUserProfile', JSON.stringify(parsed));
+            }
+          }
+        } catch {}
       }
 
       // Loại bỏ các mục đã thanh toán khỏi state và tải lại giỏ hàng từ DB
@@ -1168,26 +1130,6 @@ export default function GioHang() {
               <Text style={[styles.selectAllLabel, { color: colors.textPrimary }]}>
                 Tất cả
               </Text>
-        <View style={{ height: 150 }} /> {/* Padding dưới để không bị che bởi thanh thanh toán */}
-      </ScrollView>
-
-      {/* Thanh Thanh Toán (Chỉ hiện khi có ít nhất 1 sách được chọn) */}
-      {selectedCount > 0 && (
-        <View style={themeStyles.checkoutBar}>
-          
-          <View style={themeStyles.checkoutTopRow}>
-            <TouchableOpacity onPress={toggleSelectAll} style={themeStyles.selectAllBtn}>
-              <Ionicons 
-                name={isAllSelected ? "checkbox" : "square-outline"} 
-                size={22} 
-                color={isAllSelected ? "#2c3a7a" : "#888"} 
-              />
-              <Text style={themeStyles.selectAllText}>{lang === 'en' ? 'Select All' : 'Tất cả'}</Text>
-            </TouchableOpacity>
-            
-            <View style={themeStyles.priceContainer}>
-              <Text style={themeStyles.totalLabel}>{lang === 'en' ? `Total (${selectedCount} items):` : `Tổng tiền (${selectedCount} mục):`}</Text>
-              <Text style={themeStyles.totalPrice}>{totalPrice} 🥔</Text>
             </View>
             <Text style={[styles.selectedCountCaption, { color: colors.textSecondary }]}>
               Đã chọn: {selectedCount} cuốn

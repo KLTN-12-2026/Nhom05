@@ -35,8 +35,6 @@ interface ScreenRoute {
 
 const SCREENS_WITH_SHARED_HEADER: AppScreen[] = [
   'offers',
-  'upload',
-  'bookshelf',
   'categories',
   'search',
   'transactions',
@@ -387,6 +385,7 @@ export default function App() {
       goBack,
       logout,
       isDarkMode,
+      toggleDarkMode,
       isFooterVisible,
       setFooterVisible: setIsFooterVisible,
       isLoggedIn,
@@ -405,6 +404,7 @@ export default function App() {
       goBack,
       logout,
       isDarkMode,
+      toggleDarkMode,
       isFooterVisible,
       isLoggedIn,
       showLoginAlert,
@@ -419,14 +419,6 @@ export default function App() {
     () => SCREENS_WITH_SHARED_HEADER.includes(currentRoute.name),
     [currentRoute.name]
   );
-    userAvatarUrl,
-    setUserAvatarUrl,
-    userInitial,
-    setUserInitial,
-    lang,
-    setLang,
-  };
-  const showSharedHeader = SCREENS_WITH_SHARED_HEADER.includes(currentRoute.name);
 
   let screen;
   switch (currentRoute.name) {
@@ -536,7 +528,7 @@ export default function App() {
                 isDarkMode={isDarkMode}
                 onToggleDarkMode={toggleDarkMode}
                 blurTarget={blurTargetRef}
-                compact={['offers', 'upload', 'bookshelf'].includes(currentRoute.name)}
+                compact={currentRoute.name === 'offers'}
               />
             )}
             <BlurTargetView
@@ -548,7 +540,7 @@ export default function App() {
             {!['auth', 'reader', 'chatbot', 'notifications'].includes(currentRoute.name) && (
               <Footer
                 activeNav={activeNav}
-                floating={['home', 'bookDetail', 'offers'].includes(currentRoute.name)}
+                floating={['home', 'bookDetail', 'offers', 'upload', 'bookshelf', 'profile'].includes(currentRoute.name)}
                 visible={isFooterVisible}
               />
             )}

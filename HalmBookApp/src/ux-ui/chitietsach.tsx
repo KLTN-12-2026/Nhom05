@@ -39,6 +39,19 @@ import { checkBookIsFavorite, toggleFavoriteBook } from './favoriteService';
 import { useAppNavigation } from './navigation';
 import { addNotification } from './notificationService';
 import {
+  addToCartApi,
+  BookAccessDetail,
+  calculateDynamicKhoai,
+  checkBookAccessDetailApi,
+  checkoutBooksApi,
+  fetchBookDetailFromApi,
+  fetchWalletBalanceApi,
+  isPersonalOrLocalBook,
+  RENTAL_DURATION_OPTIONS,
+  RentalDurationDays,
+  resolveBaseKhoaiForBook,
+} from './rentalService';
+import {
   getCurrentUsername,
   getUserItem,
   KEY_GIFTED_BOOKS,
@@ -74,6 +87,13 @@ interface BookDetailProps {
     rating?: string;
     summary?: string;
     desc?: string;
+    price?: number;
+    rent_price?: number;
+    description?: string;
+    category_name?: string;
+    isPersonal?: boolean;
+    fileUri?: string;
+    pdf_url?: string;
   };
   onBack: () => void;
   onStartReading: (initialChapterIndex?: number) => void;
@@ -136,13 +156,30 @@ const getBookChapters = (book: any): ChapterItem[] => {
 };
 
 export default function BookDetailScreen({ book, onBack, onStartReading }: BookDetailProps) {
-  const { isDarkMode, setFooterVisible, lang, isLoggedIn, showLoginAlert } = useAppNavigation();
+  const { isDarkMode, setFooterVisible, lang, isLoggedIn, showLoginAlert, navigate, navigateTab } = useAppNavigation();
   const themeStyles = useMemo(() => getThemedStyles(isDarkMode), [isDarkMode]);
-  const [isSaved, setIsSaved] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
   const [savedChapter, setSavedChapter] = useState<{ chapterNum: number; title: string } | null>(null);
   const [showAllChapters, setShowAllChapters] = useState(false);
   const scrollOffset = useRef(0);
+
+  // Quản lý Thuê sách & Quyền đọc từ Backend
+  const isPersonalBook = useMemo(() => isPersonalOrLocalBook(book), [book]);
+  const [dbBookDetail, setDbBookDetail] = useState<any | null>(null);
+  const [accessDetail, setAccessDetail] = useState<BookAccessDetail>({
+    hasAccess: false,
+    currentPage: 1,
+    readingPercentage: 0,
+    remainingDays: 0,
+    isForever: false,
+    status: 'NONE',
+    checkedFromServer: false,
+  });
+  const [isLoadingAccess, setIsLoadingAccess] = useState(false);
+  const [isRentModalVisible, setIsRentModalVisible] = useState(false);
+  const [selectedRentalDays, setSelectedRentalDays] = useState<RentalDurationDays>(7);
+  const [isProcessingRent, setIsProcessingRent] = useState(false);
+  const [isAddingToCart, setIsAddingToCart] = useState(false);
 
   // Quản lý Modal 1 (Nhập ID người nhận) & Modal 2 (Màn tặng sách cho bạn bè)
   const [isIdPromptVisible, setIsIdPromptVisible] = useState(false);
@@ -156,9 +193,14 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
   const [isSendingGift, setIsSendingGift] = useState(false);
   const [potatoBalance, setPotatoBalance] = useState<number>(100);
 
-  // Đọc số dư khoai lưu trữ
+  // Đọc số dư khoai lưu trữ & đồng bộ từ ví Backend
   const loadPotatoBalance = async () => {
     try {
+      const liveBal = await fetchWalletBalanceApi();
+      if (liveBal !== null) {
+        setPotatoBalance(liveBal);
+        return;
+      }
       const raw = await getUserItem(KEY_POTATO_BALANCE);
       if (raw) {
         setPotatoBalance(Number(raw) || 0);
@@ -219,6 +261,21 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
   const chapters = useMemo(() => getBookChapters(book), [book]);
   const chapterDisplay = useMemo(() => getBookChapterDisplay(book, chapters), [book, chapters]);
 
+  const effectiveRawPrice = dbBookDetail?.rent_price ?? dbBookDetail?.price ?? (book as any).rent_price ?? (book as any).price;
+  const baseKhoai = useMemo(
+    () => resolveBaseKhoaiForBook(String(book.id), effectiveRawPrice),
+    [book.id, effectiveRawPrice]
+  );
+  const dynamicRentalCost = useMemo(
+    () => calculateDynamicKhoai(baseKhoai, selectedRentalDays),
+    [baseKhoai, selectedRentalDays]
+  );
+  const isTrialRestricted =
+    !isPersonalBook &&
+    accessDetail.checkedFromServer &&
+    !accessDetail.hasAccess &&
+    chapters.length > 1;
+
   // Đồng bộ trạng thái yêu thích từ Backend MySQL & Cache Local
   useEffect(() => {
     let isMounted = true;
@@ -231,6 +288,205 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
       isMounted = false;
     };
   }, [book.id]);
+
+  // Đồng bộ chi tiết sách từ DB & trạng thái Đang thuê
+  useEffect(() => {
+    let isMounted = true;
+    const bookIdStr = String(book.id);
+    if (isPersonalBook) {
+      setDbBookDetail(null);
+      setAccessDetail({
+        hasAccess: true,
+        currentPage: 1,
+        readingPercentage: 0,
+        remainingDays: 0,
+        isForever: true,
+        status: 'PERSONAL',
+        checkedFromServer: false,
+      });
+      return;
+    }
+
+    setIsLoadingAccess(true);
+    Promise.all([
+      fetchBookDetailFromApi(bookIdStr),
+      checkBookAccessDetailApi(bookIdStr),
+      isLoggedIn ? fetchWalletBalanceApi() : Promise.resolve(null),
+    ])
+      .then(([detail, access, walletBal]) => {
+        if (!isMounted) return;
+        if (detail) setDbBookDetail(detail);
+        setAccessDetail(access);
+        if (typeof walletBal === 'number') setPotatoBalance(walletBal);
+        if (access.hasAccess && access.currentPage > 1) {
+          setSavedChapter((prev) =>
+            prev ?? {
+              chapterNum: access.currentPage,
+              title: lang === 'en' ? `Continue Ch.${access.currentPage}` : `Đọc tiếp Chương ${access.currentPage}`,
+            }
+          );
+        }
+      })
+      .catch(() => { })
+      .finally(() => {
+        if (isMounted) setIsLoadingAccess(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [book.id, isLoggedIn, isPersonalBook, lang]);
+
+  const ensureVerifiedCatalogBook = async (): Promise<boolean> => {
+    if (isPersonalBook) return false;
+    if (dbBookDetail) return true;
+    const detail = await fetchBookDetailFromApi(String(book.id));
+    if (detail) {
+      setDbBookDetail(detail);
+      return true;
+    }
+    Alert.alert(
+      lang === 'en' ? 'Book Not Available for Rent' : 'Chưa hỗ trợ thuê',
+      lang === 'en'
+        ? 'This title is an offline/suggested preview and is not registered in the online catalog yet.'
+        : 'Cuốn sách này hiện là bản gợi ý/ngoại tuyến và chưa có trong danh mục cho thuê trên hệ thống.'
+    );
+    return false;
+  };
+
+  const openRentModal = async () => {
+    if (!isLoggedIn) {
+      showLoginAlert(
+        lang === 'en'
+          ? 'Please log in to rent and sync books to your Bookshelf!'
+          : 'Bạn phải đăng nhập để thuê sách và đồng bộ vào Tủ sách!'
+      );
+      return;
+    }
+    const ok = await ensureVerifiedCatalogBook();
+    if (!ok) return;
+    const liveBal = await fetchWalletBalanceApi();
+    if (liveBal !== null) setPotatoBalance(liveBal);
+    setSelectedRentalDays(7);
+    setIsRentModalVisible(true);
+  };
+
+  const handleQuickAddToCart = async () => {
+    if (!isLoggedIn) {
+      showLoginAlert(
+        lang === 'en'
+          ? 'Please log in to add books to your Cart!'
+          : 'Bạn phải đăng nhập để thêm sách vào Giỏ hàng!'
+      );
+      return;
+    }
+    const ok = await ensureVerifiedCatalogBook();
+    if (!ok) return;
+
+    setIsAddingToCart(true);
+    try {
+      const res = await addToCartApi(String(book.id), selectedRentalDays, effectiveRawPrice);
+      if (res.requireLogin) {
+        showLoginAlert(res.message);
+        return;
+      }
+      if (!res.success) {
+        Alert.alert(lang === 'en' ? 'Notice' : 'Thông báo', res.message);
+        return;
+      }
+      Alert.alert(
+        lang === 'en' ? 'Added to Cart' : 'Đã thêm vào Giỏ hàng',
+        lang === 'en'
+          ? `"${book.title}" (${selectedRentalDays} days) has been added to your cart.`
+          : `Đã thêm "${book.title}" (gói ${selectedRentalDays} ngày) vào Giỏ hàng của bạn.`,
+        [
+          { text: lang === 'en' ? 'Stay' : 'Ở lại', style: 'cancel' },
+          { text: lang === 'en' ? 'View Cart' : 'Xem Giỏ hàng', onPress: () => navigate('cart') },
+        ]
+      );
+    } finally {
+      setIsAddingToCart(false);
+    }
+  };
+
+  const handleConfirmRent = async () => {
+    if (!isLoggedIn) {
+      setIsRentModalVisible(false);
+      showLoginAlert(
+        lang === 'en' ? 'Please log in to rent books!' : 'Bạn phải đăng nhập để thuê sách!'
+      );
+      return;
+    }
+    if (isProcessingRent) return;
+
+    if (potatoBalance < dynamicRentalCost) {
+      Alert.alert(
+        lang === 'en' ? 'Insufficient Balance' : 'Số dư Khoai không đủ',
+        lang === 'en'
+          ? `You need ${dynamicRentalCost} Khoai (current balance: ${potatoBalance} Khoai). Top up now?`
+          : `Bạn cần ${dynamicRentalCost} Khoai để thuê gói ${selectedRentalDays} ngày (số dư hiện tại: ${potatoBalance} Khoai).`,
+        [
+          { text: lang === 'en' ? 'Close' : 'Đóng', style: 'cancel' },
+          {
+            text: lang === 'en' ? 'Top Up' : 'Nạp Khoai',
+            onPress: () => {
+              setIsRentModalVisible(false);
+              navigateTab('offers');
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    setIsProcessingRent(true);
+    try {
+      const res = await checkoutBooksApi([
+        {
+          bookId: String(book.id),
+          durationDays: selectedRentalDays,
+          price: dynamicRentalCost,
+        },
+      ]);
+      if (res.requireLogin) {
+        setIsRentModalVisible(false);
+        showLoginAlert(res.message);
+        return;
+      }
+      if (!res.success) {
+        Alert.alert(lang === 'en' ? 'Rental Failed' : 'Không thể thuê sách', res.message);
+        return;
+      }
+
+      if (typeof res.remainingPotatoBalance === 'number') {
+        setPotatoBalance(res.remainingPotatoBalance);
+      } else {
+        const refreshedBal = await fetchWalletBalanceApi();
+        if (refreshedBal !== null) setPotatoBalance(refreshedBal);
+      }
+
+      const freshAccess = await checkBookAccessDetailApi(String(book.id));
+      setAccessDetail(freshAccess);
+      setIsRentModalVisible(false);
+
+      Alert.alert(
+        lang === 'en' ? 'Rental Successful!' : 'Thuê sách thành công!',
+        `${res.message}\n\n• ${lang === 'en' ? 'Plan' : 'Gói thuê'}: ${selectedRentalDays} ${lang === 'en' ? 'days' : 'ngày'}\n• ${lang === 'en' ? 'Paid' : 'Đã thanh toán'}: -${res.totalKhoaiPaid ?? dynamicRentalCost} 🥔`,
+        [
+          {
+            text: lang === 'en' ? 'View Bookshelf' : 'Xem Tủ sách',
+            onPress: () => navigateTab('bookshelf'),
+          },
+          {
+            text: lang === 'en' ? 'Read Now' : 'Đọc Ngay',
+            onPress: () => onStartReading(0),
+          },
+        ]
+      );
+    } finally {
+      setIsProcessingRent(false);
+    }
+  };
 
   const handleToggleFavorite = async () => {
     if (!isLoggedIn) {
@@ -621,10 +877,67 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
           </View>
         </View>
 
+        {/* BANNER TRẠNG THÁI THUÊ SÁCH / BẢN ĐỌC THỬ */}
+        {!isPersonalBook && (
+          <View
+            style={[
+              themeStyles.rentalBanner,
+              accessDetail.hasAccess
+                ? themeStyles.rentalBannerActive
+                : themeStyles.rentalBannerLocked,
+            ]}
+          >
+            <View style={themeStyles.rentalBannerLeft}>
+              <Ionicons
+                name={accessDetail.hasAccess ? 'checkmark-circle' : 'time-outline'}
+                size={18}
+                color={
+                  accessDetail.hasAccess
+                    ? isDarkMode
+                      ? '#34D399'
+                      : '#059669'
+                    : isDarkMode
+                      ? '#FBBF24'
+                      : '#b45309'
+                }
+              />
+              <View style={{ flex: 1 }}>
+                {isLoadingAccess ? (
+                  <Text style={themeStyles.rentalBannerText}>
+                    {lang === 'en' ? 'Checking rental status...' : 'Đang kiểm tra trạng thái thuê...'}
+                  </Text>
+                ) : accessDetail.hasAccess ? (
+                  <Text style={themeStyles.rentalBannerText}>
+                    {accessDetail.isForever
+                      ? lang === 'en'
+                        ? 'Owned forever • Full book unlocked'
+                        : 'Sở hữu vĩnh viễn • Đọc trọn bộ'
+                      : lang === 'en'
+                        ? `Rented • ${accessDetail.remainingDays} days left`
+                        : `Đang thuê • Còn ${accessDetail.remainingDays} ngày`}
+                  </Text>
+                ) : accessDetail.status === 'EXPIRED' ? (
+                  <Text style={themeStyles.rentalBannerText}>
+                    {lang === 'en'
+                      ? `Rental expired • Renew from ${baseKhoai} 🥔 / 7 days`
+                      : `Đã hết hạn thuê • Gia hạn từ ${baseKhoai} 🥔 / 7 ngày`}
+                  </Text>
+                ) : (
+                  <Text style={themeStyles.rentalBannerText}>
+                    {lang === 'en'
+                      ? `Preview Ch.1 only • Full access from ${baseKhoai} 🥔 / 7 days`
+                      : `Đọc thử Chương 1 • Thuê trọn bộ từ ${baseKhoai} 🥔 / 7 ngày`}
+                  </Text>
+                )}
+              </View>
+            </View>
+          </View>
+        )}
+
         {/* Ô THỨ HAI: CÁC NÚT HÀNH ĐỘNG (THEO MÀU SẮC CHUẨN CỦA TRANG CHỦ WEB) */}
         <View style={themeStyles.actionRow}>
           {/* Nút Tiếp Tục Đọc (Vàng kim sang trọng) */}
-          {savedChapter && (
+          {savedChapter && (isPersonalBook || accessDetail.hasAccess) && (
             <TouchableOpacity
               style={themeStyles.btnContinueReading}
               onPress={handleContinueReading}
@@ -641,44 +954,96 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
             </TouchableOpacity>
           )}
 
-          {/* Nút Đọc Từ Đầu (Đỏ vang hoàng gia trên Dark Mode, xanh ngọc trên Light Mode) */}
+          {/* Nút Đọc Từ Đầu / Đọc Thử */}
           <TouchableOpacity
             style={[
               themeStyles.btnReadPrimary,
-              savedChapter ? themeStyles.btnReadPrimaryCompact : null,
+              savedChapter && (isPersonalBook || accessDetail.hasAccess) ? themeStyles.btnReadPrimaryCompact : null,
             ]}
             onPress={() => onStartReading(0)}
             activeOpacity={0.88}
           >
             <BookOpen size={16} color="#ffffff" />
-            <Text style={themeStyles.btnReadPrimaryText}>{lang === 'en' ? 'Read from Start' : 'Đọc Từ Đầu'}</Text>
+            <Text style={themeStyles.btnReadPrimaryText}>
+              {isPersonalBook || accessDetail.hasAccess
+                ? lang === 'en'
+                  ? 'Read from Start'
+                  : 'Đọc Từ Đầu'
+                : lang === 'en'
+                  ? 'Preview Ch.1'
+                  : 'Đọc Thử C.1'}
+            </Text>
           </TouchableOpacity>
 
-          {/* Nút Thêm Tủ */}
+          {/* Nút Thêm Tủ (đồng bộ Yêu thích thật lên DB) */}
           <TouchableOpacity
             style={[
               themeStyles.btnBookmark,
-              isSaved && themeStyles.btnBookmarkActive,
-              savedChapter ? themeStyles.btnBookmarkCompact : null,
+              isLiked && themeStyles.btnBookmarkActive,
+              savedChapter && (isPersonalBook || accessDetail.hasAccess) ? themeStyles.btnBookmarkCompact : null,
             ]}
-            onPress={() => setIsSaved(!isSaved)}
+            onPress={handleToggleFavorite}
             activeOpacity={0.88}
           >
             <Bookmark
               size={16}
-              color={isSaved ? '#ffffff' : (isDarkMode ? '#EDE9DF' : '#334155')}
-              fill={isSaved ? '#ffffff' : 'none'}
+              color={isLiked ? '#ffffff' : (isDarkMode ? '#EDE9DF' : '#334155')}
+              fill={isLiked ? '#ffffff' : 'none'}
             />
             <Text
               style={[
                 themeStyles.btnBookmarkText,
-                isSaved && themeStyles.btnBookmarkActiveText,
+                isLiked && themeStyles.btnBookmarkActiveText,
               ]}
             >
-              {isSaved ? 'Đã Lưu' : 'Thêm Tủ'}
+              {isLiked ? (lang === 'en' ? 'Saved' : 'Đã Lưu') : (lang === 'en' ? 'Save' : 'Thêm Tủ')}
             </Text>
           </TouchableOpacity>
         </View>
+
+        {/* HÀNG THUÊ SÁCH & THÊM VÀO GIỎ (CHO SÁCH CATALOG HỆ THỐNG) */}
+        {!isPersonalBook && (
+          <View style={themeStyles.rentalActionRow}>
+            <TouchableOpacity
+              style={themeStyles.btnAddToCart}
+              onPress={handleQuickAddToCart}
+              disabled={isAddingToCart}
+              activeOpacity={0.85}
+            >
+              {isAddingToCart ? (
+                <ActivityIndicator size="small" color={isDarkMode ? '#EDE9DF' : '#334155'} />
+              ) : (
+                <>
+                  <Ionicons
+                    name="cart-outline"
+                    size={16}
+                    color={isDarkMode ? '#EDE9DF' : '#334155'}
+                  />
+                  <Text style={themeStyles.btnAddToCartText} numberOfLines={1}>
+                    {lang === 'en' ? 'Add Cart' : 'Thêm Giỏ'}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={themeStyles.btnRentNow}
+              onPress={openRentModal}
+              activeOpacity={0.88}
+            >
+              <Ionicons name="sparkles" size={15} color={isDarkMode ? '#111210' : '#ffffff'} />
+              <Text style={themeStyles.btnRentNowText} numberOfLines={1}>
+                {accessDetail.hasAccess
+                  ? lang === 'en'
+                    ? 'Extend Rental'
+                    : 'Gia Hạn Thuê Sách'
+                  : lang === 'en'
+                    ? `Rent Book (${baseKhoai} 🥔)`
+                    : `Thuê Trọn Bộ (${baseKhoai} 🥔)`}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Ô THỨ BA: TRÍCH ĐOẠN NỔI BẬT (CHỈ HIỂN THỊ KHI CÓ DỮ LIỆU TỪ DB) */}
         {featuredQuote && (
@@ -705,15 +1070,32 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
             <View style={themeStyles.chaptersCardBox}>
               {(showAllChapters ? chapters : chapters.slice(0, 5)).map((chap) => {
                 const isCurrentChapter = savedChapter?.chapterNum === chap.id;
+                const isChapterLocked = isTrialRestricted && chap.id > 1;
                 return (
                   <TouchableOpacity
                     key={chap.id}
                     style={[
                       themeStyles.chapterRowItem,
                       isCurrentChapter && themeStyles.chapterRowActive,
+                      isChapterLocked && { opacity: 0.6 },
                     ]}
                     activeOpacity={0.7}
-                    onPress={() => onStartReading(chap.id - 1)}
+                    onPress={() => {
+                      if (isChapterLocked) {
+                        Alert.alert(
+                          lang === 'en' ? 'Rental Required' : 'Cần thuê sách để đọc tiếp',
+                          lang === 'en'
+                            ? 'Only Chapter 1 is available for free preview. Rent the full book to unlock all chapters.'
+                            : 'Bạn chỉ có thể đọc thử Chương 1. Hãy thuê trọn bộ sách để đọc tiếp chương này.',
+                          [
+                            { text: lang === 'en' ? 'Cancel' : 'Để sau', style: 'cancel' },
+                            { text: lang === 'en' ? 'Rent Now' : 'Thuê Ngay', onPress: openRentModal },
+                          ]
+                        );
+                        return;
+                      }
+                      onStartReading(chap.id - 1);
+                    }}
                   >
                     <View style={themeStyles.chapterLeftCol}>
                       {/* Badge số thứ tự chương */}
@@ -1071,6 +1453,148 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ===================================================================== */}
+      {/* MODAL CHỌN GÓI THUÊ SÁCH & THANH TOÁN KHOAI                          */}
+      {/* ===================================================================== */}
+      <Modal
+        visible={isRentModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => !isProcessingRent && setIsRentModalVisible(false)}
+      >
+        <View style={themeStyles.modalBackdrop}>
+          <View style={themeStyles.rentModalCard}>
+            <View style={themeStyles.modalHeaderRow}>
+              <View style={themeStyles.modalHeaderTitleGroup}>
+                <View style={[themeStyles.modalHeaderIconBadge, { backgroundColor: isDarkMode ? 'rgba(212, 175, 55, 0.16)' : '#fef3c7' }]}>
+                  <Ionicons name="sparkles" size={18} color={isDarkMode ? '#D4AF37' : '#d97706'} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={themeStyles.modalHeaderTitle}>
+                    {lang === 'en' ? 'Choose Rental Plan' : 'Chọn Gói Thuê Sách'}
+                  </Text>
+                  <Text style={themeStyles.modalHeaderSubtitle} numberOfLines={1}>
+                    {book.title}
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={themeStyles.modalCloseBtn}
+                onPress={() => !isProcessingRent && setIsRentModalVisible(false)}
+              >
+                <Ionicons name="close" size={18} color={isDarkMode ? '#A6A29A' : '#64748b'} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={themeStyles.rentModalBody}>
+              <Text style={themeStyles.rentSectionLabel}>
+                {lang === 'en' ? 'Select rental duration:' : 'Thời hạn thuê đọc trọn bộ:'}
+              </Text>
+              <View style={themeStyles.rentPlanGrid}>
+                {RENTAL_DURATION_OPTIONS.map((opt) => {
+                  const isActive = selectedRentalDays === opt.days;
+                  const optCost = calculateDynamicKhoai(baseKhoai, opt.days);
+                  return (
+                    <TouchableOpacity
+                      key={opt.days}
+                      style={[
+                        themeStyles.rentPlanCard,
+                        isActive && themeStyles.rentPlanCardActive,
+                      ]}
+                      onPress={() => setSelectedRentalDays(opt.days)}
+                      activeOpacity={0.85}
+                    >
+                      <Text
+                        style={[
+                          themeStyles.rentPlanTitle,
+                          isActive && themeStyles.rentPlanTitleActive,
+                        ]}
+                      >
+                        {lang === 'en' ? opt.labelEn : opt.label}
+                      </Text>
+                      <Text
+                        style={[
+                          themeStyles.rentPlanPrice,
+                          isActive && themeStyles.rentPlanPriceActive,
+                        ]}
+                      >
+                        {optCost} 🥔
+                      </Text>
+                      <Text style={themeStyles.rentPlanSub} numberOfLines={1}>
+                        {lang === 'en' ? opt.subtitleEn : opt.subtitle}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <View style={themeStyles.costInfoRow}>
+                <View style={themeStyles.costLeft}>
+                  <Ionicons name="wallet-outline" size={16} color={isDarkMode ? '#F3DA7A' : '#d97706'} />
+                  <Text style={themeStyles.costLabel}>
+                    {lang === 'en' ? `Total (${selectedRentalDays}d):` : `Chi phí (${selectedRentalDays} ngày):`}
+                  </Text>
+                  <Text style={themeStyles.costValue}>{dynamicRentalCost} Khoai 🥔</Text>
+                </View>
+                <Text style={themeStyles.balanceHint}>
+                  {lang === 'en' ? 'Bal:' : 'Ví:'} {potatoBalance} 🥔
+                </Text>
+              </View>
+
+              {potatoBalance < dynamicRentalCost && (
+                <Text style={themeStyles.rentInsufficientHint}>
+                  {lang === 'en'
+                    ? 'Insufficient balance. Tap Top Up Khoai below to continue.'
+                    : 'Số dư Ví Khoai chưa đủ. Bạn có thể nạp thêm ở mục Ưu đãi.'}
+                </Text>
+              )}
+
+              <View style={themeStyles.modalActionRow}>
+                <TouchableOpacity
+                  style={themeStyles.modalCancelBtn}
+                  onPress={handleQuickAddToCart}
+                  disabled={isProcessingRent || isAddingToCart}
+                >
+                  <Text style={themeStyles.modalCancelBtnText}>
+                    {isAddingToCart
+                      ? '...'
+                      : lang === 'en'
+                        ? 'Add Cart'
+                        : 'Thêm Giỏ'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    themeStyles.modalConfirmBtn,
+                    isProcessingRent && { opacity: 0.7 },
+                  ]}
+                  onPress={handleConfirmRent}
+                  disabled={isProcessingRent}
+                >
+                  {isProcessingRent ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle" size={16} color="#ffffff" />
+                      <Text style={themeStyles.modalConfirmBtnText}>
+                        {potatoBalance < dynamicRentalCost
+                          ? lang === 'en'
+                            ? 'Top Up Khoai'
+                            : 'Nạp Khoai'
+                          : lang === 'en'
+                            ? `Rent (${dynamicRentalCost} 🥔)`
+                            : `Thuê Ngay (${dynamicRentalCost} 🥔)`}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -1934,6 +2458,156 @@ function getThemedStyles(isDarkMode: boolean) {
       fontSize: 13.5,
       fontWeight: '800',
       color: '#ffffff',
+    },
+
+    // Banner Trạng Thái Thuê Sách / Bản Đọc Thử
+    rentalBanner: {
+      marginHorizontal: 16,
+      marginTop: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 12,
+      borderWidth: 1,
+    },
+    rentalBannerActive: {
+      backgroundColor: isDarkMode ? 'rgba(52, 211, 153, 0.12)' : '#ecfdf5',
+      borderColor: isDarkMode ? 'rgba(52, 211, 153, 0.3)' : '#a7f3d0',
+    },
+    rentalBannerLocked: {
+      backgroundColor: isDarkMode ? 'rgba(217, 119, 6, 0.12)' : '#fffbeb',
+      borderColor: isDarkMode ? 'rgba(251, 191, 36, 0.3)' : '#fde68a',
+    },
+    rentalBannerLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    rentalBannerText: {
+      fontSize: 12.5,
+      fontWeight: '700',
+      color: isDarkMode ? '#EDE9DF' : '#1e293b',
+    },
+
+    // Hàng Nút Thêm Giỏ & Thuê Sách Trọn Bộ
+    rentalActionRow: {
+      flexDirection: 'row',
+      paddingHorizontal: 16,
+      paddingBottom: 14,
+      gap: 10,
+      backgroundColor: isDarkMode ? 'rgba(22, 24, 27, 0.92)' : '#ffffff',
+      borderBottomWidth: 1,
+      borderBottomColor: isDarkMode ? '#262A33' : '#f1f5f9',
+    },
+    btnAddToCart: {
+      flex: 0.9,
+      height: 44,
+      borderRadius: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      backgroundColor: isDarkMode ? '#20242D' : '#f8fafc',
+      borderWidth: 1,
+      borderColor: isDarkMode ? '#333842' : '#cbd5e1',
+      paddingHorizontal: 10,
+    },
+    btnAddToCartText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: isDarkMode ? '#EDE9DF' : '#334155',
+    },
+    btnRentNow: {
+      flex: 1.5,
+      height: 44,
+      borderRadius: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingHorizontal: 12,
+      backgroundColor: isDarkMode ? '#D4AF37' : '#d97706',
+      shadowColor: isDarkMode ? '#D4AF37' : '#d97706',
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: isDarkMode ? 0.35 : 0.25,
+      shadowRadius: 5,
+      elevation: 3,
+    },
+    btnRentNowText: {
+      fontSize: 13.5,
+      fontWeight: '900',
+      color: isDarkMode ? '#111210' : '#ffffff',
+    },
+
+    // Modal Chọn Gói Thuê Sách
+    rentModalCard: {
+      width: '92%',
+      maxWidth: 400,
+      backgroundColor: isDarkMode ? '#1C1F26' : '#ffffff',
+      borderRadius: 20,
+      padding: 18,
+      borderWidth: 1,
+      borderColor: isDarkMode ? '#2D323E' : '#e2e8f0',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.28,
+      shadowRadius: 16,
+      elevation: 10,
+    },
+    rentModalBody: {
+      marginTop: 6,
+    },
+    rentSectionLabel: {
+      fontSize: 12.5,
+      fontWeight: '700',
+      color: isDarkMode ? '#D1CEBF' : '#475569',
+      marginBottom: 8,
+    },
+    rentPlanGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginBottom: 12,
+    },
+    rentPlanCard: {
+      width: '48%',
+      paddingVertical: 10,
+      paddingHorizontal: 10,
+      borderRadius: 12,
+      borderWidth: 1.5,
+      borderColor: isDarkMode ? '#333842' : '#e2e8f0',
+      backgroundColor: isDarkMode ? '#14161B' : '#f8fafc',
+    },
+    rentPlanCardActive: {
+      borderColor: isDarkMode ? '#D4AF37' : '#d97706',
+      backgroundColor: isDarkMode ? 'rgba(212, 175, 55, 0.14)' : '#fffbeb',
+    },
+    rentPlanTitle: {
+      fontSize: 13.5,
+      fontWeight: '800',
+      color: isDarkMode ? '#EDE9DF' : '#0f172a',
+    },
+    rentPlanTitleActive: {
+      color: isDarkMode ? '#F3DA7A' : '#b45309',
+    },
+    rentPlanPrice: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: isDarkMode ? '#34D399' : '#059669',
+      marginTop: 2,
+    },
+    rentPlanPriceActive: {
+      color: isDarkMode ? '#D4AF37' : '#d97706',
+    },
+    rentPlanSub: {
+      fontSize: 10.5,
+      color: isDarkMode ? '#8D8980' : '#64748b',
+      marginTop: 3,
+    },
+    rentInsufficientHint: {
+      fontSize: 11.5,
+      fontWeight: '600',
+      color: isDarkMode ? '#FCA5A5' : '#dc2626',
+      marginBottom: 10,
     },
   });
 }

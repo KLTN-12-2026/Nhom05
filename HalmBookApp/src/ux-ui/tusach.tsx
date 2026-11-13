@@ -3,9 +3,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Dimensions,
   Image,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,9 +15,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import axios from 'axios';
-import { getBookCoverSource, API_BASE_URL } from './bookCovers';
-import { BookData, useAppNavigation, useAppThemeStyles } from './navigation';
+import { getBookCoverSource } from './bookCovers';
+import { BookData, useAppNavigation, useAppThemeStyles, useAutoHideFooter } from './navigation';
 import { READING_BOOKS_LIST_KEY, addToReadingList } from './readingHistory';
 import {
   getUserItem,
@@ -28,10 +29,8 @@ import {
   KEY_GIFTED_BOOKS,
 } from './userStorage';
 import { getUnreadNotificationCount } from './notificationService';
-import {
-  fetchBackendUploadedBooks,
-  mergeUploadedBooks,
-} from './uploadBookService';
+import { fetchBookshelfFromApi, RentedBookItem } from './rentalService';
+import { fetchFavoriteBooksFromApi } from './favoriteService';
 
 // ============================================================================
 // [GIẢI THÍCH CODE]: Các hằng số Storage Key
@@ -80,15 +79,22 @@ export interface BookshelfItem {
   beBookId?: string;
   isSyncedWithBE?: boolean;
   chapters?: any[];
+  remainingDays?: number;
+  isForever?: boolean;
+  expired?: boolean;
+  categoryName?: string;
 }
 
-// Bảng màu nền bìa đồng bộ hoàn toàn với uploadfile.tsx cho các sách tải lên
+// Các màu bìa tối giản phong cách ấn phẩm xuất bản khi sách chưa có ảnh bìa
 const getPlaceholderColors = (title: string) => {
-  if (title.includes('HalmBook1')) return { bg: '#e0f2fe', text: '#0284c7', border: '#bae6fd' };
-  if (title.includes('HalmBook2')) return { bg: '#fef3c7', text: '#d97706', border: '#fde68a' };
-  if (title.includes('HalmBook3')) return { bg: '#fce7f3', text: '#db2777', border: '#fbcfe8' };
-  if (title.includes('HalmBook4')) return { bg: '#dcfce7', text: '#15803d', border: '#bbf7d0' };
-  return { bg: '#ede9fe', text: '#7c3aed', border: '#ddd6fe' };
+  const hash = (title || '').split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+  const palettes = [
+    { bg: '#F4F5F7', text: '#1F2937', border: '#E5E7EB', spine: '#CBD5E1' },
+    { bg: '#EFF4F2', text: '#234E45', border: '#D5E3DF', spine: '#9AB8B1' },
+    { bg: '#F2F4F8', text: '#243447', border: '#DCE2EC', spine: '#9AA8BF' },
+    { bg: '#F6F4F0', text: '#3F3A32', border: '#E6E1D8', spine: '#C4BCB0' },
+  ];
+  return palettes[hash % palettes.length];
 };
 
 export default function TuSach() {
@@ -103,6 +109,7 @@ export default function TuSach() {
     isLoggedIn,
     showLoginAlert,
   } = useAppNavigation();
+  const { onScroll: handleFooterScroll, showFooter } = useAutoHideFooter();
 
   const foreground = isDarkMode ? '#F5F1E8' : '#11131A';
 
@@ -115,14 +122,22 @@ export default function TuSach() {
   // Mặc định là mảng rỗng, chỉ hiển thị sách thật của người dùng
   const [readingList, setReadingList] = useState<BookshelfItem[]>([]);
   const [rentedList, setRentedList] = useState<BookshelfItem[]>([]);
+  const [expiredRentedList, setExpiredRentedList] = useState<BookshelfItem[]>([]);
   const [favoritesList, setFavoritesList] = useState<BookshelfItem[]>([]);
   const [uploadedList, setUploadedList] = useState<BookshelfItem[]>([]);
   const [giftedList, setGiftedList] = useState<BookshelfItem[]>([]);
   const [unreadNotifCount, setUnreadNotifCount] = useState(0);
+  const [isLoadingRented, setIsLoadingRented] = useState(false);
+  const [rentedError, setRentedError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     getUnreadNotificationCount().then(setUnreadNotifCount).catch(() => {});
   }, [activeTab]);
+
+  useEffect(() => {
+    showFooter();
+  }, [activeTab, showFooter]);
 
   // ============================================================================
   // [GIẢI THÍCH CODE]: Nạp dữ liệu sách thực tế từ AsyncStorage theo tài khoản
@@ -201,53 +216,61 @@ export default function TuSach() {
         setGiftedList([]);
       }
 
-      // 5. Đồng bộ từ Backend: GET /api/home/bookshelf (đang thuê) & GET /api/home/favorites (yêu thích)
+      // 5. Đồng bộ từ Backend với fallback URL thông minh:
+      //    GET /api/home/bookshelf (đang thuê) & GET /api/home/favorites (yêu thích)
       if (token) {
+        setIsLoadingRented(true);
+        setRentedError(null);
         try {
-          const [bookshelfRes, favoritesRes] = await Promise.all([
-            axios.get(`${API_BASE_URL}/api/home/bookshelf`, {
-              headers: { Authorization: `Bearer ${token}` },
-              timeout: 4000,
-            }).catch(() => null),
-            axios.get(`${API_BASE_URL}/api/home/favorites`, {
-              headers: { Authorization: `Bearer ${token}` },
-              timeout: 4000,
-            }).catch(() => null),
+          const mapRentedDto = (item: RentedBookItem): BookshelfItem => ({
+            id: item.bookId,
+            title: item.title,
+            author: item.author,
+            chapter: item.expired
+              ? (lang === 'en' ? 'Expired' : 'Hết hạn thuê')
+              : item.isForever
+                ? (lang === 'en' ? 'Owned forever' : 'Sở hữu vĩnh viễn')
+                : (lang === 'en' ? `${Math.max(1, item.remainingDays)}d left` : `Còn ${Math.max(1, item.remainingDays)} ngày`),
+            img_url: item.img_url || '',
+            coverImage: item.coverImage || item.img_url || '',
+            remainingDays: item.remainingDays,
+            isForever: item.isForever,
+            expired: item.expired,
+            categoryName: item.categoryName,
+          });
+
+          const [bookshelfRes, syncedFavs] = await Promise.all([
+            fetchBookshelfFromApi(),
+            fetchFavoriteBooksFromApi().catch(() => null),
           ]);
 
-          if (bookshelfRes && Array.isArray(bookshelfRes.data)) {
-            const mappedRented: BookshelfItem[] = bookshelfRes.data
-              .filter((item: any) => item.status === 'ACTIVE' || item.isForever || (item.remainingDays && item.remainingDays > 0))
-              .map((item: any) => ({
-                id: String(item.bookId),
-                title: item.bookName || item.title || 'Sách HALM BOOK',
-                author: item.author || 'Tác giả',
-                chapter: item.isForever || item.remainingDays > 1000 ? 'Sở hữu vĩnh viễn' : `Còn ${item.remainingDays} ngày`,
-                img_url: item.imgUrl || '',
-                coverImage: item.imgUrl || '',
-              }));
-            setRentedList(mappedRented);
-          } else {
-            setRentedList([]);
+          setRentedList(bookshelfRes.books.map(mapRentedDto));
+          setExpiredRentedList(bookshelfRes.expiredBooks.map(mapRentedDto));
+          if (bookshelfRes.networkError && bookshelfRes.errorMessage) {
+            setRentedError(bookshelfRes.errorMessage);
           }
 
-          if (favoritesRes && Array.isArray(favoritesRes.data)) {
-            const mappedFavs: BookshelfItem[] = favoritesRes.data.map((item: any) => ({
+          if (Array.isArray(syncedFavs) && syncedFavs.length > 0) {
+            currentFavs = syncedFavs.map((item) => ({
               id: String(item.bookId || item.id),
-              title: item.title || item.bookName || 'Sách yêu thích',
+              title: item.title || 'Sách yêu thích',
               author: item.author || 'Tác giả',
               chapter: item.categoryName || 'Yêu thích',
-              img_url: item.imgUrl || item.img || '',
-              coverImage: item.imgUrl || item.img || '',
+              img_url: item.img_url || '',
+              coverImage: item.coverImage || item.img_url || '',
             }));
-            currentFavs = mappedFavs;
-            await setUserItem(KEY_FAVORITES_BOOKS, JSON.stringify(mappedFavs));
           }
         } catch {
           setRentedList([]);
+          setExpiredRentedList([]);
+        } finally {
+          setIsLoadingRented(false);
         }
       } else {
         setRentedList([]);
+        setExpiredRentedList([]);
+        setRentedError(null);
+        setIsLoadingRented(false);
       }
 
       setFavoritesList(currentFavs);
@@ -257,9 +280,17 @@ export default function TuSach() {
       setUploadedList([]);
       setFavoritesList([]);
       setRentedList([]);
+      setExpiredRentedList([]);
       setGiftedList([]);
+      setIsLoadingRented(false);
     }
-  }, []);
+  }, [lang]);
+
+  const handleRefreshBookshelf = useCallback(async () => {
+    setRefreshing(true);
+    await loadBookshelfData();
+    setRefreshing(false);
+  }, [loadBookshelfData]);
 
   useEffect(() => {
     loadBookshelfData();
@@ -406,7 +437,8 @@ export default function TuSach() {
         id: item.id,
         title: item.title,
         author: item.author,
-        chapter: item.chapter,
+        chapter: activeTab === 'dangthue' ? undefined : item.chapter,
+        category_name: item.categoryName,
         img_url: item.img_url,
         coverImage: rawCover,
         coverUri: rawCover,
@@ -437,8 +469,7 @@ export default function TuSach() {
       <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'} />
 
       {/* ==================================================================== */}
-      {/* HEADER TRÊN CÙNG: Giữ phong cách icon đẹp, thanh lịch gốc            */}
-      {/* Bao gồm: Chuông thông báo, Cây bút (khi ở đang đọc), Tìm kiếm, Avatar */}
+      {/* HEADER TRÊN CÙNG: Tối giản, thanh lịch chuẩn app đọc sách            */}
       {/* ==================================================================== */}
       <View style={themeStyles.headerBar}>
         {!isEditing ? (
@@ -450,14 +481,14 @@ export default function TuSach() {
             </View>
 
             <View style={themeStyles.headerActions}>
-              {/* Icon thông báo kèm chấm đỏ (khôi phục đúng icon cũ chuẩn đẹp) */}
+              {/* Icon thông báo kèm chấm đỏ */}
               <TouchableOpacity
                 style={themeStyles.actionButton}
                 onPress={() => navigate('notifications')}
                 accessibilityRole="button"
                 accessibilityLabel={lang === 'en' ? 'Notifications' : 'Thông báo'}
               >
-                <MaterialCommunityIcons name="bell-outline" size={23} color={foreground} />
+                <MaterialCommunityIcons name="bell-outline" size={20} color={foreground} />
                 {unreadNotifCount > 0 && <View style={themeStyles.notice} />}
               </TouchableOpacity>
 
@@ -473,7 +504,7 @@ export default function TuSach() {
                   accessibilityRole="button"
                   accessibilityLabel="Chỉnh sửa"
                 >
-                  <Ionicons name="create-outline" size={22} color={foreground} />
+                  <Ionicons name="create-outline" size={20} color={foreground} />
                 </TouchableOpacity>
               )}
 
@@ -484,7 +515,7 @@ export default function TuSach() {
                 accessibilityRole="button"
                 accessibilityLabel={lang === 'en' ? 'Search' : 'Tìm kiếm'}
               >
-                <Ionicons name="search-outline" size={23} color={foreground} />
+                <Ionicons name="search-outline" size={20} color={foreground} />
               </TouchableOpacity>
 
               {/* Icon Avatar tài khoản */}
@@ -525,7 +556,7 @@ export default function TuSach() {
               <Ionicons
                 name={isAllSelected ? 'checkmark-circle' : 'ellipse-outline'}
                 size={22}
-                color={isAllSelected ? '#2c3a7a' : '#64748b'}
+                color={isAllSelected ? '#2F6B5F' : '#6B7280'}
                 style={{ marginRight: 8 }}
               />
               <Text style={[themeStyles.selectAllText, { color: foreground }]}>
@@ -548,8 +579,8 @@ export default function TuSach() {
               >
                 <MaterialCommunityIcons
                   name="trash-can-outline"
-                  size={18}
-                  color={selectedIds.length === 0 ? '#94a3b8' : '#e11d48'}
+                  size={17}
+                  color={selectedIds.length === 0 ? '#9CA3AF' : '#e11d48'}
                   style={{ marginRight: 4 }}
                 />
                 <Text
@@ -571,7 +602,7 @@ export default function TuSach() {
                 }}
                 activeOpacity={0.8}
               >
-                <Ionicons name="close" size={24} color={foreground} />
+                <Ionicons name="close" size={20} color={foreground} />
               </TouchableOpacity>
             </View>
           </>
@@ -579,8 +610,7 @@ export default function TuSach() {
       </View>
 
       {/* ==================================================================== */}
-      {/* THANH TAB NẰM NGANG VÀ LƯỚT QUA (Horizontal ScrollView)              */}
-      {/* Không hiển thị số, viền bo tròn đổ bóng đầy đủ không bị cắt mép      */}
+      {/* THANH TAB NẰM NGANG (Horizontal ScrollView)                          */}
       {/* ==================================================================== */}
       <View style={themeStyles.tabScrollWrapper}>
         <ScrollView
@@ -590,6 +620,7 @@ export default function TuSach() {
         >
           {TABS.map((tab) => {
             const isActive = activeTab === tab.id;
+            const iconName = (isActive ? tab.icon : `${tab.icon}-outline`) as keyof typeof Ionicons.glyphMap;
             return (
               <TouchableOpacity
                 key={tab.id}
@@ -601,10 +632,10 @@ export default function TuSach() {
                 activeOpacity={0.8}
               >
                 <Ionicons
-                  name={tab.icon}
-                  size={16}
-                  color={isActive ? '#1a1a1a' : '#64748b'}
-                  style={{ marginRight: 6 }}
+                  name={iconName}
+                  size={14}
+                  color={isActive ? '#FFFFFF' : (isDarkMode ? '#9CA3AF' : '#6B7280')}
+                  style={{ marginRight: 5 }}
                 />
                 <Text
                   style={[
@@ -627,24 +658,62 @@ export default function TuSach() {
         style={themeStyles.scrollContainer}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={themeStyles.scrollContent}
+        onScroll={handleFooterScroll}
+        scrollEventThrottle={16}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefreshBookshelf}
+            tintColor={isDarkMode ? '#34D399' : '#2F6B5F'}
+          />
+        }
       >
-        {currentBooks.length === 0 ? (
+        {activeTab === 'dangthue' && rentedError ? (
+          <View style={themeStyles.rentedRetryBanner}>
+            <Ionicons
+              name="alert-circle-outline"
+              size={18}
+              color={isDarkMode ? '#FBBF24' : '#B45309'}
+            />
+            <Text style={themeStyles.rentedRetryText} numberOfLines={2}>
+              {rentedError}
+            </Text>
+            <TouchableOpacity
+              style={themeStyles.rentedRetryBtn}
+              onPress={handleRefreshBookshelf}
+              activeOpacity={0.8}
+            >
+              <Text style={themeStyles.rentedRetryBtnText}>
+                {lang === 'en' ? 'Retry' : 'Thử lại'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+
+        {activeTab === 'dangthue' && isLoadingRented && currentBooks.length === 0 ? (
+          <View style={themeStyles.emptyContainer}>
+            <ActivityIndicator size="large" color={isDarkMode ? '#34D399' : '#2F6B5F'} />
+            <Text style={[themeStyles.emptyDesc, { marginTop: 12 }]}>
+              {lang === 'en' ? 'Loading rented books...' : 'Đang tải danh sách sách đang thuê...'}
+            </Text>
+          </View>
+        ) : currentBooks.length === 0 && (activeTab !== 'dangthue' || expiredRentedList.length === 0) ? (
           <View style={themeStyles.emptyContainer}>
             <View style={themeStyles.emptyIconCircle}>
               <Ionicons
                 name={
                   activeTab === 'dangdoc'
-                    ? 'book'
+                    ? 'book-outline'
                     : activeTab === 'dangthue'
-                      ? 'time'
+                      ? 'time-outline'
                       : activeTab === 'yeuthich'
-                        ? 'heart'
+                        ? 'heart-outline'
                         : activeTab === 'tailen'
-                          ? 'cloud-upload'
-                          : 'gift'
+                          ? 'cloud-upload-outline'
+                          : 'gift-outline'
                 }
-                size={36}
-                color="#1a1a1a"
+                size={32}
+                color={isDarkMode ? '#34D399' : '#2F6B5F'}
               />
             </View>
             <Text style={themeStyles.emptyTitle}>
@@ -660,8 +729,8 @@ export default function TuSach() {
               <Ionicons
                 name={activeTab === 'tailen' ? 'cloud-upload-outline' : 'compass-outline'}
                 size={16}
-                color="#1a1a1a"
-                style={{ marginRight: 6 }}
+                color="#FFFFFF"
+                style={{ marginRight: 7 }}
               />
               <Text style={themeStyles.emptyBtnText}>
                 {activeTab === 'tailen'
@@ -674,13 +743,21 @@ export default function TuSach() {
           <View style={themeStyles.gridContainer}>
             {currentBooks.map((item) => {
               const rawCover = item.coverUri || item.coverImage || item.img_url;
-              const coverSource = rawCover
+              const isDirectUri =
+                typeof rawCover === 'string' &&
+                /^(?:http:\/\/|https:\/\/|file:\/\/|data:)/i.test(rawCover);
+              const coverSource = isDirectUri
                 ? { uri: rawCover }
-                : getBookCoverSource(item.id, item.img_url);
+                : getBookCoverSource(item.id, rawCover || undefined);
 
               const placeholderStyle = getPlaceholderColors(item.title);
               const isSelected = selectedIds.includes(item.id);
               const isCloud = item.isSyncedWithBE || !!item.beBookId;
+              const isExpiringSoon =
+                activeTab === 'dangthue' &&
+                !item.isForever &&
+                typeof item.remainingDays === 'number' &&
+                item.remainingDays <= 2;
 
               return (
                 <TouchableOpacity
@@ -691,7 +768,7 @@ export default function TuSach() {
                 >
                   {/* Bìa sách */}
                   <View style={themeStyles.bookCover}>
-                    {/* Bìa mặc định tao nhã đồng bộ hoàn toàn với uploadfile.tsx */}
+                    {/* Bìa tối giản tinh tế khi chưa có ảnh bìa */}
                     <View
                       style={[
                         themeStyles.fallbackCover,
@@ -701,10 +778,21 @@ export default function TuSach() {
                         },
                       ]}
                     >
-                      <Text style={{ fontSize: 24 }}>📖</Text>
+                      <View
+                        style={[
+                          themeStyles.fallbackSpine,
+                          { backgroundColor: placeholderStyle.spine },
+                        ]}
+                      />
+                      <Ionicons
+                        name="book-outline"
+                        size={20}
+                        color={placeholderStyle.text}
+                        style={{ opacity: 0.72 }}
+                      />
                       <Text
                         style={[themeStyles.fallbackCoverText, { color: placeholderStyle.text }]}
-                        numberOfLines={2}
+                        numberOfLines={3}
                       >
                         {item.title}
                       </Text>
@@ -719,10 +807,37 @@ export default function TuSach() {
                       />
                     ) : null}
 
+                    {/* Huy hiệu thời hạn thuê trên tab Đang thuê */}
+                    {activeTab === 'dangthue' && (
+                      <View
+                        style={[
+                          themeStyles.rentalBadge,
+                          item.isForever
+                            ? themeStyles.rentalBadgeForever
+                            : isExpiringSoon
+                              ? themeStyles.rentalBadgeWarning
+                              : themeStyles.rentalBadgeActive,
+                        ]}
+                      >
+                        <Ionicons
+                          name={item.isForever ? 'infinite' : 'time-outline'}
+                          size={10}
+                          color="#ffffff"
+                        />
+                        <Text style={themeStyles.rentalBadgeText} numberOfLines={1}>
+                          {item.isForever
+                            ? (lang === 'en' ? 'Forever' : 'Vĩnh viễn')
+                            : (lang === 'en'
+                                ? `${Math.max(1, item.remainingDays || 1)}d`
+                                : `${Math.max(1, item.remainingDays || 1)} ngày`)}
+                        </Text>
+                      </View>
+                    )}
+
                     {/* Huy hiệu Đã đồng bộ Cloud khi ở tab Tải lên */}
                     {activeTab === 'tailen' && isCloud && (
                       <View style={themeStyles.cloudSyncBadge}>
-                        <Ionicons name="cloud-done" size={10} color="#ffffff" />
+                        <Ionicons name="cloud-done-outline" size={10} color="#ffffff" />
                         <Text style={themeStyles.cloudSyncBadgeText}>Cloud</Text>
                       </View>
                     )}
@@ -732,54 +847,146 @@ export default function TuSach() {
                       <View style={themeStyles.bookCheckBadge}>
                         <Ionicons
                           name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
-                          size={24}
-                          color={isSelected ? '#27ae60' : '#ffffff'}
+                          size={22}
+                          color={isSelected ? '#2F6B5F' : '#ffffff'}
                           style={themeStyles.checkIconShadow}
                         />
                       </View>
                     )}
                   </View>
 
-                  {/* Dưới là tên sách */}
+                  {/* Dưới là tên sách & thông tin phụ thanh lịch */}
                   <Text style={themeStyles.bookTitle} numberOfLines={2}>
                     {item.title}
                   </Text>
+                  {activeTab === 'dangthue' && item.chapter ? (
+                    <Text
+                      style={[
+                        themeStyles.rentalDurationSub,
+                        isExpiringSoon && themeStyles.rentalDurationSubWarn,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {item.chapter}
+                    </Text>
+                  ) : item.author ? (
+                    <Text style={themeStyles.bookAuthor} numberOfLines={1}>
+                      {item.author}
+                    </Text>
+                  ) : null}
                 </TouchableOpacity>
               );
             })}
           </View>
         )}
 
-        <View style={{ height: 40 }} />
+        {activeTab === 'dangthue' && expiredRentedList.length > 0 && (
+          <View style={themeStyles.expiredSection}>
+            <Text style={themeStyles.expiredSectionTitle}>
+              {lang === 'en'
+                ? `Expired Rentals (${expiredRentedList.length})`
+                : `Sách đã hết hạn thuê (${expiredRentedList.length})`}
+            </Text>
+            <View style={themeStyles.gridContainer}>
+              {expiredRentedList.map((item) => {
+                const rawCover = item.coverUri || item.coverImage || item.img_url;
+                const isDirectUri =
+                  typeof rawCover === 'string' &&
+                  /^(?:http:\/\/|https:\/\/|file:\/\/|data:)/i.test(rawCover);
+                const coverSource = isDirectUri
+                  ? { uri: rawCover }
+                  : getBookCoverSource(item.id, rawCover || undefined);
+                const placeholderStyle = getPlaceholderColors(item.title);
+                return (
+                  <TouchableOpacity
+                    key={`exp-${item.id}`}
+                    style={[themeStyles.bookCard, { opacity: 0.72 }]}
+                    activeOpacity={0.85}
+                    onPress={() => handleBookPress(item)}
+                  >
+                    <View style={themeStyles.bookCover}>
+                      <View
+                        style={[
+                          themeStyles.fallbackCover,
+                          {
+                            backgroundColor: placeholderStyle.bg,
+                            borderColor: placeholderStyle.border,
+                          },
+                        ]}
+                      >
+                        <View
+                          style={[
+                            themeStyles.fallbackSpine,
+                            { backgroundColor: placeholderStyle.spine },
+                          ]}
+                        />
+                        <Ionicons
+                          name="book-outline"
+                          size={20}
+                          color={placeholderStyle.text}
+                          style={{ opacity: 0.72 }}
+                        />
+                        <Text
+                          style={[themeStyles.fallbackCoverText, { color: placeholderStyle.text }]}
+                          numberOfLines={3}
+                        >
+                          {item.title}
+                        </Text>
+                      </View>
+                      {coverSource ? (
+                        <Image
+                          source={coverSource}
+                          style={StyleSheet.absoluteFill}
+                          resizeMode="cover"
+                        />
+                      ) : null}
+                      <View style={[themeStyles.rentalBadge, themeStyles.rentalBadgeExpired]}>
+                        <Text style={themeStyles.rentalBadgeText}>
+                          {lang === 'en' ? 'Expired' : 'Hết hạn'}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={themeStyles.bookTitle} numberOfLines={2}>
+                      {item.title}
+                    </Text>
+                    <Text style={themeStyles.rentalDurationSubWarn} numberOfLines={1}>
+                      {lang === 'en' ? 'Tap to renew' : 'Chạm để gia hạn'}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+        <View style={{ height: 100 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#fcf3e8' },
+  safeArea: { flex: 1, backgroundColor: '#FFFFFF' },
 
   // ============================================================================
-  // HEADER TRÊN CÙNG (Thanh lịch & tinh tế giống header gốc)
+  // HEADER TRÊN CÙNG (Tối giản, thanh lịch chuẩn app đọc sách)
   // ============================================================================
   headerBar: {
-    height: 48,
+    height: 56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    backgroundColor: 'transparent',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(120, 120, 130, 0.16)',
+    backgroundColor: '#FFFFFF',
   },
   headerTitleBox: {
     flex: 1,
     justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: '900',
-    letterSpacing: -0.3,
+    fontSize: 24,
+    fontWeight: '700',
+    letterSpacing: -0.4,
   },
   headerActions: {
     flexDirection: 'row',
@@ -789,25 +996,29 @@ const styles = StyleSheet.create({
   actionButton: {
     width: 36,
     height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F4F5F7',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
     alignItems: 'center',
     justifyContent: 'center',
   },
   notice: {
     position: 'absolute',
-    right: 5,
-    top: 4,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#FF4E55',
+    right: 7,
+    top: 7,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#E11D48',
   },
   avatar: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    borderWidth: 2,
-    borderColor: '#9147DF',
-    backgroundColor: '#F2E8FF',
+    borderWidth: 1.5,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F4F5F7',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -821,14 +1032,14 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#2c3a7a',
+    backgroundColor: '#2F6B5F',
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '900',
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
   },
 
   // Header khi ở Chế độ Chỉnh sửa (Edit Mode)
@@ -839,12 +1050,12 @@ const styles = StyleSheet.create({
   },
   selectAllText: {
     fontSize: 15,
-    fontWeight: '900',
+    fontWeight: '700',
   },
   editActionsRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
   },
   bookCheckBadge: {
     position: 'absolute',
@@ -857,97 +1068,171 @@ const styles = StyleSheet.create({
     top: 6,
     left: 6,
     zIndex: 9,
-    backgroundColor: 'rgba(37, 99, 235, 0.92)',
+    backgroundColor: 'rgba(15, 23, 42, 0.78)',
     paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
+    paddingVertical: 2.5,
+    borderRadius: 6,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.25,
-    shadowRadius: 2,
-    elevation: 3,
   },
   cloudSyncBadgeText: {
-    color: '#ffffff',
+    color: '#FFFFFF',
     fontSize: 9,
-    fontWeight: '800',
+    fontWeight: '600',
+  },
+  rentalBadge: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    zIndex: 9,
+    paddingHorizontal: 6,
+    paddingVertical: 2.5,
+    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  rentalBadgeActive: {
+    backgroundColor: 'rgba(15, 118, 110, 0.88)',
+  },
+  rentalBadgeForever: {
+    backgroundColor: 'rgba(30, 41, 59, 0.88)',
+  },
+  rentalBadgeWarning: {
+    backgroundColor: 'rgba(190, 18, 60, 0.90)',
+  },
+  rentalBadgeExpired: {
+    backgroundColor: 'rgba(71, 85, 105, 0.88)',
+  },
+  rentalBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9.5,
+    fontWeight: '600',
+  },
+  rentalDurationSub: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#0F766E',
+    textAlign: 'left',
+    marginTop: 2,
+  },
+  rentalDurationSubWarn: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#DC2626',
+    textAlign: 'left',
+    marginTop: 2,
+  },
+  rentedRetryBanner: {
+    marginHorizontal: HORIZONTAL_PADDING,
+    marginBottom: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  rentedRetryText: {
+    flex: 1,
+    fontSize: 12.5,
+    fontWeight: '500',
+    color: '#374151',
+  },
+  rentedRetryBtn: {
+    backgroundColor: '#2F6B5F',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  rentedRetryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11.5,
+    fontWeight: '600',
+  },
+  expiredSection: {
+    marginTop: 14,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+  },
+  expiredSectionTitle: {
+    paddingHorizontal: HORIZONTAL_PADDING,
+    marginBottom: 12,
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#6B7280',
   },
   checkIconShadow: {
-    textShadowColor: 'rgba(0, 0, 0, 0.65)',
+    textShadowColor: 'rgba(0, 0, 0, 0.55)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
   deleteBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffe4e6',
-    borderWidth: 1.5,
-    borderColor: '#e11d48',
-    borderRadius: 8,
-    paddingVertical: 5,
+    backgroundColor: '#FFF1F2',
+    borderWidth: 1,
+    borderColor: '#FECDD3',
+    borderRadius: 10,
+    paddingVertical: 6,
     paddingHorizontal: 10,
-    marginRight: 6,
+    marginRight: 4,
   },
   deleteBtnDisabled: {
-    backgroundColor: '#f1f5f9',
-    borderColor: '#cbd5e1',
+    backgroundColor: '#F4F5F7',
+    borderColor: '#E5E7EB',
   },
   deleteBtnText: {
     fontSize: 13,
-    fontWeight: '900',
-    color: '#e11d48',
+    fontWeight: '600',
+    color: '#E11D48',
   },
   deleteBtnTextDisabled: {
-    color: '#94a3b8',
+    color: '#9CA3AF',
   },
 
   // ============================================================================
-  // THANH TAB CUỘN NGANG
+  // THANH TAB CUỘN NGANG (Tinh gọn chuẩn app đọc sách)
   // ============================================================================
   tabScrollWrapper: {
-    backgroundColor: 'transparent',
-    paddingTop: 8,
-    paddingBottom: 2,
+    backgroundColor: '#FFFFFF',
+    paddingTop: 6,
+    paddingBottom: 8,
   },
   horizontalTabScroll: {
     paddingHorizontal: HORIZONTAL_PADDING,
-    paddingTop: 4,
-    paddingBottom: 12,
     flexDirection: 'row',
     alignItems: 'center',
   },
   tabPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 9,
-    paddingHorizontal: 15,
-    backgroundColor: '#fff',
-    borderRadius: 22,
-    borderWidth: 2,
-    borderColor: '#1a1a1a',
-    marginRight: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 2.5, height: 2.5 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 3,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    backgroundColor: '#F4F5F7',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginRight: 8,
   },
   tabPillActive: {
-    backgroundColor: '#ffde59',
-    borderColor: '#1a1a1a',
-    shadowOffset: { width: 3, height: 3 },
+    backgroundColor: '#2F6B5F',
+    borderColor: '#2F6B5F',
   },
   tabPillText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#334155',
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#374151',
   },
   tabPillTextActive: {
-    fontWeight: '900',
-    color: '#1a1a1a',
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
 
   // ============================================================================
@@ -955,8 +1240,8 @@ const styles = StyleSheet.create({
   // ============================================================================
   scrollContainer: { flex: 1 },
   scrollContent: {
-    paddingTop: 6,
-    paddingBottom: 20,
+    paddingTop: 16,
+    paddingBottom: 24,
   },
   gridContainer: {
     flexDirection: 'row',
@@ -966,99 +1251,111 @@ const styles = StyleSheet.create({
   },
   bookCard: {
     width: ITEM_WIDTH,
-    marginBottom: 16,
+    marginBottom: 18,
   },
   bookCover: {
     width: ITEM_WIDTH,
     height: COVER_HEIGHT,
     borderRadius: 8,
-    backgroundColor: '#e2e8f0',
+    backgroundColor: '#F4F5F7',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 5,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
   },
   fallbackCover: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 8,
+    padding: 10,
+  },
+  fallbackSpine: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    opacity: 0.85,
   },
   fallbackCoverText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#1a1a1a',
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#1F2937',
     textAlign: 'center',
-    marginTop: 4,
+    marginTop: 6,
+    lineHeight: 14,
   },
   bookTitle: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#1a1a1a',
-    marginTop: 6,
-    textAlign: 'center',
-    lineHeight: 16,
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#111827',
+    marginTop: 7,
+    textAlign: 'left',
+    lineHeight: 17,
+  },
+  bookAuthor: {
+    fontSize: 11,
+    fontWeight: '400',
+    color: '#6B7280',
+    marginTop: 2,
+    textAlign: 'left',
   },
 
   // ============================================================================
   // TRẠNG THÁI TRỐNG (CHƯA CÓ SÁCH NÀO)
   // ============================================================================
   emptyContainer: {
-    paddingVertical: 60,
-    paddingHorizontal: 30,
+    paddingVertical: 72,
+    paddingHorizontal: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
   emptyIconCircle: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    backgroundColor: '#ffde59',
-    borderWidth: 2,
-    borderColor: '#1a1a1a',
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#F4F5F7',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 3, height: 3 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
-    elevation: 4,
     marginBottom: 16,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#1a1a1a',
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#111827',
     textAlign: 'center',
   },
   emptyDesc: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#64748b',
+    fontSize: 13.5,
+    fontWeight: '400',
+    color: '#6B7280',
     textAlign: 'center',
     marginTop: 6,
-    lineHeight: 18,
+    lineHeight: 20,
   },
   emptyBtn: {
-    marginTop: 20,
+    marginTop: 22,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffde59',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#1a1a1a',
+    backgroundColor: '#2F6B5F',
+    paddingVertical: 11,
+    paddingHorizontal: 22,
+    borderRadius: 24,
     shadowColor: '#000',
-    shadowOffset: { width: 2.5, height: 2.5 },
-    shadowOpacity: 1,
-    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    elevation: 2,
   },
   emptyBtnText: {
-    fontSize: 13,
-    fontWeight: '900',
-    color: '#1a1a1a',
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 });
