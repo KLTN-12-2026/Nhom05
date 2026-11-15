@@ -641,7 +641,7 @@ export default function App() {
                 {screen}
               </Animated.View>
             </BlurTargetView>
-            {!['auth', 'reader', 'chatbot', 'notifications'].includes(currentRoute.name) && (
+            {!['auth', 'reader', 'chatbot', 'notifications', 'payment'].includes(currentRoute.name) && (
               <Footer
                 activeNav={activeNav}
                 floating={['home', 'bookDetail', 'offers', 'upload', 'bookshelf', 'profile'].includes(currentRoute.name)}

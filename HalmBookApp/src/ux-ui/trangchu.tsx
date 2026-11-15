@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import Constants from 'expo-constants';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -11,16 +12,14 @@ import {
   Platform,
   RefreshControl,
   ScrollView,
-  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   UIManager,
-  View,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { BookData, useAppNavigation } from './navigation';
 import { getBookCoverSource } from './bookCovers';
 import { getBookChapterLabel } from './bookContentService';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
@@ -113,21 +112,21 @@ const Nebula = () => {
       ])
     ).start();
   }, []);
-  
+
   return (
     <>
       {/* Góc trên trái (Ánh tím) */}
       <Animated.View style={{
         position: 'absolute', top: -100, left: -100, width: 350, height: 350, borderRadius: 175,
-        backgroundColor: BRAND.primary, 
-        opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.03, 0.12] }), 
+        backgroundColor: BRAND.primary,
+        opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.03, 0.12] }),
         transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1.2] }) }]
       }} />
       {/* Góc dưới phải (Ánh vàng) */}
       <Animated.View style={{
         position: 'absolute', bottom: -100, right: -100, width: 400, height: 400, borderRadius: 200,
-        backgroundColor: BRAND.secondary, 
-        opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.05] }), 
+        backgroundColor: BRAND.secondary,
+        opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.05] }),
         transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [1.2, 0.8] }) }]
       }} />
     </>
@@ -167,7 +166,7 @@ const ShootingStar = ({ delay, top, left }: any) => {
 // Ngôi sao lấp lánh (Tốc độ và độ trễ ngẫu nhiên)
 const Star = ({ delay, duration, top, left, size, color }: any) => {
   const anim = useRef(new Animated.Value(0)).current;
-  
+
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
@@ -204,7 +203,7 @@ const DarkModeBackgroundEffects = ({ visible }: { visible: boolean }) => {
   const { stars, shootingStars } = useMemo(() => {
     const starsList = Array.from({ length: 120 }).map((_, i) => ({
       id: i,
-      top: `${Math.random() * 100}%`, 
+      top: `${Math.random() * 100}%`,
       left: `${Math.random() * 100}%`,
       duration: Math.random() * 500 + 300, // Nhấp nháy loạn và nhanh hơn (300ms - 800ms)
       size: Math.random() * 3 + 1,
@@ -337,7 +336,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
       try {
         const response = await axios.get(`${baseUrl}/api/home/books`, {
           params: { page: 0, size: 50 },
-          timeout:9000,
+          timeout: 9000,
           signal,
         });
         fetchedData = response.data;
@@ -383,9 +382,9 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
     touches?: ArrayLike<{ pageY: number }>;
     changedTouches?: ArrayLike<{ pageY: number }>;
   }) => nativeEvent.touches?.[0]?.pageY
-    ?? nativeEvent.changedTouches?.[0]?.pageY
+  ?? nativeEvent.changedTouches?.[0]?.pageY
     ?? nativeEvent.pageY;
-  
+
   const bgAnim = useRef(new Animated.Value(isDarkMode ? 1 : 0)).current;
 
   useEffect(() => {
@@ -398,7 +397,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
 
   const animatedBg = bgAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['#ffffff', BRAND.black] 
+    outputRange: ['#ffffff', BRAND.black]
   });
 
   const styles = getStyles(isDarkMode);
@@ -650,39 +649,42 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
               {unreadNotifications > 0 && <View style={{ position: 'absolute', top: 3, right: 2, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 3, backgroundColor: '#D5AC56', alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 9, fontWeight: '800', color: '#382F23' }}>{unreadNotifications > 99 ? '99+' : unreadNotifications}</Text></View>}
             </TouchableOpacity>
           </View>
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false} 
-            contentContainerStyle={styles.carouselContainer}
-            snapToInterval={315} 
-            decelerationRate="fast"
-          >
-            {(books.length > 0 ? books.slice(0, 5) : CAROUSEL).map((banner: any, index: number) => (
-              <TouchableOpacity key={banner.id} style={styles.bannerCard} activeOpacity={0.9} onPress={() => setSelectedPreviewBook(banner)}>
-                <View style={styles.bannerImagePlaceholder}>
-                  {(() => {
-                    const bSource = getBookCoverSource(banner.id, banner.img_url);
-                    return bSource ? (
-                      <Image source={bSource} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                    ) : (
-                      <Text style={styles.bannerImageText}>Banner {index + 1}</Text>
-                    );
-                  })()}
+
+          <View style={styles.toolbar}>
+            {toolbarData.map((item, idx) => (
+              <TouchableOpacity
+                key={idx}
+                style={styles.toolbarItem}
+                activeOpacity={0.8}
+                onPress={() => {
+                  // ============================================================================
+                  // [GIẢI THÍCH CODE]: Chặn khách vãng lai khi nhấn vào 'Đã Lưu' (tủ sách) ở toolbar
+                  // Hiển thị thông báo yêu cầu đăng nhập kèm dòng 'Đăng nhập ngay'
+                  // ============================================================================
+                  if (item.screen === 'bookshelf' && !isLoggedIn) {
+                    showLoginAlert(lang === 'en' ? 'Please log in to use bookshelf feature' : 'Bạn phải đăng nhập để dùng chức năng tủ sách');
+                    return;
+                  }
+                  navigate(item.screen as any);
+                }}
+              >
+                <View style={[
+                  styles.toolbarIconBox,
+                  {
+                    backgroundColor: isDarkMode ? item.bgDark : item.bgLight,
+                    borderColor: isDarkMode ? item.borderDark : item.borderLight,
+                  }
+                ]}>
+                  <Ionicons
+                    name={item.icon as any}
+                    size={22}
+                    color={isDarkMode ? item.iconDark : item.iconLight}
+                  />
                 </View>
-                <View style={styles.bannerOverlay}>
-                  <Text style={styles.bannerTitle} numberOfLines={1}>{banner.title}</Text>
-                </View>
+                <Text style={styles.toolbarLabel} numberOfLines={1}>{item.label}</Text>
               </TouchableOpacity>
             ))}
-          </ScrollView>
-          
-          <View style={styles.paginationDots}>
-            <View style={[styles.dot, styles.dotActive]} />
-            <View style={styles.dot} />
-            <View style={styles.dot} />
-            <View style={styles.dot} />
           </View>
-        </View>
 
         <View style={styles.toolbar}>
           {toolbarData.map((item, idx) => (
@@ -798,9 +800,29 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
                 </View>
                 {books.slice(0, 5).reverse().map((novel, index) => renderRankItem(novel, index))}
               </View>
-            </ScrollView>
-          )}
-        </View>
+            ) : books.length === 0 ? (
+              <View style={styles.statusBox}>
+                <Text style={styles.statusEmptyText}>{lang === 'en' ? 'No ranking data available' : 'Chưa có dữ liệu bảng xếp hạng'}</Text>
+              </View>
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList} snapToInterval={315} decelerationRate="fast">
+                <View style={styles.rankPage}>
+                  <View style={styles.rankPageHeader}>
+                    <Text style={styles.rankPageTitle}>{lang === 'en' ? '🏆 Weekly Top' : '🏆 Top Tuần'}</Text>
+                    <Text style={styles.rankPageMore}>{lang === 'en' ? 'See more ›' : 'Xem thêm ›'}</Text>
+                  </View>
+                  {books.slice(0, 5).map((novel, index) => renderRankItem(novel, index))}
+                </View>
+                <View style={styles.rankPage}>
+                  <View style={styles.rankPageHeader}>
+                    <Text style={styles.rankPageTitle}>{lang === 'en' ? '🔥 Monthly Top' : '🔥 Top Tháng'}</Text>
+                    <Text style={styles.rankPageMore}>{lang === 'en' ? 'See more ›' : 'Xem thêm ›'}</Text>
+                  </View>
+                  {books.slice(0, 5).reverse().map((novel, index) => renderRankItem(novel, index))}
+                </View>
+              </ScrollView>
+            )}
+          </View>
 
         {/* DANH MỤC THỂ LOẠI: TÁCH RIÊNG TỪNG HÀNG SÁCH LƯỚT NGANG KÈM Ô MỞ RỘNG (GIỐNG WEB) */}
         <View style={styles.sectionHeaderContainer}>
@@ -808,35 +830,34 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
             <Ionicons name="library" size={16} color={isDarkMode ? '#A5B4FC' : '#6366F1'} style={{marginRight: 6}} />
             <Text style={[styles.sectionTitleText, { color: isDarkMode ? '#A5B4FC' : '#4338CA' }]}>Danh Mục Thể Loại</Text>
           </View>
-        </View>
 
-        {shelfCategories.map((shelf) => {
-          if (!shelf.books || shelf.books.length === 0) return null;
-          return (
-            <View key={shelf.id} style={styles.shelfSection}>
-              <View style={styles.shelfHeader}>
-                <View style={styles.shelfTitleWrapper}>
-                  <View style={[styles.shelfIconBadge, { backgroundColor: isDarkMode ? '#222834' : '#F4F1EA' }]}>
-                    <Ionicons name={shelf.icon as any} size={15} color={isDarkMode ? '#D8B36A' : '#8B4A3C'} />
+          {shelfCategories.map((shelf) => {
+            if (!shelf.books || shelf.books.length === 0) return null;
+            return (
+              <View key={shelf.id} style={styles.shelfSection}>
+                <View style={styles.shelfHeader}>
+                  <View style={styles.shelfTitleWrapper}>
+                    <View style={[styles.shelfIconBadge, { backgroundColor: isDarkMode ? '#222834' : '#F4F1EA' }]}>
+                      <Ionicons name={shelf.icon as any} size={15} color={isDarkMode ? '#D8B36A' : '#8B4A3C'} />
+                    </View>
+                    <Text style={styles.shelfTitleText}>{shelf.name}</Text>
                   </View>
-                  <Text style={styles.shelfTitleText}>{shelf.name}</Text>
                 </View>
-              </View>
 
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList}>
-                {shelf.books.slice(0, 8).map(n => renderNovelCard(n, 115, true))}
-                {renderDiscoveryCard(shelf.name, shelf.icon, shelf.id)}
-              </ScrollView>
-            </View>
-          );
-        })}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList}>
+                  {shelf.books.slice(0, 8).map(n => renderNovelCard(n, 115, true))}
+                  {renderDiscoveryCard(shelf.name, shelf.icon, shelf.id)}
+                </ScrollView>
+              </View>
+            );
+          })}
 
         <View style={styles.footerBranding}>
           <Text style={styles.footerBrandTitle}>HALM <Text style={{ color: isDarkMode ? '#A99BCB' : '#9b51e0' }}>Book</Text></Text>
           <Text style={styles.footerBrandSlogan}>Sách là ánh sáng!</Text>
         </View>
 
-      </ScrollView>
+        </ScrollView>
 
       </Animated.View>
 
@@ -980,7 +1001,7 @@ const getStyles = (isDark: boolean) => {
       paddingBottom: 20,
       marginBottom: isDark ? 14 : 10,
       borderBottomWidth: isDark ? 1 : 3,
-      borderBottomColor: isDark ? '#3A3F49' : '#1a1a1a', 
+      borderBottomColor: isDark ? '#3A3F49' : '#1a1a1a',
     },
     header: {
       flexDirection: 'row',
@@ -1497,3 +1518,5 @@ const getStyles = (isDark: boolean) => {
     },
   });
 };
+
+
