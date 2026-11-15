@@ -5,14 +5,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   RefreshControl,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchApiWithFallback } from './apiService';
 import { useAppNavigation, useAutoHideFooter } from './navigation';
 import { getCurrentUsername } from './userStorage';
@@ -443,6 +446,7 @@ function isWithinTimeRange(timestampMs: number, range: TimeRangeFilter): boolean
 }
 
 export default function HalmBookHistory() {
+  const insets = useSafeAreaInsets();
   const { navigate, goBack, isDarkMode, isLoggedIn, lang } = useAppNavigation();
   const { onScroll: handleFooterScroll } = useAutoHideFooter();
   const t = COPY[lang] || COPY.vi;
@@ -684,7 +688,15 @@ export default function HalmBookHistory() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: Math.max(
+              insets.top,
+              Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 44
+            ) + 8,
+          },
+        ]}
         showsVerticalScrollIndicator={false}
         onScroll={handleFooterScroll}
         scrollEventThrottle={16}

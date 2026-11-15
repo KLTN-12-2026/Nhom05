@@ -37,7 +37,6 @@ const SCREENS_WITH_SHARED_HEADER: AppScreen[] = [
   'offers',
   'categories',
   'search',
-  'transactions',
 ];
 
 const LoginLogoutWithSuccess = LoginLogout as ComponentType<{ onLoginSuccess: () => void }>;
@@ -537,7 +536,7 @@ export default function App() {
             >
               {screen}
             </BlurTargetView>
-            {!['auth', 'reader', 'chatbot', 'notifications'].includes(currentRoute.name) && (
+            {!['auth', 'reader', 'chatbot', 'notifications', 'payment'].includes(currentRoute.name) && (
               <Footer
                 activeNav={activeNav}
                 floating={['home', 'bookDetail', 'offers', 'upload', 'bookshelf', 'profile'].includes(currentRoute.name)}
