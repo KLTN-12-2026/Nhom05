@@ -145,7 +145,10 @@ export const toggleFavoriteBook = async (
         }
       );
 
-      const isFav = Boolean(res.data?.isFavorite);
+      if (typeof res.data?.isFavorite !== 'boolean') {
+        return { success: false, isFavorite: false, message: 'Máy chủ chưa xác nhận trạng thái yêu thích. Vui lòng thử lại.' };
+      }
+      const isFav = res.data.isFavorite;
       const message = res.data?.message || (isFav ? 'Đã thêm vào danh sách yêu thích!' : 'Đã xóa khỏi danh sách yêu thích!');
 
       // Đồng bộ vào Local Storage để phản hồi giao diện tức thì
