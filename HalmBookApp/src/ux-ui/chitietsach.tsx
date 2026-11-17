@@ -597,8 +597,9 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
    * XỬ LÝ THÊM SÁCH THẬT VÀO GIỎ HÀNG (DATABASE MYSQL QUA API)
    */
   const handleAddToCart = async () => {
-    if (!isLoggedIn) {
-      showLoginAlert('Bạn phải đăng nhập để thêm sách vào giỏ hàng');
+    const token = await AsyncStorage.getItem('userToken');
+    if (!isLoggedIn && !token) {
+      showLoginAlert('Đăng nhập để thêm sách vào giỏ hàng.', () => handleAddToCart());
       return;
     }
 
@@ -616,7 +617,6 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
 
     setIsAddingToCart(true);
     try {
-      const token = await AsyncStorage.getItem('userToken');
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
       // Đảm bảo lấy đúng mã sách có sẵn trong Database

@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { BlurTargetView } from 'expo-blur';
 import { ComponentRef, ComponentType, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Animated, BackHandler, Easing, Platform, View } from 'react-native';
+import { Alert, Animated, BackHandler, Easing, Modal, Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import ChatBotScreen, { ChatMessage } from './src/ux-ui/chatbot';
 import FloatingChatbotBubble from './src/ux-ui/FloatingChatbotBubble';
@@ -11,10 +11,11 @@ import BookDetailScreen from './src/ux-ui/chitietsach';
 import DmTrangChu from './src/ux-ui/dmtrangchu';
 import Footer, { PRIMARY_TABS } from './src/ux-ui/footer';
 import GioHang from './src/ux-ui/giohang';
+import GenreBooksScreen from './src/ux-ui/genreBooks';
 import LoginLogout from './src/ux-ui/loginlogout';
 import HalmBookHistory from './src/ux-ui/lsgiaodich';
 import ManHinhDoc from './src/ux-ui/manhinhdoc';
-import { AppLanguage, AppScreen, BookData, NavigationContext, type NavigationOptions } from './src/ux-ui/navigation';
+import { AppLanguage, AppNavigate, AppScreen, BookData, GenreBooksParams, NavigationContext } from './src/ux-ui/navigation';
 import ThanhToan from './src/ux-ui/PTThanhtoan';
 import SharedHeader from './src/ux-ui/sharedheader';
 import TheLoai from './src/ux-ui/theloai';
@@ -33,11 +34,10 @@ import { clearLegacyBookshelfKeys } from './src/ux-ui/userStorage';
 interface ScreenRoute extends NavigationOptions {
   name: AppScreen;
   book?: BookData;
+  genre?: GenreBooksParams;
 }
 
 const SCREENS_WITH_SHARED_HEADER: AppScreen[] = [
-  'offers',
-  'categories',
   'transactions',
 ];
 
@@ -51,7 +51,7 @@ const SCREEN_TRANSITION_OPTIONS: Partial<
   },
 };
 
-const LoginLogoutWithSuccess = LoginLogout as ComponentType<{ onLoginSuccess: () => void }>;
+const LoginLogoutWithSuccess = LoginLogout as ComponentType<{ onLoginSuccess: () => void; onCancel?: () => void }>;
 
 // Quản lý cờ phiên làm việc: Sống trong RAM của tiến trình app hiện tại
 const isSessionActive = () => {
@@ -107,20 +107,40 @@ export default function App() {
   const [authModal, setAuthModal] = useState<{
     visible: boolean;
     message: string;
+    showForm: boolean;
   }>({
     visible: false,
     message: '',
+    showForm: false,
   });
+  const pendingAuthAction = useRef<(() => void) | null>(null);
+  const authEntrance = useRef(new Animated.Value(0)).current;
 
-  const showLoginAlert = useCallback((message: string) => {
+  useEffect(() => {
+    authEntrance.setValue(0);
+    if (!authModal.showForm) return;
+    const animation = Animated.timing(authEntrance, {
+      toValue: 1,
+      duration: 260,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [authModal.showForm, authEntrance]);
+
+  const showLoginAlert = useCallback((message: string, onAuthenticated?: () => void) => {
     setAuthModal({
       visible: true,
       message,
+      showForm: true,
     });
+    pendingAuthAction.current = onAuthenticated || null;
   }, []);
 
-  const closeAuthModal = useCallback(() => {
-    setAuthModal({ visible: false, message: '' });
+  const closeAuthPrompt = useCallback(() => {
+    setAuthModal((current) => ({ ...current, visible: false, showForm: false }));
+    pendingAuthAction.current = null;
   }, []);
 
   const blurTargetRef = useRef<ComponentRef<typeof View> | null>(null);
@@ -135,15 +155,15 @@ export default function App() {
     },
   ]);
 
-  // Khôi phục phiên làm việc: Reload trong cùng phiên thì giữ lại, tắt app chạy phiên mới thì bắt buộc login
+  // Khôi phục phiên đăng nhập nếu có; nếu không thì mở app ở chế độ khách.
   useEffect(() => {
     let isMounted = true;
     const restoreSession = async () => {
       try {
         const sessionActive = isSessionActive();
 
-        // Nếu đây là phiên chạy mới (Fresh launch / Mở app từ đầu)
         if (!sessionActive) {
+          setSessionActive(false);
           await AsyncStorage.multiRemove([
             'userToken',
             'accessToken',
@@ -154,13 +174,12 @@ export default function App() {
           ]);
           if (isMounted) {
             setIsLoggedIn(false);
-            setRoutes([{ name: 'auth' }]);
+            setRoutes([{ name: 'home' }]);
             setIsReady(true);
           }
           return;
         }
 
-        // Nếu là reload trong cùng phiên làm việc (FE & BE vẫn đang chạy liên tục)
         const token = await AsyncStorage.getItem('userToken');
         const profileStr = await AsyncStorage.getItem('userProfile');
         if (profileStr && isMounted) {
@@ -182,7 +201,9 @@ export default function App() {
           if (savedRoutesStr) {
             const parsed = JSON.parse(savedRoutesStr);
             if (Array.isArray(parsed) && parsed.length > 0) {
-              setRoutes(parsed);
+              setRoutes(parsed.filter((route: ScreenRoute) => route.name !== 'auth').length
+                ? parsed.filter((route: ScreenRoute) => route.name !== 'auth')
+                : [{ name: 'home' }]);
               setIsReady(true);
               return;
             }
@@ -190,13 +211,13 @@ export default function App() {
           setRoutes([{ name: 'home' }]);
         } else if (isMounted) {
           setIsLoggedIn(false);
-          setRoutes([{ name: 'auth' }]);
+          setRoutes([{ name: 'home' }]);
         }
       } catch (err) {
         console.warn('Lỗi khôi phục session Expo:', err);
         if (isMounted) {
           setIsLoggedIn(false);
-          setRoutes([{ name: 'auth' }]);
+          setRoutes([{ name: 'home' }]);
         }
       } finally {
         if (isMounted) setIsReady(true);
@@ -251,62 +272,87 @@ export default function App() {
     return activeTabRoute?.name ?? 'home';
   }, [routes]);
 
-  const navigate = useCallback((name: AppScreen, book?: BookData, options?: NavigationOptions) => {
-    if (!isLoggedIn) {
-      if (name === 'chatbot') {
-        showLoginAlert(lang === 'en' ? 'Please log in to use HALM.AI.' : 'Vui lòng đăng nhập để sử dụng trợ lý HALM.AI.');
-        return;
-      }
+  const navigate: AppNavigate = useCallback((name: AppScreen, params?: BookData | GenreBooksParams) => {
+    const book = name === 'genreBooks' ? undefined : params as BookData | undefined;
+    const genre = name === 'genreBooks' ? params as GenreBooksParams : undefined;
+    if (name === 'auth') {
+      setAuthModal({ visible: true, message: lang === 'en' ? 'Sign in or create an account to continue.' : 'Đăng nhập hoặc tạo tài khoản để tiếp tục.', showForm: true });
+      pendingAuthAction.current = null;
+      return;
+    }
+    if (!isLoggedIn && !isSessionActive()) {
       if (name === 'upload') {
-        showLoginAlert(lang === 'en' ? 'Please log in to use upload file feature' : 'Bạn phải đăng nhập mới dùng được chức năng uploadfile');
+        showLoginAlert(lang === 'en' ? 'Please log in to use upload file feature' : 'Bạn phải đăng nhập mới dùng được chức năng uploadfile', () => {
+          setIsFooterVisible(true);
+          setRoutes((current) => [...current, { name, book }]);
+        });
         return;
       }
       if (name === 'bookshelf') {
-        showLoginAlert(lang === 'en' ? 'Please log in to use bookshelf feature' : 'Bạn phải đăng nhập để dùng chức năng tủ sách');
+        showLoginAlert(lang === 'en' ? 'Please log in to use bookshelf feature' : 'Bạn phải đăng nhập để dùng chức năng tủ sách', () => {
+          setIsFooterVisible(true);
+          setRoutes((current) => [...current, { name, book }]);
+        });
         return;
       }
       if (name === 'profile') {
-        showLoginAlert(lang === 'en' ? 'Please log in to use profile feature' : 'Bạn phải đăng nhập để dùng chức năng trang cá nhân');
+        showLoginAlert(lang === 'en' ? 'Please log in to use profile feature' : 'Bạn phải đăng nhập để dùng chức năng trang cá nhân', () => {
+          setIsFooterVisible(true);
+          setRoutes((current) => [...current, { name, book }]);
+        });
         return;
       }
       if (name === 'cart') {
-        showLoginAlert(lang === 'en' ? 'Please log in to use cart feature' : 'Bạn phải đăng nhập để dùng chức năng giỏ hàng');
+        showLoginAlert(lang === 'en' ? 'Please log in to use cart feature' : 'Bạn phải đăng nhập để dùng chức năng giỏ hàng', () => {
+          setIsFooterVisible(true);
+          setRoutes((current) => [...current, { name, book }]);
+        });
         return;
       }
       if (name === 'payment') {
-        showLoginAlert(lang === 'en' ? 'Please log in to proceed to payment' : 'Bạn phải đăng nhập để thanh toán');
+        showLoginAlert(lang === 'en' ? 'Please log in to proceed to payment' : 'Bạn phải đăng nhập để thanh toán', () => {
+          setIsFooterVisible(true);
+          setRoutes((current) => [...current, { name, book }]);
+        });
         return;
       }
     }
     setIsFooterVisible(true);
-    setRoutes((current) => [...current, { name, book, ...options }]);
+    setRoutes((current) => [...current, { name, book, genre }]);
   }, [isLoggedIn, lang, showLoginAlert]);
 
   const handleModalLoginPress = useCallback(() => {
-    closeAuthModal();
-    navigate('auth');
-  }, [closeAuthModal, navigate]);
+    setAuthModal((current) => ({ ...current, showForm: true }));
+  }, []);
 
   const navigateTab = useCallback((name: AppScreen) => {
-    if (!isLoggedIn) {
-      if (name === 'chatbot') {
-        showLoginAlert(lang === 'en' ? 'Please log in to use HALM.AI.' : 'Vui lòng đăng nhập để sử dụng trợ lý HALM.AI.');
-        return;
-      }
+    if (!isLoggedIn && !isSessionActive()) {
       if (name === 'upload') {
-        showLoginAlert(lang === 'en' ? 'Please log in to use upload file feature' : 'Bạn phải đăng nhập mới dùng được chức năng uploadfile');
+        showLoginAlert(lang === 'en' ? 'Please log in to use upload file feature' : 'Bạn phải đăng nhập mới dùng được chức năng uploadfile', () => {
+          setIsFooterVisible(true);
+          setRoutes([{ name }]);
+        });
         return;
       }
       if (name === 'bookshelf') {
-        showLoginAlert(lang === 'en' ? 'Please log in to use bookshelf feature' : 'Bạn phải đăng nhập để dùng chức năng tủ sách');
+        showLoginAlert(lang === 'en' ? 'Please log in to use bookshelf feature' : 'Bạn phải đăng nhập để dùng chức năng tủ sách', () => {
+          setIsFooterVisible(true);
+          setRoutes([{ name }]);
+        });
         return;
       }
       if (name === 'profile') {
-        showLoginAlert(lang === 'en' ? 'Please log in to use profile feature' : 'Bạn phải đăng nhập để dùng chức năng trang cá nhân');
+        showLoginAlert(lang === 'en' ? 'Please log in to use profile feature' : 'Bạn phải đăng nhập để dùng chức năng trang cá nhân', () => {
+          setIsFooterVisible(true);
+          setRoutes([{ name }]);
+        });
         return;
       }
       if (name === 'cart') {
-        showLoginAlert(lang === 'en' ? 'Please log in to use cart feature' : 'Bạn phải đăng nhập để dùng chức năng giỏ hàng');
+        showLoginAlert(lang === 'en' ? 'Please log in to use cart feature' : 'Bạn phải đăng nhập để dùng chức năng giỏ hàng', () => {
+          setIsFooterVisible(true);
+          setRoutes([{ name }]);
+        });
         return;
       }
     }
@@ -326,9 +372,15 @@ export default function App() {
   const finishLogin = useCallback(() => {
     setSessionActive(true);
     setIsLoggedIn(true);
-    const nextRoutes: ScreenRoute[] = [{ name: 'home' }];
-    setRoutes(nextRoutes);
-    AsyncStorage.setItem('savedRoutes', JSON.stringify(nextRoutes)).catch(() => {});
+    setAuthModal({ visible: false, message: '', showForm: false });
+    const pendingAction = pendingAuthAction.current;
+    pendingAuthAction.current = null;
+    requestAnimationFrame(() => pendingAction?.());
+  }, []);
+
+  const closeAuthForm = useCallback(() => {
+    setAuthModal({ visible: false, message: '', showForm: false });
+    pendingAuthAction.current = null;
   }, []);
 
   useEffect(() => {
@@ -362,7 +414,7 @@ export default function App() {
       await clearLegacyBookshelfKeys();
       setUserAvatarUrl('');
       setUserInitial('H');
-      setRoutes([{ name: 'auth' }]);
+      setRoutes([{ name: 'home' }]);
     } catch {
       Alert.alert('Không thể đăng xuất', 'Đã xảy ra lỗi khi xóa thông tin đăng nhập.');
     }
@@ -552,6 +604,9 @@ export default function App() {
     case 'categories':
       screen = <TheLoai />;
       break;
+    case 'genreBooks':
+      screen = <GenreBooksScreen key={currentRoute.genre?.categoryId} genre={currentRoute.genre} />;
+      break;
     case 'search':
       screen = <TimKiem />;
       break;
@@ -590,6 +645,28 @@ export default function App() {
           book={currentRoute.book}
           onBack={goBack}
           onStartReading={(initialChapterIndex) => {
+            const requestedChapterIndex = typeof initialChapterIndex === 'number' ? initialChapterIndex : 0;
+            const safeChapterIndex = (!isLoggedIn && !isSessionActive())
+              ? Math.min(Math.max(0, requestedChapterIndex), 2)
+              : requestedChapterIndex;
+            if (!isLoggedIn && !isSessionActive() && requestedChapterIndex > 2) {
+              showLoginAlert(
+                'Đăng nhập để tiếp tục đến chương này. Khách có thể đọc thử 3 chương đầu.',
+                () => setRoutes((current) => [
+                  ...current,
+                  {
+                    name: 'reader',
+                    book: {
+                      ...currentRoute.book,
+                      id: currentRoute.book?.id || 'book-1',
+                      title: currentRoute.book?.title || 'Đọc sách',
+                      initialChapterIndex: 2,
+                    } as any,
+                  },
+                ])
+              );
+              return;
+            }
             if (currentRoute.book) {
               addToReadingList({
                 id: currentRoute.book.id,
@@ -604,7 +681,7 @@ export default function App() {
               ...currentRoute.book,
               id: currentRoute.book?.id || 'book-1',
               title: currentRoute.book?.title || 'Đọc sách',
-              initialChapterIndex: typeof initialChapterIndex === 'number' ? initialChapterIndex : 0,
+              initialChapterIndex: typeof safeChapterIndex === 'number' ? safeChapterIndex : 0,
             } as any);
           }}
         />
@@ -623,14 +700,28 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <NavigationContext.Provider value={navigation}>
-        {currentRoute.name === 'auth' ? screen : (
-          <View style={{ flex: 1 }}>
+        {currentRoute.name === 'auth' ? null : (
+          <View
+            style={{
+              flex: 1,
+              backgroundColor:
+                currentRoute.name === 'cart'
+                  ? isDarkMode
+                    ? '#242321'
+                    : '#FFFFFF'
+                  : currentRoute.name === 'payment'
+                    ? isDarkMode
+                      ? '#181716'
+                      : '#F7F5F0'
+                    : isDarkMode ? '#101319' : '#FFFFFF',
+            }}
+          >
             {showSharedHeader && (
               <SharedHeader
                 isDarkMode={isDarkMode}
                 onToggleDarkMode={toggleDarkMode}
                 blurTarget={blurTargetRef}
-                compact={currentRoute.name === 'offers'}
+                currentScreen={currentRoute.name}
               />
             )}
             <BlurTargetView
@@ -644,7 +735,7 @@ export default function App() {
             {!['auth', 'reader', 'chatbot', 'notifications', 'payment'].includes(currentRoute.name) && (
               <Footer
                 activeNav={activeNav}
-                floating={['home', 'bookDetail', 'offers', 'upload', 'bookshelf', 'profile'].includes(currentRoute.name)}
+                floating={['home', 'categories', 'genreBooks', 'bookDetail', 'offers', 'upload', 'bookshelf', 'profile'].includes(currentRoute.name)}
                 visible={isFooterVisible}
               />
             )}
@@ -662,13 +753,31 @@ export default function App() {
           isEnglish={lang === 'en'}
         />
         <AuthRequiredModal
-          visible={authModal.visible}
+          visible={authModal.visible && !authModal.showForm}
           message={authModal.message}
-          onClose={closeAuthModal}
+          onClose={closeAuthPrompt}
           onLogin={handleModalLoginPress}
           isDarkMode={isDarkMode}
           lang={lang}
         />
+        <Modal
+          visible={authModal.showForm}
+          transparent
+          animationType="fade"
+          onRequestClose={closeAuthForm}
+        >
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.62)', justifyContent: 'center', paddingHorizontal: 16, paddingVertical: 24 }}>
+            <Animated.View style={{ width: '100%', maxWidth: 480, maxHeight: '92%', flexShrink: 1, alignSelf: 'center', overflow: 'hidden', borderRadius: 18,
+              opacity: authEntrance,
+              transform: [
+                { translateY: authEntrance.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) },
+                { scale: authEntrance.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) },
+              ],
+            }}>
+              <LoginLogoutWithSuccess onLoginSuccess={finishLogin} onCancel={closeAuthForm} />
+            </Animated.View>
+          </View>
+        </Modal>
       </NavigationContext.Provider>
     </SafeAreaProvider>
   );

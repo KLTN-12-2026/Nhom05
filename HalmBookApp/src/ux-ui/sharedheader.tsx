@@ -85,7 +85,7 @@ function SharedHeaderComponent({
                 style={styles.actionButton}
                 onPress={() => {
                   if (!isLoggedIn) {
-                    showLoginAlert(lang === 'en' ? 'Please log in to use cart feature' : 'Bạn phải đăng nhập để dùng chức năng giỏ hàng');
+                    showLoginAlert(lang === 'en' ? 'Please log in to use cart feature' : 'Bạn phải đăng nhập để dùng chức năng giỏ hàng', () => navigate('cart'));
                     return;
                   }
                   navigate('cart');
@@ -105,7 +105,7 @@ function SharedHeaderComponent({
               style={styles.avatar}
               onPress={() => {
                 if (!isLoggedIn) {
-                  showLoginAlert(lang === 'en' ? 'Please log in to use profile feature' : 'Bạn phải đăng nhập để dùng chức năng trang cá nhân');
+                  showLoginAlert(lang === 'en' ? 'Please log in to use profile feature' : 'Bạn phải đăng nhập để dùng chức năng trang cá nhân', () => navigateTab('profile'));
                   return;
                 }
                 navigateTab('profile');

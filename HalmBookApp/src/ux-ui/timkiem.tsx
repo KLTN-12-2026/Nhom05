@@ -22,6 +22,8 @@ import { getBookChapterLabel } from './bookContentService';
 
 const RECENT_SEARCHES_KEY = '@halmbook_recent_searches';
 const MAX_RECENT_SEARCHES = 8;
+const RECENT_BOOKS_KEY = '@halmbook_recent_search_books';
+const MAX_RECENT_BOOKS = 4;
 
 const debuggerHost = Constants.expoConfig?.hostUri;
 const localhost = debuggerHost ? debuggerHost.split(':')[0] : 'localhost';
@@ -147,11 +149,46 @@ export default function SearchScreen() {
   const { navigate, goBack, isDarkMode, toggleDarkMode } = useAppNavigation();
   const [keyword, setKeyword] = useState('');
   const [recent, setRecent] = useState<string[]>([]);
+  const [recentBooks, setRecentBooks] = useState<SearchBookItem[]>([]);
   const [allBooks, setAllBooks] = useState<SearchBookItem[]>([]);
   const [results, setResults] = useState<SearchBookItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [failedCovers, setFailedCovers] = useState<Record<string, boolean>>({});
+  const hasKeyword = keyword.trim().length > 0;
+  const displayedBooks = hasKeyword ? results : recentBooks;
+
+  useEffect(() => {
+    let isMounted = true;
+    AsyncStorage.getItem(RECENT_BOOKS_KEY).then((stored) => {
+      if (!stored || !isMounted) return;
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        setRecentBooks(parsed.filter((book) => book && typeof book.id === 'string' && typeof book.title === 'string').slice(0, MAX_RECENT_BOOKS));
+      }
+    }).catch((error) => console.warn('Không thể đọc sách tìm gần đây:', error));
+    return () => { isMounted = false; };
+  }, []);
+
+  const openBook = (book: SearchBookItem) => {
+    const updated = [book, ...recentBooks.filter((item) => item.id !== book.id)].slice(0, MAX_RECENT_BOOKS);
+    setRecentBooks(updated);
+    void AsyncStorage.setItem(RECENT_BOOKS_KEY, JSON.stringify(updated)).catch(
+      (error) => console.warn('Không thể lưu sách tìm gần đây:', error)
+    );
+    navigate('bookDetail', {
+      id: book.id,
+      title: book.title,
+      author: book.author,
+      chapter: book.chapter,
+      tag: book.category,
+      rating: book.rating,
+      reads: book.reviews,
+      img_url: book.img_url,
+      description: book.description,
+      price: book.price,
+    });
+  };
 
   // ==============================================================
   // ĐỒNG BỘ 100% MÀU SẮC & TỶ LỆ HEADER THEO TRANG CHỦ (HOMESCREEN)
@@ -448,20 +485,7 @@ export default function SearchScreen() {
                 { backgroundColor: colors.brandPrimary },
               ]}
               activeOpacity={0.85}
-              onPress={() =>
-                navigate('bookDetail', {
-                  id: item.id,
-                  title: item.title,
-                  author: item.author,
-                  chapter: item.chapter,
-                  tag: item.category,
-                  rating: item.rating,
-                  reads: item.reviews,
-                  img_url: item.img_url,
-                  description: item.description,
-                  price: item.price,
-                })
-              }
+              onPress={() => openBook(item)}
             >
               <Text
                 style={[
@@ -593,7 +617,7 @@ export default function SearchScreen() {
       {/* ============================================================== */}
       <View style={[styles.bodyContainer, { backgroundColor: colors.screenBg }]}>
         <FlatList
-          data={results}
+          data={displayedBooks}
           keyExtractor={(item) => item.id}
           renderItem={renderBook}
           showsVerticalScrollIndicator={false}
@@ -672,18 +696,24 @@ export default function SearchScreen() {
                     { color: colors.textPrimary },
                   ]}
                 >
-                  KẾT QUẢ TÌM KIẾM
+                  {hasKeyword ? 'KẾT QUẢ TÌM KIẾM' : 'SÁCH TÌM GẦN ĐÂY'}
                 </Text>
                 <Text
                   style={[styles.resultCount, { color: colors.textSecondary }]}
                 >
-                  {isLoading ? 'Đang tải...' : `Có ${results.length} kết quả`}
+                  {hasKeyword && isLoading ? 'Đang tải...' : `Có ${displayedBooks.length} ${hasKeyword ? 'kết quả' : 'sách'}`}
                 </Text>
               </View>
             </>
           }
           ListEmptyComponent={
-            isLoading ? (
+            !hasKeyword ? (
+              <View style={styles.empty}>
+                <Ionicons name="time-outline" size={44} color={colors.textSecondary} />
+                <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>Chưa có sách tìm gần đây</Text>
+                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Tìm kiếm và mở sách để lưu vào danh sách gần đây.</Text>
+              </View>
+            ) : isLoading ? (
               <View style={styles.empty}>
                 <ActivityIndicator size="large" color={colors.brandPrimary} />
                 <Text
