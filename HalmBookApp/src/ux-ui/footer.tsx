@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Animated, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppNavigation } from './navigation';
 
@@ -30,12 +30,12 @@ function FooterComponent({ activeNav, floating = false, visible = true }: Footer
   // Hiệu ứng ẩn khi cuộn xuống và hiện khi cuộn lên mượt mà
   useEffect(() => {
     Animated.spring(animTranslateY, {
-      toValue: visible ? 0 : 120,
+      toValue: visible ? 0 : 100 + insets.bottom,
       useNativeDriver: true,
       friction: 8,
       tension: 50,
     }).start();
-  }, [visible]);
+  }, [visible, insets.bottom, animTranslateY]);
 
   // ============================================================================
   // [GIẢI THÍCH CODE]: Xử lý sự kiện khi nhấn vào từng tab ở Footer
@@ -48,15 +48,15 @@ function FooterComponent({ activeNav, floating = false, visible = true }: Footer
   const handleTabPress = (tabId: (typeof PRIMARY_TABS)[number]['id']) => {
     if (!isLoggedIn) {
       if (tabId === 'upload') {
-        showLoginAlert(lang === 'en' ? 'Please log in to use upload file feature' : 'Bạn phải đăng nhập mới dùng được chức năng uploadfile');
+        showLoginAlert(lang === 'en' ? 'Please log in to use upload file feature' : 'Bạn phải đăng nhập mới dùng được chức năng uploadfile', () => navigateTab('upload'));
         return;
       }
       if (tabId === 'bookshelf') {
-        showLoginAlert(lang === 'en' ? 'Please log in to use bookshelf feature' : 'Bạn phải đăng nhập để dùng chức năng tủ sách');
+        showLoginAlert(lang === 'en' ? 'Please log in to use bookshelf feature' : 'Bạn phải đăng nhập để dùng chức năng tủ sách', () => navigateTab('bookshelf'));
         return;
       }
       if (tabId === 'profile') {
-        showLoginAlert(lang === 'en' ? 'Please log in to use profile feature' : 'Bạn phải đăng nhập để dùng chức năng trang cá nhân');
+        showLoginAlert(lang === 'en' ? 'Please log in to use profile feature' : 'Bạn phải đăng nhập để dùng chức năng trang cá nhân', () => navigateTab('profile'));
         return;
       }
     }
@@ -65,12 +65,16 @@ function FooterComponent({ activeNav, floating = false, visible = true }: Footer
 
   return (
     <Animated.View
-      pointerEvents={floating ? 'box-none' : 'auto'}
+      pointerEvents={!visible ? 'none' : floating ? 'box-none' : 'auto'}
+      accessibilityElementsHidden={!visible}
+      importantForAccessibility={visible ? 'auto' : 'no-hide-descendants'}
       style={[
         styles.footerWrap,
         floating && styles.footerWrapFloating,
         {
           paddingBottom: Math.max(insets.bottom, 6),
+          paddingLeft: Math.max(insets.left, 12),
+          paddingRight: Math.max(insets.right, 12),
           transform: [{ translateY: animTranslateY }],
         },
       ]}
@@ -91,8 +95,9 @@ function FooterComponent({ activeNav, floating = false, visible = true }: Footer
               <Ionicons
                 name={tab.icon}
                 size={22}
-                color={isActive ? '#1473E6' : isDarkMode ? '#AAB1C0' : '#6F7684'}
+                color={isActive ? (isDarkMode ? '#8FC3B5' : '#35695F') : isDarkMode ? '#B9B7AF' : '#77736C'}
               />
+              <Text numberOfLines={1} style={[styles.navLabel, { color: isActive ? (isDarkMode ? '#8FC3B5' : '#35695F') : isDarkMode ? '#B9B7AF' : '#77736C' }]}>{lang === 'en' ? ({ home: 'Home', offers: 'Offers', upload: 'Upload', bookshelf: 'Library', profile: 'Profile' } as const)[tab.id] : tab.title}</Text>
             </TouchableOpacity>
           );
         })}
@@ -123,32 +128,41 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 30,
+    borderRadius: 8,
     paddingHorizontal: 8,
-    height: 56,
+    minHeight: 64,
+    borderWidth: 1,
+    borderColor: '#E6E1D8',
+    maxWidth: 720,
+    width: '100%',
+    alignSelf: 'center',
     shadowColor: '#1a1a1a',
     shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.16,
+    shadowOpacity: 0.08,
     shadowRadius: 14,
     elevation: 8,
   },
   bottomNavDark: {
-    backgroundColor: '#20242D',
+    backgroundColor: '#292D2A',
+    borderColor: '#414642',
     shadowColor: '#000',
-    shadowOpacity: 0.38,
+    shadowOpacity: 0.2,
   },
   navItem: {
-    width: 52,
-    height: 44,
-    borderRadius: 24,
+    flex: 1,
+    minWidth: 0,
+    minHeight: 52,
+    borderRadius: 6,
+    paddingVertical: 4,
+    gap: 3,
     alignItems: 'center',
     justifyContent: 'center',
   },
   navItemActive: {
-    width: 66,
-    backgroundColor: 'rgba(20, 115, 230, 0.12)',
+    backgroundColor: 'rgba(75, 129, 118, 0.12)',
   },
+  navLabel: { fontSize: 10, lineHeight: 14, fontWeight: '600', maxWidth: '100%' },
   navItemActiveDark: {
-    backgroundColor: 'rgba(216, 179, 106, 0.16)',
+    backgroundColor: 'rgba(143, 195, 181, 0.12)',
   },
 });

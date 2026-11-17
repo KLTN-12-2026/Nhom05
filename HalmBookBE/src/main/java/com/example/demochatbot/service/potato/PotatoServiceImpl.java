@@ -1,6 +1,5 @@
 package com.example.demochatbot.service.potato;
 
-import com.example.demochatbot.dto.TopupRequest;
 import com.example.demochatbot.dto.TransferRequest;
 import com.example.demochatbot.dto.WalletResponseDto;
 import com.example.demochatbot.model.Customer;
@@ -25,7 +24,7 @@ import java.util.Optional;
  * Mô tả: Hiện thực chi tiết toàn bộ nghiệp vụ Ví Khoai Tây cho độc giả HALM BOOK
  *        - Lấy số dư Khoai thực tế từ cơ sở dữ liệu
  *        - Khởi tạo & lấy danh sách các gói nạp
- *        - Nạp Khoai siêu tốc qua VietQR / Chuyển khoản
+ *        - Cộng Khoai sau khi cổng thanh toán xác nhận giao dịch
  *        - Sổ cái minh bạch lịch sử giao dịch (cộng/trừ khoai)
  *        - Tặng khoai cho bạn bè độc giả
  *        - Khấu trừ khoai khi thanh toán đơn thuê sách
@@ -140,58 +139,34 @@ public class PotatoServiceImpl implements PotatoService {
         return transactions;
     }
 
-    /**
-     * Xử lý nạp Khoai Tây vào ví (VietQR 24/7)
-     */
     @Override
     @Transactional
-    public PotatoTransaction topupPotato(int accountId, TopupRequest request) {
+    public PotatoTransaction creditVerifiedTopup(int accountId, int amount, String description) {
+        if (amount <= 0) {
+            throw new IllegalArgumentException("Số Khoai nạp phải lớn hơn 0.");
+        }
+
         Customer customer = customerRepository.findCustomerById(accountId);
         if (customer == null) {
             throw new RuntimeException("Không tìm thấy thông tin khách hàng!");
         }
 
-        int totalKhoaiToAdd = 0;
-        String packageName = "Nạp Khoai Siêu Tốc";
-
-        if (request.getPackageId() != null && request.getPackageId() > 0) {
-            Optional<PotatoPackage> pkgOpt = potatoPackageRepository.findById(request.getPackageId());
-            if (pkgOpt.isPresent()) {
-                PotatoPackage pkg = pkgOpt.get();
-                totalKhoaiToAdd = pkg.getPotatoAmount() + pkg.getBonusPotato();
-                packageName = pkg.getPackageName();
-            }
-        }
-
-        // Nếu không có packageId, tính theo số tiền (1.000 VNĐ = 1 Khoai)
-        if (totalKhoaiToAdd == 0) {
-            double money = (request.getAmountMoney() != null && request.getAmountMoney() > 0) ? request.getAmountMoney() : 50000.0;
-            totalKhoaiToAdd = (int) (money / 1000.0);
-        }
-
-        // Cập nhật số dư thực tế trong Customer
         int currentBalance = customer.getPotatoBalance() != null ? customer.getPotatoBalance() : 0;
-        int newBalance = currentBalance + totalKhoaiToAdd;
+        int newBalance = Math.addExact(currentBalance, amount);
+        int currentEarned = customer.getTotalPotatoEarned() != null
+                ? customer.getTotalPotatoEarned()
+                : currentBalance;
         customer.setPotatoBalance(newBalance);
-
-        int currentEarned = customer.getTotalPotatoEarned() != null ? customer.getTotalPotatoEarned() : currentBalance;
-        customer.setTotalPotatoEarned(currentEarned + totalKhoaiToAdd);
+        customer.setTotalPotatoEarned(Math.addExact(currentEarned, amount));
         customerRepository.save(customer);
+        tierService.calculateAndUpdateCustomerTier(customer);
 
-        // Tự động kiểm tra và thăng hạng thành viên nếu tích lũy đủ điểm
-        try {
-            tierService.calculateAndUpdateCustomerTier(customer);
-        } catch (Exception e) {
-            System.err.println("Lỗi kiểm tra thăng hạng khi nạp khoai: " + e.getMessage());
-        }
-
-        // Lưu vào sổ cái giao dịch
         PotatoTransaction transaction = new PotatoTransaction();
         transaction.setCustomer(customer);
-        transaction.setAmount(totalKhoaiToAdd);
+        transaction.setAmount(amount);
         transaction.setBalanceAfter(newBalance);
         transaction.setType("TOPUP");
-        transaction.setDescription("Nạp " + packageName + " thành công qua VietQR 24/7");
+        transaction.setDescription(description);
         transaction.setCreatedAt(LocalDateTime.now());
 
         return potatoTransactionRepository.save(transaction);

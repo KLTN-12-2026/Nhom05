@@ -377,7 +377,7 @@ function MarqueeText({ text, style }: { text: string; style: any }) {
 
 export default function ManHinhDoc({ onBack, book }: ReaderProps) {
   const insets = useSafeAreaInsets();
-  const { setFooterVisible } = useAppNavigation();
+  const { setFooterVisible, isLoggedIn, showLoginAlert } = useAppNavigation();
 
   // 1. Luôn ẩn Footer của toàn app khi đọc sách
   useEffect(() => {
@@ -437,7 +437,7 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
         ) {
           setCurrentChapterIndex(detail.currentPage - 1);
         } else if (detail.checkedFromServer && !detail.hasAccess) {
-          setCurrentChapterIndex((prev: number) => (prev > 0 ? 0 : prev));
+          setCurrentChapterIndex((prev: number) => Math.min(prev, 2));
         }
       })
       .catch(() => {});
@@ -447,11 +447,8 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
     };
   }, [book?.id, book?.initialChapterIndex, chapters.length, isPersonalBook]);
 
-  const isTrialRestricted =
-    !isPersonalBook &&
-    accessInfo.checkedFromServer &&
-    !accessInfo.hasAccess &&
-    chapters.length > 1;
+  const isTrialRestricted = !isPersonalBook && !accessInfo.hasAccess && accessInfo.checkedFromServer;
+  const trialChapterLimit = 3;
 
   // Đồng bộ tiến độ đọc lên Backend khi người dùng có quyền thuê hợp lệ
   useEffect(() => {
@@ -468,10 +465,26 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
   const handleSelectChapterIndex = useCallback(
     (targetIdx: number) => {
       const bounded = Math.max(0, Math.min(chapters.length - 1, targetIdx));
-      if (isTrialRestricted && bounded > 0) {
+      if (isTrialRestricted && bounded >= trialChapterLimit) {
+        if (!isLoggedIn) {
+          showLoginAlert(
+            'Đăng nhập để tiếp tục đọc. Sau khi đăng nhập, bạn sẽ được quay lại đúng cuốn sách và chương đang chọn.',
+            () => {
+              if (isPersonalBook || accessInfo.hasAccess) {
+                setCurrentChapterIndex(bounded);
+              } else {
+                Alert.alert(
+                  'Cần thuê sách để đọc tiếp',
+                  'Bạn đã đọc hết 3 chương dùng thử. Hãy thuê sách để mở khóa toàn bộ nội dung tác phẩm.'
+                );
+              }
+            }
+          );
+          return;
+        }
         Alert.alert(
           'Cần thuê sách để đọc tiếp',
-          'Bạn đang xem bản đọc thử (Chương 1). Hãy thuê sách để mở khóa toàn bộ nội dung tác phẩm.',
+          'Bạn đã đọc hết 3 chương dùng thử. Hãy thuê sách để mở khóa toàn bộ nội dung tác phẩm.',
           [
             { text: 'Để sau', style: 'cancel' },
             {
@@ -487,7 +500,7 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
       }
       setCurrentChapterIndex(bounded);
     },
-    [chapters.length, isTrialRestricted, onBack]
+    [accessInfo.hasAccess, chapters.length, isLoggedIn, isPersonalBook, isTrialRestricted, onBack, showLoginAlert]
   );
 
   const activeChapter: Chapter = chapters[currentChapterIndex] || chapters[0] || {
@@ -1410,7 +1423,9 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
             onPress={() => handleSelectChapterIndex(currentChapterIndex + 1)}
           >
             <Text style={[styles.prevNextChapterText, { color: currentTheme.text }]}>
-              {isTrialRestricted && currentChapterIndex === 0 ? 'Thuê để đọc tiếp ›' : 'Chương sau ›'}
+              {isTrialRestricted && currentChapterIndex >= trialChapterLimit - 1
+                ? (isLoggedIn ? 'Thuê để đọc tiếp ›' : 'Đăng nhập để đọc tiếp ›')
+                : 'Chương sau ›'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -1960,7 +1975,7 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
                 </Text>
                 {isTrialRestricted && (
                   <Text style={{ fontSize: 11, color: '#d97706', fontWeight: '600', marginTop: 2 }}>
-                    Bản đọc thử (Chương 1) • Thuê sách để mở khóa toàn bộ
+                    Bản đọc thử (3 chương) • Đăng nhập và thuê sách để mở khóa toàn bộ
                   </Text>
                 )}
               </View>
@@ -1972,7 +1987,7 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
             <ScrollView style={styles.tocScrollView} showsVerticalScrollIndicator={false}>
               {chapters.map((ch, idx) => {
                 const isSelected = idx === currentChapterIndex;
-                const isLocked = isTrialRestricted && idx > 0;
+                const isLocked = isTrialRestricted && idx >= trialChapterLimit;
                 return (
                   <TouchableOpacity
                     key={ch.id || idx}
