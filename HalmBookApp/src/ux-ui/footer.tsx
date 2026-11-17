@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppNavigation } from './navigation';
 
@@ -85,7 +85,7 @@ function FooterComponent({ activeNav, floating = false, visible = true }: Footer
           return (
             <TouchableOpacity
               key={tab.id}
-              style={[styles.navItem, isActive && styles.navItemActive, isDarkMode && isActive && styles.navItemActiveDark]}
+              style={styles.navItem}
               onPress={() => handleTabPress(tab.id)}
               activeOpacity={0.7}
               accessibilityRole="button"
@@ -95,9 +95,8 @@ function FooterComponent({ activeNav, floating = false, visible = true }: Footer
               <Ionicons
                 name={tab.icon}
                 size={22}
-                color={isActive ? (isDarkMode ? '#8FC3B5' : '#35695F') : isDarkMode ? '#B9B7AF' : '#77736C'}
+                color={isActive ? (isDarkMode ? '#E5A93C' : '#35695F') : isDarkMode ? '#A39F99' : '#77736C'}
               />
-              <Text numberOfLines={1} style={[styles.navLabel, { color: isActive ? (isDarkMode ? '#8FC3B5' : '#35695F') : isDarkMode ? '#B9B7AF' : '#77736C' }]}>{lang === 'en' ? ({ home: 'Home', offers: 'Offers', upload: 'Upload', bookshelf: 'Library', profile: 'Profile' } as const)[tab.id] : tab.title}</Text>
             </TouchableOpacity>
           );
         })}
@@ -128,7 +127,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 8,
+    borderRadius: 20,
     paddingHorizontal: 8,
     minHeight: 64,
     borderWidth: 1,
@@ -143,8 +142,8 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   bottomNavDark: {
-    backgroundColor: '#292D2A',
-    borderColor: '#414642',
+    backgroundColor: '#242321',
+    borderColor: '#383633',
     shadowColor: '#000',
     shadowOpacity: 0.2,
   },
@@ -157,12 +156,5 @@ const styles = StyleSheet.create({
     gap: 3,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  navItemActive: {
-    backgroundColor: 'rgba(75, 129, 118, 0.12)',
-  },
-  navLabel: { fontSize: 10, lineHeight: 14, fontWeight: '600', maxWidth: '100%' },
-  navItemActiveDark: {
-    backgroundColor: 'rgba(143, 195, 181, 0.12)',
   },
 });

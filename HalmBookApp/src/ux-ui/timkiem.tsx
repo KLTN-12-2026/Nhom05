@@ -195,22 +195,23 @@ export default function SearchScreen() {
   // ==============================================================
   const isDark = isDarkMode;
   const colors = {
-    headerBg: isDark ? '#1F2228' : '#4A7C72',
-    headerIcon: '#FFFFFF',
-    headerActionBg: isDark ? '#272B33' : 'rgba(255,255,255,0.18)',
-    headerThemeIcon: isDark ? '#FFD166' : '#FFF8E7',
-    searchBoxBg: isDark ? '#272B33' : '#FFFFFF',
-    searchBoxText: isDark ? '#F3F6FA' : '#1E2430',
-    searchBoxPlaceholder: isDark ? '#9BA3B2' : '#7A8291',
-    screenBg: isDark ? '#12151B' : '#F6F7FB',
-    cardBg: isDark ? '#1B1F28' : '#FFFFFF',
-    border: isDark ? '#2E3441' : '#E5E8EF',
-    textPrimary: isDark ? '#F3F6FA' : '#1E2430',
-    textSecondary: isDark ? '#A5B0C2' : '#667085',
-    brandPrimary: isDark ? '#D8B36A' : '#4A7C72',
-    brandButtonText: isDark ? '#12151B' : '#FFFFFF',
-    priceColor: isDark ? '#E5A93C' : '#4A7C72',
-    chipBg: isDark ? '#232834' : '#EEF1F6',
+    headerBg: isDark ? '#1F2228' : '#EAE6DF',
+    headerIcon: isDark ? '#FFFFFF' : '#242321',
+    headerActionBg: isDark ? '#242321' : '#EAE6DF',
+    headerThemeIcon: isDark ? '#E5A93C' : '#4B8176',
+    headerBorder: isDark ? '#383633' : '#D2C8BA',
+    searchBoxBg: isDark ? '#242321' : '#EAE6DF',
+    searchBoxText: isDark ? '#F7F5F0' : '#242321',
+    searchBoxPlaceholder: isDark ? '#A39F99' : '#85817A',
+    screenBg: isDark ? '#181716' : '#F7F5F0',
+    cardBg: isDark ? '#242321' : '#FFFFFF',
+    border: isDark ? '#383633' : '#E6E1D8',
+    textPrimary: isDark ? '#F7F5F0' : '#242321',
+    textSecondary: isDark ? '#A39F99' : '#85817A',
+    brandPrimary: isDark ? '#D8B36A' : '#4B8176',
+    brandButtonText: isDark ? '#181716' : '#FFFFFF',
+    priceColor: isDark ? '#E5A93C' : '#8B4A3C',
+    chipBg: isDark ? '#2D2B28' : '#EAE6DF',
   };
 
   // 1. Đọc lịch sử tìm kiếm thật từ AsyncStorage khi mount
@@ -533,7 +534,7 @@ export default function SearchScreen() {
         <View
           style={[
             styles.searchInputContainer,
-            { backgroundColor: colors.searchBoxBg },
+            { backgroundColor: colors.searchBoxBg, borderColor: colors.headerBorder },
           ]}
         >
           <Ionicons
@@ -582,7 +583,7 @@ export default function SearchScreen() {
         <TouchableOpacity
           style={[
             styles.headerRightBtn,
-            { backgroundColor: colors.headerActionBg },
+            { backgroundColor: colors.headerActionBg, borderColor: colors.headerBorder },
           ]}
           onPress={() => toggleDarkMode?.()}
           activeOpacity={0.75}
@@ -601,7 +602,7 @@ export default function SearchScreen() {
         <TouchableOpacity
           style={[
             styles.headerRightBtn,
-            { backgroundColor: colors.headerActionBg, marginLeft: 4 },
+            { backgroundColor: colors.headerActionBg, borderColor: colors.headerBorder, marginLeft: 4 },
           ]}
           onPress={() => navigate('cart')}
           activeOpacity={0.75}
@@ -809,6 +810,7 @@ const styles = StyleSheet.create({
     height: 40,
     marginHorizontal: 8,
     borderRadius: 10,
+    borderWidth: 1,
     paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
@@ -827,6 +829,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 10,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },

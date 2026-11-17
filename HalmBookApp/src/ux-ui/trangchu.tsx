@@ -1,8 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
+<<<<<<< HEAD
 import { ComponentRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Constants from 'expo-constants';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
+=======
+import { ComponentRef, Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+>>>>>>> 37cbdae (redesign the homepage, update search functionality, and update expanded categories)
 import {
   ActivityIndicator,
   Animated,
@@ -41,142 +45,261 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-// MÀU SẮC THƯƠNG HIỆU
-const BRAND = { primary: '#4B8176', secondary: '#B87968', bg: '#FFFFFF', black: '#202321' };
+// MÀU SẮC THƯƠNG HIỆU (copy từ uudai.tsx)
+const DARK_MODE_PRIMARY = '#9A8BC2';
+const DARK_MODE_SECONDARY = '#D8B36A';
 
-// --- COMPONENT HIỆU ỨNG SAO VÀ VŨ TRỤ ---
+// --- COMPONENT HIỆU ỨNG SAO VÀ VŨ TRỤ (copy từ uudai.tsx, đổi prefix Offers → Home) ---
 
-// Hào quang tinh vân (Nebula) chớp nở chậm rãi
-const Nebula = () => {
-  const anim = useRef(new Animated.Value(0)).current;
+function HomeNebula() {
+  const animation = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
-    Animated.loop(
+    const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(anim, { toValue: 1, duration: 5000, useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0, duration: 5000, useNativeDriver: true })
-      ])
-    ).start();
-  }, []);
+        Animated.timing(animation, { toValue: 1, duration: 5000, useNativeDriver: true }),
+        Animated.timing(animation, { toValue: 0, duration: 5000, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [animation]);
 
   return (
     <>
-      {/* Góc trên trái (Ánh tím) */}
-      <Animated.View style={{
-        position: 'absolute', top: -100, left: -100, width: 350, height: 350, borderRadius: 175,
-        backgroundColor: BRAND.primary,
-        opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.03, 0.12] }),
-        transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1.2] }) }]
-      }} />
-      {/* Góc dưới phải (Ánh vàng) */}
-      <Animated.View style={{
-        position: 'absolute', bottom: -100, right: -100, width: 400, height: 400, borderRadius: 200,
-        backgroundColor: BRAND.secondary,
-        opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.05] }),
-        transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [1.2, 0.8] }) }]
-      }} />
+      <Animated.View
+        style={{
+          position: 'absolute',
+          top: -100,
+          left: -100,
+          width: 350,
+          height: 350,
+          borderRadius: 175,
+          backgroundColor: DARK_MODE_PRIMARY,
+          opacity: animation.interpolate({ inputRange: [0, 1], outputRange: [0.03, 0.12] }),
+          transform: [{ scale: animation.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1.2] }) }],
+        }}
+      />
+      <Animated.View
+        style={{
+          position: 'absolute',
+          bottom: -100,
+          right: -100,
+          width: 400,
+          height: 400,
+          borderRadius: 200,
+          backgroundColor: DARK_MODE_SECONDARY,
+          opacity: animation.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.05] }),
+          transform: [{ scale: animation.interpolate({ inputRange: [0, 1], outputRange: [1.2, 0.8] }) }],
+        }}
+      />
     </>
   );
-};
+}
 
-// Sao băng rơi chéo màn hình
-const ShootingStar = ({ delay, top, left }: any) => {
-  const anim = useRef(new Animated.Value(0)).current;
+function HomeStar({
+  top,
+  left,
+  duration,
+  size,
+  color,
+}: {
+  top: string;
+  left: string;
+  duration: number;
+  size: number;
+  color: string;
+}) {
+  const animation = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.loop(
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(animation, { toValue: 1, duration, useNativeDriver: true }),
+        Animated.timing(animation, { toValue: 0.1, duration, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [animation, duration]);
+
+  return (
+    <Animated.View
+      style={{
+        position: 'absolute',
+        top,
+        left,
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: color,
+        opacity: animation,
+        shadowColor: color,
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 1,
+        shadowRadius: 6,
+      }}
+    />
+  );
+}
+
+function HomeShootingStar({
+  delay,
+  top,
+  left,
+  screenWidth,
+  screenHeight,
+}: {
+  delay: number;
+  top: string;
+  left: string;
+  screenWidth: number;
+  screenHeight: number;
+}) {
+  const animation = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
       Animated.sequence([
         Animated.delay(delay),
-        Animated.timing(anim, { toValue: 1, duration: 1200, useNativeDriver: true }), // Bay qua
-        Animated.timing(anim, { toValue: 0, duration: 0, useNativeDriver: true }), // Reset ngay
-      ])
-    ).start();
-  }, []);
-
-  const translateX = anim.interpolate({ inputRange: [0, 1], outputRange: [0, width] });
-  const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [0, height * 0.8] });
-  const opacity = anim.interpolate({ inputRange: [0, 0.1, 0.8, 1], outputRange: [0, 1, 1, 0] });
+        Animated.timing(animation, { toValue: 1, duration: 1200, useNativeDriver: true }),
+        Animated.timing(animation, { toValue: 0, duration: 0, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [animation, delay]);
 
   return (
-    <Animated.View style={{
-      position: 'absolute', top, left,
-      width: 80, height: 2,
-      backgroundColor: '#fff',
-      transform: [{ rotate: '45deg' }, { translateX }, { translateY }],
-      opacity,
-      shadowColor: BRAND.secondary, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 10
-    }} />
+    <Animated.View
+      style={{
+        position: 'absolute',
+        top,
+        left,
+        width: 80,
+        height: 2,
+        backgroundColor: '#fff',
+        transform: [
+          { rotate: '45deg' },
+          { translateX: animation.interpolate({ inputRange: [0, 1], outputRange: [0, screenWidth] }) },
+          { translateY: animation.interpolate({ inputRange: [0, 1], outputRange: [0, screenHeight * 0.8] }) },
+        ],
+        opacity: animation.interpolate({ inputRange: [0, 0.1, 0.8, 1], outputRange: [0, 1, 1, 0] }),
+        shadowColor: DARK_MODE_SECONDARY,
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 1,
+        shadowRadius: 10,
+      }}
+    />
   );
-};
+}
 
-// Ngôi sao lấp lánh (Tốc độ và độ trễ ngẫu nhiên)
-const Star = ({ delay, duration, top, left, size, color }: any) => {
-  const anim = useRef(new Animated.Value(0)).current;
+// Ánh trăng chuyển động
+function HomeFloatingMoon() {
+  const floatAnim = useRef(new Animated.Value(0)).current;
+  const glowAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.loop(
+    const floatLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(anim, { toValue: 1, duration, useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0.1, duration, useNativeDriver: true })
-      ])
-    ).start();
-  }, []);
+        Animated.timing(floatAnim, { toValue: 1, duration: 4000, useNativeDriver: true }),
+        Animated.timing(floatAnim, { toValue: 0, duration: 4000, useNativeDriver: true }),
+      ]),
+    );
+    const glowLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, { toValue: 1, duration: 3000, useNativeDriver: true }),
+        Animated.timing(glowAnim, { toValue: 0, duration: 3000, useNativeDriver: true }),
+      ]),
+    );
+    floatLoop.start();
+    glowLoop.start();
+    return () => { floatLoop.stop(); glowLoop.stop(); };
+  }, [floatAnim, glowAnim]);
 
   return (
-    <Animated.View style={{
-      position: 'absolute', top, left,
-      width: size, height: size,
-      borderRadius: size / 2,
-      backgroundColor: color,
-      opacity: anim,
-      shadowColor: color, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 1, shadowRadius: 6
-    }} />
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        top: '8%',
+        right: '10%',
+        zIndex: -1,
+        opacity: floatAnim.interpolate({ inputRange: [0, 1], outputRange: [0.18, 0.35] }),
+        transform: [{ translateY: floatAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -12] }) }],
+      }}
+    >
+      <Animated.View
+        style={{
+          width: 36,
+          height: 36,
+          borderRadius: 18,
+          backgroundColor: DARK_MODE_SECONDARY,
+          shadowColor: DARK_MODE_SECONDARY,
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 0.8,
+          shadowRadius: 14,
+        }}
+      />
+    </Animated.View>
   );
-};
+}
 
-// Quản lý tổng thể Background Dark Mode
-export const DarkModeBackgroundEffects = ({ visible }: { visible: boolean }) => {
-  const opacityAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.timing(opacityAnim, {
-      toValue: visible ? 1 : 0,
-      duration: 800,
-      useNativeDriver: true
-    }).start();
-  }, [visible]);
-
-  const { stars, shootingStars } = useMemo(() => {
-    const starsList = Array.from({ length: 120 }).map((_, i) => ({
-      id: i,
+// Quản lý tổng thể Background Dark Mode (copy từ uudai.tsx)
+export function DarkModeBackgroundEffects({
+  visible,
+  screenWidth,
+  screenHeight,
+}: {
+  visible: boolean;
+  screenWidth: number;
+  screenHeight: number;
+}) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const { stars, shootingStars } = useMemo(() => ({
+    stars: Array.from({ length: 120 }, (_, id) => ({
+      id,
       top: `${Math.random() * 100}%`,
       left: `${Math.random() * 100}%`,
-      duration: Math.random() * 500 + 300, // Nhấp nháy loạn và nhanh hơn (300ms - 800ms)
+      duration: Math.random() * 500 + 300,
       size: Math.random() * 3 + 1,
-      color: Math.random() > 0.7 ? BRAND.secondary : (Math.random() > 0.5 ? '#48dbfb' : BRAND.primary),
-    }));
+      color: Math.random() > 0.7
+        ? DARK_MODE_SECONDARY
+        : Math.random() > 0.5
+          ? '#48dbfb'
+          : DARK_MODE_PRIMARY,
+    })),
+    shootingStars: Array.from({ length: 3 }, (_, id) => ({
+      id,
+      top: `${Math.random() * -20}%`,
+      left: `${Math.random() * 60}%`,
+      delay: Math.random() * 8000 + 2000,
+    })),
+  }), []);
 
-    const shootingList = Array.from({ length: 3 }).map((_, i) => ({
-      id: `shoot_${i}`,
-      top: `${Math.random() * -20}%`, // Bắt đầu từ ngoài mép trên
-      left: `${Math.random() * 60}%`, // Dọc nửa trên màn hình
-      delay: Math.random() * 8000 + 2000, // Thi thoảng bay 1 cái
-    }));
-
-    return { stars: starsList, shootingStars: shootingList };
-  }, []);
+  useEffect(() => {
+    const fade = Animated.timing(opacity, {
+      toValue: visible ? 1 : 0,
+      duration: 800,
+      useNativeDriver: true,
+    });
+    fade.start();
+    return () => fade.stop();
+  }, [opacity, visible]);
 
   return (
-    <Animated.View style={[StyleSheet.absoluteFill, { opacity: opacityAnim, zIndex: 0, overflow: 'hidden' }]} pointerEvents="none">
-      <Nebula />
-      {stars.map(s => (
-        <Star key={s.id} top={s.top} left={s.left} duration={s.duration} size={s.size} color={s.color} />
-      ))}
-      {shootingStars.map(s => (
-        <ShootingStar key={s.id} top={s.top} left={s.left} delay={s.delay} />
+    <Animated.View
+      pointerEvents="none"
+      style={[StyleSheet.absoluteFill, { opacity, zIndex: 0, overflow: 'hidden' }]}
+    >
+      <HomeNebula />
+      {stars.map((star) => <HomeStar key={star.id} {...star} />)}
+      {shootingStars.map((star) => (
+        <HomeShootingStar key={star.id} {...star} screenWidth={screenWidth} screenHeight={screenHeight} />
       ))}
     </Animated.View>
   );
-};
+}
 // --------------------------------
 
 interface TrangChuProps {
@@ -206,6 +329,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
 
   // State & Ref quản lý Drawer Navbar điều hướng
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
+  const [isDrawerCategoriesExpanded, setIsDrawerCategoriesExpanded] = useState(true);
   const drawerAnim = useRef(new Animated.Value(0)).current;
   const mainScrollViewRef = useRef<any>(null);
   const sectionPositions = useRef<Record<string, number>>({});
@@ -303,44 +427,24 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
     return list.length > 0 ? list : books;
   }, [books]);
 
-  // Phân chia danh mục sách thành từng hàng lướt ngang riêng biệt có ô mở rộng giống Web
-  const shelfCategories = useMemo(() => [
-    {
-      id: 'cat-van-hoc',
-      categoryId: 4,
-      name: 'Kho Văn Học & Tiểu Thuyết',
-      icon: 'book-outline',
-      books: books.filter(b => b.category_id === 4 || (b.category_name && (b.category_name.toLowerCase().includes('tiểu thuyết') || b.category_name.toLowerCase().includes('tình cảm')))),
-    },
-    {
-      id: 'cat-hien-thuc',
-      categoryId: 5,
-      name: 'Văn Học Hiện Thực',
-      icon: 'library-outline',
-      books: books.filter(b => b.category_id === 5 || (b.category_name && b.category_name.toLowerCase().includes('hiện thực'))),
-    },
-    {
-      id: 'cat-phong-su',
-      categoryId: 3,
-      name: 'Phóng Sự & Xã Hội',
-      icon: 'newspaper-outline',
-      books: books.filter(b => b.category_id === 3 || (b.category_name && b.category_name.toLowerCase().includes('phóng sự'))),
-    },
-    {
-      id: 'cat-lich-su',
-      categoryId: 2,
-      name: 'Lịch Sử & Hồi Ký',
-      icon: 'hourglass-outline',
-      books: books.filter(b => b.category_id === 2 || (b.category_name && (b.category_name.toLowerCase().includes('lịch sử') || b.category_name.toLowerCase().includes('hồi ký')))),
-    },
-    {
-      id: 'cat-kinh-dien',
-      categoryId: 1,
-      name: 'Danh Tác Kinh Điển',
-      icon: 'ribbon-outline',
-      books: books.filter(b => b.category_id === 1 || (b.category_name && b.category_name.toLowerCase().includes('kinh điển'))),
-    },
-  ], [books]);
+  // Build shelves only from category metadata returned by the backend.
+  // A missing name or ID is excluded rather than being assigned guessed data.
+  const shelfCategories = useMemo(() => {
+    const categories = new Map<string, { categoryId: number; name: string; books: HomeBookItem[] }>();
+    books.forEach((book) => {
+      if (book.category_id === undefined || !book.category_name) return;
+      const key = `${book.category_id}:${book.category_name}`;
+      const category = categories.get(key);
+      if (category) category.books.push(book);
+      else categories.set(key, { categoryId: book.category_id, name: book.category_name, books: [book] });
+    });
+    const icons = ['book-outline', 'library-outline', 'newspaper-outline', 'hourglass-outline', 'ribbon-outline'];
+    return Array.from(categories.values()).map((category, index) => ({
+      ...category,
+      id: `cat-${category.categoryId}-${index}`,
+      icon: icons[index % icons.length],
+    }));
+  }, [books]);
 
   const recentBooks = useMemo(() => getRecentHomeBooks(books), [books]);
 
@@ -402,11 +506,46 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
     outputRange: [0, 0.55],
   });
 
+  const bgAnim = useRef(new Animated.Value(isDarkMode ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.timing(bgAnim, {
+      toValue: isDarkMode ? 1 : 0,
+      duration: 500,
+      useNativeDriver: false,
+    }).start();
+  }, [bgAnim, isDarkMode]);
+
+  const animatedBg = bgAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['#F7F5F0', '#181716'],
+  });
+
   const styles = useMemo(() => getStyles(isDarkMode, width), [isDarkMode, width]);
-  const primary = isDarkMode ? '#8FC3B5' : '#4B8176';
-  const textColor = isDarkMode ? '#F1F0EC' : '#242321';
-  const featuredBooks = books.slice(0, 5);
-  const activeFeatured = Math.min(featuredIndex, Math.max(0, featuredBooks.length - 1));
+  const primary = isDarkMode ? '#E5A93C' : '#4B8176';
+  const textColor = isDarkMode ? '#F7F5F0' : '#242321';
+  const homeCardWidth = width < 380 ? 116 : 132;
+  // Use real Home books for editorial slides; fallback content stays isolated until a Featured API exists.
+  const featuredItems = books.length > 0
+    ? books.slice(0, 2).map((book) => ({
+      id: `book-${book.id}`,
+      eyebrow: 'GIỚI THIỆU SÁCH',
+      title: book.title,
+      description: book.description?.replace(/<[^>]*>/g, '').trim() || `Tác phẩm của ${book.author || 'tác giả HALMBOOK'}.`,
+      book,
+    }))
+    : [
+      { id: 'mock-release', eyebrow: 'GÓC VĂN HỌC', title: 'Không gian đọc mới mỗi ngày', description: 'Một khoảng lặng để khám phá những câu chuyện và góc nhìn đáng nhớ.', book: undefined },
+      { id: 'mock-reading-event', eyebrow: 'DẤU ẤN VĂN HỌC', title: 'Đọc theo nhịp riêng', description: 'Những trang sách mở ra thêm nhiều cách nhìn về con người và cuộc sống.', book: undefined },
+    ];
+  const activeFeatured = Math.min(featuredIndex, Math.max(0, featuredItems.length - 1));
+  useEffect(() => {
+    if (featuredItems.length < 2) return;
+    const timer = setInterval(() => {
+      setFeaturedIndex((current) => (current + 1) % featuredItems.length);
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [featuredItems.length]);
   const rankedBooks = useMemo(() => getRankedHomeBooks(books), [books]);
   useEffect(() => {
     featuredRef.current?.scrollTo({ x: 0, animated: false });
@@ -431,7 +570,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
   };
 
   const renderNovelCard = (novel: HomeBookItem, cardWidth: number = 115, hasMarginRight: boolean = true, subtitle?: string) => {
-    const coverHeight = Math.floor(cardWidth * 1.35);
+    const coverHeight = Math.floor(cardWidth * 1.45);
     return (
       <TouchableOpacity
         key={novel.id}
@@ -454,30 +593,29 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
     );
   };
 
-  const renderDiscoveryCard = (categoryName: string, icon: string, categoryId: number) => {
+  const renderShelfMoreCard = (categoryName: string, categoryId: number, cardWidth: number = 115) => {
+    const coverHeight = Math.floor(cardWidth * 1.45);
+    const cardHeight = coverHeight + 6 + 42 + 4 + 17;
     return (
       <TouchableOpacity
-        key={`discovery-${categoryId}`}
-        style={styles.discoveryCard}
+        key={`more-${categoryId}`}
+        style={[styles.novelCard, styles.moreAction, { width: cardWidth, height: cardHeight }]}
         activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel={`Xem thêm sách thuộc ${categoryName}`}
         onPress={() => navigate('genreBooks', { categoryId, categoryName })}
       >
-        <View style={styles.discoveryIconWrapper}>
-          <Ionicons name={icon as any} size={26} color={isDarkMode ? '#8FC3B5' : '#8B4A3C'} />
-        </View>
-        <Text style={styles.discoveryTitle} numberOfLines={2}>{categoryName}</Text>
-        <View style={styles.discoveryButton}>
-          <Text style={styles.discoveryBtnText}>Khám phá</Text>
-          <Ionicons name="arrow-forward" size={13} color={isDarkMode ? '#8FC3B5' : '#8B4A3C'} />
-        </View>
+        <Text style={styles.moreActionCategory} numberOfLines={2}>{categoryName}</Text>
+        <Text style={styles.moreActionLabel}>Xem thêm</Text>
+        <Ionicons name="arrow-down" size={20} color={isDarkMode ? '#F0D4B5' : '#6F5740'} />
       </TouchableOpacity>
     );
   };
 
-  const renderRankItem = (novel: any, index: number) => {
+  const renderRankItem = (novel: HomeBookItem, index: number) => {
     return (
       <TouchableOpacity key={novel.id} style={styles.rankItem} activeOpacity={0.8} onPress={() => setSelectedPreviewBook(novel)}>
-        <Text style={[styles.rankNumber, index < 3 ? styles.rankNumberTop : null]}>{index + 1}</Text>
+        <Text style={[styles.rankNumber, index === 0 ? styles.rankNumberFirst : index === 1 ? styles.rankNumberSecond : index === 2 ? styles.rankNumberThird : null]}>{index + 1}</Text>
         <View style={styles.rankCover}>
           <HomeCover book={novel} />
         </View>
@@ -489,6 +627,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
     );
   };
 
+<<<<<<< HEAD
   const toolbarData = [
     {
       icon: 'trophy',
@@ -537,10 +676,12 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
     },
   ];
 
+=======
+>>>>>>> 37cbdae (redesign the homepage, update search functionality, and update expanded categories)
   return (
-    <SafeAreaView edges={['top', 'left', 'right']} style={[styles.container, { backgroundColor: isDarkMode ? '#202321' : '#F7F5F0' }]}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={[styles.container, styles.safeAreaHeader, { backgroundColor: isDarkMode ? '#181716' : '#EAE6DF' }]}>
       <Animated.View
-        style={[styles.container, styles.homeFrame]}
+        style={[styles.container, styles.homeFrame, { backgroundColor: animatedBg }]}
         onLayout={({ nativeEvent: { layout } }) => {
           // Reserve space for the bottom navigation even while it is hidden.
           floatingMenuBounds.current = {
@@ -556,6 +697,10 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
         }}
       >
       <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'} />
+
+      {/* HIỆU ỨNG DARK MODE - COPY TỪ UUDAI */}
+      <DarkModeBackgroundEffects visible={isDarkMode} screenWidth={window.width} screenHeight={window.height} />
+      {isDarkMode && <HomeFloatingMoon />}
 
 
 
@@ -628,7 +773,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
               <Ionicons
                 name="search-outline"
                 size={18}
-                color={isDarkMode ? '#9BA3B2' : '#7A8291'}
+                color={isDarkMode ? '#D7FFF5' : '#625E57'}
                 style={{ marginRight: 8 }}
               />
               <Text style={styles.searchInput} numberOfLines={1}>
@@ -669,62 +814,32 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
               {unreadNotifications > 0 && <View style={{ position: 'absolute', top: 3, right: 2, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 3, backgroundColor: '#D5AC56', alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 9, fontWeight: '800', color: '#382F23' }}>{unreadNotifications > 99 ? '99+' : unreadNotifications}</Text></View>}
             </TouchableOpacity>
           </View>
-          <View style={styles.featuredHeading}>
-            <Text style={styles.featuredEyebrow}>HALMBOOK / KHÔNG GIAN ĐỌC</Text>
-            <Text style={styles.pageTitle}>Mở sách, mở góc nhìn.</Text>
-          </View>
-          {featuredBooks.length > 0 ? <>
+          {featuredItems.length > 0 ? <>
             <ScrollView ref={featuredRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselContainer}
               snapToInterval={featuredWidth + 12} decelerationRate="fast" scrollEventThrottle={16}
-              onScroll={event => setFeaturedIndex(Math.max(0, Math.min(featuredBooks.length - 1, Math.round(event.nativeEvent.contentOffset.x / (featuredWidth + 12)))))}>
-              {featuredBooks.map(book => <View key={book.id} style={[styles.featuredPanel, { width: featuredWidth }]}>
-                <View style={styles.featuredCopy}>
-                  <Text style={styles.featuredEyebrow} numberOfLines={1}>{book.category_name || 'TRONG THƯ VIỆN'}</Text>
-                  <Text style={styles.featuredTitle} numberOfLines={3}>{book.title}</Text>
-                  <Text style={styles.featuredAuthor} numberOfLines={1}>{book.author}</Text>
-                  {!!book.description && <Text style={styles.featuredDescription} numberOfLines={2}>{book.description.replace(/<[^>]*>/g, '')}</Text>}
-                  <TouchableOpacity style={styles.featuredCta} onPress={() => setSelectedPreviewBook(book)} accessibilityRole="button" accessibilityLabel={'Xem tác phẩm ' + book.title}>
-                    <Text style={styles.featuredCtaText}>Xem tác phẩm</Text><Ionicons name="arrow-forward" size={15} color={isDarkMode ? '#202321' : '#FFFFFF'} />
-                  </TouchableOpacity>
+              onScroll={event => setFeaturedIndex(Math.max(0, Math.min(featuredItems.length - 1, Math.round(event.nativeEvent.contentOffset.x / (featuredWidth + 12)))))}>
+              {featuredItems.map((item) => (
+                 <View
+                   key={item.id}
+                   style={[styles.featuredPanel, isDarkMode && styles.featuredPanelDark, { width: featuredWidth }]}
+                 >
+                  <View style={styles.featuredEditorialCopy}>
+                    <Text style={[styles.featuredEyebrow, isDarkMode && styles.featuredEyebrowDark]}>{item.eyebrow}</Text>
+                    <Text style={[styles.featuredTitle, isDarkMode && styles.featuredTitleDark]} numberOfLines={2}>{item.title}</Text>
+                    <Text style={[styles.featuredDescription, isDarkMode && styles.featuredDescriptionDark]} numberOfLines={3}>{item.description}</Text>
+                  </View>
+                  <View style={[styles.featuredEditorialImage, isDarkMode && styles.featuredEditorialImageDark]}>
+                    {item.book ? <HomeCover book={item.book} /> : <Ionicons name="book-outline" size={40} color={isDarkMode ? '#E5A93C' : '#8B4A3C'} />}
+                  </View>
                 </View>
-                <View style={styles.featuredCover}><HomeCover book={book} /></View>
-              </View>)}
+              ))}
             </ScrollView>
             <View style={styles.paginationDots}>
-              {featuredBooks.map((book, index) => <TouchableOpacity key={book.id} style={styles.dotTarget} accessibilityRole="button" accessibilityLabel={'Chuyển đến ' + book.title} accessibilityState={{ selected: index === activeFeatured }} onPress={() => featuredRef.current?.scrollTo({ x: index * (featuredWidth + 12), animated: true })}>
+              {featuredItems.map((item, index) => <TouchableOpacity key={item.id} style={styles.dotTarget} accessibilityRole="button" accessibilityLabel={`Chuyển đến nội dung ${index + 1}`} accessibilityState={{ selected: index === activeFeatured }} onPress={() => featuredRef.current?.scrollTo({ x: index * (featuredWidth + 12), animated: true })}>
                 <View style={[styles.dot, index === activeFeatured && styles.dotActive]} />
               </TouchableOpacity>)}
             </View>
-          </> : <View style={styles.statusBox} accessibilityLiveRegion="polite">
-            {isLoading ? <ActivityIndicator color={primary} /> : <Ionicons name="library-outline" size={28} color={primary} />}
-            <Text style={styles.statusText}>{isLoading ? 'Đang chuẩn bị không gian đọc…' : errorMessage ? 'Chưa thể tải tác phẩm nổi bật. Hãy thử lại bên dưới.' : 'Những tác phẩm mới sẽ xuất hiện tại đây.'}</Text>
-          </View>}
-        </View>
-
-        <View style={styles.toolbar}>
-          {toolbarData.map((item, idx) => (
-            <TouchableOpacity
-              key={idx}
-              style={styles.toolbarItem}
-              activeOpacity={0.8}
-              onPress={() => item.screen === 'transactions' ? handleJumpToSection('ranking') : navigate(item.screen as any)}
-            >
-              <View style={[
-                styles.toolbarIconBox,
-                {
-                  backgroundColor: isDarkMode ? '#2A2E2B' : '#F7F5F0',
-                  borderColor: isDarkMode ? '#414642' : '#E6E1D8',
-                }
-              ]}>
-                <Ionicons
-                  name={item.icon as any}
-                  size={22}
-                  color={primary}
-                />
-              </View>
-              <Text style={styles.toolbarLabel} numberOfLines={1}>{item.label}</Text>
-            </TouchableOpacity>
-          ))}
+          </> : null}
         </View>
 
         {errorMessage && books.length > 0 && <View style={styles.refreshNotice} accessibilityLiveRegion="polite">
@@ -763,7 +878,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
             </View>
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList}>
-              {recommendedBooks.map(n => renderNovelCard(n, width < 380 ? 116 : 132, true))}
+              {recommendedBooks.map(n => renderNovelCard(n, homeCardWidth, true))}
             </ScrollView>
           )}
         </View>
@@ -793,7 +908,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
             </View>
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList}>
-              {recentBooks.map(n => renderNovelCard(n, width < 380 ? 116 : 132, true, formatHomeBookDate(n)))}
+              {recentBooks.map(n => renderNovelCard(n, homeCardWidth, true, formatHomeBookDate(n)))}
             </ScrollView>
           )}
         </View>
@@ -835,36 +950,10 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
         </View>
 
         {/* DANH MỤC THỂ LOẠI: TÁCH RIÊNG TỪNG HÀNG SÁCH LƯỚT NGANG KÈM Ô MỞ RỘNG (GIỐNG WEB) */}
-        <View
-          style={styles.sectionHeaderContainer}
-          onLayout={(e) => {
-            sectionPositions.current['categories'] = e.nativeEvent.layout.y;
-          }}
-        >
-          <View style={styles.sectionTitleBox}>
-            <View style={styles.sectionAccent} />
-            <Text style={styles.sectionTitleText}>Danh Mục Thể Loại</Text>
-          </View>
-          <TouchableOpacity style={styles.allGenres} onPress={() => navigate('categories')} accessibilityRole="button"><Text style={styles.shelfMoreText}>Xem tất cả thể loại →</Text></TouchableOpacity>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList}>
-            {shelfCategories.map(shelf => <TouchableOpacity key={shelf.id} style={styles.genreCard} onPress={() => navigate('genreBooks', { categoryId: shelf.categoryId, categoryName: shelf.name })} accessibilityRole="button" accessibilityLabel={shelf.name}>
-              <Ionicons name={shelf.icon as any} size={22} color={primary} />
-              <Text style={styles.genreTitle}>{shelf.name}</Text>
-              <Text style={styles.genreLink}>Khám phá →</Text>
-            </TouchableOpacity>)}
-          </ScrollView>
-        </View>
-        <ContinueReading books={books} refreshKey={historyRefreshKey} />
-        <View style={styles.editorialPanel}>
-          <Text style={styles.featuredEyebrow}>GÓC ĐỌC CHẬM</Text>
-          <Text style={styles.editorialTitle}>Một khoảng lặng cho trang sách.</Text>
-          <Text style={styles.editorialDescription}>Chọn một chủ đề bạn quan tâm, đọc theo nhịp riêng và khám phá những góc nhìn khác nhau trong từng tác phẩm.</Text>
-          <TouchableOpacity onPress={() => navigate('categories')} accessibilityRole="button" style={styles.editorialAction}><Text style={styles.shelfMoreText}>Tìm chủ đề để bắt đầu →</Text></TouchableOpacity>
-        </View>
-
         {shelfCategories.map((shelf) => {
           if (!shelf.books || shelf.books.length === 0) return null;
           return (
+            <Fragment key={shelf.id}>
             <View
               key={shelf.id}
               style={styles.shelfSection}
@@ -878,14 +967,23 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
                     <Ionicons name={shelf.icon as any} size={15} color={isDarkMode ? '#8FC3B5' : '#8B4A3C'} />
                   </View>
                 </View>
-                <TouchableOpacity onPress={() => navigate('genreBooks', { categoryId: shelf.categoryId, categoryName: shelf.name })} style={styles.moreAction} accessibilityRole="button" accessibilityLabel={'Xem thêm ' + shelf.name}><Text style={styles.shelfMoreText}>Xem thêm</Text></TouchableOpacity>
               </View>
 
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList}>
-                {shelf.books.map(n => renderNovelCard(n, width < 380 ? 116 : 132, true))}
-                {renderDiscoveryCard(shelf.name, shelf.icon, shelf.categoryId)}
+                {shelf.books.slice(0, 7).map(n => renderNovelCard(n, homeCardWidth, true))}
+                {renderShelfMoreCard(shelf.name, shelf.categoryId, homeCardWidth)}
               </ScrollView>
             </View>
+            {shelfCategories.indexOf(shelf) === 1 && <ContinueReading books={books} refreshKey={historyRefreshKey} />}
+            {(shelfCategories.indexOf(shelf) + 1) % 4 === 0 && shelfCategories.indexOf(shelf) < shelfCategories.length - 1 && (
+              <View style={styles.editorialPanel}>
+                <Text style={styles.featuredEyebrow}>GÓC ĐỌC CHẬM</Text>
+                <Text style={styles.editorialTitle}>Một khoảng lặng cho trang sách.</Text>
+                <Text style={styles.editorialDescription}>Chọn một chủ đề bạn quan tâm, đọc theo nhịp riêng và khám phá những góc nhìn khác nhau trong từng tác phẩm.</Text>
+                <TouchableOpacity onPress={() => navigate('categories')} accessibilityRole="button" style={styles.editorialAction}><Text style={styles.shelfMoreText}>Tìm chủ đề để bắt đầu →</Text></TouchableOpacity>
+              </View>
+            )}
+            </Fragment>
           );
         })}
 
@@ -934,21 +1032,18 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
         animationType="fade"
         onRequestClose={() => setSelectedPreviewBook(null)}
       >
-        <TouchableOpacity
+        <View
           style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setSelectedPreviewBook(null)}
         >
           <TouchableOpacity
-            style={[styles.previewPopupCard, { maxHeight: Math.max(160, window.height - insets.top - insets.bottom - 32) }]}
+            style={StyleSheet.absoluteFill}
             activeOpacity={1}
-            onPress={() => {
-              if (selectedPreviewBook) {
-                const bookToOpen = selectedPreviewBook;
-                setSelectedPreviewBook(null);
-                navigate('bookDetail', bookToOpen);
-              }
-            }}
+            onPress={() => setSelectedPreviewBook(null)}
+            accessibilityRole="button"
+            accessibilityLabel="Đóng thông tin tác phẩm"
+          />
+          <View
+            style={[styles.previewPopupCard, { maxHeight: Math.max(160, window.height - insets.top - insets.bottom - 32) }]}
           >
             <ScrollView showsVerticalScrollIndicator={false} bounces={false}>
             {/* Header Popup */}
@@ -1030,8 +1125,8 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
               <Ionicons name="arrow-forward" size={16} color={isDarkMode ? '#12151B' : '#ffffff'} />
             </TouchableOpacity>
             </ScrollView>
-          </TouchableOpacity>
-        </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
 
       {/* THANH ĐIỀU HƯỚNG DRAWER (NAVBAR DỌC TRƯỢT TỪ BÊN TRÁI) */}
@@ -1067,16 +1162,17 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
             ]}
           >
             {/* HIỆU ỨNG DARK MODE ĐỒNG BỘ TRANG CHỦ */}
+            <DarkModeBackgroundEffects visible={isDarkMode} screenWidth={window.width} screenHeight={window.height} />
 
             {/* Header Drawer */}
             <View style={[styles.drawerHeader, { paddingTop: insets.top + 12 }]}>
               <View style={styles.drawerHeaderInfo}>
                 <View style={styles.drawerLogoBadge}>
-                  <Ionicons name="book" size={18} color="#FFFFFF" />
+                  <Ionicons name="book" size={18} color={isDarkMode ? '#FFFFFF' : '#8B4A3C'} />
                 </View>
                 <View>
                   <Text style={styles.drawerBrandText}>
-                    HALM <Text style={{ color: isDarkMode ? '#8FC3B5' : '#E6E1D8' }}>Book</Text>
+                    HALM <Text style={{ color: isDarkMode ? '#8FC3B5' : '#8B4A3C' }}>Book</Text>
                   </Text>
                   <Text style={styles.drawerSubText}>Điều hướng trang chủ</Text>
                 </View>
@@ -1089,7 +1185,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
                 accessibilityRole="button"
                 accessibilityLabel="Đóng thanh điều hướng"
               >
-                <Ionicons name="close" size={20} color="#FFFFFF" />
+                <Ionicons name="close" size={20} color={isDarkMode ? '#FFFFFF' : '#242321'} />
               </TouchableOpacity>
             </View>
 
@@ -1109,8 +1205,8 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
                 accessibilityRole="button"
                 accessibilityLabel="Mở bộ lọc sách"
               >
-                <View style={[styles.drawerItemIconBox, { backgroundColor: isDarkMode ? '#203831' : '#E8F3EF' }]}>
-                  <Ionicons name="options-outline" size={18} color={isDarkMode ? '#87C9B5' : '#4A7C72'} />
+                  <View style={[styles.drawerItemIconBox, { backgroundColor: isDarkMode ? '#203831' : '#EAE6DF' }]}>
+                  <Ionicons name="options-outline" size={18} color={isDarkMode ? '#87C9B5' : '#8B4A3C'} />
                 </View>
                 <View style={styles.drawerItemTextBox}>
                   <Text style={styles.drawerItemTitle}>Bộ lọc</Text>
@@ -1146,8 +1242,8 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
                   activeOpacity={0.75}
                   onPress={() => handleJumpToSection('recent')}
                 >
-                  <View style={[styles.drawerItemIconBox, { backgroundColor: isDarkMode ? '#292D2A' : '#F7F5F0' }]}>
-                    <Ionicons name="flash" size={17} color={isDarkMode ? '#8FC3B5' : '#35695F'} />
+                  <View style={[styles.drawerItemIconBox, { backgroundColor: isDarkMode ? '#292D2A' : '#EAE6DF' }]}>
+                  <Ionicons name="flash" size={17} color={isDarkMode ? '#8FC3B5' : '#8B4A3C'} />
                   </View>
                   <View style={styles.drawerItemTextBox}>
                     <Text style={styles.drawerItemTitle}>Mới Cập Nhật</Text>
@@ -1181,18 +1277,18 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
                 <TouchableOpacity
                   style={styles.drawerGroupHeaderBtn}
                   activeOpacity={0.7}
-                  onPress={() => handleJumpToSection('categories')}
+                  onPress={() => setIsDrawerCategoriesExpanded((expanded) => !expanded)}
                 >
                   <Text style={styles.drawerGroupTitle}>DANH MỤC THỂ LOẠI</Text>
-                  <Ionicons name="arrow-down-circle-outline" size={15} color={isDarkMode ? '#8FC3B5' : '#8B4A3C'} />
+                  <Ionicons name={isDrawerCategoriesExpanded ? 'chevron-up' : 'chevron-down'} size={18} color={isDarkMode ? '#E5A93C' : '#8B4A3C'} />
                 </TouchableOpacity>
 
-                {shelfCategories.map((shelf) => {
+                {isDrawerCategoriesExpanded && shelfCategories.map((shelf) => {
                   const bookCount = shelf.books?.length || 0;
                   return (
                     <TouchableOpacity
                       key={`drawer-shelf-${shelf.id}`}
-                      style={styles.drawerItem}
+                      style={styles.drawerCategoryRow}
                       activeOpacity={0.75}
                       onPress={() => {
                         if (shelf.books.length) handleJumpToSection(shelf.id);
@@ -1202,14 +1298,14 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
                         }
                       }}
                     >
-                      <View style={[styles.drawerItemIconBox, { backgroundColor: isDarkMode ? '#292D2A' : '#F7F5F0' }]}>
-                        <Ionicons name={shelf.icon as any} size={17} color={isDarkMode ? '#8FC3B5' : '#8B4A3C'} />
+                      <View style={styles.drawerCategoryIcon}>
+                        <Ionicons name={shelf.icon as any} size={18} color={isDarkMode ? '#E5A93C' : '#8B4A3C'} />
                       </View>
                       <View style={styles.drawerItemTextBox}>
                         <Text style={styles.drawerItemTitle} numberOfLines={1}>{shelf.name}</Text>
                         <Text style={styles.drawerItemDesc}>{bookCount} cuốn sách</Text>
                       </View>
-                      <Ionicons name="chevron-forward" size={16} color={isDarkMode ? '#6E7687' : '#9E988E'} />
+                      <Ionicons name="chevron-forward" size={16} color={isDarkMode ? '#A39F99' : '#9E988E'} />
                     </TouchableOpacity>
                   );
                 })}
@@ -1224,54 +1320,61 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
 }
 
 const getStyles = (isDark: boolean, width: number) => {
-  const textMain = isDark ? '#F5F1E8' : '#242321';
-  const textSub = isDark ? '#B9B7AF' : '#77736C';
-  const pageBg = isDark ? '#202321' : '#F7F5F0';
+  const textMain = isDark ? '#F7F5F0' : '#242321';
+  const textSub = isDark ? '#A39F99' : '#85817A';
+  const pageBg = isDark ? '#181716' : '#F7F5F0';
 
-  const topBg = isDark ? '#202321' : '#F7F5F0';
-
-  const cardBg = isDark ? '#292D2A' : '#ffffff';
-  const cardRaised = isDark ? '#303530' : '#ffffff';
-  const coverBg = isDark ? '#343A35' : '#ccc';
+  const cardBg = isDark ? '#242321' : '#ffffff';
+  const cardRaised = isDark ? '#242321' : '#ffffff';
+  const coverBg = isDark ? '#2D2B28' : '#F2EFE9';
+  const cardBorder = isDark ? '#383633' : '#E6E1D8';
+  const accent = isDark ? '#E5A93C' : '#8B4A3C';
+  const chipBg = isDark ? '#2D2B28' : '#EAE6DF';
 
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: pageBg },
     homeFrame: { width: '100%', maxWidth: 1040, alignSelf: 'center' },
-    featuredHeading: { paddingHorizontal: 16, marginBottom: 16 },
+    featuredHeading: { paddingHorizontal: 16, marginBottom: 8 },
     pageTitle: { fontSize: 28, lineHeight: 36, fontWeight: '700', color: textMain, marginTop: 6 },
-    featuredPanel: { flexDirection: 'row', alignItems: 'center', backgroundColor: isDark ? '#292D2A' : '#F7F5F0', padding: width < 360 ? 12 : 18, gap: 16, borderRadius: 8, marginRight: 12, borderWidth: 1, borderColor: isDark ? '#414642' : '#E6E1D8' },
+    featuredPanel: { minHeight: 156, flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', padding: width < 360 ? 14 : 18, borderRadius: 16, marginRight: 12, borderWidth: 1, borderColor: '#E6E1D8', shadowColor: '#242321', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 2 },
+    featuredPanelDark: { backgroundColor: '#242321', borderColor: '#383633', shadowColor: '#000000', shadowOpacity: 0.2 },
+    featuredEditorialCopy: { flex: 1, minWidth: 0, paddingRight: 12 },
+    featuredEditorialImage: { width: width < 360 ? 74 : 90, height: width < 360 ? 108 : 126, borderRadius: 10, backgroundColor: '#F3EEE7', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+    featuredEditorialImageDark: { backgroundColor: '#2D2B28' },
     featuredCopy: { flex: 1, minWidth: 0, alignItems: 'flex-start' },
-    featuredEyebrow: { fontSize: 12, lineHeight: 17, fontWeight: '600', letterSpacing: 0.7, color: isDark ? '#BC8B7B' : '#8B4A3C' },
-    featuredTitle: { fontSize: width < 360 ? 21 : 26, lineHeight: width < 360 ? 28 : 34, fontWeight: '700', color: textMain, marginTop: 8 },
-    featuredAuthor: { fontSize: 13, lineHeight: 19, color: textSub, marginTop: 6 },
-    featuredDescription: { fontSize: 13, lineHeight: 20, color: textSub, marginTop: 8 },
-    featuredCover: { width: width < 360 ? 80 : width < 600 ? 100 : 150, aspectRatio: 0.68, backgroundColor: isDark ? '#343A35' : '#E6E1D8', borderRadius: 4, overflow: 'hidden' },
-    featuredCta: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, marginTop: 14, backgroundColor: isDark ? '#8FC3B5' : '#4B8176', borderRadius: 6 },
-    featuredCtaText: { fontSize: 13, fontWeight: '600', color: isDark ? '#202321' : '#FFFFFF' },
-    dotTarget: { minWidth: 32, minHeight: 32, alignItems: 'center', justifyContent: 'center' },
-    allGenres: { alignSelf: 'flex-start', marginLeft: 16, paddingVertical: 10, marginTop: -8, marginBottom: 8 },
-    genreCard: { width: 156, minHeight: 152, padding: 16, marginRight: 12, backgroundColor: isDark ? '#292D2A' : '#F7F5F0', borderWidth: 1, borderColor: isDark ? '#414642' : '#E6E1D8', borderRadius: 8 },
-    genreTitle: { color: textMain, fontSize: 15, lineHeight: 22, fontWeight: '600', marginTop: 12 },
-    genreLink: { color: isDark ? '#8FC3B5' : '#35695F', fontSize: 12, marginTop: 10 },
-    editorialPanel: { margin: 16, marginBottom: 28, padding: 20, backgroundColor: isDark ? '#292D2A' : '#F7F5F0', borderLeftWidth: 3, borderLeftColor: isDark ? '#BC8B7B' : '#8B4A3C' },
+    featuredEyebrow: { fontSize: 11, lineHeight: 16, fontWeight: '700', letterSpacing: 0.6, color: '#8B4A3C' },
+    featuredEyebrowDark: { color: '#E5A93C' },
+    featuredTitle: { fontSize: width < 360 ? 19 : 22, lineHeight: width < 360 ? 25 : 29, fontWeight: '700', color: '#242321', marginTop: 7 },
+    featuredTitleDark: { color: '#F7F5F0' },
+    featuredAuthor: { fontSize: 13, lineHeight: 19, color: '#625E57', marginTop: 6 },
+    featuredDescription: { fontSize: 12, lineHeight: 18, color: '#625E57', marginTop: 8 },
+    featuredDescriptionDark: { color: '#A39F99' },
+    featuredCover: { width: width < 360 ? 80 : width < 600 ? 100 : 150, aspectRatio: 0.68, backgroundColor: isDark ? '#2D2B28' : '#E6E1D8', borderRadius: 4, overflow: 'hidden' },
+    featuredCta: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, marginTop: 14, backgroundColor: isDark ? '#E5A93C' : '#4B8176', borderRadius: 6 },
+    featuredCtaText: { fontSize: 13, fontWeight: '600', color: isDark ? '#181716' : '#FFFFFF' },
+    featuredEmpty: { minHeight: 112, borderRadius: 12, marginHorizontal: 16, paddingHorizontal: 18, paddingVertical: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? '#242321' : '#B7E3D8', borderWidth: 1, borderColor: isDark ? '#383633' : '#7DBBAE' },
+    featuredEmptyText: { marginTop: 7, fontSize: 13, lineHeight: 19, textAlign: 'center', color: isDark ? '#A39F99' : '#245C53' },
+    dotTarget: { minWidth: 24, minHeight: 20, alignItems: 'center', justifyContent: 'center' },
+    editorialPanel: { margin: 16, marginBottom: 28, padding: 20, backgroundColor: isDark ? '#242321' : '#F7F5F0', borderLeftWidth: 3, borderLeftColor: isDark ? '#E5A93C' : '#8B4A3C', borderWidth: isDark ? 1 : 0, borderColor: isDark ? '#383633' : 'transparent' },
     editorialTitle: { fontSize: 20, lineHeight: 28, color: textMain, fontWeight: '700', marginTop: 8 },
     editorialDescription: { fontSize: 14, lineHeight: 22, color: textSub, marginTop: 8 },
     editorialAction: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start', marginTop: 4 },
-    moreAction: { minHeight: 44, justifyContent: 'center', paddingLeft: 12 },
     scrollView: { flex: 1, backgroundColor: 'transparent' },
     scrollContent: { paddingBottom: 120 },
-    refreshNotice: { marginHorizontal: 16, padding: 16, alignItems: 'center', marginBottom: 20, backgroundColor: isDark ? '#303530' : '#FFFFFF', borderRadius: 8 },
+    refreshNotice: { marginHorizontal: 16, padding: 16, alignItems: 'center', marginBottom: 20, backgroundColor: isDark ? '#242321' : '#FFFFFF', borderRadius: 8, borderWidth: 1, borderColor: cardBorder },
     refreshStatus: { paddingHorizontal: 16, paddingBottom: 16, alignItems: 'center' },
 
+    safeAreaHeader: { backgroundColor: isDark ? '#1F2228' : '#EAE6DF' },
     topBackground: {
-      backgroundColor: topBg,
-      borderBottomLeftRadius: 0,
-      borderBottomRightRadius: 0,
+      backgroundColor: isDark ? '#1F2228' : '#EAE6DF',
+      borderBottomLeftRadius: 20,
+      borderBottomRightRadius: 20,
       paddingTop: 0,
       paddingBottom: 20,
       marginBottom: isDark ? 14 : 10,
       borderBottomWidth: 1,
-      borderBottomColor: isDark ? '#383C39' : '#E6E1D8',
+      borderBottomColor: isDark ? '#383633' : '#EAE6DF',
+      overflow: 'hidden',
     },
     header: {
       flexDirection: 'row',
@@ -1295,8 +1398,8 @@ const getStyles = (isDark: boolean, width: number) => {
       height: FLOATING_MENU_SIZE,
       borderRadius: FLOATING_MENU_SIZE / 2,
       borderWidth: 1,
-      borderColor: isDark ? 'rgba(255,255,255,0.24)' : 'rgba(255,255,255,0.65)',
-      backgroundColor: isDark ? '#303530' : '#F7F5F0',
+      borderColor: isDark ? '#383633' : 'rgba(255,255,255,0.65)',
+      backgroundColor: isDark ? '#242321' : '#F7F5F0',
       justifyContent: 'center',
       alignItems: 'center',
       zIndex: 10,
@@ -1311,7 +1414,9 @@ const getStyles = (isDark: boolean, width: number) => {
       flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: isDark ? '#2A2E2B' : '#F7F5F0',
+      backgroundColor: isDark ? '#242321' : '#EAE6DF',
+      borderWidth: 1,
+      borderColor: isDark ? '#383633' : '#D2C8BA',
       borderRadius: 10,
       paddingHorizontal: 12,
       height: 40,
@@ -1319,51 +1424,35 @@ const getStyles = (isDark: boolean, width: number) => {
     },
     searchInput: {
       flex: 1,
-      color: isDark ? '#9BA3B2' : '#7A8291',
+      color: isDark ? '#A39F99' : '#625E57',
       fontWeight: '400',
       fontSize: 14,
     },
     darkModeToggle: {
       width: 40,
       height: 40,
-      backgroundColor: isDark ? '#2A2E2B' : '#F7F5F0',
+      backgroundColor: isDark ? '#242321' : '#EAE6DF',
+      borderWidth: 1,
+      borderColor: isDark ? '#383633' : '#D2C8BA',
       borderRadius: 10,
       justifyContent: 'center',
       alignItems: 'center',
     },
 
     carouselContainer: { paddingLeft: 16, paddingRight: 4 },
-    paginationDots: { flexDirection: 'row', justifyContent: 'center', marginTop: 15 },
+    paginationDots: { flexDirection: 'row', justifyContent: 'center', marginTop: -2, marginBottom: -2 },
     dot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: isDark ? '#59625A' : '#D6D0C6',
-      marginHorizontal: 4,
+      width: 5,
+      height: 5,
+      borderRadius: 3,
+      backgroundColor: isDark ? '#383633' : '#D6D0C6',
+      marginHorizontal: 3,
     },
-    dotActive: { width: 20, backgroundColor: isDark ? '#8FC3B5' : '#4B8176' },
-
-    toolbar: {
-      flexDirection: 'row',
-      justifyContent: 'space-around',
-      paddingVertical: 12,
-      paddingHorizontal: 10,
-      marginBottom: 12,
-    },
-    toolbarItem: { alignItems: 'center', flex: 1 },
-    toolbarIconBox: {
-      width: 44, height: 44, borderRadius: 8, borderWidth: 1, justifyContent: 'center', alignItems: 'center', marginBottom: 6,
-    },
-    toolbarLabel: {
-      fontSize: 11,
-      fontWeight: '700',
-      color: textMain,
-      textAlign: 'center',
-    },
+    dotActive: { width: 12, backgroundColor: isDark ? '#E5A93C' : '#245C53' },
 
     section: { marginBottom: 28 },
     sectionTitleBox: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', paddingHorizontal: 15, marginBottom: 14, gap: 9 },
-    sectionAccent: { width: 3, height: 22, borderRadius: 2, backgroundColor: isDark ? '#B87968' : '#8B4A3C' },
+    sectionAccent: { width: 3, height: 22, borderRadius: 2, backgroundColor: isDark ? '#E5A93C' : '#8B4A3C' },
     sectionTitleText: { fontSize: 20, lineHeight: 27, fontWeight: '700', color: textMain, flexShrink: 1 },
     scrollList: { paddingLeft: 16, paddingRight: 16, paddingBottom: 4 },
 
@@ -1395,6 +1484,7 @@ const getStyles = (isDark: boolean, width: number) => {
       borderRadius: 8,
       justifyContent: 'center',
       alignItems: 'center',
+      backgroundColor: isDark ? '#2D2B28' : '#F7F5F0',
     },
     shelfTitleText: {
       flex: 1, fontSize: 19, lineHeight: 25, fontWeight: '700', color: textMain,
@@ -1402,16 +1492,16 @@ const getStyles = (isDark: boolean, width: number) => {
     shelfMoreText: {
       fontSize: 12,
       fontWeight: '700',
-      color: isDark ? '#8FC3B5' : '#8B4A3C',
+      color: isDark ? '#E5A93C' : '#8B4A3C',
     },
     discoveryCard: {
       width: 120,
       height: 195,
-      backgroundColor: isDark ? '#292D2A' : '#FBF9F5',
+      backgroundColor: isDark ? '#242321' : '#FBF9F5',
       borderRadius: 10,
       borderWidth: 1.5,
       borderStyle: 'dashed',
-      borderColor: isDark ? '#3E4758' : '#D4C7B5',
+      borderColor: isDark ? '#383633' : '#D4C7B5',
       justifyContent: 'center',
       alignItems: 'center',
       padding: 12,
@@ -1421,7 +1511,7 @@ const getStyles = (isDark: boolean, width: number) => {
       width: 44,
       height: 44,
       borderRadius: 22,
-      backgroundColor: isDark ? '#282F3E' : '#EFE8DA',
+      backgroundColor: isDark ? '#2D2B28' : '#EFE8DA',
       justifyContent: 'center',
       alignItems: 'center',
       marginBottom: 10,
@@ -1438,7 +1528,7 @@ const getStyles = (isDark: boolean, width: number) => {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 4,
-      backgroundColor: isDark ? '#2C2619' : '#F5EBE1',
+      backgroundColor: isDark ? '#2D2B28' : '#F5EBE1',
       paddingHorizontal: 8,
       paddingVertical: 4,
       borderRadius: 12,
@@ -1446,15 +1536,18 @@ const getStyles = (isDark: boolean, width: number) => {
     discoveryBtnText: {
       fontSize: 11,
       fontWeight: '700',
-      color: isDark ? '#8FC3B5' : '#8B4A3C',
+      color: isDark ? '#E5A93C' : '#8B4A3C',
     },
 
     novelCard: { marginRight: 14 },
+    moreAction: { minHeight: 44, justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 14, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: isDark ? '#6F665A' : '#CFC8BD', backgroundColor: isDark ? '#292723' : '#EAE6DF' },
+    moreActionCategory: { width: '100%', minHeight: 34, textAlign: 'center', fontSize: 12, lineHeight: 17, fontWeight: '700', color: isDark ? '#F0E8DC' : '#4A4640' },
+    moreActionLabel: { textAlign: 'center', fontSize: 12, lineHeight: 17, fontWeight: '800', color: isDark ? '#F0E8DC' : '#4A4640' },
     novelCover: {
       backgroundColor: isDark ? coverBg : '#F2EFE9',
       borderRadius: 10,
       borderWidth: 1,
-      borderColor: isDark ? '#414642' : '#E8E4DC',
+      borderColor: isDark ? '#383633' : '#E8E4DC',
       marginBottom: 6,
       justifyContent: 'center',
       alignItems: 'center',
@@ -1477,10 +1570,10 @@ const getStyles = (isDark: boolean, width: number) => {
     previewPopupCard: {
       width: '100%',
       maxWidth: 340,
-      backgroundColor: isDark ? '#292D2A' : '#ffffff',
+      backgroundColor: isDark ? '#242321' : '#ffffff',
       borderRadius: 22,
       borderWidth: 1,
-      borderColor: isDark ? '#414642' : '#E8E4DC',
+      borderColor: isDark ? '#383633' : '#E8E4DC',
       padding: 18,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 10 },
@@ -1498,7 +1591,7 @@ const getStyles = (isDark: boolean, width: number) => {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 5,
-      backgroundColor: isDark ? '#303530' : '#F7F5F0',
+      backgroundColor: isDark ? '#2D2B28' : '#F7F5F0',
       paddingHorizontal: 9,
       paddingVertical: 4,
       borderRadius: 10,
@@ -1506,13 +1599,13 @@ const getStyles = (isDark: boolean, width: number) => {
     popupBadgeText: {
       fontSize: 11,
       fontWeight: '700',
-      color: isDark ? '#8FC3B5' : '#35695F',
+      color: isDark ? '#E5A93C' : '#35695F',
     },
     popupCloseBtn: {
       width: 28,
       height: 28,
       borderRadius: 14,
-      backgroundColor: isDark ? '#2B3240' : '#F3F4F6',
+      backgroundColor: isDark ? '#2D2B28' : '#F3F4F6',
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -1527,7 +1620,7 @@ const getStyles = (isDark: boolean, width: number) => {
       backgroundColor: isDark ? coverBg : '#F5F5F7',
       overflow: 'hidden',
       borderWidth: 1,
-      borderColor: isDark ? '#414642' : '#E5E7EB',
+      borderColor: isDark ? '#383633' : '#E5E7EB',
       marginRight: 14,
       justifyContent: 'center',
       alignItems: 'center',
@@ -1552,7 +1645,7 @@ const getStyles = (isDark: boolean, width: number) => {
     popupAuthorText: {
       fontSize: 12,
       fontWeight: '700',
-      color: isDark ? '#8FC3B5' : '#8B4A3C',
+      color: isDark ? '#E5A93C' : '#8B4A3C',
       flex: 1,
     },
     popupTagText: {
@@ -1584,12 +1677,12 @@ const getStyles = (isDark: boolean, width: number) => {
       color: textSub,
     },
     popupDescBox: {
-      backgroundColor: isDark ? '#232936' : '#F9F8F6',
+      backgroundColor: isDark ? '#2D2B28' : '#F9F8F6',
       padding: 10,
       borderRadius: 10,
       marginBottom: 14,
       borderLeftWidth: 3,
-      borderLeftColor: isDark ? '#8FC3B5' : '#8B4A3C',
+      borderLeftColor: isDark ? '#E5A93C' : '#8B4A3C',
     },
     popupDescText: {
       fontSize: 12,
@@ -1597,31 +1690,33 @@ const getStyles = (isDark: boolean, width: number) => {
       lineHeight: 17,
     },
     popupActionBtn: {
-      flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, backgroundColor: isDark ? '#8FC3B5' : '#4B8176', paddingVertical: 12, borderRadius: 8,
+      flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, backgroundColor: isDark ? '#E5A93C' : '#4B8176', paddingVertical: 12, borderRadius: 8,
     },
     popupActionBtnText: {
       fontSize: 14,
       fontWeight: '800',
-      color: isDark ? '#12151B' : '#ffffff',
+      color: isDark ? '#181716' : '#ffffff',
     },
 
     rankPage: {
-      width: '100%', backgroundColor: cardBg, borderRadius: 8, borderWidth: 1, borderColor: isDark ? '#414642' : '#E6E1D8', padding: 16,
+      width: '100%', backgroundColor: cardBg, borderRadius: 8, borderWidth: 1, borderColor: isDark ? '#383633' : '#E6E1D8', padding: 16,
     },
-    rankPageHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+    rankPageHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, borderBottomWidth: 1, borderBottomColor: isDark ? '#383633' : '#E6E1D8', paddingBottom: 10 },
     rankPageTitle: { fontSize: 16, fontWeight: '900', color: textMain },
-    rankPageMore: { fontSize: 12, fontWeight: '700', color: isDark ? '#8FC3B5' : textSub },
+    rankPageMore: { fontSize: 12, fontWeight: '700', color: isDark ? '#E5A93C' : textSub },
 
     rankItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
     rankNumber: { width: 25, fontSize: 18, fontWeight: '900', color: textSub },
-    rankNumberTop: { color: isDark ? '#BC8B7B' : '#8B4A3C' },
+    rankNumberFirst: { color: isDark ? '#E5A93C' : '#8B4A3C' },
+    rankNumberSecond: { color: isDark ? '#F5B041' : '#35695F' },
+    rankNumberThird: { color: isDark ? '#D8B36A' : '#4B8176' },
     rankCover: {
       width: 45,
       height: 60,
-      backgroundColor: isDark ? '#303641' : '#ddd',
+      backgroundColor: isDark ? '#2D2B28' : '#ddd',
       borderRadius: 7,
       borderWidth: 1,
-      borderColor: isDark ? '#414642' : '#E6E1D8',
+      borderColor: isDark ? '#383633' : '#E6E1D8',
       justifyContent: 'center',
       alignItems: 'center',
       marginRight: 12,
@@ -1634,7 +1729,7 @@ const getStyles = (isDark: boolean, width: number) => {
 
     categoryTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 },
     categoryTag: {
-      paddingHorizontal: 15, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: isDark ? '#414642' : '#E6E1D8', backgroundColor: isDark ? '#292D2A' : '#F7F5F0',
+      paddingHorizontal: 15, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: isDark ? '#383633' : '#E6E1D8', backgroundColor: isDark ? '#242321' : '#F7F5F0',
     },
     categoryTagText: { fontSize: 12, fontWeight: '800', color: textMain },
 
@@ -1645,21 +1740,21 @@ const getStyles = (isDark: boolean, width: number) => {
       flexDirection: 'row',
       justifyContent: 'space-around',
       alignItems: 'center',
-      backgroundColor: isDark ? '#171A21' : '#fff',
-      borderTopWidth: isDark ? 1 : 2,
-      borderTopColor: isDark ? '#303640' : '#eee',
+      backgroundColor: isDark ? '#242321' : '#fff',
+      borderTopWidth: 1,
+      borderTopColor: isDark ? '#383633' : '#eee',
       paddingVertical: 10,
       paddingBottom: Platform.OS === 'ios' ? 25 : 10,
     },
     navItem: { flex: 1, alignItems: 'center', justifyContent: 'center', height: 48 },
-    navText: { fontSize: 10, fontWeight: '700', marginTop: 4, color: isDark ? '#737987' : '#8f9bb3' },
-    navActiveText: { color: isDark ? '#8FC3B5' : '#2c3a7a', fontWeight: '900' },
+    navText: { fontSize: 10, fontWeight: '700', marginTop: 4, color: isDark ? '#A39F99' : '#8f9bb3' },
+    navActiveText: { color: isDark ? '#E5A93C' : '#2c3a7a', fontWeight: '900' },
 
     footerBranding: {
       alignItems: 'center',
       paddingVertical: 15,
-      borderTopWidth: isDark ? 1 : 2,
-      borderTopColor: isDark ? '#292E38' : '#f1f2f6',
+      borderTopWidth: 1,
+      borderTopColor: isDark ? '#383633' : '#f1f2f6',
       marginTop: 10,
     },
     footerBrandTitle: { fontSize: 28, fontWeight: '900', color: isDark ? '#535A68' : '#ccc', letterSpacing: 1 },
@@ -1671,10 +1766,10 @@ const getStyles = (isDark: boolean, width: number) => {
       alignItems: 'center',
       justifyContent: 'center',
       marginHorizontal: 15,
-      backgroundColor: isDark ? '#292D2A' : '#fafafa',
+      backgroundColor: isDark ? '#242321' : '#fafafa',
       borderRadius: 14,
       borderWidth: 1,
-      borderColor: isDark ? '#363D4B' : '#e0e0e0',
+      borderColor: isDark ? '#383633' : '#e0e0e0',
       borderStyle: 'dashed',
     },
     statusText: {
@@ -1699,14 +1794,14 @@ const getStyles = (isDark: boolean, width: number) => {
     retryBtn: {
       paddingHorizontal: 16,
       paddingVertical: 7,
-      backgroundColor: isDark ? '#8FC3B5' : '#242321',
+      backgroundColor: isDark ? '#E5A93C' : '#242321',
       borderRadius: 8,
       marginTop: 4,
     },
     retryBtnText: {
       fontSize: 12,
       fontWeight: '800',
-      color: isDark ? '#242321' : '#fff',
+      color: isDark ? '#181716' : '#fff',
     },
 
     /* DRAWER NAVBAR STYLES */
@@ -1724,9 +1819,9 @@ const getStyles = (isDark: boolean, width: number) => {
     },
     drawerContainer: {
       height: '100%',
-      backgroundColor: isDark ? '#202321' : '#FFFFFF',
+      backgroundColor: isDark ? '#1F2228' : '#FFFFFF',
       borderRightWidth: 1,
-      borderRightColor: isDark ? '#2A303D' : '#E6E1D8',
+      borderRightColor: isDark ? '#383633' : '#E6E1D8',
       shadowColor: '#000',
       shadowOffset: { width: 4, height: 0 },
       shadowOpacity: 0.25,
@@ -1741,9 +1836,9 @@ const getStyles = (isDark: boolean, width: number) => {
       paddingHorizontal: 16,
       paddingTop: Platform.OS === 'ios' ? 48 : 20,
       paddingBottom: 16,
-      backgroundColor: isDark ? '#292D2A' : '#4A7C72',
+       backgroundColor: isDark ? '#1F2228' : '#EAE6DF',
       borderBottomWidth: 1,
-      borderBottomColor: isDark ? '#2E3545' : 'rgba(0,0,0,0.06)',
+       borderBottomColor: isDark ? '#383633' : '#E6E1D8',
     },
     drawerHeaderInfo: {
       flexDirection: 'row',
@@ -1753,7 +1848,7 @@ const getStyles = (isDark: boolean, width: number) => {
       width: 36,
       height: 36,
       borderRadius: 10,
-      backgroundColor: isDark ? '#343A35' : 'rgba(255,255,255,0.2)',
+      backgroundColor: isDark ? '#E5A93C' : 'rgba(255,255,255,0.2)',
       justifyContent: 'center',
       alignItems: 'center',
       marginRight: 10,
@@ -1761,25 +1856,25 @@ const getStyles = (isDark: boolean, width: number) => {
     drawerBrandText: {
       fontSize: 16,
       fontWeight: '800',
-      color: '#FFFFFF',
+       color: isDark ? '#F7F5F0' : '#242321',
       letterSpacing: 0.5,
     },
     drawerSubText: {
       fontSize: 11,
-      color: isDark ? '#9DA7B8' : 'rgba(255,255,255,0.85)',
+       color: isDark ? '#A39F99' : '#85817A',
       marginTop: 2,
     },
     drawerCloseBtn: {
       width: 32,
       height: 32,
       borderRadius: 16,
-      backgroundColor: isDark ? '#343A35' : 'rgba(255,255,255,0.2)',
+      backgroundColor: isDark ? '#2D2B28' : 'rgba(255,255,255,0.2)',
       justifyContent: 'center',
       alignItems: 'center',
     },
     drawerScroll: {
       flex: 1,
-      backgroundColor: isDark ? 'transparent' : '#FAF8F5',
+       backgroundColor: isDark ? '#181716' : '#F7F5F0',
     },
     drawerScrollContent: {
       paddingVertical: 14,
@@ -1798,26 +1893,40 @@ const getStyles = (isDark: boolean, width: number) => {
     drawerGroupTitle: {
       fontSize: 11,
       fontWeight: '800',
-      color: isDark ? '#8FC3B5' : '#8B4A3C',
+      color: isDark ? '#E5A93C' : '#8B4A3C',
       letterSpacing: 0.8,
       marginBottom: 8,
       paddingHorizontal: 4,
     },
-    drawerItem: {
+     drawerItem: {
       flexDirection: 'row',
       alignItems: 'center',
       paddingVertical: 10,
       paddingHorizontal: 10,
       borderRadius: 10,
-      backgroundColor: isDark ? '#292D2A' : '#FFFFFF',
+      backgroundColor: isDark ? '#242321' : '#FFFFFF',
       borderWidth: 1,
-      borderColor: isDark ? '#2A303D' : '#EDE8DF',
-      marginBottom: 6,
-    },
+      borderColor: isDark ? '#383633' : '#EDE8DF',
+       marginBottom: 6,
+     },
+     drawerCategoryRow: {
+       flexDirection: 'row',
+       alignItems: 'center',
+       minHeight: 48,
+       paddingHorizontal: 6,
+       borderBottomWidth: 1,
+       borderBottomColor: isDark ? '#383633' : '#E6E1D8',
+     },
+     drawerCategoryIcon: {
+       width: 30,
+       alignItems: 'center',
+       marginRight: 8,
+     },
     drawerItemIconBox: {
       width: 32,
       height: 32,
       borderRadius: 8,
+      backgroundColor: isDark ? '#2D2B28' : '#E8F3EF',
       justifyContent: 'center',
       alignItems: 'center',
       marginRight: 10,
@@ -1828,23 +1937,53 @@ const getStyles = (isDark: boolean, width: number) => {
     drawerItemTitle: {
       fontSize: 13,
       fontWeight: '700',
-      color: isDark ? '#EDEFF3' : '#242321',
+      color: textMain,
     },
     drawerItemDesc: {
       fontSize: 11,
-      color: isDark ? '#8A92A2' : '#85817A',
+      color: textSub,
       marginTop: 1,
     },
     drawerBadge: {
       paddingHorizontal: 7,
       paddingVertical: 2,
       borderRadius: 10,
-      backgroundColor: isDark ? '#2C3444' : '#EFECE6',
+      backgroundColor: isDark ? '#2D2B28' : '#EFECE6',
     },
     drawerBadgeText: {
       fontSize: 11,
       fontWeight: '700',
-      color: isDark ? '#8FC3B5' : '#8B4A3C',
+      color: isDark ? '#E5A93C' : '#8B4A3C',
+    },
+    drawerFooter: {
+      flexDirection: 'row',
+      paddingHorizontal: 12,
+      paddingTop: 12,
+      paddingBottom: Platform.OS === 'ios' ? 24 : 14,
+      borderTopWidth: 1,
+      borderTopColor: isDark ? '#383633' : '#EDE8DF',
+      backgroundColor: isDark ? '#1F2228' : '#FFFFFF',
+      gap: 10,
+    },
+    drawerFooterBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      height: 42,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: isDark ? '#383633' : '#E6E1D8',
+      backgroundColor: isDark ? '#242321' : '#F7F5F0',
+    },
+    drawerFooterCartBtn: {
+      backgroundColor: isDark ? '#2D2B28' : '#F7F5F0',
+    },
+    drawerFooterBtnText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: isDark ? '#E5A93C' : '#8B4A3C',
     },
   });
 };
