@@ -940,65 +940,7 @@ export default function UploadFile() {
                 />
               </View>
 
-              {/* 3. Thể loại sách đồng bộ với Backend */}
-              <View style={themeStyles.inputGroup}>
-                <Text style={themeStyles.inputLabel}>
-                  {lang === 'en' ? 'Category' : 'Thể loại sách'}
-                </Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
-                >
-                  {categories.map((cat) => {
-                    const isSelected = selectedCategoryId === cat.category_id;
-                    return (
-                      <TouchableOpacity
-                        key={cat.category_id}
-                        style={[
-                          themeStyles.categoryPill,
-                          isSelected && themeStyles.categoryPillActive,
-                        ]}
-                        onPress={() => setSelectedCategoryId(cat.category_id)}
-                        disabled={isUploading}
-                        activeOpacity={0.8}
-                      >
-                        <Text
-                          style={[
-                            themeStyles.categoryPillText,
-                            isSelected && themeStyles.categoryPillTextActive,
-                          ]}
-                        >
-                          {cat.category_name}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-
-              {/* 4. Mô tả tác phẩm (Tùy chọn) */}
-              <View style={themeStyles.inputGroup}>
-                <Text style={themeStyles.inputLabel}>
-                  {lang === 'en' ? 'Description (Optional)' : 'Mô tả tác phẩm (Tùy chọn)'}
-                </Text>
-                <TextInput
-                  style={[themeStyles.textInput, { height: 60, textAlignVertical: 'top', paddingTop: 8 }]}
-                  value={bookDescription}
-                  onChangeText={setBookDescription}
-                  placeholder={
-                    lang === 'en'
-                      ? 'Brief description or notes about the document...'
-                      : 'Tóm tắt hoặc ghi chú về tài liệu cá nhân...'
-                  }
-                  placeholderTextColor="#9CA3AF"
-                  multiline
-                  numberOfLines={2}
-                  editable={!isUploading}
-                />
-              </View>
-
-              {/* 5. Chọn Ảnh Bìa Sách */}
+              {/* 3. Chọn Ảnh Bìa Sách */}
               <View style={themeStyles.inputGroup}>
                 <Text style={themeStyles.inputLabel}>
                   {lang === 'en' ? 'Book Cover Image' : 'Ảnh bìa sách'}
@@ -1057,20 +999,6 @@ export default function UploadFile() {
                     </View>
                   </View>
                 ) : null}
-              </View>
-
-              {/* Thông báo đồng bộ tài liệu */}
-              <View style={themeStyles.syncNoticeBox}>
-                <Ionicons
-                  name="cloud-done-outline"
-                  size={16}
-                  color={isDarkMode ? '#34D399' : '#2F6B5F'}
-                />
-                <Text style={themeStyles.syncNoticeText}>
-                  {lang === 'en'
-                    ? 'Saved directly in your personal Bookshelf'
-                    : 'Lưu trữ và mở đọc ngay trong Tủ sách cá nhân'}
-                </Text>
               </View>
             </ScrollView>
 

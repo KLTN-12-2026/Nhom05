@@ -97,7 +97,7 @@ const getPlaceholderColors = (title: string) => {
   return palettes[hash % palettes.length];
 };
 
-export default function TuSach() {
+export default function TuSach({ initialTab = 'dangdoc' }: { initialTab?: BookshelfTab }) {
   const themeStyles = useAppThemeStyles(styles);
   const {
     navigate,
@@ -113,7 +113,7 @@ export default function TuSach() {
 
   const foreground = isDarkMode ? '#F5F1E8' : '#11131A';
 
-  const [activeTab, setActiveTab] = useState<BookshelfTab>('dangdoc');
+  const [activeTab, setActiveTab] = useState<BookshelfTab>(initialTab);
 
   // Chế độ chỉnh sửa xoá sách đang đọc
   const [isEditing, setIsEditing] = useState(false);
@@ -250,7 +250,7 @@ export default function TuSach() {
             setRentedError(bookshelfRes.errorMessage);
           }
 
-          if (Array.isArray(syncedFavs) && syncedFavs.length > 0) {
+          if (Array.isArray(syncedFavs)) {
             currentFavs = syncedFavs.map((item) => ({
               id: String(item.bookId || item.id),
               title: item.title || 'Sách yêu thích',

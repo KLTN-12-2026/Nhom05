@@ -1,6 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { ComponentRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Constants from 'expo-constants';
+import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import {
   ActivityIndicator,
   Animated,
@@ -17,7 +19,7 @@ import {
   useWindowDimensions,
   TouchableOpacity,
   UIManager,
-  View,
+  View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BookData, useAppNavigation } from './navigation';
@@ -26,7 +28,10 @@ import HomeCover from './home/HomeBookCover';
 import ContinueReading from './home/ContinueReading';
 import { formatHomeBookDate, getRankedHomeBooks, getRecentHomeBooks, HomeBookItem, readHomePage } from './home/homeData';
 export type { HomeBookItem } from './home/homeData';
+import { getBookCoverSource } from './bookCovers';
+import { getBookChapterLabel } from './bookContentService';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
+import { useUnreadNotificationCount } from './useUnreadNotificationCount';
 
 const { width, height } = Dimensions.get('window');
 const FLOATING_MENU_SIZE = 40;
@@ -382,8 +387,10 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
     touches?: ArrayLike<{ pageY: number }>;
     changedTouches?: ArrayLike<{ pageY: number }>;
   }) => nativeEvent.touches?.[0]?.pageY
-    ?? nativeEvent.changedTouches?.[0]?.pageY
+  ?? nativeEvent.changedTouches?.[0]?.pageY
     ?? nativeEvent.pageY;
+
+  const bgAnim = useRef(new Animated.Value(isDarkMode ? 1 : 0)).current;
 
   const drawerTranslateX = drawerAnim.interpolate({
     inputRange: [0, 1],
@@ -498,6 +505,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
       icon: 'bookmarks',
       label: 'Đã Lưu',
       screen: 'bookshelf',
+      initialBookshelfTab: 'yeuthich' as const,
       bgLight: '#EEF2FF',
       iconLight: '#4B8176',
       borderLight: '#E0E7FF',
@@ -650,6 +658,15 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
               accessibilityLabel="Giỏ hàng"
             >
               <Ionicons name="cart-outline" size={21} color={textColor} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.darkModeToggle, { marginLeft: 4 }]}
+              onPress={() => navigate('notifications')}
+              accessibilityRole="button"
+              accessibilityLabel={`Thông báo${unreadNotifications ? `, ${unreadNotifications} chưa đọc` : ''}`}
+            >
+              <Ionicons name="notifications-outline" size={21} color="#FFFFFF" />
+              {unreadNotifications > 0 && <View style={{ position: 'absolute', top: 3, right: 2, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 3, backgroundColor: '#D5AC56', alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 9, fontWeight: '800', color: '#382F23' }}>{unreadNotifications > 99 ? '99+' : unreadNotifications}</Text></View>}
             </TouchableOpacity>
           </View>
           <View style={styles.featuredHeading}>
@@ -860,7 +877,6 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
                   <View style={[styles.shelfIconBadge, { backgroundColor: isDarkMode ? '#292D2A' : '#F7F5F0' }]}>
                     <Ionicons name={shelf.icon as any} size={15} color={isDarkMode ? '#8FC3B5' : '#8B4A3C'} />
                   </View>
-                  <Text style={styles.shelfTitleText}>{shelf.name}</Text>
                 </View>
                 <TouchableOpacity onPress={() => navigate('genreBooks', { categoryId: shelf.categoryId, categoryName: shelf.name })} style={styles.moreAction} accessibilityRole="button" accessibilityLabel={'Xem thêm ' + shelf.name}><Text style={styles.shelfMoreText}>Xem thêm</Text></TouchableOpacity>
               </View>
@@ -878,7 +894,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
           <Text style={styles.footerBrandSlogan}>Sách là ánh sáng!</Text>
         </View>
 
-      </ScrollView>
+        </ScrollView>
 
       {showFloatingMenu && (
         <Animated.View
@@ -1832,3 +1848,5 @@ const getStyles = (isDark: boolean, width: number) => {
     },
   });
 };
+
+

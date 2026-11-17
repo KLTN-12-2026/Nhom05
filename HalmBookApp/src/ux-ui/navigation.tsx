@@ -4,6 +4,7 @@ import { NativeScrollEvent, NativeSyntheticEvent, StyleSheet, TextStyle, ViewSty
 export type AppScreen =
   | 'auth'
   | 'home'
+  | 'leaderboard'
   | 'dmHome'
   | 'offers'
   | 'upload'

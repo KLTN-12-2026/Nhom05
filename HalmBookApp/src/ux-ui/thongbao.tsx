@@ -1,844 +1,169 @@
-import { 
-  ArrowLeft, 
-  Bell, 
-  BookOpen, 
-  CheckCheck, 
-  Coins, 
-  Crown, 
-  Gift, 
-  Mail, 
-  Quote, 
-  Sparkles, 
-  Trash2, 
-  X 
-} from 'lucide-react-native';
-import { useCallback, useEffect, useState } from 'react';
-import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
-import { useAppNavigation, useAppThemeStyles } from './navigation';
-import {
-  AppNotification,
-  clearAllNotifications,
-  deleteNotification,
-  getNotifications,
-  markAllNotificationsAsRead,
-  markNotificationAsRead,
-  NotificationType
-} from './notificationService';
-import {
-  Alert,
-  FlatList,
-  Modal,
-  Platform,
-  RefreshControl,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
-} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { StatusBar } from 'expo-status-bar';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, AppState, FlatList, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAppNavigation } from './navigation';
+import { AppNotification, clearAllNotifications, deleteNotification, getNotifications, markAllNotificationsAsRead, markNotificationAsRead, NotificationType, subscribeNotifications } from './notificationService';
 
-interface ThongBaoScreenProps {
-  onBack: () => void;
+const TYPES: Record<NotificationType, { icon: keyof typeof Ionicons.glyphMap; color: string; label: string; en: string }> = {
+  gift_received: { icon: 'gift-outline', color: '#BE6684', label: 'Nhận sách', en: 'Gift received' },
+  gift_sent: { icon: 'paper-plane-outline', color: '#8271B4', label: 'Tặng sách', en: 'Gift sent' },
+  potato_reward: { icon: 'sparkles-outline', color: '#B48732', label: 'Thưởng Khoai', en: 'Khoai rewards' },
+  potato_purchase: { icon: 'wallet-outline', color: '#B48732', label: 'Nạp Khoai', en: 'Khoai top-up' },
+  tier_upgrade: { icon: 'ribbon-outline', color: '#B48732', label: 'Thăng hạng', en: 'Membership' },
+  system: { icon: 'megaphone-outline', color: '#4D887A', label: 'Hệ thống', en: 'System' },
+};
+type Tab = 'all' | 'unread' | 'gift' | 'potato' | 'tier' | 'system';
+type Confirmation = { id: string; title: string } | 'all' | null;
+
+function timeLabel(timestamp: number, english: boolean) {
+  return new Date(timestamp).toLocaleString(english ? 'en-GB' : 'vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+function dayLabel(timestamp: number, english: boolean) {
+  const today = new Date();
+  const yesterday = new Date(); yesterday.setDate(today.getDate() - 1);
+  const date = new Date(timestamp);
+  if (date.toDateString() === today.toDateString()) return english ? 'Today' : 'Hôm nay';
+  if (date.toDateString() === yesterday.toDateString()) return english ? 'Yesterday' : 'Hôm qua';
+  return date.toLocaleDateString(english ? 'en-GB' : 'vi-VN', { day: '2-digit', month: 'long', year: 'numeric' });
 }
 
-type FilterTab = 'all' | 'gift' | 'potato' | 'tier' | 'system';
-
-interface GiftMessageModalData {
-  senderName: string;
-  bookTitle: string;
-  message: string;
-  hasMessage: boolean;
-  isSent?: boolean;
-}
-
-export default function ThongBaoScreen({ onBack }: ThongBaoScreenProps) {
-  const themeStyles = useAppThemeStyles(styles);
-  const { navigate, isDarkMode, lang } = useAppNavigation();
-
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [activeTab, setActiveTab] = useState<FilterTab>('all');
-  const [isRefreshing, setIsRefreshing] = useState(false);
-
-  // State mở popup xem lời nhắn tặng sách
-  const [activeGiftModal, setActiveGiftModal] = useState<GiftMessageModalData | null>(null);
-
-  // Tải danh sách thông báo
-  const loadNotifications = useCallback(async () => {
+export default function ThongBaoScreen({ onBack }: { onBack: () => void }) {
+  const { navigate, isDarkMode, lang, isLoggedIn } = useAppNavigation();
+  const en = lang === 'en';
+  const [items, setItems] = useState<AppNotification[]>([]);
+  const [tab, setTab] = useState<Tab>('all');
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [detail, setDetail] = useState<AppNotification | null>(null);
+  const [confirmation, setConfirmation] = useState<Confirmation>(null);
+  const mounted = useRef(false);
+  const version = useRef(0);
+  const invalidateLoads = useCallback(() => { version.current++; }, []);
+  const mutation = useRef(false);
+  const text = isDarkMode ? '#F3EEE5' : '#342E29';
+  const muted = isDarkMode ? '#B5B1BB' : '#857F76';
+  const card = isDarkMode ? '#23262E' : '#FFFFFF';
+  const background = isDarkMode ? '#17191F' : '#FAF7F1';
+  const load = useCallback(async () => {
+    const ticket = ++version.current;
     try {
-      const data = await getNotifications();
-      setNotifications(data);
-    } catch (err) {
-      console.warn('Lỗi tải thông báo:', err);
+      const result = isLoggedIn ? await getNotifications() : [];
+      if (mounted.current && ticket === version.current) { setItems(result); setError(''); }
+    } catch {
+      if (mounted.current && ticket === version.current) setError(en ? 'Could not load notifications. Please try again.' : 'Không thể tải thông báo. Vui lòng thử lại.');
+    } finally {
+      if (mounted.current && ticket === version.current) setLoading(false);
     }
-  }, []);
-
+  }, [en, isLoggedIn]);
   useEffect(() => {
-    loadNotifications();
-  }, [loadNotifications]);
+    mounted.current = true;
+    const initialLoad = setTimeout(() => { void load(); }, 0);
+    const unsubscribe = subscribeNotifications(() => { void load(); });
+    const subscription = AppState.addEventListener('change', state => { if (state === 'active') void load(); });
+    return () => { mounted.current = false; clearTimeout(initialLoad); invalidateLoads(); unsubscribe(); subscription.remove(); };
+  }, [load, invalidateLoads]);
 
-  const onRefresh = async () => {
-    setIsRefreshing(true);
-    await loadNotifications();
-    setIsRefreshing(false);
+  const perform = async (action: () => Promise<void>) => {
+    if (mutation.current) return;
+    mutation.current = true;
+    setBusy(true);
+    try { await action(); await load(); }
+    catch { if (mounted.current) setError(en ? 'Changes could not be saved. Try again.' : 'Chưa lưu được thay đổi. Vui lòng thử lại.'); }
+    finally { mutation.current = false; if (mounted.current) setBusy(false); }
   };
-
-  // Xem lời nhắn tặng sách
-  const handleOpenGiftMessage = async (item: AppNotification) => {
-    if (!item.isRead) {
-      await markNotificationAsRead(item.id);
-      setNotifications((current) =>
-        current.map((n) => (n.id === item.id ? { ...n, isRead: true } : n))
-      );
-    }
-
-    const isSent = item.type === 'gift_sent';
-    const sender = isSent 
-      ? (item.data?.recipientName || (lang === 'en' ? 'Friend' : 'Bạn bè')) 
-      : (item.data?.senderName || (lang === 'en' ? 'A friend' : 'Bạn bè'));
-    const bookTitle = item.data?.bookTitle || (lang === 'en' ? 'Gift book' : 'Sách tặng');
-    const rawMessage = item.data?.giftMessage?.trim();
-    const hasMessage = Boolean(rawMessage && rawMessage.length > 0);
-    const message = hasMessage 
-      ? rawMessage! 
-      : (lang === 'en' ? 'No message' : 'Không có lời nhắn nào');
-
-    setActiveGiftModal({
-      senderName: sender,
-      bookTitle,
-      message,
-      hasMessage,
-      isSent,
-    });
+  const open = (item: AppNotification) => {
+    setDetail(item);
+    if (!item.isRead) void perform(() => markNotificationAsRead(item.id));
   };
-
-  // Đánh dấu 1 thông báo đã đọc
-  const handleItemPress = async (item: AppNotification) => {
-    if (!item.isRead) {
-      await markNotificationAsRead(item.id);
-      setNotifications((current) =>
-        current.map((n) => (n.id === item.id ? { ...n, isRead: true } : n))
-      );
-    }
-
-    // Nếu là nhận sách hoặc tặng sách -> mở xem lời nhắn
-    if (item.type === 'gift_received' || item.type === 'gift_sent') {
-      handleOpenGiftMessage(item);
-    } else if (item.type === 'tier_upgrade') {
-      navigate('profile');
-    }
-  };
-
-  // Đánh dấu tất cả là đã đọc
-  const handleMarkAllRead = async () => {
-    if (notifications.length === 0) return;
-    await markAllNotificationsAsRead();
-    setNotifications((current) => current.map((n) => ({ ...n, isRead: true })));
-  };
-
-  // Xóa 1 thông báo
-  const handleDeleteItem = (item: AppNotification) => {
-    Alert.alert(
-      lang === 'en' ? 'Delete notification' : 'Xóa thông báo',
-      lang === 'en' ? 'Are you sure you want to delete this notification?' : 'Bạn có chắc muốn xóa thông báo này?',
-      [
-        { text: lang === 'en' ? 'Cancel' : 'Hủy', style: 'cancel' },
-        {
-          text: lang === 'en' ? 'Delete' : 'Xóa',
-          style: 'destructive',
-          onPress: async () => {
-            await deleteNotification(item.id);
-            setNotifications((current) => current.filter((n) => n.id !== item.id));
-          },
-        },
-      ]
-    );
-  };
-
-  // Xóa toàn bộ thông báo
-  const handleClearAll = () => {
-    if (notifications.length === 0) return;
-    Alert.alert(
-      lang === 'en' ? 'Clear all' : 'Xóa tất cả thông báo',
-      lang === 'en' ? 'Are you sure you want to clear all notifications?' : 'Bạn có chắc chắn muốn xóa toàn bộ thông báo?',
-      [
-        { text: lang === 'en' ? 'Cancel' : 'Hủy', style: 'cancel' },
-        {
-          text: lang === 'en' ? 'Clear All' : 'Xóa tất cả',
-          style: 'destructive',
-          onPress: async () => {
-            await clearAllNotifications();
-            setNotifications([]);
-          },
-        },
-      ]
-    );
-  };
-
-  // Lọc theo tab
-  const filteredNotifications = notifications.filter((item) => {
-    if (activeTab === 'gift') {
-      return item.type === 'gift_received' || item.type === 'gift_sent';
-    }
-    if (activeTab === 'potato') {
-      return item.type === 'potato_reward' || item.type === 'potato_purchase';
-    }
-    if (activeTab === 'tier') {
-      return item.type === 'tier_upgrade';
-    }
-    if (activeTab === 'system') {
-      return item.type === 'system';
-    }
+  const unread = items.filter(item => !item.isRead).length;
+  const filtered = useMemo(() => items.filter(item => {
+    if (tab === 'unread') return !item.isRead;
+    if (tab === 'gift') return item.type === 'gift_received' || item.type === 'gift_sent';
+    if (tab === 'potato') return item.type === 'potato_reward' || item.type === 'potato_purchase';
+    if (tab === 'tier') return item.type === 'tier_upgrade';
+    if (tab === 'system') return item.type === 'system';
     return true;
-  });
-
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
-
-  // Lấy icon và màu sắc cho từng loại thông báo
-  const getTypeBadge = (type: NotificationType) => {
-    switch (type) {
-      case 'gift_received':
-        return {
-          icon: <Gift size={18} color="#ec4899" />,
-          bg: '#fdf2f8',
-          label: lang === 'en' ? 'Received Gift' : 'Nhận sách',
-          color: '#ec4899',
-        };
-      case 'gift_sent':
-        return {
-          icon: <BookOpen size={18} color="#8b5cf6" />,
-          bg: '#f5f3ff',
-          label: lang === 'en' ? 'Sent Gift' : 'Tặng sách',
-          color: '#8b5cf6',
-        };
-      case 'potato_reward':
-      case 'potato_purchase':
-        return {
-          icon: <Coins size={18} color="#d97706" />,
-          bg: '#fffbeb',
-          label: lang === 'en' ? 'Potatoes' : 'Khoai Tây',
-          color: '#d97706',
-        };
-      case 'tier_upgrade':
-        return {
-          icon: <Crown size={18} color="#eab308" />,
-          bg: '#fefce8',
-          label: lang === 'en' ? 'Tier VIP' : 'Thăng hạng',
-          color: '#ca8a04',
-        };
-      case 'system':
-      default:
-        return {
-          icon: <Sparkles size={18} color="#2c3a7a" />,
-          bg: '#eef2ff',
-          label: lang === 'en' ? 'System' : 'Hệ thống',
-          color: '#2c3a7a',
-        };
-    }
-  };
-
-  const renderItem = ({ item }: { item: AppNotification }) => {
-    const badge = getTypeBadge(item.type);
-    const isGiftReceived = item.type === 'gift_received';
-    const isGiftSent = item.type === 'gift_sent';
-
-    return (
-      <TouchableOpacity
-        style={[
-          themeStyles.notifCard,
-          !item.isRead && themeStyles.notifCardUnread,
-        ]}
-        activeOpacity={0.88}
-        onPress={() => handleItemPress(item)}
-      >
-        {/* Icon đại diện */}
-        <View style={[themeStyles.iconBox, { backgroundColor: badge.bg }]}>
-          {badge.icon}
-        </View>
-
-        {/* Nội dung thông báo */}
-        <View style={themeStyles.cardContent}>
-          <View style={themeStyles.cardHeaderRow}>
-            <View style={themeStyles.badgeWrap}>
-              <Text style={[themeStyles.badgeText, { color: badge.color }]}>{badge.label}</Text>
-            </View>
-            <Text style={themeStyles.timeText}>{item.time}</Text>
-            {!item.isRead && <View style={themeStyles.unreadDot} />}
-          </View>
-
-          <Text style={[themeStyles.titleText, !item.isRead && themeStyles.titleTextBold]}>
-            {item.title}
-          </Text>
-
-          <Text style={themeStyles.messageText}>
-            {item.message}
-          </Text>
-
-          {/* ============================================================================
-              [GIẢI THÍCH CODE]: Nút "Chạm để xem lời nhắn" cho thông báo tặng/nhận sách
-              Khi nhấn vào sẽ mở Modal hiển thị trọn vẹn lời nhắn gửi gắm
-              ============================================================================ */}
-          {isGiftReceived && (
-            <TouchableOpacity
-              style={themeStyles.actionHintRow}
-              activeOpacity={0.75}
-              onPress={() => handleOpenGiftMessage(item)}
-            >
-              <Mail size={13} color="#ec4899" style={{ marginRight: 5 }} />
-              <Text style={[themeStyles.actionHintText, { color: '#ec4899' }]}>
-                {lang === 'en' ? 'Tap to view message ✉️' : 'Chạm để xem lời nhắn ✉️'}
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          {isGiftSent && (
-            <TouchableOpacity
-              style={themeStyles.actionHintRow}
-              activeOpacity={0.75}
-              onPress={() => handleOpenGiftMessage(item)}
-            >
-              <Mail size={13} color="#8b5cf6" style={{ marginRight: 5 }} />
-              <Text style={[themeStyles.actionHintText, { color: '#8b5cf6' }]}>
-                {lang === 'en' ? 'Tap to view sent message ✉️' : 'Chạm để xem lời nhắn đã gửi ✉️'}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Nút xóa item */}
-        <TouchableOpacity
-          style={themeStyles.deleteItemBtn}
-          activeOpacity={0.6}
-          onPress={() => handleDeleteItem(item)}
-        >
-          <Trash2 size={16} color="#94a3b8" />
-        </TouchableOpacity>
-      </TouchableOpacity>
-    );
+  }), [items, tab]);
+  const tabs: { key: Tab; label: string }[] = [
+    { key: 'all', label: en ? 'All' : 'Tất cả' }, { key: 'unread', label: `${en ? 'Unread' : 'Chưa đọc'}${unread ? ` · ${unread}` : ''}` },
+    { key: 'gift', label: en ? 'Gifts' : 'Quà tặng' }, { key: 'potato', label: '🥔 Khoai' },
+    { key: 'tier', label: en ? 'Membership' : 'Thăng hạng' }, { key: 'system', label: en ? 'System' : 'Hệ thống' },
+  ];
+  const goToRelated = () => {
+    if (!detail) return;
+    const target = detail.type.startsWith('gift_') ? 'bookshelf' : detail.type.startsWith('potato_') ? 'transactions' : detail.type === 'tier_upgrade' ? 'profile' : null;
+    setDetail(null);
+    if (target) navigate(target);
   };
 
   return (
-    <SafeAreaView style={themeStyles.safeArea}>
-      <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'} />
-
-      {/* 1. Header màn hình */}
-      <View style={themeStyles.header}>
-        <TouchableOpacity style={themeStyles.headerBackBtn} onPress={onBack} activeOpacity={0.7}>
-          <ArrowLeft size={22} color="#1e293b" />
-        </TouchableOpacity>
-
-        <View style={themeStyles.headerTitleWrap}>
-          <Text style={themeStyles.headerTitle}>
-            {lang === 'en' ? 'Notifications' : 'Thông báo'}
-          </Text>
-          {unreadCount > 0 && (
-            <View style={themeStyles.headerCountBadge}>
-              <Text style={themeStyles.headerCountText}>{unreadCount}</Text>
-            </View>
-          )}
-        </View>
-
-        <View style={themeStyles.headerActions}>
-          {unreadCount > 0 && (
-            <TouchableOpacity
-              style={themeStyles.headerIconBtn}
-              onPress={handleMarkAllRead}
-              activeOpacity={0.7}
-              accessibilityLabel="Đọc tất cả"
-            >
-              <CheckCheck size={20} color="#2c3a7a" />
-            </TouchableOpacity>
-          )}
-          {notifications.length > 0 && (
-            <TouchableOpacity
-              style={themeStyles.headerIconBtn}
-              onPress={handleClearAll}
-              activeOpacity={0.7}
-              accessibilityLabel="Xóa tất cả"
-            >
-              <Trash2 size={19} color="#64748b" />
-            </TouchableOpacity>
-          )}
-        </View>
+    <SafeAreaView edges={['top', 'left', 'right']} style={[styles.screen, { backgroundColor: background }]}>
+      <StatusBar style={isDarkMode ? 'light' : 'dark'} />
+      <View style={styles.header}>
+        <Pressable accessibilityLabel={en ? 'Go back' : 'Quay lại'} onPress={onBack} style={[styles.iconButton, { backgroundColor: card }]}><Ionicons name="arrow-back" size={22} color={text} /></Pressable>
+        <View style={{ flex: 1 }}><Text style={[styles.title, { color: text }]}>{en ? 'Notifications' : 'Thông báo'}</Text><Text style={{ color: muted, fontSize: 12 }}>{en ? 'Your reading updates' : 'Hộp thư dành riêng cho bạn'}</Text></View>
+        <Pressable disabled={!items.length || busy} accessibilityLabel={en ? 'Delete all notifications' : 'Xóa tất cả thông báo'} onPress={() => setConfirmation('all')} style={[styles.iconButton, { backgroundColor: card, opacity: items.length ? 1 : 0.35 }]}><Ionicons name="trash-outline" size={20} color={muted} /></Pressable>
       </View>
-
-      {/* 2. Thanh lọc chủ đề (Tabs) - Cho phép lướt ngang mượt mà */}
-      <View style={themeStyles.tabsContainer}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={themeStyles.tabsScrollContent}
-        >
-          <TouchableOpacity
-            style={[themeStyles.tabPill, activeTab === 'all' && themeStyles.tabPillActive]}
-            onPress={() => setActiveTab('all')}
-            activeOpacity={0.8}
-          >
-            <Text style={[themeStyles.tabPillText, activeTab === 'all' && themeStyles.tabPillTextActive]}>
-              {lang === 'en' ? 'All' : 'Tất cả'} ({notifications.length})
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[themeStyles.tabPill, activeTab === 'gift' && themeStyles.tabPillActive]}
-            onPress={() => setActiveTab('gift')}
-            activeOpacity={0.8}
-          >
-            <Text style={[themeStyles.tabPillText, activeTab === 'gift' && themeStyles.tabPillTextActive]}>
-              🎁 {lang === 'en' ? 'Gifts' : 'Quà tặng'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[themeStyles.tabPill, activeTab === 'potato' && themeStyles.tabPillActive]}
-            onPress={() => setActiveTab('potato')}
-            activeOpacity={0.8}
-          >
-            <Text style={[themeStyles.tabPillText, activeTab === 'potato' && themeStyles.tabPillTextActive]}>
-              🥔 {lang === 'en' ? 'Potatoes' : 'Khoai Tây'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[themeStyles.tabPill, activeTab === 'tier' && themeStyles.tabPillActive]}
-            onPress={() => setActiveTab('tier')}
-            activeOpacity={0.8}
-          >
-            <Text style={[themeStyles.tabPillText, activeTab === 'tier' && themeStyles.tabPillTextActive]}>
-              👑 {lang === 'en' ? 'VIP Tiers' : 'Hạng VIP'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[themeStyles.tabPill, activeTab === 'system' && themeStyles.tabPillActive]}
-            onPress={() => setActiveTab('system')}
-            activeOpacity={0.8}
-          >
-            <Text style={[themeStyles.tabPillText, activeTab === 'system' && themeStyles.tabPillTextActive]}>
-              📢 {lang === 'en' ? 'System' : 'Hệ thống'}
-            </Text>
-          </TouchableOpacity>
-        </ScrollView>
+      <View style={styles.body}>
+        <View style={styles.summary}>
+          <View style={styles.summaryIcon}><Ionicons name="notifications-outline" color="#E8CA80" size={30} /></View>
+          <View style={{ flex: 1, gap: 5 }}><Text style={styles.summaryTitle}>{unread ? (en ? `${unread} unread updates` : `Bạn có ${unread} tin chưa đọc`) : (en ? 'All caught up!' : 'Không bỏ lỡ điều hay')}</Text><Text style={styles.summaryCopy}>{en ? 'Gifts, Khoai and little reading milestones.' : 'Quà tặng, Khoai và những dấu mốc trên hành trình đọc.'}</Text></View>
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabScroll} contentContainerStyle={styles.tabs}>{tabs.map(value => <Pressable key={value.key} accessibilityRole="tab" accessibilityState={{ selected: tab === value.key }} onPress={() => setTab(value.key)} style={[styles.tab, { backgroundColor: tab === value.key ? '#7B3037' : card }]}><Text style={{ color: tab === value.key ? '#FFF' : muted, fontWeight: '700', fontSize: 12 }}>{value.label}</Text></Pressable>)}</ScrollView>
+        <View style={styles.listToolbar}><Text style={[styles.listTitle, { color: text }]}>{en ? 'Your inbox' : 'Hộp thư của bạn'} <Text style={{ color: muted, fontWeight: '400' }}>({filtered.length})</Text></Text><Pressable disabled={!unread || busy} onPress={() => void perform(() => markAllNotificationsAsRead())} accessibilityLabel={en ? 'Mark all as read' : 'Đánh dấu tất cả đã đọc'} style={[styles.readAll, { opacity: unread ? 1 : 0.4 }]}><Ionicons name="checkmark-done-outline" size={17} color="#B18C40" /><Text style={styles.readAllText}>{en ? 'Read all' : 'Đọc tất cả'}</Text></Pressable></View>
+        {error ? <View accessibilityRole="alert" style={styles.error}><Text style={{ color: '#B45158', flex: 1 }}>{error}</Text><Pressable onPress={() => void load()}><Text style={{ color: '#B45158', fontWeight: '800' }}>{en ? 'Retry' : 'Thử lại'}</Text></Pressable></View> : null}
+        <FlatList
+          data={filtered} keyExtractor={item => item.id} showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.list}
+          refreshControl={<RefreshControl refreshing={loading} onRefresh={() => { setLoading(true); void load(); }} tintColor="#B18C40" />}
+          renderItem={({ item, index }) => {
+            const badge = TYPES[item.type] ?? TYPES.system;
+            const day = dayLabel(item.timestamp, en);
+            const showDay = index === 0 || day !== dayLabel(filtered[index - 1].timestamp, en);
+            return <View>
+              {showDay && <Text style={[styles.day, { color: muted }]}>{day}</Text>}
+              <View style={[styles.notification, { backgroundColor: card, borderColor: !item.isRead ? '#B9924A66' : '#99999920' }]}>
+                <Pressable disabled={busy} onPress={() => open(item)} accessibilityRole="button" accessibilityLabel={`${item.isRead ? '' : (en ? 'Unread. ' : 'Chưa đọc. ')}${item.title}`} style={styles.notificationMain}>
+                  <View style={[styles.typeIcon, { backgroundColor: `${badge.color}18` }]}><Ionicons name={badge.icon} size={23} color={badge.color} /></View>
+                  <View style={styles.notificationText}>
+                    <View style={styles.metadata}><Text style={[styles.badge, { color: badge.color }]}>{en ? badge.en : badge.label}</Text>{!item.isRead && <View style={styles.dot} />}</View>
+                    <Text style={[styles.notificationTitle, { color: text, fontWeight: item.isRead ? '600' : '800' }]}>{item.title}</Text>
+                    <Text numberOfLines={2} style={[styles.message, { color: muted }]}>{item.message}</Text>
+                    <Text style={[styles.time, { color: muted }]}>{timeLabel(item.timestamp, en)}</Text>
+                  </View>
+                </Pressable>
+                <Pressable disabled={busy} onPress={() => setConfirmation({ id: item.id, title: item.title })} style={styles.deleteButton} accessibilityLabel={en ? `Delete ${item.title}` : `Xóa ${item.title}`}><Ionicons name="close" size={18} color={muted} /></Pressable>
+              </View>
+            </View>;
+          }}
+          ListEmptyComponent={<View style={styles.empty}>{loading ? <ActivityIndicator color="#B18C40" /> : <><View style={[styles.emptyIcon, { backgroundColor: card }]}><Ionicons name={tab === 'unread' ? 'checkmark-done-outline' : 'mail-open-outline'} size={42} color="#B99A58" /></View><Text style={[styles.emptyTitle, { color: text }]}>{!isLoggedIn ? (en ? 'Your inbox awaits' : 'Hộp thư đang chờ bạn') : tab === 'unread' ? (en ? 'You are all caught up' : 'Bạn đã đọc hết rồi!') : (en ? 'No updates here yet' : 'Chưa có thông báo ở đây')}</Text><Text style={[styles.emptyCopy, { color: muted }]}>{!isLoggedIn ? (en ? 'Log in to see your personal updates.' : 'Đăng nhập để xem thông báo dành riêng cho tài khoản của bạn.') : (en ? 'New gifts, Khoai and membership updates will appear here.' : 'Khi có quà tặng, nạp Khoai hoặc cập nhật thành viên, bạn sẽ thấy thông báo tại đây.')}</Text>{!isLoggedIn && <Pressable style={styles.primary} onPress={() => navigate('auth')}><Text style={styles.primaryText}>{en ? 'Log in' : 'Đăng nhập'}</Text></Pressable>}</>}</View>}
+        />
       </View>
-
-      {/* 3. Danh sách thông báo */}
-      <FlatList
-        data={filteredNotifications}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={themeStyles.listContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} colors={['#2c3a7a']} />
-        }
-        ListEmptyComponent={
-          <View style={themeStyles.emptyContainer}>
-            <View style={themeStyles.emptyIconBox}>
-              <Bell size={40} color="#94a3b8" />
-            </View>
-            <Text style={themeStyles.emptyTitle}>
-              {lang === 'en' ? 'No notifications yet' : 'Hộp thư thông báo đang trống'}
-            </Text>
-            <Text style={themeStyles.emptySubtitle}>
-              {lang === 'en'
-                ? 'Gift books, daily check-ins, and membership updates will appear here.'
-                : 'Các thông báo quà tặng, nạp khoai, điểm danh và thăng hạng thành viên sẽ xuất hiện tại đây.'}
-            </Text>
-          </View>
-        }
-      />
-
-      {/* ============================================================================
-          [GIẢI THÍCH CODE]: POPUP MODAL HIỂN THỊ LỜI NHẮN TẶNG SÁCH
-          Khi người dùng nhấn vào "Chạm để xem lời nhắn", modal này sẽ mở lên
-          ============================================================================ */}
-      <Modal
-        visible={Boolean(activeGiftModal)}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setActiveGiftModal(null)}
-      >
-        <View style={themeStyles.modalBackdrop}>
-          {/* Nhấn ra bên ngoài để đóng modal */}
-          <TouchableOpacity
-            style={StyleSheet.absoluteFill}
-            activeOpacity={1}
-            onPress={() => setActiveGiftModal(null)}
-          />
-
-          <View style={themeStyles.modalCard}>
-            {/* Nút đóng góc trên */}
-            <TouchableOpacity
-              style={themeStyles.modalCloseBtn}
-              onPress={() => setActiveGiftModal(null)}
-              activeOpacity={0.7}
-            >
-              <X size={20} color="#64748b" />
-            </TouchableOpacity>
-
-            {/* Icon hộp quà xinh xắn */}
-            <View style={themeStyles.modalGiftIconBox}>
-              <Gift size={32} color="#ec4899" />
-            </View>
-
-            {/* Tiêu đề Modal */}
-            <Text style={themeStyles.modalHeaderTitle}>
-              {activeGiftModal?.isSent 
-                ? (lang === 'en' ? 'Sent Gift Message' : 'Lời nhắn bạn đã gửi')
-                : (lang === 'en' ? 'Gift Message from Friend' : `Lời nhắn từ ${activeGiftModal?.senderName}`)}
-            </Text>
-
-            {/* Tên sách được tặng */}
-            <View style={themeStyles.modalBookPill}>
-              <BookOpen size={14} color="#2c3a7a" style={{ marginRight: 6 }} />
-              <Text style={themeStyles.modalBookTitle} numberOfLines={1}>
-                {activeGiftModal?.bookTitle}
-              </Text>
-            </View>
-
-            {/* Khung nội dung lời nhắn nằm chính giữa */}
-            <View style={themeStyles.messageContentBox}>
-              {activeGiftModal?.hasMessage ? (
-                <>
-                  <Quote size={20} color="#f472b6" style={{ marginBottom: 8, opacity: 0.7 }} />
-                  <Text style={themeStyles.modalMessageText}>
-                    "{activeGiftModal?.message}"
-                  </Text>
-                </>
-              ) : (
-                <Text style={themeStyles.modalEmptyMessageText}>
-                  {activeGiftModal?.message}
-                </Text>
-              )}
-            </View>
+      <Modal visible={Boolean(detail || confirmation)} transparent animationType="fade" onRequestClose={() => { if (!busy) { setDetail(null); setConfirmation(null); } }}>
+        <View style={styles.backdrop}><Pressable style={StyleSheet.absoluteFill} disabled={busy} accessibilityLabel={en ? 'Close dialog' : 'Đóng hộp thoại'} onPress={() => { setDetail(null); setConfirmation(null); }} />
+          <View accessibilityViewIsModal style={[styles.dialog, { backgroundColor: card }]}>
+            <ScrollView contentContainerStyle={{ gap: 16 }}>
+              {error && <Text accessibilityRole="alert" style={{ color: '#B45158' }}>{error}</Text>}
+              <View style={styles.dialogHeader}><View style={[styles.typeIcon, { backgroundColor: '#B99A5818' }]}><Ionicons name={confirmation ? 'trash-outline' : (TYPES[detail?.type ?? 'system'] ?? TYPES.system).icon} size={26} color="#B18C40" /></View><Pressable disabled={busy} accessibilityLabel={en ? 'Close' : 'Đóng'} style={styles.iconButton} onPress={() => { setDetail(null); setConfirmation(null); }}><Ionicons name="close" size={22} color={muted} /></Pressable></View>
+              <Text style={[styles.dialogTitle, { color: text }]}>{confirmation ? (en ? 'Delete notifications?' : 'Xóa thông báo?') : detail?.title}</Text>
+              <Text style={[styles.dialogCopy, { color: muted }]}>{confirmation ? confirmation === 'all' ? (en ? 'All notifications will be deleted. This cannot be undone.' : 'Toàn bộ thông báo sẽ bị xóa. Thao tác này không thể hoàn tác.') : `${en ? 'Delete' : 'Xóa'} “${confirmation.title}”?` : detail?.message}</Text>
+              {detail && !confirmation && <><Text style={[styles.time, { color: muted }]}>{timeLabel(detail.timestamp, en)}</Text>{detail.type.startsWith('gift_') && <View style={[styles.giftMessage, { backgroundColor: background }]}><Text style={{ color: text, fontWeight: '700' }}>{detail.data?.bookTitle ?? (en ? 'Gift message' : 'Lời nhắn tặng sách')}</Text><Text selectable style={[styles.dialogCopy, { color: muted, marginTop: 10 }]}>{detail.data?.giftMessage?.trim() || (en ? 'No message included.' : 'Không có lời nhắn kèm theo.')}</Text></View>}{detail.type !== 'system' && <Pressable onPress={goToRelated} style={styles.primary}><Text style={styles.primaryText}>{detail.type.startsWith('gift_') ? (en ? 'Open bookshelf' : 'Đến tủ sách') : detail.type.startsWith('potato_') ? (en ? 'View transactions' : 'Xem giao dịch') : (en ? 'View membership' : 'Xem hạng thành viên')}</Text></Pressable>}</>}
+              {confirmation && <View style={styles.confirmActions}><Pressable disabled={busy} onPress={() => setConfirmation(null)} style={styles.cancel}><Text style={{ color: muted, fontWeight: '700' }}>{en ? 'Cancel' : 'Hủy'}</Text></Pressable><Pressable disabled={busy} style={[styles.primary, { backgroundColor: '#A13D49', flex: 1 }]} onPress={() => { const target = confirmation; void perform(async () => { if (target === 'all') await clearAllNotifications(); else await deleteNotification(target.id); if (mounted.current) setConfirmation(null); }); }}><Text style={styles.primaryText}>{busy ? (en ? 'Deleting…' : 'Đang xóa…') : (en ? 'Delete' : 'Xóa')}</Text></Pressable></View>}
+            </ScrollView>
           </View>
         </View>
       </Modal>
     </SafeAreaView>
   );
 }
-
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-  },
-
-  // Header
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 3,
-    zIndex: 10,
-  },
-  headerBackBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#f1f5f9',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitleWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flex: 1,
-    marginLeft: 14,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#0f172a',
-  },
-  headerCountBadge: {
-    backgroundColor: '#ef4444',
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  headerCountText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#ffffff',
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  headerIconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#f1f5f9',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  // Tabs lọc lướt ngang mượt mà
-  tabsContainer: {
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9',
-  },
-  tabsScrollContent: {
-    flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 9,
-    alignItems: 'center',
-  },
-  tabPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 7.5,
-    borderRadius: 18,
-    backgroundColor: '#f1f5f9',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  tabPillActive: {
-    backgroundColor: '#2c3a7a',
-    borderColor: '#2c3a7a',
-  },
-  tabPillText: {
-    fontSize: 12.5,
-    fontWeight: '600',
-    color: '#64748b',
-  },
-  tabPillTextActive: {
-    color: '#ffffff',
-    fontWeight: '700',
-  },
-
-  // Danh sách
-  listContent: {
-    padding: 16,
-    paddingBottom: 30,
-  },
-  notifCard: {
-    flexDirection: 'row',
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  notifCardUnread: {
-    borderColor: '#c7d2fe',
-    backgroundColor: '#fbfcfe',
-    borderLeftWidth: 4,
-    borderLeftColor: '#2c3a7a',
-  },
-  iconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  cardContent: {
-    flex: 1,
-  },
-  cardHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  badgeWrap: {
-    paddingHorizontal: 6,
-    paddingVertical: 1.5,
-    borderRadius: 6,
-    backgroundColor: '#f1f5f9',
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-  },
-  timeText: {
-    fontSize: 11,
-    color: '#94a3b8',
-    marginLeft: 'auto',
-    marginRight: 6,
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#2c3a7a',
-  },
-  titleText: {
-    fontSize: 14.5,
-    fontWeight: '600',
-    color: '#334155',
-    marginBottom: 4,
-  },
-  titleTextBold: {
-    fontWeight: '800',
-    color: '#0f172a',
-  },
-  messageText: {
-    fontSize: 13,
-    lineHeight: 19,
-    color: '#64748b',
-  },
-  actionHintRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    backgroundColor: '#fdf2f8',
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-  },
-  actionHintText: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  deleteItemBtn: {
-    padding: 6,
-    marginLeft: 6,
-    alignSelf: 'flex-start',
-  },
-
-  // Trống
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 80,
-    paddingHorizontal: 30,
-  },
-  emptyIconBox: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#f1f5f9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#1e293b',
-    marginBottom: 6,
-  },
-  emptySubtitle: {
-    fontSize: 13,
-    lineHeight: 20,
-    color: '#94a3b8',
-    textAlign: 'center',
-  },
-
-  // Modal Xem lời nhắn
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalCard: {
-    width: '100%',
-    maxWidth: 360,
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    padding: 22,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.15,
-    shadowRadius: 15,
-    elevation: 10,
-  },
-  modalCloseBtn: {
-    position: 'absolute',
-    top: 14,
-    right: 14,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#f1f5f9',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  modalGiftIconBox: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#fdf2f8',
-    borderWidth: 1.5,
-    borderColor: '#fbcfe8',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 6,
-    marginBottom: 12,
-  },
-  modalHeaderTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: '#0f172a',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  modalBookPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#eef2ff',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 14,
-    marginBottom: 14,
-    maxWidth: '90%',
-  },
-  modalBookTitle: {
-    fontSize: 12.5,
-    fontWeight: '700',
-    color: '#2c3a7a',
-  },
-  messageContentBox: {
-    width: '100%',
-    backgroundColor: '#f8fafc',
-    borderRadius: 16,
-    paddingVertical: 20,
-    paddingHorizontal: 16,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  modalMessageText: {
-    fontSize: 14.5,
-    lineHeight: 22,
-    color: '#334155',
-    fontStyle: 'italic',
-    textAlign: 'center',
-  },
-  modalEmptyMessageText: {
-    fontSize: 14,
-    color: '#94a3b8',
-    fontStyle: 'italic',
-    textAlign: 'center',
-  },
+  screen: { flex: 1 }, header: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 18, width: '100%', maxWidth: 900, alignSelf: 'center' }, title: { fontSize: 23, fontWeight: '800', marginBottom: 3 }, iconButton: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  body: { flex: 1, width: '100%', maxWidth: 900, alignSelf: 'center', paddingHorizontal: 18 }, summary: { backgroundColor: '#294B43', borderRadius: 23, padding: 20, flexDirection: 'row', alignItems: 'center', gap: 15 }, summaryIcon: { padding: 12, borderRadius: 20, backgroundColor: '#FFFFFF12' }, summaryTitle: { color: '#FFF7E5', fontWeight: '800', fontSize: 17 }, summaryCopy: { color: '#C6D8CD', fontSize: 12, lineHeight: 19 },
+  tabScroll: { flexGrow: 0, marginTop: 18, marginBottom: 18 }, tabs: { gap: 8, paddingVertical: 3 }, tab: { paddingHorizontal: 16, paddingVertical: 11, borderRadius: 13 }, listToolbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, paddingBottom: 6 }, listTitle: { fontSize: 16, fontWeight: '800' }, readAll: { flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 40 }, readAllText: { color: '#B18C40', fontSize: 12, fontWeight: '700' }, list: { paddingBottom: 110, flexGrow: 1 }, day: { fontSize: 12, fontWeight: '700', marginTop: 18, marginBottom: 10 },
+  notification: { flexDirection: 'row', borderRadius: 19, borderWidth: 1, marginBottom: 10, overflow: 'hidden' }, notificationMain: { flexDirection: 'row', gap: 12, flex: 1, padding: 16, paddingRight: 0 }, typeIcon: { width: 46, height: 46, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }, notificationText: { flex: 1, gap: 6, paddingBottom: 2 }, metadata: { flexDirection: 'row', alignItems: 'center', gap: 8 }, badge: { fontSize: 10, fontWeight: '800' }, dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#C29B46' }, notificationTitle: { fontSize: 14, lineHeight: 21 }, message: { fontSize: 12, lineHeight: 19 }, time: { fontSize: 10, marginTop: 2 }, deleteButton: { width: 42, minHeight: 44, alignItems: 'center', paddingTop: 14 },
+  empty: { alignItems: 'center', justifyContent: 'center', gap: 16, paddingHorizontal: 24, paddingVertical: 55 }, emptyIcon: { padding: 24, borderRadius: 30 }, emptyTitle: { fontSize: 19, fontWeight: '800', textAlign: 'center' }, emptyCopy: { fontSize: 13, lineHeight: 22, textAlign: 'center', maxWidth: 380 }, error: { flexDirection: 'row', gap: 12, padding: 14, backgroundColor: '#B4515812', borderRadius: 12 },
+  backdrop: { flex: 1, backgroundColor: '#00000088', justifyContent: 'center', alignItems: 'center', padding: 22 }, dialog: { width: '100%', maxWidth: 480, maxHeight: '85%', borderRadius: 25, padding: 24 }, dialogHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, dialogTitle: { fontSize: 21, fontWeight: '800', lineHeight: 29 }, dialogCopy: { fontSize: 14, lineHeight: 23 }, giftMessage: { padding: 18, borderRadius: 16 }, primary: { backgroundColor: '#7B3037', borderRadius: 13, paddingHorizontal: 22, paddingVertical: 14, alignItems: 'center', justifyContent: 'center' }, primaryText: { color: '#FFF', fontWeight: '700', fontSize: 13 }, confirmActions: { flexDirection: 'row', gap: 12 }, cancel: { flex: 1, padding: 14, alignItems: 'center', justifyContent: 'center' },
 });
