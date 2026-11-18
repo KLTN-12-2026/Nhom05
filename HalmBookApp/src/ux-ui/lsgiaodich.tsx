@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchApiWithFallback } from './apiService';
-import { useAppNavigation, useAutoHideFooter } from './navigation';
+import { useAppNavigation } from './navigation';
 import { getCurrentUsername } from './userStorage';
 
 export type TransactionCategoryFilter = 'all' | 'topup' | 'rent' | 'reward' | 'transfer';
@@ -448,7 +448,6 @@ function isWithinTimeRange(timestampMs: number, range: TimeRangeFilter): boolean
 export default function HalmBookHistory() {
   const insets = useSafeAreaInsets();
   const { navigate, goBack, isDarkMode, isLoggedIn, lang } = useAppNavigation();
-  const { onScroll: handleFooterScroll } = useAutoHideFooter();
   const t = COPY[lang] || COPY.vi;
 
   const palette = useMemo(
@@ -695,11 +694,10 @@ export default function HalmBookHistory() {
               insets.top,
               Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 44
             ) + 8,
+            paddingBottom: Math.max(insets.bottom, 24) + 16,
           },
         ]}
         showsVerticalScrollIndicator={false}
-        onScroll={handleFooterScroll}
-        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

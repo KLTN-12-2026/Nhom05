@@ -19,9 +19,11 @@ export const API_BASE_URL =
 export const CANDIDATE_AUTH_URLS = [
   API_BASE_URL,
   `http://${localhost}:8082`,
+  'http://172.26.41.174:8082',
+  'http://192.168.1.7:8082',
+  'http://192.168.1.165:8082',
   'http://localhost:8082',
   'http://127.0.0.1:8082',
-  'http://192.168.1.165:8082',
   'http://10.0.2.2:8082',
 ];
 
@@ -186,8 +188,8 @@ export async function saveMobileAuthSession(
 
   const username = String(
     account?.username ||
-      fallbackUsername ||
-      (customer?.email ? String(customer.email).split('@')[0] : 'Reader')
+    fallbackUsername ||
+    (customer?.email ? String(customer.email).split('@')[0] : 'Reader')
   );
   const email = String(customer?.email || account?.email || '');
   const fullName = String(
@@ -197,8 +199,8 @@ export async function saveMobileAuthSession(
     typeof customer?.potatoBalance === 'number'
       ? customer.potatoBalance
       : typeof account?.khoai === 'number'
-      ? account.khoai
-      : 0;
+        ? account.khoai
+        : 0;
   const avatar = String(
     customer?.avatar || customer?.avatarUrl || account?.avatar || ''
   );

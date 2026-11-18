@@ -898,6 +898,27 @@ export default function Toi() {
           return next;
         });
 
+        // Cập nhật ngay lập tức vào state để người dùng thấy streakDays và potato tăng tức thì
+        if (typeof res.data.streakDays === 'number') {
+          const newStreak = res.data.streakDays;
+          const newPotato = typeof res.data.potatoBalance === 'number' ? res.data.potatoBalance : undefined;
+          setUserInfo((prev) => ({
+            ...prev,
+            streakDays: newStreak,
+            potatoBalance: newPotato !== undefined ? newPotato : prev.potatoBalance,
+          }));
+          setTierSummary((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  streakDays: newStreak,
+                  hasCheckedInToday: true,
+                  potatoBalance: newPotato !== undefined ? newPotato : prev.potatoBalance,
+                }
+              : null
+          );
+        }
+
         // Tự động ghi thông báo vào Hộp thư thông báo
         addNotification({
           type: 'potato_reward',
@@ -1471,7 +1492,7 @@ export default function Toi() {
             <View style={themeStyles.statIconWrap}>
               <Ionicons name="flame-outline" size={20} color={isDarkMode ? '#FB923C' : '#C2410C'} />
             </View>
-            <Text style={themeStyles.statValue}>{userInfo.streakDays}</Text>
+            <Text style={themeStyles.statValue}>{tierSummary?.streakDays ?? userInfo.streakDays}</Text>
             <Text style={themeStyles.statLabel}>{t.readingStreak}</Text>
           </View>
           <View style={themeStyles.statDivider} />

@@ -133,7 +133,10 @@ export default function ChatBotScreen({
 
           {/* Nội dung tin nhắn văn bản */}
           {item.text && (
-            <Text style={[themeStyles.messageText, isUser ? themeStyles.userText : themeStyles.botText]}>
+            <Text 
+              style={[themeStyles.messageText, isUser ? themeStyles.userText : themeStyles.botText]}
+              selectable={true}
+            >
               {item.text}
             </Text>
           )}
@@ -195,9 +198,9 @@ export default function ChatBotScreen({
           </View>
         </View>
         <View style={[themeStyles.messageBubble, themeStyles.botBubble, themeStyles.loadingBubble]}>
-          <ActivityIndicator size="small" color="#2c3a7a" style={{ marginRight: 10 }} />
-          <Text style={themeStyles.loadingText}>
-            HALM.AI đang phân tích & soạn câu trả lời...
+          <ActivityIndicator size="small" color="#2c3a7a" style={{ marginRight: 8 }} />
+          <Text style={themeStyles.loadingText} numberOfLines={2}>
+            HALM.AI đang soạn câu trả lời...
           </Text>
         </View>
       </View>
@@ -425,7 +428,8 @@ const styles = StyleSheet.create({
   messageWrapper: { 
     flexDirection: 'row', 
     marginBottom: 14, 
-    alignItems: 'flex-end' 
+    alignItems: 'flex-end',
+    width: '100%',
   },
   messageWrapperUser: { 
     justifyContent: 'flex-end' 
@@ -436,7 +440,8 @@ const styles = StyleSheet.create({
 
   botAvatarWrapper: {
     marginRight: 8,
-    marginBottom: 4
+    marginBottom: 4,
+    flexShrink: 0,
   },
   botAvatarInner: {
     width: 30,
@@ -454,11 +459,12 @@ const styles = StyleSheet.create({
 
   // Bong bóng tin nhắn
   messageBubble: {
-    maxWidth: '80%', 
+    maxWidth: '82%', 
     paddingHorizontal: 15, 
     paddingTop: 12, 
     paddingBottom: 9,
     borderRadius: 20,
+    flexShrink: 1,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 3,
@@ -467,20 +473,24 @@ const styles = StyleSheet.create({
   userBubble: { 
     backgroundColor: '#2c3a7a', 
     borderBottomRightRadius: 4,
-    shadowColor: '#2c3a7a'
+    shadowColor: '#2c3a7a',
+    alignSelf: 'flex-end',
   },
   botBubble: { 
     backgroundColor: '#ffffff', 
     borderBottomLeftRadius: 4,
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    shadowColor: '#000'
+    shadowColor: '#000',
+    alignSelf: 'flex-start',
+    flexShrink: 1,
   },
 
   // Bot badge bên trong tin nhắn
   botBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 6,
     marginBottom: 5
   },
@@ -505,7 +515,8 @@ const styles = StyleSheet.create({
   messageText: { 
     fontSize: 14.5, 
     lineHeight: 22, 
-    marginBottom: 4 
+    marginBottom: 4,
+    flexShrink: 1,
   },
   userText: { 
     color: '#ffffff',
@@ -540,7 +551,8 @@ const styles = StyleSheet.create({
     marginTop: 8, 
     marginBottom: 6,
     borderWidth: 1, 
-    borderColor: '#e2e8f0'
+    borderColor: '#e2e8f0',
+    width: '100%',
   },
   bookSuggestCover: { 
     width: 44, 
@@ -548,12 +560,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#e2e8f0', 
     borderRadius: 8, 
     justifyContent: 'center', 
-    alignItems: 'center' 
+    alignItems: 'center',
+    flexShrink: 0,
   },
   bookSuggestInfo: { 
     flex: 1, 
     marginLeft: 10, 
-    justifyContent: 'center' 
+    justifyContent: 'center',
+    minWidth: 0,
   },
   bookSuggestTitle: { 
     fontSize: 13, 
@@ -569,6 +583,7 @@ const styles = StyleSheet.create({
   },
   bookSuggestTagRow: { 
     flexDirection: 'row', 
+    flexWrap: 'wrap',
     gap: 6 
   },
   bookSuggestTag: { 
@@ -586,14 +601,18 @@ const styles = StyleSheet.create({
   loadingBubble: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    maxWidth: '82%',
+    flexShrink: 1,
   },
   loadingText: {
     fontSize: 13,
     fontStyle: 'italic',
     color: '#475569',
-    fontWeight: '500'
+    fontWeight: '500',
+    flex: 1,
+    flexShrink: 1,
   },
 
   // Khung nhập tin nhắn

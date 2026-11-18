@@ -14,15 +14,14 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
   UIManager,
   View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { getBookCoverSource } from './bookCovers';
 import { getBookChapterLabel } from './bookContentService';
-import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
+import { getBookCoverSource } from './bookCovers';
+import { BookData, useAppNavigation } from './navigation';
 import { useUnreadNotificationCount } from './useUnreadNotificationCount';
 
 const { width, height } = Dimensions.get('window');
@@ -40,9 +39,11 @@ const API_BASE_URL = `http://${localhost}:8082`;
 
 const CANDIDATE_API_URLS = [
   API_BASE_URL,
+  'http://172.26.41.174:8082',
+  'http://192.168.1.7:8082',
+  'http://192.168.1.165:8082',
   'http://localhost:8082',
   'http://127.0.0.1:8082',
-  'http://192.168.1.165:8082',
   'http://10.0.2.2:8082',
 ];
 
@@ -241,7 +242,15 @@ interface TrangChuProps {
 }
 
 export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: TrangChuProps) {
-  const { navigate, setFooterVisible, isLoggedIn } = useAppNavigation();
+  const {
+    navigate,
+    setFooterVisible,
+    isLoggedIn,
+    showLoginAlert,
+    lang,
+    userAvatarUrl,
+    userInitial,
+  } = useAppNavigation();
   const unreadNotifications = useUnreadNotificationCount(isLoggedIn);
   const [selectedPreviewBook, setSelectedPreviewBook] = useState<HomeBookItem | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -538,116 +547,117 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
   return (
     <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: isDarkMode ? '#1F2228' : '#4A7C72' }]}>
       <Animated.View style={[styles.container, { backgroundColor: animatedBg }]}>
-      <ExpoStatusBar style="light" />
-      
-      {/* TRUNG TÂM HIỆU ỨNG DARK MODE */}
-      <DarkModeBackgroundEffects visible={isDarkMode} />
-      
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        bounces
-        refreshControl={Platform.OS === 'web' ? undefined : (
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={isDarkMode ? '#D8B36A' : '#5a8b82'}
-            colors={['#5a8b82', '#9147DF']}
-          />
-        )}
-        onScroll={(event) => {
-          const currentY = event.nativeEvent.contentOffset.y;
-          const diff = currentY - scrollOffset.current;
-          if (Math.abs(diff) > 8) {
-            if (diff > 0 && currentY > 60) {
-              setFooterVisible?.(false);
-            } else if (diff < 0) {
-              setFooterVisible?.(true);
+        <ExpoStatusBar style="light" />
+
+        {/* TRUNG TÂM HIỆU ỨNG DARK MODE */}
+        <DarkModeBackgroundEffects visible={isDarkMode} />
+
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          bounces
+          refreshControl={Platform.OS === 'web' ? undefined : (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={isDarkMode ? '#D8B36A' : '#5a8b82'}
+              colors={['#5a8b82', '#9147DF']}
+            />
+          )}
+          onScroll={(event) => {
+            const currentY = event.nativeEvent.contentOffset.y;
+            const diff = currentY - scrollOffset.current;
+            if (Math.abs(diff) > 8) {
+              if (diff > 0 && currentY > 60) {
+                setFooterVisible?.(false);
+              } else if (diff < 0) {
+                setFooterVisible?.(true);
+              }
             }
-          }
-          scrollOffset.current = currentY;
-        }}
-        scrollEventThrottle={16}
-        onTouchStart={(event) => {
-          const pageY = getTouchPageY(event.nativeEvent);
-          pullStart.current = scrollOffset.current <= 0 ? pageY ?? null : null;
-          refreshStarted.current = false;
-        }}
-        onTouchMove={(event) => {
-          if (Platform.OS !== 'web' || pullStart.current === null || scrollOffset.current > 0) return;
-          const pageY = getTouchPageY(event.nativeEvent);
-          if (pageY !== undefined && pageY - pullStart.current >= 90) handleRefresh();
-        }}
-        onTouchEnd={() => { pullStart.current = null; }}
-        onTouchCancel={() => { pullStart.current = null; }}
-      >
-        
-        <View style={styles.topBackground}>
-          <View style={styles.header}>
-            <TouchableOpacity
-              style={styles.menuBtn}
-              onPress={() => {
-                console.log('Open Filter');
-                navigate('categories');
-              }}
-              activeOpacity={0.75}
-              accessibilityRole="button"
-              accessibilityLabel="Mở bộ lọc"
-            >
-              <Ionicons name="menu" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
+            scrollOffset.current = currentY;
+          }}
+          scrollEventThrottle={16}
+          onTouchStart={(event) => {
+            const pageY = getTouchPageY(event.nativeEvent);
+            pullStart.current = scrollOffset.current <= 0 ? pageY ?? null : null;
+            refreshStarted.current = false;
+          }}
+          onTouchMove={(event) => {
+            if (Platform.OS !== 'web' || pullStart.current === null || scrollOffset.current > 0) return;
+            const pageY = getTouchPageY(event.nativeEvent);
+            if (pageY !== undefined && pageY - pullStart.current >= 90) handleRefresh();
+          }}
+          onTouchEnd={() => { pullStart.current = null; }}
+          onTouchCancel={() => { pullStart.current = null; }}
+        >
 
-            <TouchableOpacity
-              style={styles.searchContainer}
-              activeOpacity={0.9}
-              onPress={() => navigate('search')}
-              accessibilityRole="button"
-              accessibilityLabel="Tìm kiếm sách, tác giả"
-            >
-              <Ionicons
-                name="search-outline"
-                size={18}
-                color={isDarkMode ? '#9BA3B2' : '#7A8291'}
-                style={{ marginRight: 8 }}
-              />
-              <Text style={styles.searchInput} numberOfLines={1}>
-                Tìm kiếm sách, tác giả...
-              </Text>
-            </TouchableOpacity>
+          <View style={styles.topBackground}>
+            <View style={styles.header}>
+              <TouchableOpacity
+                style={styles.menuBtn}
+                onPress={() => {
+                  console.log('Open Filter');
+                  navigate('categories');
+                }}
+                activeOpacity={0.75}
+                accessibilityRole="button"
+                accessibilityLabel="Mở bộ lọc"
+              >
+                <Ionicons name="menu" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.darkModeToggle}
-              onPress={onToggleDarkMode}
-              activeOpacity={0.75}
-              accessibilityRole="button"
-              accessibilityLabel={isDarkMode ? 'Bật chế độ sáng' : 'Bật chế độ tối'}
-            >
-              <Ionicons
-                name={isDarkMode ? 'sunny' : 'moon'}
-                size={20}
-                color={isDarkMode ? '#FFD166' : '#FFF8E7'}
-              />
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.searchContainer}
+                activeOpacity={0.9}
+                onPress={() => navigate('search')}
+                accessibilityRole="button"
+                accessibilityLabel="Tìm kiếm sách, tác giả"
+              >
+                <Ionicons
+                  name="search-outline"
+                  size={18}
+                  color={isDarkMode ? '#9BA3B2' : '#7A8291'}
+                  style={{ marginRight: 8 }}
+                />
+                <Text style={styles.searchInput} numberOfLines={1}>
+                  Tìm kiếm sách, tác giả...
+                </Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.darkModeToggle, { marginLeft: 4 }]}
-              onPress={() => navigate('cart')}
-              activeOpacity={0.75}
-              accessibilityRole="button"
-              accessibilityLabel="Giỏ hàng"
-            >
-              <Ionicons name="cart-outline" size={21} color="#FFFFFF" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.darkModeToggle, { marginLeft: 4 }]}
-              onPress={() => navigate('notifications')}
-              accessibilityRole="button"
-              accessibilityLabel={`Thông báo${unreadNotifications ? `, ${unreadNotifications} chưa đọc` : ''}`}
-            >
-              <Ionicons name="notifications-outline" size={21} color="#FFFFFF" />
-              {unreadNotifications > 0 && <View style={{ position: 'absolute', top: 3, right: 2, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 3, backgroundColor: '#D5AC56', alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 9, fontWeight: '800', color: '#382F23' }}>{unreadNotifications > 99 ? '99+' : unreadNotifications}</Text></View>}
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.darkModeToggle}
+                onPress={onToggleDarkMode}
+                activeOpacity={0.75}
+                accessibilityRole="button"
+                accessibilityLabel={isDarkMode ? 'Bật chế độ sáng' : 'Bật chế độ tối'}
+              >
+                <Ionicons
+                  name={isDarkMode ? 'sunny' : 'moon'}
+                  size={20}
+                  color={isDarkMode ? '#FFD166' : '#FFF8E7'}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.darkModeToggle, { marginLeft: 4 }]}
+                onPress={() => navigate('cart')}
+                activeOpacity={0.75}
+                accessibilityRole="button"
+                accessibilityLabel="Giỏ hàng"
+              >
+                <Ionicons name="cart-outline" size={21} color="#FFFFFF" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.darkModeToggle, { marginLeft: 4 }]}
+                onPress={() => navigate('notifications')}
+                accessibilityRole="button"
+                accessibilityLabel={`Thông báo${unreadNotifications ? `, ${unreadNotifications} chưa đọc` : ''}`}
+              >
+                <Ionicons name="notifications-outline" size={21} color="#FFFFFF" />
+                {unreadNotifications > 0 && <View style={{ position: 'absolute', top: 3, right: 2, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 3, backgroundColor: '#D5AC56', alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 9, fontWeight: '800', color: '#382F23' }}>{unreadNotifications > 99 ? '99+' : unreadNotifications}</Text></View>}
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={styles.toolbar}>
@@ -665,7 +675,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
                     showLoginAlert(lang === 'en' ? 'Please log in to use bookshelf feature' : 'Bạn phải đăng nhập để dùng chức năng tủ sách');
                     return;
                   }
-                  navigate(item.screen as any);
+                  navigate(item.screen as any, undefined, { initialBookshelfTab: item.initialBookshelfTab });
                 }}
               >
                 <View style={[
@@ -686,119 +696,73 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
             ))}
           </View>
 
-        <View style={styles.toolbar}>
-          {toolbarData.map((item, idx) => (
-            <TouchableOpacity
-              key={idx}
-              style={styles.toolbarItem}
-              activeOpacity={0.8}
-              onPress={() => navigate(item.screen as any, undefined, { initialBookshelfTab: item.initialBookshelfTab })}
-            >
-              <View style={[
-                styles.toolbarIconBox,
-                {
-                  backgroundColor: isDarkMode ? item.bgDark : item.bgLight,
-                  borderColor: isDarkMode ? item.borderDark : item.borderLight,
-                }
-              ]}>
-                <Ionicons
-                  name={item.icon as any}
-                  size={22}
-                  color={isDarkMode ? item.iconDark : item.iconLight}
-                />
+          <View style={styles.section}>
+            <View style={[styles.sectionTitleBox, { backgroundColor: isDarkMode ? '#2C2216' : '#FEF3C7', borderColor: isDarkMode ? '#45351E' : '#FDE68A' }]}>
+              <Ionicons name="sparkles" size={16} color={isDarkMode ? '#FBBF24' : '#D97706'} style={{ marginRight: 6 }} />
+              <Text style={[styles.sectionTitleText, { color: isDarkMode ? '#FBBF24' : '#92400E' }]}>Khuyến Khích Đọc</Text>
+            </View>
+            {isLoading ? (
+              <View style={styles.statusBox}>
+                <ActivityIndicator size="small" color={isDarkMode ? '#D8B36A' : '#5a8b82'} />
+                <Text style={styles.statusText}>Đang tải dữ liệu sách...</Text>
               </View>
-              <Text style={styles.toolbarLabel} numberOfLines={1}>{item.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <View style={styles.section}>
-          <View style={[styles.sectionTitleBox, { backgroundColor: isDarkMode ? '#2C2216' : '#FEF3C7', borderColor: isDarkMode ? '#45351E' : '#FDE68A' }]}>
-            <Ionicons name="sparkles" size={16} color={isDarkMode ? '#FBBF24' : '#D97706'} style={{marginRight: 6}} />
-            <Text style={[styles.sectionTitleText, { color: isDarkMode ? '#FBBF24' : '#92400E' }]}>Khuyến Khích Đọc</Text>
-          </View>
-          {isLoading ? (
-            <View style={styles.statusBox}>
-              <ActivityIndicator size="small" color={isDarkMode ? '#D8B36A' : '#5a8b82'} />
-              <Text style={styles.statusText}>Đang tải dữ liệu sách...</Text>
-            </View>
-          ) : errorMessage ? (
-            <View style={styles.statusBox}>
-              <Text style={styles.statusErrorText}>{errorMessage}</Text>
-              <TouchableOpacity style={styles.retryBtn} onPress={() => fetchBooks()}>
-                <Text style={styles.retryBtnText}>Thử lại</Text>
-              </TouchableOpacity>
-            </View>
-          ) : books.length === 0 ? (
-            <View style={styles.statusBox}>
-              <Text style={styles.statusEmptyText}>Chưa có sách nào trong kho lưu trữ</Text>
-            </View>
-          ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList}>
-              {recommendedBooks.slice(0, 7).map(n => renderNovelCard(n, 115, true))}
-            </ScrollView>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <View style={[styles.sectionTitleBox, { backgroundColor: isDarkMode ? '#132822' : '#ECFDF5', borderColor: isDarkMode ? '#1F473C' : '#D1FAE5' }]}>
-            <Ionicons name="flash" size={16} color={isDarkMode ? '#34D399' : '#059669'} style={{marginRight: 6}} />
-            <Text style={[styles.sectionTitleText, { color: isDarkMode ? '#34D399' : '#065F46' }]}>Mới Cập Nhật</Text>
-          </View>
-          {isLoading ? (
-            <View style={styles.statusBox}>
-              <ActivityIndicator size="small" color={isDarkMode ? '#D8B36A' : '#5a8b82'} />
-              <Text style={styles.statusText}>Đang tải dữ liệu sách...</Text>
-            </View>
-          ) : errorMessage ? (
-            <View style={styles.statusBox}>
-              <Text style={styles.statusErrorText}>{errorMessage}</Text>
-            </View>
-          ) : books.length === 0 ? (
-            <View style={styles.statusBox}>
-              <Text style={styles.statusEmptyText}>Chưa có sách mới cập nhật</Text>
-            </View>
-          ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList}>
-              {recentBooks.slice(0, 7).map(n => renderNovelCard(n, 115, true))}
-            </ScrollView>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <View style={[styles.sectionTitleBox, { backgroundColor: badgeColors[3] }]}>
-            <Ionicons name="podium" size={18} color="#1a1a1a" style={{marginRight: 6}} />
-            <Text style={[styles.sectionTitleText, { color: '#1a1a1a' }]}>Bảng Xếp Hạng</Text>
-          </View>
-          
-          {isLoading ? (
-            <View style={styles.statusBox}>
-              <ActivityIndicator size="small" color={isDarkMode ? '#D8B36A' : '#5a8b82'} />
-              <Text style={styles.statusText}>Đang tải bảng xếp hạng...</Text>
-            </View>
-          ) : errorMessage ? (
-            <View style={styles.statusBox}>
-              <Text style={styles.statusErrorText}>{errorMessage}</Text>
-            </View>
-          ) : books.length === 0 ? (
-            <View style={styles.statusBox}>
-              <Text style={styles.statusEmptyText}>Chưa có dữ liệu bảng xếp hạng</Text>
-            </View>
-          ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList} snapToInterval={315} decelerationRate="fast">
-              <View style={styles.rankPage}>
-                <View style={styles.rankPageHeader}>
-                  <Text style={styles.rankPageTitle}>🏆 Top Tuần</Text>
-                  <Text style={styles.rankPageMore}>Xem thêm ›</Text>
-                </View>
-                {books.slice(0, 5).map((novel, index) => renderRankItem(novel, index))}
+            ) : errorMessage ? (
+              <View style={styles.statusBox}>
+                <Text style={styles.statusErrorText}>{errorMessage}</Text>
+                <TouchableOpacity style={styles.retryBtn} onPress={() => fetchBooks()}>
+                  <Text style={styles.retryBtnText}>Thử lại</Text>
+                </TouchableOpacity>
               </View>
-              <View style={styles.rankPage}>
-                <View style={styles.rankPageHeader}>
-                  <Text style={styles.rankPageTitle}>🔥 Top Tháng</Text>
-                  <Text style={styles.rankPageMore}>Xem thêm ›</Text>
-                </View>
-                {books.slice(0, 5).reverse().map((novel, index) => renderRankItem(novel, index))}
+            ) : books.length === 0 ? (
+              <View style={styles.statusBox}>
+                <Text style={styles.statusEmptyText}>Chưa có sách nào trong kho lưu trữ</Text>
+              </View>
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList}>
+                {recommendedBooks.slice(0, 7).map(n => renderNovelCard(n, 115, true))}
+              </ScrollView>
+            )}
+          </View>
+
+          <View style={styles.section}>
+            <View style={[styles.sectionTitleBox, { backgroundColor: isDarkMode ? '#132822' : '#ECFDF5', borderColor: isDarkMode ? '#1F473C' : '#D1FAE5' }]}>
+              <Ionicons name="flash" size={16} color={isDarkMode ? '#34D399' : '#059669'} style={{ marginRight: 6 }} />
+              <Text style={[styles.sectionTitleText, { color: isDarkMode ? '#34D399' : '#065F46' }]}>Mới Cập Nhật</Text>
+            </View>
+            {isLoading ? (
+              <View style={styles.statusBox}>
+                <ActivityIndicator size="small" color={isDarkMode ? '#D8B36A' : '#5a8b82'} />
+                <Text style={styles.statusText}>Đang tải dữ liệu sách...</Text>
+              </View>
+            ) : errorMessage ? (
+              <View style={styles.statusBox}>
+                <Text style={styles.statusErrorText}>{errorMessage}</Text>
+              </View>
+            ) : books.length === 0 ? (
+              <View style={styles.statusBox}>
+                <Text style={styles.statusEmptyText}>Chưa có sách mới cập nhật</Text>
+              </View>
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList}>
+                {recentBooks.slice(0, 7).map(n => renderNovelCard(n, 115, true))}
+              </ScrollView>
+            )}
+          </View>
+
+          <View style={styles.section}>
+            <View style={[styles.sectionTitleBox, { backgroundColor: badgeColors[3] }]}>
+              <Ionicons name="podium" size={18} color="#1a1a1a" style={{ marginRight: 6 }} />
+              <Text style={[styles.sectionTitleText, { color: '#1a1a1a' }]}>Bảng Xếp Hạng</Text>
+            </View>
+
+            {isLoading ? (
+              <View style={styles.statusBox}>
+                <ActivityIndicator size="small" color={isDarkMode ? '#D8B36A' : '#5a8b82'} />
+                <Text style={styles.statusText}>{lang === 'en' ? 'Loading leaderboard...' : 'Đang tải bảng xếp hạng...'}</Text>
+              </View>
+            ) : errorMessage ? (
+              <View style={styles.statusBox}>
+                <Text style={styles.statusErrorText}>{errorMessage}</Text>
               </View>
             ) : books.length === 0 ? (
               <View style={styles.statusBox}>
@@ -824,11 +788,12 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
             )}
           </View>
 
-        {/* DANH MỤC THỂ LOẠI: TÁCH RIÊNG TỪNG HÀNG SÁCH LƯỚT NGANG KÈM Ô MỞ RỘNG (GIỐNG WEB) */}
-        <View style={styles.sectionHeaderContainer}>
-          <View style={[styles.sectionTitleBox, { backgroundColor: isDarkMode ? '#1C1F38' : '#EEF2FF', borderColor: isDarkMode ? '#31355E' : '#E0E7FF' }]}>
-            <Ionicons name="library" size={16} color={isDarkMode ? '#A5B4FC' : '#6366F1'} style={{marginRight: 6}} />
-            <Text style={[styles.sectionTitleText, { color: isDarkMode ? '#A5B4FC' : '#4338CA' }]}>Danh Mục Thể Loại</Text>
+          {/* DANH MỤC THỂ LOẠI: TÁCH RIÊNG TỪNG HÀNG SÁCH LƯỚT NGANG KÈM Ô MỞ RỘNG (GIỐNG WEB) */}
+          <View style={styles.sectionHeaderContainer}>
+            <View style={[styles.sectionTitleBox, { backgroundColor: isDarkMode ? '#1C1F38' : '#EEF2FF', borderColor: isDarkMode ? '#31355E' : '#E0E7FF' }]}>
+              <Ionicons name="library" size={16} color={isDarkMode ? '#A5B4FC' : '#6366F1'} style={{ marginRight: 6 }} />
+              <Text style={[styles.sectionTitleText, { color: isDarkMode ? '#A5B4FC' : '#4338CA' }]}>{lang === 'en' ? 'Book Categories' : 'Danh Mục Thể Loại'}</Text>
+            </View>
           </View>
 
           {shelfCategories.map((shelf) => {
@@ -852,10 +817,10 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode, onRefresh }: Tr
             );
           })}
 
-        <View style={styles.footerBranding}>
-          <Text style={styles.footerBrandTitle}>HALM <Text style={{ color: isDarkMode ? '#A99BCB' : '#9b51e0' }}>Book</Text></Text>
-          <Text style={styles.footerBrandSlogan}>Sách là ánh sáng!</Text>
-        </View>
+          <View style={styles.footerBranding}>
+            <Text style={styles.footerBrandTitle}>HALM <Text style={{ color: isDarkMode ? '#A99BCB' : '#9b51e0' }}>Book</Text></Text>
+            <Text style={styles.footerBrandSlogan}>Sách là ánh sáng!</Text>
+          </View>
 
         </ScrollView>
 
@@ -981,9 +946,9 @@ const getStyles = (isDark: boolean) => {
   const textMain = isDark ? '#F5F1E8' : '#1a1a1a';
   const textSub = isDark ? '#A7ABB5' : '#666';
   const pageBg = isDark ? '#101319' : '#ffffff';
-  
-  const topBg = isDark ? '#1F2228' : '#4A7C72'; 
-  
+
+  const topBg = isDark ? '#1F2228' : '#4A7C72';
+
   const cardBg = isDark ? '#1B1F28' : '#ffffff';
   const cardRaised = isDark ? '#232833' : '#ffffff';
   const coverBg = isDark ? '#2B303B' : '#ccc';
