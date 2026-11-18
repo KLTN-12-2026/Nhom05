@@ -1,3 +1,4 @@
+import { CANDIDATE_API_URLS } from './apiService';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -29,7 +30,6 @@ import {
   View,
 } from 'react-native';
 import axios from 'axios';
-import Constants from 'expo-constants';
 import { getBookCoverSource } from './bookCovers';
 import { useAppNavigation } from './navigation';
 import { getBookRealChapters, getBookChapterLabel } from './bookContentService';
@@ -38,21 +38,11 @@ import { useBookFavorite } from './useBookFavorite';
 const { width, height } = Dimensions.get('window');
 
 // CẤU HÌNH KẾT NỐI BACKEND SPRING BOOT + MYSQL
-const debuggerHost = Constants.expoConfig?.hostUri;
-const localhost = debuggerHost ? debuggerHost.split(':')[0] : 'localhost';
-const API_BASE_URL = `http://${localhost}:8082`;
 
-const CANDIDATE_API_URLS = Array.from(
-  new Set([
-    API_BASE_URL,
-    'http://172.26.41.174:8082',
-    'http://192.168.1.7:8082',
-    'http://192.168.1.165:8082',
-    'http://localhost:8082',
-    'http://127.0.0.1:8082',
-    'http://10.0.2.2:8082',
-  ])
-);
+
+
+
+
 
 // MÀU SẮC THƯƠNG HIỆU ĐỒNG BỘ TRANG CHỦ APP
 const BRAND = {

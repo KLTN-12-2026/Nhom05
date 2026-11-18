@@ -421,8 +421,12 @@ export async function extractPdfChapters(
   author: string,
   fileSizeText: string
 ): Promise<Chapter[]> {
+  const bytes = await getPdfUint8Array(fileUri);
+  return extractPdfBytesChapters(bytes, fileName, bookTitle, author, fileSizeText);
+}
+
+export function extractPdfBytesChapters(uint8: Uint8Array, fileName: string, bookTitle: string, author: string, fileSizeText = ''): Chapter[] {
   try {
-    const uint8 = await getPdfUint8Array(fileUri);
     console.log('[PDF] Đã đọc thành công số byte:', uint8.length);
 
     if (uint8 && uint8.length > 0) {

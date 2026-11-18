@@ -33,8 +33,7 @@ public class SupportTicketIntakeService {
         Customer customer = null;
         if (message.getCustomerId() != null && !message.getCustomerId().isBlank()) {
             customer = customers.findById(message.getCustomerId()).orElse(null);
-        } else if (message.getSenderEmail() != null && !message.getSenderEmail().isBlank()) {
-            customer = customers.findByEmail(message.getSenderEmail()).orElse(null);
+
         }
         SupportTicket ticket = SupportTicket.builder()
                 .code(message.getCode()).customer(customer)

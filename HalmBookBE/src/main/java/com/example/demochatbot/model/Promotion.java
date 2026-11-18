@@ -24,6 +24,9 @@ public class Promotion {
     private LocalDateTime start_date;
     private LocalDateTime end_date;
     private String status;
+    private String book_id;
+
+
 
     @ManyToOne
     @JoinColumn(name = "category_id" , referencedColumnName = "category_id")

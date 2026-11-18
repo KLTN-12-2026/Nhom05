@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { API_BASE_URL } from '../config/api.js';
+import { API_BASE_URL, normalizeAssetLinks } from '../config/api.js';
 import { getAuthToken, getValidAuthToken, getAdminAuthToken, isTokenExpired, clearAuthSession, clearAdminAuthSession } from './authToken.js';
 import { resolveAuthScope } from './requestPolicy.js';
 
@@ -17,7 +17,10 @@ axiosClient.interceptors.request.use(config => {
   return config;
 });
 
-axiosClient.interceptors.response.use(response => response, error => {
+axiosClient.interceptors.response.use(response => {
+  response.data = normalizeAssetLinks(response.data);
+  return response;
+}, error => {
   if (typeof window !== 'undefined') {
     const { sessionScope: scope, hadSession } = error.config || {};
     const { status, data } = error.response || {};

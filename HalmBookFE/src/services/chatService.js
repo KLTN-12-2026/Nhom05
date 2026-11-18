@@ -32,6 +32,15 @@ export const sendChatMessage = async (message) => {
     return reply;
 };
 
+export function getChatErrorMessage(error) {
+    const data = error?.response?.data;
+    if (typeof data?.error === 'string' && data.error.startsWith('AI_') && typeof data.message === 'string') {
+        return data.message;
+    }
+    if (error?.response?.status === 429) return 'AI đang bận. Bạn chờ một chút rồi thử lại nhé.';
+    return 'Chưa xác nhận được tin nhắn đã lưu. Bạn mở lại chat để kiểm tra trước khi gửi lại.';
+}
+
 export const getChatHistory = async () => {
     if (getChatOwner() === 'guest') {
         const history = readStoredJson('halm_guest_chat_history', [], false);

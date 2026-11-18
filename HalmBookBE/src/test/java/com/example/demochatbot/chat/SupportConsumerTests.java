@@ -83,11 +83,20 @@ class SupportConsumerTests {
     @Test void newTicketAndReaderNotificationAreWrittenByTheIntakeTransaction() {
         Customer reader = new Customer();
         reader.setCustomer_id("reader");
-        when(customers.findByEmail("test@example.invalid")).thenReturn(Optional.of(reader));
+        when(customers.findById("reader")).thenReturn(Optional.of(reader));
         SupportTicketIntakeService store = new SupportTicketIntakeService(tickets, customers, notifications);
-        SupportTicket saved = store.accept(message("new")).orElseThrow();
+        SupportTicketMessage request = message("new");
+        request.setCustomerId("reader");
+        SupportTicket saved = store.accept(request).orElseThrow();
         assertEquals("Nhờ hỗ trợ", saved.getMessage());
         verify(tickets).saveAndFlush(saved);
         verify(notifications).save(any(Notification.class));
+    }
+    @Test void guestEmailMustNotAttachATicketToSomeoneElsesAccount() {
+        SupportTicketIntakeService store = new SupportTicketIntakeService(tickets, customers, notifications);
+        SupportTicket ticket = store.accept(message("guest")).orElseThrow();
+        assertNull(ticket.getCustomer());
+        verify(customers, never()).findByEmail(any());
+        verifyNoInteractions(notifications);
     }
 }

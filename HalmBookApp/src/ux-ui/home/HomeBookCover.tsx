@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Image, StyleSheet, Text, View } from 'react-native';
 import { getBookCoverSource } from '../bookCovers';
 import { BookData, useAppNavigation } from '../navigation';
@@ -7,15 +7,15 @@ import { BookData, useAppNavigation } from '../navigation';
 // Used only by Home and its editorial modules, never recolors the book artwork.
 export default function HomeBookCover({ book }: { book: BookData }) {
   const { isDarkMode } = useAppNavigation();
-  const [failed, setFailed] = useState(false);
+  const [failedSource, setFailedSource] = useState<string | null>(null);
   const localCover = book.coverUri || book.coverImage;
   const source = getBookCoverSource(book.id, localCover || book.img_url);
-  useEffect(() => setFailed(false), [book.id, book.img_url, localCover]);
+  const identity = book.id + ':' + (localCover || book.img_url || '');
   return (
     <View style={[StyleSheet.absoluteFill, styles.fallback]}>
-      {source && !failed ? (
+      {source && failedSource !== identity ? (
         <Image source={source} style={StyleSheet.absoluteFill} resizeMode="contain"
-          onError={() => setFailed(true)} accessibilityLabel={`Bìa sách ${book.title}`} />
+          onError={() => setFailedSource(identity)} accessibilityLabel={`Bìa sách ${book.title}`} />
       ) : (
         <>
           <Ionicons name="book-outline" size={25} color={isDarkMode ? '#E5A93C' : '#4B8176'} />

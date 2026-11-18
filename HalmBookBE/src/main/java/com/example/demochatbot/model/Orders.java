@@ -40,6 +40,11 @@ public class Orders {
     @Column(length = 64)
     private String checkoutFingerprint;
 
+    // Immutable top-up terms captured when the payment request is created.
+    private Integer topupPackageId;
+    private String topupPackageName;
+    private Integer topupPotatoAmount;
+
     @ManyToOne
     @JoinColumn(name = "promotion_id" , referencedColumnName = "promotion_id")
     private Promotion promotion;

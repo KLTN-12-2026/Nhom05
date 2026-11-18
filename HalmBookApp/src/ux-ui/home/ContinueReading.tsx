@@ -4,7 +4,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View
 import { API_BASE_URL } from '../apiService';
 import { BookData, useAppNavigation } from '../navigation';
 import { fetchBookDetailFromApi } from '../rentalService';
-import { getCurrentUsername, getUserItem, KEY_READING_BOOKS } from '../userStorage';
+import { getCurrentUsername, getUserItem, KEY_READING_BOOKS, KEY_UPLOADED_BOOKS } from '../userStorage';
 import HomeBookCover from './HomeBookCover';
 import { HomeBookItem, mapHomeBook } from './homeData';
 
@@ -14,7 +14,12 @@ interface Props {
 }
 
 // Read the existing account-scoped history. No synthetic progress and no storage migration.
-export default function ContinueReading({ books, refreshKey }: Props) {
+export default function ContinueReading(props: Props) {
+  const { isLoggedIn } = useAppNavigation();
+  return <ReadingHistory key={String(isLoggedIn) + ':' + props.refreshKey} {...props} />;
+}
+
+function ReadingHistory({ books, refreshKey }: Props) {
   const { isLoggedIn, isDarkMode, navigate } = useAppNavigation();
   const [history, setHistory] = useState<BookData[]>([]);
   const [opening, setOpening] = useState<string | null>(null);
@@ -26,9 +31,6 @@ export default function ContinueReading({ books, refreshKey }: Props) {
     let active = true;
     generation.current += 1;
     busy.current = false;
-    setOpening(null);
-    setMessage(null);
-    setHistory([]);
     if (isLoggedIn) {
       void (async () => {
         try {
@@ -48,6 +50,7 @@ export default function ContinueReading({ books, refreshKey }: Props) {
               img_url: typeof book.img_url === 'string' ? book.img_url : undefined,
               coverUri: typeof book.coverUri === 'string' ? book.coverUri : undefined,
               coverImage: typeof book.coverImage === 'string' ? book.coverImage : undefined,
+              isPersonal: book.isPersonal === true || /^(uploaded|upload|personal)[_-]/.test(book.id),
               fileUri: typeof book.fileUri === 'string' && /^(file:|content:)/.test(book.fileUri) ? book.fileUri : undefined,
             }];
           }) : [];
@@ -71,7 +74,9 @@ export default function ContinueReading({ books, refreshKey }: Props) {
     setMessage(null);
     try {
       const catalogBook = books.find(book => book.id === record.id);
-      const book = record.fileUri ? record : catalogBook || mapHomeBook(await fetchBookDetailFromApi(record.id), API_BASE_URL);
+      const uploaded = record.isPersonal ? JSON.parse(await getUserItem(KEY_UPLOADED_BOOKS) || '[]') as BookData[] : [];
+      const book = record.isPersonal ? uploaded.find(item => item.id === record.id) || record
+        : catalogBook || mapHomeBook(await fetchBookDetailFromApi(record.id), API_BASE_URL);
       if (requestGeneration !== generation.current) return;
       if (!book) {
         setMessage('Chưa thể mở tác phẩm này. Sách có thể đã thay đổi hoặc kết nối đang gián đoạn. Bạn có thể thử lại.');

@@ -3,10 +3,12 @@ package com.example.demochatbot.service.cart;
 import com.example.demochatbot.dto.AddToCartRequest;
 import com.example.demochatbot.dto.CartItemDto;
 import com.example.demochatbot.dto.CheckoutResponse;
+import com.example.demochatbot.dto.CheckoutRequest;
+import com.example.demochatbot.service.order.OrderService;
+import com.example.demochatbot.service.order.RentalPricing;
 import com.example.demochatbot.model.*;
 import com.example.demochatbot.repository.*;
 import com.example.demochatbot.service.customer.CustomerService;
-import com.example.demochatbot.service.tier.TierService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,49 +30,24 @@ public class CartServiceImpl implements CartService {
     private BookRepository bookRepository;
 
     @Autowired
-    private CustomerRepository customerRepository;
-
-    @Autowired
     private CustomerService customerService;
 
     @Autowired
-    private OrdersRepository ordersRepository;
+    private OrderService orderService;
 
-    @Autowired
-    private OrderItemRepository orderItemRepository;
-
-    @Autowired
-    private AccessRecordRepository accessRecordRepository;
-
-    @Autowired
-    private PotatoTransactionRepository potatoTransactionRepository;
-
-    @Autowired(required = false)
-    private TierService tierService;
 
     /**
      * Lấy thông tin Customer theo userId (accountId) hoặc ngữ cảnh đăng nhập hiện tại.
      */
     private Customer resolveCustomer(Integer userId) {
-        if (userId != null && userId > 0) {
-            Customer byId = customerService.findCustomerById(userId);
-            if (byId != null) {
-                return byId;
-            }
+        int currentId = customerService.getCurrentAccountId();
+        if (currentId <= 0) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.UNAUTHORIZED);
+        if (userId != null && userId > 0 && userId != currentId) {
+            throw new org.springframework.security.access.AccessDeniedException("Giỏ hàng không thuộc tài khoản hiện tại.");
         }
-        try {
-            int currentAccountId = customerService.getCurrentAccountId();
-            Customer current = customerService.findCustomerById(currentAccountId);
-            if (current != null) {
-                return current;
-            }
-        } catch (Exception ignored) {
-        }
-        List<Customer> all = customerRepository.findAll();
-        if (!all.isEmpty()) {
-            return all.get(0);
-        }
-        throw new RuntimeException("Không tìm thấy thông tin khách hàng!");
+        Customer current = customerService.findCustomerById(currentId);
+        if (current == null) throw new IllegalArgumentException("Không tìm thấy thông tin khách hàng!");
+        return current;
     }
 
     private Customer getCurrentCustomer() {
@@ -91,7 +68,7 @@ public class CartServiceImpl implements CartService {
      */
     public static int normalizeRentalDays(Integer days) {
         if (days == null) return 7;
-        if (days == 14 || days == 30 || days == 90 || days == 7) {
+        if (days == 1 || days == 3 || days == 15 || days == 36500 || days == 14 || days == 30 || days == 90 || days == 7) {
             return days;
         }
         if (days > 90) return 90;
@@ -101,17 +78,7 @@ public class CartServiceImpl implements CartService {
     }
 
     private int resolveRentalDays(String planKey) {
-        if (planKey == null || planKey.trim().isEmpty()) {
-            return 7;
-        }
-        if ("forever".equalsIgnoreCase(planKey)) {
-            return 90;
-        }
-        try {
-            return normalizeRentalDays(Integer.parseInt(planKey.trim()));
-        } catch (NumberFormatException e) {
-            return 7;
-        }
+        return RentalPricing.duration(planKey == null || planKey.isBlank() ? "7" : planKey);
     }
 
     /**
@@ -129,31 +96,9 @@ public class CartServiceImpl implements CartService {
         return 15;
     }
 
-    /**
-     * Công thức tính giá Khoai động theo số ngày thuê:
-     * - 7 ngày:  100% baseKhoai (Mặc định)
-     * - 14 ngày: làm tròn(baseKhoai * 1.8)
-     * - 30 ngày: làm tròn(baseKhoai * 3.5)
-     * - 90 ngày: làm tròn(baseKhoai * 9.0)
-     */
+    /** Same server tariff as the primary checkout endpoint. */
     public static int calculatePriceKhoai(int baseKhoai, int rentalDays) {
-        double multiplier;
-        switch (rentalDays) {
-            case 14:
-                multiplier = 1.8;
-                break;
-            case 30:
-                multiplier = 3.5;
-                break;
-            case 90:
-                multiplier = 9.0;
-                break;
-            case 7:
-            default:
-                multiplier = 1.0;
-                break;
-        }
-        return (int) Math.round(baseKhoai * multiplier);
+        return (int) RentalPricing.price(String.valueOf(rentalDays), null);
     }
 
     private String resolveDescription(Book book) {
@@ -176,9 +121,10 @@ public class CartServiceImpl implements CartService {
 
     private CartItemDto toCartItemDto(Cart_Item item) {
         Book b = item.getBook();
-        int days = normalizeRentalDays(item.getRentalDays());
+        String plan = item.getPlanKey() == null ? String.valueOf(normalizeRentalDays(item.getRentalDays())) : item.getPlanKey();
+        int days = RentalPricing.duration(plan);
         int baseKhoai = resolveBaseKhoai(b);
-        int priceKhoai = calculatePriceKhoai(baseKhoai, days);
+        int priceKhoai = (int) Math.round(RentalPricing.price(plan, b));
         String title = b != null && b.getBookName() != null ? b.getBookName() : "";
         String author = b != null && b.getAuthor() != null ? b.getAuthor() : "HALM BOOK";
         String coverUrl = b != null && b.getImg_url() != null ? b.getImg_url() : "";
@@ -196,7 +142,7 @@ public class CartServiceImpl implements CartService {
                 .rentalDays(days)
                 .priceKhoai(priceKhoai)
                 .rentPrice((double) baseKhoai)
-                .planKey(String.valueOf(days))
+                .planKey(plan)
                 .selectedPrice((double) priceKhoai)
                 .build();
     }
@@ -221,14 +167,13 @@ public class CartServiceImpl implements CartService {
         Optional<Cart_Item> existingItem = cartItemRepository.findByCartIdAndBookId(cart.getCart_id(), book.getBook_id());
         int days = resolveRentalDays(request.getPlanKey());
         int baseKhoai = resolveBaseKhoai(book);
-        int dynamicPrice = calculatePriceKhoai(baseKhoai, days);
-        double finalPrice = (request.getPrice() != null && request.getPrice() > 0)
-                ? request.getPrice()
-                : (double) dynamicPrice;
+        String plan = days == 36500 ? "forever" : String.valueOf(days);
+        int dynamicPrice = (int) Math.round(RentalPricing.price(plan, book));
+        double finalPrice = dynamicPrice;
 
         if (existingItem.isPresent()) {
             Cart_Item item = existingItem.get();
-            item.setPlanKey(String.valueOf(days));
+            item.setPlanKey(plan);
             item.setRentalDays(days);
             item.setSelectedPrice(finalPrice);
             item.setUpdatedAt(LocalDateTime.now());
@@ -281,16 +226,17 @@ public class CartServiceImpl implements CartService {
         Cart_Item item = cartItemRepository.findById(cartItemId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy sách trong giỏ hàng!"));
 
-        if (item.getCart() != null && item.getCart().getCart_id() != cart.getCart_id()) {
+        if (item.getCart() == null || item.getCart().getCart_id() != cart.getCart_id()) {
             throw new RuntimeException("Bạn không có quyền chỉnh sửa mục giỏ hàng này!");
         }
 
         int normalizedDays = normalizeRentalDays(days);
         int baseKhoai = resolveBaseKhoai(item.getBook());
-        int priceKhoai = calculatePriceKhoai(baseKhoai, normalizedDays);
+        String plan = normalizedDays == 36500 ? "forever" : String.valueOf(normalizedDays);
+        int priceKhoai = (int) Math.round(RentalPricing.price(plan, item.getBook()));
 
         item.setRentalDays(normalizedDays);
-        item.setPlanKey(String.valueOf(normalizedDays));
+        item.setPlanKey(plan);
         item.setSelectedPrice((double) priceKhoai);
         item.setUpdatedAt(LocalDateTime.now());
 
@@ -325,7 +271,7 @@ public class CartServiceImpl implements CartService {
         Cart_Item item = cartItemRepository.findById(cartItemId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy sản phẩm trong giỏ hàng!"));
 
-        if (item.getCart() != null && item.getCart().getCart_id() != cart.getCart_id()) {
+        if (item.getCart() == null || item.getCart().getCart_id() != cart.getCart_id()) {
             throw new RuntimeException("Bạn không có quyền xóa sản phẩm này!");
         }
 
@@ -333,161 +279,23 @@ public class CartServiceImpl implements CartService {
     }
 
     @Override
-    @Transactional
     public CheckoutResponse checkout(int userId, List<Integer> cartItemIds) {
-        if (cartItemIds == null || cartItemIds.isEmpty()) {
-            throw new RuntimeException("Vui lòng chọn ít nhất 1 cuốn sách để thanh toán!");
+        return checkout(userId, cartItemIds, null);
+    }
+
+    @Override
+    public CheckoutResponse checkout(int userId, List<Integer> cartItemIds, String idempotencyKey) {
+        resolveCustomer(userId);
+        if (cartItemIds == null || cartItemIds.isEmpty() || cartItemIds.stream().anyMatch(id -> id == null || id <= 0)
+                || new HashSet<>(cartItemIds).size() != cartItemIds.size()) {
+            throw new IllegalArgumentException("Danh sách mục giỏ hàng không hợp lệ.");
         }
-
-        Customer customer = resolveCustomer(userId);
-        Cart cart = getOrCreateCart(customer);
-
-        List<Cart_Item> selectedItems = cartItemRepository.findAllById(cartItemIds).stream()
-                .filter(ci -> ci.getCart() != null && ci.getCart().getCart_id() == cart.getCart_id())
-                .collect(Collectors.toList());
-
-        if (selectedItems.isEmpty()) {
-            throw new RuntimeException("Không tìm thấy mục giỏ hàng hợp lệ để thanh toán!");
-        }
-
-        // 1. Tính tổng giá Khoai theo số ngày thuê thực tế của từng sách
-        int subtotalKhoai = 0;
-        for (Cart_Item item : selectedItems) {
-            int days = normalizeRentalDays(item.getRentalDays());
-            int baseKhoai = resolveBaseKhoai(item.getBook());
-            int itemPrice = calculatePriceKhoai(baseKhoai, days);
-            subtotalKhoai += itemPrice;
-        }
-
-        // Chiết khấu hạng thành viên (nếu có)
-        int tierDiscountPercent = (customer.getMembershipTier() != null && customer.getMembershipTier().getDiscountPercent() != null)
-                ? customer.getMembershipTier().getDiscountPercent()
-                : 0;
-        double discount = tierDiscountPercent > 0 ? (subtotalKhoai * tierDiscountPercent / 100.0) : 0.0;
-        int totalKhoaiPaid = (int) Math.max(0, Math.round(subtotalKhoai - discount));
-
-        // 2. Kiểm tra số dư Khoai của User
-        int currentBalance = customer.getPotatoBalance() != null ? customer.getPotatoBalance() : 0;
-        if (currentBalance < totalKhoaiPaid) {
-            throw new RuntimeException(
-                    "Số dư Ví Khoai không đủ (" + currentBalance + " < " + totalKhoaiPaid + " Khoai)! Vui lòng nạp thêm Khoai để thuê sách."
-            );
-        }
-
-        // 3. Trừ Khoai của User
-        int newBalance = currentBalance - totalKhoaiPaid;
-        customer.setPotatoBalance(newBalance);
-        customerRepository.save(customer);
-
-        // 4. Ghi log vào bảng giao dịch Khoai (potato_transaction)
-        String txCode = "HLM-" + (System.currentTimeMillis() % 1000000);
-        PotatoTransaction potatoTx = new PotatoTransaction();
-        potatoTx.setCustomer(customer);
-        potatoTx.setAmount(-totalKhoaiPaid);
-        potatoTx.setBalanceAfter(newBalance);
-        potatoTx.setType("RENT_BOOK");
-        potatoTx.setDescription("Thuê " + selectedItems.size() + " cuốn sách qua Giỏ hàng (Mã: " + txCode + ")");
-        potatoTx.setCreatedAt(LocalDateTime.now());
-        potatoTransactionRepository.save(potatoTx);
-
-        // 5. Tạo bản ghi đơn hàng (Orders & Order_Item) và cấp quyền đọc (Access_Record)
-        Orders order = new Orders();
-        order.setCustomer(customer);
-        order.setTotal_amount(totalKhoaiPaid);
-        order.setPaymentCurrency("POTATO");
-        order.setOrderType("RENT_BOOK");
-        order.setPayment_status("PAID");
-        order.setPayment_method("POTATO_WALLET");
-        order.setTransaction_no(txCode);
-        order.setDiscount_amount(discount);
-        order.setOrder_date(LocalDateTime.now());
-        Orders savedOrder = ordersRepository.save(order);
-
-        List<Map<String, Object>> rentedBooksResult = new ArrayList<>();
-        LocalDateTime now = LocalDateTime.now();
-
-        for (Cart_Item ci : selectedItems) {
-            Book book = ci.getBook();
-            if (book == null) continue;
-
-            int durationDays = normalizeRentalDays(ci.getRentalDays());
-            int baseKhoai = resolveBaseKhoai(book);
-            int priceKhoai = calculatePriceKhoai(baseKhoai, durationDays);
-
-            Order_Item orderItem = new Order_Item();
-            orderItem.setOrders(savedOrder);
-            orderItem.setBook(book);
-            orderItem.setRentalType("RENT");
-            orderItem.setDurationDays(durationDays);
-            orderItem.setPrice((double) priceKhoai);
-            orderItemRepository.save(orderItem);
-
-            // Cấp hoặc gia hạn quyền đọc sách trong bảng access_record
-            Optional<Access_Record> existingRecordOpt = accessRecordRepository.findByCustomerAndBook(customer, book);
-            Access_Record accessRecord;
-            if (existingRecordOpt.isPresent()) {
-                accessRecord = existingRecordOpt.get();
-                LocalDateTime currentEndDate = accessRecord.getEnd_date();
-                if (currentEndDate != null && currentEndDate.isAfter(now)) {
-                    accessRecord.setEnd_date(currentEndDate.plusDays(durationDays));
-                } else {
-                    accessRecord.setStart_date(now);
-                    accessRecord.setEnd_date(now.plusDays(durationDays));
-                }
-                accessRecord.setStatus("ACTIVE");
-                accessRecord.setRenewCount((accessRecord.getRenewCount() != null ? accessRecord.getRenewCount() : 0) + 1);
-            } else {
-                accessRecord = new Access_Record();
-                accessRecord.setCustomer(customer);
-                accessRecord.setBook(book);
-                accessRecord.setStart_date(now);
-                accessRecord.setEnd_date(now.plusDays(durationDays));
-                accessRecord.setStatus("ACTIVE");
-                accessRecord.setCurrentPage(1);
-                accessRecord.setReadingPercentage(0.0);
-                accessRecord.setLastReadAt(now);
-                accessRecord.setRenewCount(0);
-            }
-            accessRecordRepository.save(accessRecord);
-
-            book.setReadCount((book.getReadCount() != null ? book.getReadCount() : 0) + 1);
-            bookRepository.save(book);
-
-            Map<String, Object> bookInfo = new HashMap<>();
-            bookInfo.put("bookId", book.getBook_id());
-            bookInfo.put("bookName", book.getBookName());
-            bookInfo.put("author", book.getAuthor());
-            bookInfo.put("imgUrl", book.getImg_url());
-            bookInfo.put("durationDays", durationDays);
-            bookInfo.put("priceKhoai", priceKhoai);
-            rentedBooksResult.add(bookInfo);
-        }
-
-        // 6. Xóa các mục đã thanh toán khỏi giỏ hàng
-        List<Integer> idsToDelete = selectedItems.stream()
-                .map(Cart_Item::getCart_item_id)
-                .collect(Collectors.toList());
-        cartItemRepository.deleteByIds(idsToDelete);
-
-        // 7. Cộng điểm kinh nghiệm hạng thành viên (nếu có)
-        if (tierService != null) {
-            try {
-                int earnedXp = selectedItems.size() * 50;
-                tierService.addExperiencePoints(customer, earnedXp, "Thuê " + selectedItems.size() + " cuốn sách");
-                tierService.calculateAndUpdateCustomerTier(customer);
-            } catch (Exception ignored) {
-            }
-        }
-
-        return CheckoutResponse.builder()
-                .success(true)
-                .message("Thuê sách thành công! Sách đã được thêm vào Tủ Sách Cá Nhân của bạn.")
-                .orderId(savedOrder.getOrders_id())
-                .transactionNo(txCode)
-                .totalKhoaiPaid(totalKhoaiPaid)
-                .remainingPotatoBalance(newBalance)
-                .orderDate(savedOrder.getOrder_date())
-                .rentedBooks(rentedBooksResult)
-                .build();
+        CheckoutRequest request = new CheckoutRequest();
+        request.setCartItemIds(List.copyOf(cartItemIds));
+        // Cart row IDs are never reused. A retry still identifies this purchase.
+        request.setIdempotencyKey(idempotencyKey == null || idempotencyKey.isBlank()
+                ? "CART-" + userId + "-" + RentalPricing.digest(cartItemIds.stream().sorted().map(String::valueOf).collect(Collectors.joining(",")))
+                : idempotencyKey);
+        return orderService.checkoutWithPotato(userId, request);
     }
 }

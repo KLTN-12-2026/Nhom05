@@ -35,6 +35,9 @@ public class UserSupportController {
     private SupportTicketProducer supportTicketProducer;
 
     @Autowired
+    private com.example.demochatbot.service.support.SupportTicketIntakeService intakeService;
+
+    @Autowired
     private SupportTicketRepository supportTicketRepository;
 
     @Autowired
@@ -119,15 +122,15 @@ public class UserSupportController {
             }
 
             // Sinh mã ticket duy nhất, chống xung đột khóa unique khi chịu tải đồng thời
-            String code = "TK-" + (10000 + (System.currentTimeMillis() % 90000)) + "-" + UUID.randomUUID().toString().substring(0, 4).toUpperCase();
+            String code = "TK-" + UUID.randomUUID().toString().toUpperCase();
 
             // Đóng gói Message gửi vào RabbitMQ
             SupportTicketMessage msg = SupportTicketMessage.builder()
                     .code(code)
                     .customerId(currentCustomer != null ? currentCustomer.getCustomer_id() : null)
-                    .senderName(senderName.trim())
-                    .senderEmail(senderEmail.trim())
-                    .senderPhone(senderPhone.trim())
+                    .senderName(Objects.toString(senderName, "Độc giả").trim())
+                    .senderEmail(Objects.toString(senderEmail, "").trim())
+                    .senderPhone(Objects.toString(senderPhone, "").trim())
                     .category(category)
                     .priority(priority)
                     .subject(subject.trim())
@@ -136,11 +139,19 @@ public class UserSupportController {
                     .build();
 
             // Đẩy vào RabbitMQ Broker (Producer)
-            supportTicketProducer.sendTicketMessage(msg);
+            boolean queued = true;
+            try {
+                supportTicketProducer.sendTicketMessage(msg);
+            } catch (org.springframework.amqp.AmqpException queueUnavailable) {
+                // Persist with the same validated identity; readers never need an admin API.
+                intakeService.accept(msg);
+                queued = false;
+            }
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
-            response.put("message", "Yêu cầu hỗ trợ của bạn đã được đưa vào hàng đợi xử lý qua RabbitMQ!");
+            response.put("message", "Yêu cầu hỗ trợ của bạn đã được tiếp nhận!");
+            response.put("queued", queued);
             response.put("ticketCode", code);
             response.put("status", "pending");
 
@@ -170,46 +181,18 @@ public class UserSupportController {
             Set<Long> addedIds = new HashSet<>();
             List<SupportTicket> tickets = new ArrayList<>();
 
-            // 1. Tìm theo Customer đã đăng nhập
-            if (currentIdentifier != null) {
-                Customer customer = currentCustomer(currentIdentifier);
-                if (customer != null) {
-                    List<SupportTicket> byCust = supportTicketRepository.findByCustomerId(customer.getCustomer_id());
-                    for (SupportTicket t : byCust) {
-                        if (addedIds.add(t.getTicketId())) tickets.add(t);
-                    }
-                    if (customer.getEmail() != null) {
-                        List<SupportTicket> byEmail = supportTicketRepository.findAllByOrderByCreatedAtDesc().stream()
-                                .filter(t -> customer.getEmail().equalsIgnoreCase(t.getSenderEmail()))
-                                .toList();
-                        for (SupportTicket t : byEmail) {
-                            if (addedIds.add(t.getTicketId())) tickets.add(t);
-                        }
-                    }
+            Customer customer = currentIdentifier == null ? null : currentCustomer(currentIdentifier);
+            if (customer != null) {
+                for (SupportTicket ticket : supportTicketRepository.findByCustomerId(customer.getCustomer_id())) {
+                    if (addedIds.add(ticket.getTicketId())) tickets.add(ticket);
                 }
             }
-
-            // 2. Tìm theo emailParam truyền lên từ client
-            if (emailParam != null && !emailParam.trim().isEmpty()) {
-                String targetEmail = emailParam.trim().toLowerCase();
-                List<SupportTicket> byParamEmail = supportTicketRepository.findAllByOrderByCreatedAtDesc().stream()
-                        .filter(t -> t.getSenderEmail() != null && t.getSenderEmail().trim().toLowerCase().equals(targetEmail))
-                        .toList();
-                for (SupportTicket t : byParamEmail) {
-                    if (addedIds.add(t.getTicketId())) tickets.add(t);
-                }
-            }
-
-            // 3. Tìm theo danh sách ticket codes (phân tách bởi dấu phẩy)
-            if (codesParam != null && !codesParam.trim().isEmpty()) {
-                String[] codeArr = codesParam.split(",");
-                for (String c : codeArr) {
-                    String cleanCode = c.trim();
-                    if (!cleanCode.isEmpty()) {
-                        supportTicketRepository.findByCode(cleanCode).ifPresent(t -> {
-                            if (addedIds.add(t.getTicketId())) tickets.add(t);
-                        });
-                    }
+            // Email is contact information, never proof of ownership.
+            if (codesParam != null && !codesParam.isBlank()) {
+                for (String code : Arrays.stream(codesParam.split(",")).limit(50).toList()) {
+                    supportTicketRepository.findByCode(code.trim()).ifPresent(ticket -> {
+                        if (canAccess(ticket, customer, code.trim()) && addedIds.add(ticket.getTicketId())) tickets.add(ticket);
+                    });
                 }
             }
 
@@ -269,10 +252,7 @@ public class UserSupportController {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();
             String identifier = auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getName()) ? auth.getName() : null;
             Customer current = identifier == null ? null : currentCustomer(identifier);
-            boolean owner = current != null && ((ticket.getCustomer() != null
-                    && Objects.equals(ticket.getCustomer().getCustomer_id(), current.getCustomer_id()))
-                    || (current.getEmail() != null && current.getEmail().equalsIgnoreCase(ticket.getSenderEmail())));
-            if (!owner && !(identifier == null && ticket.getCode() != null && ticket.getCode().equals(body.get("code")))) {
+            if (!canAccess(ticket, current, body.get("code"))) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", "Bạn không có quyền nhắn vào yêu cầu này."));
             }
             // Độc giả nhắn tiếp -> cập nhật trạng thái pending để Admin chú ý
@@ -324,17 +304,8 @@ public class UserSupportController {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         String identifier = auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getName())
                 ? auth.getName() : null;
-        boolean isOwner = false;
-        if (identifier != null) {
-            Customer current = currentCustomer(identifier);
-            if (current != null) {
-                isOwner = (ticket.getCustomer() != null && Objects.equals(ticket.getCustomer().getCustomer_id(), current.getCustomer_id()))
-                        || (ticket.getSenderEmail() != null && current.getEmail() != null
-                        && ticket.getSenderEmail().equalsIgnoreCase(current.getEmail()));
-            }
-        } else {
-            isOwner = ticketCode != null && ticket.getCode() != null && ticket.getCode().equals(ticketCode);
-        }
+        Customer current = identifier == null ? null : currentCustomer(identifier);
+        boolean isOwner = canAccess(ticket, current, ticketCode);
 
         if (!isOwner) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
@@ -343,6 +314,15 @@ public class UserSupportController {
 
         supportTicketRepository.delete(ticket);
         return ResponseEntity.ok(Map.of("success", true, "ticketId", id));
+    }
+
+    private boolean canAccess(SupportTicket ticket, Customer current, String code) {
+        if (ticket.getCustomer() != null) {
+            return current != null && Objects.equals(ticket.getCustomer().getCustomer_id(), current.getCustomer_id());
+        }
+        // Guest tickets use an unguessable bearer code. Short legacy codes must not expose private history.
+        return code != null && code.matches("TK-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}")
+                && code.equals(ticket.getCode());
     }
 
     private Customer currentCustomer(String identifier) {

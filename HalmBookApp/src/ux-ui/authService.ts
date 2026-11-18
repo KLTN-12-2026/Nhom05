@@ -11,21 +11,9 @@ WebBrowser.maybeCompleteAuthSession();
 // ==============================================================
 // CẤU HÌNH ENDPOINT BACKEND SPRING BOOT & OAUTH CLIENT IDS
 // ==============================================================
-const debuggerHost = Constants.expoConfig?.hostUri;
-const localhost = debuggerHost ? debuggerHost.split(':')[0] : 'localhost';
-export const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL || `http://${localhost}:8082`;
-
-export const CANDIDATE_AUTH_URLS = [
-  API_BASE_URL,
-  `http://${localhost}:8082`,
-  'http://172.26.41.174:8082',
-  'http://192.168.1.7:8082',
-  'http://192.168.1.165:8082',
-  'http://localhost:8082',
-  'http://127.0.0.1:8082',
-  'http://10.0.2.2:8082',
-];
+import { API_BASE_URL } from './apiService';
+export { API_BASE_URL } from './apiService';
+export const CANDIDATE_AUTH_URLS = [API_BASE_URL];
 
 export const AUTH_ENDPOINTS = {
   LOGIN: '/api/auth/login',

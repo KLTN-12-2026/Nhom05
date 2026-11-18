@@ -22,6 +22,27 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(com.example.demochatbot.service.ai.AiChatException.class)
+    public ResponseEntity<Map<String, Object>> handleAiFailure(com.example.demochatbot.service.ai.AiChatException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("status", ex.status().value());
+        body.put("error", ex.errorCode());
+        body.put("message", ex.getMessage());
+        body.put("reply", ex.getMessage()); // Existing mobile clients display this on failed HTTP responses.
+        body.put("retryable", ex.retryAfterSeconds() > 0);
+        body.put("retryAfterSeconds", ex.retryAfterSeconds());
+        ResponseEntity.BodyBuilder response = ResponseEntity.status(ex.status());
+        if (ex.retryAfterSeconds() > 0) response.header("Retry-After", String.valueOf(ex.retryAfterSeconds()));
+        return response.body(body);
+    }
+
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public ResponseEntity<Map<String, Object>> handleResponseStatus(org.springframework.web.server.ResponseStatusException ex) {
+        return ResponseEntity.status(ex.getStatusCode()).body(Map.of(
+                "status", ex.getStatusCode().value(),
+                "message", ex.getReason() != null ? ex.getReason() : "Yêu cầu không thể thực hiện."));
+    }
+
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(BadCredentialsException.class)
