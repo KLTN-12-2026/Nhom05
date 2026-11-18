@@ -18,8 +18,8 @@ export default function HomeBookCover({ book }: { book: BookData }) {
           onError={() => setFailed(true)} accessibilityLabel={`Bìa sách ${book.title}`} />
       ) : (
         <>
-          <Ionicons name="book-outline" size={25} color={isDarkMode ? '#8FC3B5' : '#4B8176'} />
-          <Text numberOfLines={2} style={[styles.title, { color: isDarkMode ? '#B9B7AF' : '#77736C' }]}>{book.title}</Text>
+          <Ionicons name="book-outline" size={25} color={isDarkMode ? '#E5A93C' : '#4B8176'} />
+          <Text numberOfLines={2} style={[styles.title, { color: isDarkMode ? '#A39F99' : '#77736C' }]}>{book.title}</Text>
         </>
       )}
     </View>

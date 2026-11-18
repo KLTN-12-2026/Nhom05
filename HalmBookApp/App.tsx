@@ -138,6 +138,12 @@ export default function App() {
     pendingAuthAction.current = onAuthenticated || null;
   }, []);
 
+  useEffect(() => {
+    AsyncStorage.getItem('appDarkMode').then((saved) => {
+      if (saved === 'true' || saved === 'false') setIsDarkMode(saved === 'true');
+    }).catch(() => {});
+  }, []);
+
   const closeAuthPrompt = useCallback(() => {
     setAuthModal((current) => ({ ...current, visible: false, showForm: false }));
     pendingAuthAction.current = null;
@@ -523,7 +529,13 @@ export default function App() {
     ]);
   };
 
-  const toggleDarkMode = useCallback(() => setIsDarkMode((current) => !current), []);
+  const toggleDarkMode = useCallback(() => {
+    setIsDarkMode((current) => {
+      const next = !current;
+      AsyncStorage.setItem('appDarkMode', String(next)).catch(() => {});
+      return next;
+    });
+  }, []);
   const refreshHome = useCallback(() => setHomeRefreshKey((current) => current + 1), []);
 
   const navigation = useMemo(
@@ -692,7 +704,7 @@ export default function App() {
   if (!isReady) {
     return (
       <SafeAreaProvider>
-        <View style={{ flex: 1, backgroundColor: isDarkMode ? '#101319' : '#fff' }} />
+        <View style={{ flex: 1, backgroundColor: isDarkMode ? '#181716' : '#fff' }} />
       </SafeAreaProvider>
     );
   }
@@ -713,7 +725,7 @@ export default function App() {
                     ? isDarkMode
                       ? '#181716'
                       : '#F7F5F0'
-                    : isDarkMode ? '#101319' : '#FFFFFF',
+                    : isDarkMode ? '#181716' : '#FFFFFF',
             }}
           >
             {showSharedHeader && (

@@ -9,6 +9,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useAppNavigation, useAppThemeStyles } from './navigation';
@@ -31,6 +32,7 @@ export default function TheLoai() {
   const [filterVisible, setFilterVisible] = useState(false);
   const { navigate, goBack, isDarkMode, lang } = useAppNavigation();
   const insets = useSafeAreaInsets();
+  const windowDims = useWindowDimensions();
   
   const [books, setBooks] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -148,7 +150,7 @@ export default function TheLoai() {
     >
       <ExpoStatusBar style={isDarkMode ? 'light' : 'dark'} />
       {/* HIỆU ỨNG VŨ TRỤ DARK MODE ĐỒNG BỘ TRANG CHỦ */}
-      <DarkModeBackgroundEffects visible={isDarkMode} />
+      <DarkModeBackgroundEffects visible={isDarkMode} screenWidth={windowDims.width} screenHeight={windowDims.height} />
       <View style={[themeStyles.header, { backgroundColor: 'transparent' }]}>
         <TouchableOpacity
           style={themeStyles.headerBack}

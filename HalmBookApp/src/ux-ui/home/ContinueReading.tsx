@@ -91,24 +91,24 @@ export default function ContinueReading({ books, refreshKey }: Props) {
   };
 
   if (!isLoggedIn || history.length === 0) return null;
-  const text = isDarkMode ? '#F1F0EC' : '#242321';
-  const muted = isDarkMode ? '#B9B7AF' : '#77736C';
-  const primary = isDarkMode ? '#8FC3B5' : '#35695F';
+  const text = isDarkMode ? '#F7F5F0' : '#242321';
+  const muted = isDarkMode ? '#A39F99' : '#77736C';
+  const primary = isDarkMode ? '#E5A93C' : '#35695F';
   return (
     <View style={styles.section}>
       <View style={styles.heading}>
-        <View style={[styles.accent, { backgroundColor: isDarkMode ? '#BC8B7B' : '#8B4A3C' }]} />
+        <View style={[styles.accent, { backgroundColor: isDarkMode ? '#E5A93C' : '#8B4A3C' }]} />
         <Text style={[styles.title, { color: text }]}>Tiếp Tục Đọc</Text>
       </View>
       <Text style={[styles.subtitle, { color: muted }]}>Trở lại những tác phẩm bạn đã mở đọc.</Text>
       {message && <Text accessibilityLiveRegion="polite" style={[styles.message, { color: isDarkMode ? '#E0A493' : '#8B4A3C' }]}>{message}</Text>}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.list}>
-        {history.map(record => (
+        {history.slice(0, 2).map(record => (
           <TouchableOpacity key={record.id} accessibilityRole="button" accessibilityLabel={`Tiếp tục đọc ${record.title}`}
             accessibilityState={{ disabled: opening !== null, busy: opening === record.id }} disabled={opening !== null}
             activeOpacity={0.8} onPress={() => void resume(record)}
-            style={[styles.card, { backgroundColor: isDarkMode ? '#292D2A' : '#FFFFFF', borderColor: isDarkMode ? '#414642' : '#E6E1D8' }]}>
-            <View style={[styles.cover, { backgroundColor: isDarkMode ? '#343A35' : '#E6E1D8' }]}><HomeBookCover book={record} /></View>
+            style={[styles.card, { backgroundColor: isDarkMode ? '#242321' : '#FFFFFF', borderColor: isDarkMode ? '#383633' : '#E6E1D8' }]}>
+            <View style={[styles.cover, { backgroundColor: isDarkMode ? '#2D2B28' : '#E6E1D8' }]}><HomeBookCover book={record} /></View>
             <View style={styles.copy}>
               <Text style={[styles.bookTitle, { color: text }]} numberOfLines={2}>{record.title}</Text>
               {!!record.author && <Text style={[styles.author, { color: muted }]} numberOfLines={1}>{record.author}</Text>}
@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 13, lineHeight: 20, paddingHorizontal: 16, marginTop: 4, marginBottom: 12 },
   message: { fontSize: 13, lineHeight: 20, paddingHorizontal: 16, marginBottom: 12 },
   list: { paddingHorizontal: 16, gap: 12 },
-  card: { width: 272, flexDirection: 'row', padding: 14, gap: 12, borderWidth: 1, borderRadius: 8 },
+  card: { width: 188, minHeight: 174, padding: 10, gap: 8, borderWidth: 1, borderRadius: 8 },
   cover: { width: 68, height: 100, borderRadius: 4, overflow: 'hidden' },
   copy: { flex: 1, minWidth: 0, justifyContent: 'center' },
   bookTitle: { fontSize: 15, lineHeight: 21, fontWeight: '600' },
