@@ -1,4 +1,4 @@
-import axiosInstance from './axiosClient';
+import axiosInstance from './axiosClient.js';
 
 /**
  * adminSupportService.js
@@ -10,10 +10,10 @@ export const getAdminTickets = async (params = {}) => {
   return response.data;
 };
 
-export const replyAdminTicket = async (ticketId, reply, status = 'resolved') => {
+export const replyAdminTicket = async (ticketId, reply, status = 'resolved', requestId = crypto.randomUUID()) => {
   const response = await axiosInstance.post(`/api/admin/support-tickets/${ticketId}/reply`, {
     reply,
-    status
+    status, requestId
   });
   return response.data;
 };

@@ -215,7 +215,7 @@ export async function savePersonalBook({
     });
 
     // 2. Cập nhật cache metadata vào localStorage (bỏ trường dữ liệu nặng)
-    const { fileBlob, fileArrayBuffer, ...lightMetadata } = record;
+    const { fileBlob: _fileBlob, fileArrayBuffer: _fileArrayBuffer, ...lightMetadata } = record;
     const currentList = getPersonalBooksMetadata();
     const updatedList = [lightMetadata, ...currentList.filter(b => b.id !== bookId)];
     savePersonalBooksMetadata(updatedList);

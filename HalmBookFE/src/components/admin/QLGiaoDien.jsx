@@ -2,12 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useLegacyAdminPage } from './legacy-runtime';
 import {
   getBanners,
+  fetchBanners,
+  saveBanners,
   addBanner,
   updateBanner,
   toggleBannerStatus,
   deleteBanner,
   resetDefaultBanners,
   getSiteSettings,
+  fetchSiteSettings,
   saveSiteSettings
 } from '@/services/bannerService';
 
@@ -104,8 +107,12 @@ export default function QuanLyGiaoDien() {
     }, 3200);
   };
 
-  // Sync data on events
+  // Sync data on events & initial fetch from backend
   useEffect(() => {
+    // Tải dữ liệu mới nhất từ CSDL Backend
+    fetchBanners(true);
+    fetchSiteSettings();
+
     const handleBannersUpdated = (e) => {
       if (Array.isArray(e.detail?.banners)) {
         setBanners([...e.detail.banners]);
@@ -141,6 +148,7 @@ export default function QuanLyGiaoDien() {
     setModalMode('edit');
     setEditingId(banner.id);
     setFormData({
+      ...banner,
       title: banner.title || '',
       titleHighlight: banner.titleHighlight || '',
       eyebrow: banner.eyebrow || '',
@@ -159,37 +167,74 @@ export default function QuanLyGiaoDien() {
     setIsModalOpen(true);
   };
 
-  const handleToggleActive = (id) => {
-    const updated = toggleBannerStatus(id);
-    if (Array.isArray(updated)) {
-      setBanners([...updated]);
-    } else {
-      setBanners(getBanners());
+  const handleToggleActive = async (id) => {
+    try {
+      const updated = await toggleBannerStatus(id);
+      if (Array.isArray(updated)) {
+        setBanners([...updated]);
+      } else {
+        setBanners(getBanners());
+      }
+      showToast('Đã cập nhật trạng thái hiển thị banner trên trang chủ!');
+    } catch (err) {
+      showToast('Lỗi cập nhật trạng thái: ' + (err.response?.data?.error || err.message), 'error');
     }
-    showToast('Đã cập nhật trạng thái hiển thị banner trên trang chủ!');
+  };
+
+  const handleMoveBanner = async (index, direction) => {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= banners.length) return;
+
+    const reordered = [...banners];
+    const temp = reordered[index];
+    reordered[index] = reordered[targetIndex];
+    reordered[targetIndex] = temp;
+
+    reordered.forEach((b, idx) => {
+      b.order = idx + 1;
+    });
+
+    setBanners([...reordered]);
+    try {
+      const saved = await saveBanners(reordered);
+      if (Array.isArray(saved)) {
+        setBanners([...saved]);
+      }
+      showToast('Đã cập nhật thứ tự hiển thị banner vào CSDL!');
+    } catch (err) {
+      showToast('Lỗi cập nhật thứ tự banner: ' + (err.response?.data?.error || err.message), 'error');
+    }
   };
 
   const handleDeleteClick = (banner) => {
     setDeleteModal({ isOpen: true, banner });
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deleteModal.banner) return;
-    const updated = deleteBanner(deleteModal.banner.id);
-    if (Array.isArray(updated)) {
-      setBanners([...updated]);
-    } else {
-      setBanners(getBanners());
+    try {
+      const updated = await deleteBanner(deleteModal.banner.id);
+      if (Array.isArray(updated)) {
+        setBanners([...updated]);
+      } else {
+        setBanners(getBanners());
+      }
+      setDeleteModal({ isOpen: false, banner: null });
+      showToast(`Đã xóa banner "${deleteModal.banner.title}" khỏi CSDL thành công!`, 'warning');
+    } catch (err) {
+      showToast('Lỗi khi xóa banner: ' + (err.response?.data?.error || err.message), 'error');
     }
-    setDeleteModal({ isOpen: false, banner: null });
-    showToast(`Đã xóa banner "${deleteModal.banner.title}" thành công!`, 'warning');
   };
 
-  const confirmResetDefaults = () => {
-    const reset = resetDefaultBanners();
-    setBanners([...reset]);
-    setResetModalOpen(false);
-    showToast('Đã khôi phục 5 banner chuẩn của HALM BOOK thành công!');
+  const confirmResetDefaults = async () => {
+    try {
+      const reset = await resetDefaultBanners();
+      setBanners([...reset]);
+      setResetModalOpen(false);
+      showToast('Đã khôi phục 5 banner chuẩn của HALM BOOK thành công!');
+    } catch (err) {
+      showToast('Lỗi khi khôi phục banner: ' + (err.response?.data?.error || err.message), 'error');
+    }
   };
 
   // Image Upload handler (File -> Base64 Data URL)
@@ -227,10 +272,10 @@ export default function QuanLyGiaoDien() {
     showToast('Đã gỡ ảnh khỏi banner.', 'info');
   };
 
-  const handleSaveBanner = (e) => {
+  const handleSaveBanner = async (e) => {
     e.preventDefault();
     if (formData.layoutType !== 'custom_image' || formData.imageMode !== 'pure') {
-      if (!formData.title.trim()) {
+      if (!formData.title?.trim()) {
         showToast('Vui lòng nhập tiêu đề chính của banner!', 'error');
         return;
       }
@@ -239,27 +284,34 @@ export default function QuanLyGiaoDien() {
       return;
     }
 
-    let updatedList;
-    if (modalMode === 'create') {
-      updatedList = addBanner(formData);
-      showToast('Đã thêm banner mới vào trang chủ thành công!');
-    } else {
-      updatedList = updateBanner(editingId, formData);
-      showToast('Đã cập nhật banner thành công!');
-    }
+    try {
+      let updatedList;
+      if (modalMode === 'create') {
+        updatedList = await addBanner(formData);
+        showToast('Đã thêm banner mới vào CSDL thành công!');
+      } else {
+        updatedList = await updateBanner(editingId, formData);
+        showToast('Đã cập nhật banner vào CSDL thành công!');
+      }
 
-    setBanners(Array.isArray(updatedList) ? [...updatedList] : getBanners());
-    setIsModalOpen(false);
+      setBanners(Array.isArray(updatedList) ? [...updatedList] : getBanners());
+      setIsModalOpen(false);
+    } catch (err) {
+      showToast('Lỗi lưu banner vào CSDL: ' + (err.response?.data?.error || err.message), 'error');
+    }
   };
 
   // Handlers for Footer Settings
-  const handleSaveFooter = (e) => {
+  const handleSaveFooter = async (e) => {
     e.preventDefault();
-    saveSiteSettings(footerForm);
-    setSiteSettings(footerForm);
-    showToast('Đã lưu và đồng bộ toàn bộ cấu hình Chân Trang (Footer) tới người dùng!');
+    try {
+      await saveSiteSettings(footerForm);
+      setSiteSettings(footerForm);
+      showToast('Đã lưu và đồng bộ toàn bộ cấu hình Chân Trang (Footer) tới người dùng!');
+    } catch (err) {
+      showToast('Lỗi lưu cấu hình Chân Trang: ' + (err.response?.data?.error || err.message), 'error');
+    }
   };
-
   const activeCount = banners.filter((b) => b.isActive).length;
   const inactiveCount = banners.length - activeCount;
 

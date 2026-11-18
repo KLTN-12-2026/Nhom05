@@ -24,6 +24,11 @@ public class CheckoutResponse {
     private String message;
     private int orderId;
     private String transactionNo;
+    private String idempotencyKey;
+    private double subtotal;
+    private double discountAmount;
+    private double tierDiscountAmount;
+    private double couponDiscountAmount;
     private int totalKhoaiPaid;
     private int remainingPotatoBalance;
     private LocalDateTime orderDate;

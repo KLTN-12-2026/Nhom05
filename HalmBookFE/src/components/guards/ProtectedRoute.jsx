@@ -41,7 +41,8 @@ const ProtectedRoute = ({ allowedRoles }) => {
     const isValid = isTokenValid();
     const userRole = (getAuthRole() || localStorage.getItem('role') || sessionStorage.getItem('role'))?.replace(/^ROLE_/, "")?.toUpperCase();
 
-    if (!isValid && !userRole) {
+    // Bắt buộc phải có token hợp lệ và còn hạn
+    if (!isValid) {
         // Đối với người dùng thông thường: Chuyển về Trang Chủ kèm yêu cầu mở popup đăng nhập tại chỗ
         return (
             <Navigate

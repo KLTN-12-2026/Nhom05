@@ -97,6 +97,10 @@ public class PasswordController {
             return new ResponseEntity<>("Mật khẩu mới không được để trống.", HttpStatus.BAD_REQUEST);
         }
 
+        if (request.getOtp() == null || request.getOtp().trim().isEmpty()) {
+            return new ResponseEntity<>("Mã OTP không được để trống.", HttpStatus.BAD_REQUEST);
+        }
+
         Account account = null;
 
         // 1. Tìm Account qua email của Customer
@@ -117,6 +121,15 @@ public class PasswordController {
 
         if (account == null) {
             return new ResponseEntity<>("Không tìm thấy tài khoản tương ứng với email/username này.", HttpStatus.BAD_REQUEST);
+        }
+
+        // 3. Xác minh tính hợp lệ của mã OTP
+        if (account.getOtpCode() == null || !account.getOtpCode().equals(request.getOtp().trim())) {
+            return new ResponseEntity<>("Mã OTP không chính xác.", HttpStatus.BAD_REQUEST);
+        }
+
+        if (account.getOtpExpiration() == null || account.getOtpExpiration().isBefore(LocalDateTime.now())) {
+            return new ResponseEntity<>("Mã OTP đã hết hạn, vui lòng yêu cầu mã OTP mới.", HttpStatus.BAD_REQUEST);
         }
 
         // Cập nhật mật khẩu mới vào Account

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { registerExportModalHandler, unregisterExportModalHandler } from '@/services/customExport';
 
 export default function CustomExportModal() {
@@ -61,6 +61,13 @@ export default function CustomExportModal() {
     };
   }, []);
 
+  const handleClose = useCallback((res = null) => {
+    if (resolver) resolver(res);
+    setModalConfig(null);
+    setResolver(null);
+    setIsExporting(false);
+  }, [resolver]);
+
   // Đóng modal khi bấm Escape
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -70,14 +77,7 @@ export default function CustomExportModal() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [modalConfig, resolver]);
-
-  const handleClose = (res = null) => {
-    if (resolver) resolver(res);
-    setModalConfig(null);
-    setResolver(null);
-    setIsExporting(false);
-  };
+  }, [modalConfig, handleClose]);
 
   if (!modalConfig) return null;
 

@@ -191,7 +191,11 @@ CREATE TABLE orders (
     order_type VARCHAR(30) DEFAULT 'RENT_BOOK',    -- 'RENT_BOOK', 'TOPUP_POTATO', 'BUY_BOOK'
     payment_status VARCHAR(50) DEFAULT 'PENDING',  -- 'PENDING', 'SUCCESS', 'FAILED'
     payment_method VARCHAR(50) DEFAULT 'VNPAY',    -- 'VNPAY', 'POTATO_WALLET'
-    transaction_no VARCHAR(100),                   -- Mã giao dịch ngân hàng / cổng thanh toán
+    transaction_no VARCHAR(100) UNIQUE,            -- Mã giao dịch / khóa idempotency toàn cục
+    checkout_subtotal DOUBLE NULL,
+    checkout_tier_discount DOUBLE NULL,
+    checkout_coupon_discount DOUBLE NULL,
+    checkout_fingerprint VARCHAR(64) NULL,
     promotion_id VARCHAR(50) NULL,
     order_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_orders_customer FOREIGN KEY (customer_id) REFERENCES customer(customer_id) ON DELETE RESTRICT,

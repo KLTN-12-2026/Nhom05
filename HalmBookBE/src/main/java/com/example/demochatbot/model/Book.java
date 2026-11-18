@@ -48,6 +48,9 @@ public class Book {
 
     private String status = "PUBLISHED";
 
+    @Column(name = "table_of_contents", columnDefinition = "LONGTEXT")
+    private String tableOfContents;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
 

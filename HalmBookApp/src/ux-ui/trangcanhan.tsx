@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios, { AxiosRequestConfig } from 'axios';
+import { API_BASE_URL, CANDIDATE_API_URLS } from '../config/api';
 import Constants from 'expo-constants';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { ComponentRef, useCallback, useEffect, useRef, useState } from 'react';
@@ -22,6 +23,8 @@ import {
 } from 'react-native';
 import { useAppNavigation, useAppThemeStyles } from './navigation';
 
+// API_BASE_URL & CANDIDATE_API_URLS import từ ../config/api (IMP-06)
+/*
 const resolvePrimaryApiUrl = (): string => {
   if (process.env.EXPO_PUBLIC_API_URL) {
     return process.env.EXPO_PUBLIC_API_URL.replace(/\/+$/, '');
@@ -45,6 +48,7 @@ const CANDIDATE_API_URLS = Array.from(
     'http://10.0.2.2:8082',
   ])
 );
+*/
 
 async function apiRequestWithFallback<T = any>(
   path: string,
@@ -262,7 +266,7 @@ const formatDateForDisplay = (dateVal: any): string => {
 const parseDateToApi = (dateStr: string): string | null => {
   if (!dateStr || !dateStr.trim()) return null;
   const trimmed = dateStr.trim();
-  const parts = trimmed.split(/[\/\-]/);
+  const parts = trimmed.split(/[/-]/);
   if (parts.length === 3) {
     if (parts[0].length <= 2 && parts[2].length === 4) {
       const day = parts[0].padStart(2, '0');

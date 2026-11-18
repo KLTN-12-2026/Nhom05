@@ -1,3 +1,6 @@
+import { apiUrl } from '../config/api.js';
+import { readStorage, writeStorage } from '../utils/browserStorage.js';
+
 export const normalizeJwtToken = (value) => {
     if (!value || typeof value !== "string") {
         return null;
@@ -22,30 +25,33 @@ const tokenPayloadCache = new Map();
 
 export const clearAuthSession = () => {
     tokenPayloadCache.clear();
-    sessionStorage.removeItem("token");
-    sessionStorage.removeItem("role");
-    localStorage.removeItem("token");
-    localStorage.removeItem("role");
-    localStorage.removeItem("halm_customer_cache");
+    writeStorage("token", null, false);
+    writeStorage("role", null, false);
+    writeStorage("token", null, true);
+    writeStorage("role", null, true);
+    writeStorage("halm_customer_cache", null, true);
+    if (typeof window !== "undefined" && window.dispatchEvent) window.dispatchEvent(new Event("halm-auth-change"));
 };
 
 export const clearAdminAuthSession = () => {
     tokenPayloadCache.clear();
-    sessionStorage.removeItem("admin_token");
-    sessionStorage.removeItem("admin_role");
-    localStorage.removeItem("admin_token");
-    localStorage.removeItem("admin_role");
+    writeStorage("admin_token", null, false);
+    writeStorage("admin_role", null, false);
+    writeStorage("admin_token", null, true);
+    writeStorage("admin_role", null, true);
+    writeStorage("admin_user", null, true);
+    writeStorage("admin_user", null, false);
 };
 
 export const getAuthToken = () => {
-    const rawLocal = localStorage.getItem("token");
-    const rawSession = sessionStorage.getItem("token");
+    const rawLocal = readStorage("token", true);
+    const rawSession = readStorage("token", false);
     return normalizeJwtToken(rawLocal) ?? normalizeJwtToken(rawSession) ?? (rawLocal?.trim() || rawSession?.trim() || null);
 };
 
 export const getAdminAuthToken = () => {
-    const rawLocal = localStorage.getItem("admin_token");
-    const rawSession = sessionStorage.getItem("admin_token");
+    const rawLocal = readStorage("admin_token", true);
+    const rawSession = readStorage("admin_token", false);
     const adminToken = normalizeJwtToken(rawLocal) ?? normalizeJwtToken(rawSession) ?? (rawLocal?.trim() || rawSession?.trim() || null);
     if (adminToken) {
         return adminToken;
@@ -59,18 +65,18 @@ export const getAdminAuthToken = () => {
 };
 
 export const getAuthRole = () => (
-    localStorage.getItem("role") ??
-    sessionStorage.getItem("role")
+    readStorage("role", true) ??
+    readStorage("role", false)
 );
 
 export const getAdminAuthRole = () => (
-    localStorage.getItem("admin_role") ??
-    sessionStorage.getItem("admin_role") ??
-    localStorage.getItem("role") ??
-    sessionStorage.getItem("role")
+    readStorage("admin_role", true) ??
+    readStorage("admin_role", false) ??
+    readStorage("role", true) ??
+    readStorage("role", false)
 );
 
-export const saveAdminAuthSession = (responseData) => {
+export const saveAdminAuthSession = (responseData, { remember = true } = {}) => {
     const candidate = responseData?.systemToken ?? responseData?.token ?? responseData?.accessToken;
     const token = normalizeJwtToken(candidate) || (typeof candidate === "string" ? candidate.trim() : null);
 
@@ -78,17 +84,17 @@ export const saveAdminAuthSession = (responseData) => {
         throw new Error("Máy chủ không trả về JWT token hợp lệ cho Quản trị viên.");
     }
 
-    localStorage.setItem("admin_token", token);
-    sessionStorage.setItem("admin_token", token);
+    writeStorage("admin_token", remember ? token : null, true);
+    writeStorage("admin_token", token, false);
 
     const role = responseData?.role ?? "ADMIN";
-    localStorage.setItem("admin_role", String(role).trim());
-    sessionStorage.setItem("admin_role", String(role).trim());
+    writeStorage("admin_role", remember ? String(role).trim() : null, true);
+    writeStorage("admin_role", String(role).trim(), false);
 
     return token;
 };
 
-export const saveAuthSession = (responseData, { _remember = true } = {}) => {
+export const saveAuthSession = (responseData, { remember = true } = {}) => {
     const candidate = responseData?.systemToken ?? responseData?.token ?? responseData?.accessToken;
     const token = normalizeJwtToken(candidate) || (typeof candidate === "string" ? candidate.trim() : null);
 
@@ -101,15 +107,15 @@ export const saveAuthSession = (responseData, { _remember = true } = {}) => {
 
     // Nếu là tài khoản Quản trị viên, lưu vào phiên Admin riêng biệt để không làm hỏng phiên của Độc giả
     if (normalizedRole === 'ADMIN') {
-        saveAdminAuthSession(responseData);
+        saveAdminAuthSession(responseData, { remember });
         return token;
     }
 
     // Tài khoản Độc giả: Lưu đồng bộ vào token chuẩn của Storefront
-    localStorage.setItem("token", token);
-    sessionStorage.setItem("token", token);
-    localStorage.setItem("role", String(role).trim());
-    sessionStorage.setItem("role", String(role).trim());
+    writeStorage("token", remember ? token : null, true);
+    writeStorage("token", token, false);
+    writeStorage("role", remember ? String(role).trim() : null, true);
+    writeStorage("role", String(role).trim(), false);
 
     return token;
 };
@@ -222,7 +228,9 @@ export const getValidAuthToken = () => {
     const token = getAuthToken();
     if (!token) return null;
 
-    // Không tự động clear session ở đây để tránh làm người dùng bị văng đột ngột
+    if (isTokenExpired(token)) {
+        return null;
+    }
     return token;
 };
 
@@ -245,3 +253,20 @@ export const getTokenRemainingSeconds = (value) => {
 export const isAuthenticated = () => {
     return isTokenValid();
 };
+
+/**
+ * Đăng xuất người dùng Độc giả an toàn:
+ * Gửi yêu cầu thu hồi Token lên Backend (Blacklist) và dọn dẹp Storage ở Client
+ */
+async function revokeSession(token, clear) {
+    try {
+        if (token) await fetch(apiUrl('/api/auth/logout'), {
+            method: 'POST', headers: { Authorization: 'Bearer ' + token },
+            signal: AbortSignal.timeout(10000),
+        });
+    } catch { /* Local logout must still complete when the server is unreachable. */ }
+    finally { clear(); }
+}
+
+export const logoutUser = () => revokeSession(getAuthToken(), clearAuthSession);
+export const logoutAdmin = () => revokeSession(getAdminAuthToken(), clearAdminAuthSession);

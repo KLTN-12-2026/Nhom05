@@ -53,10 +53,29 @@ public class AuthServiceImpl implements AuthService {
         return candidate;
     }
 
+    private String generateUniqueUsername(String baseCandidate) {
+        String clean = (baseCandidate != null) ? baseCandidate.replaceAll("[^a-zA-Z0-9_.-]", "") : "";
+        if (clean.isBlank()) {
+            clean = "user";
+        }
+        String uniqueUsername = clean;
+        int counter = 1;
+        while (accountRepository.findByUsername(uniqueUsername).isPresent()) {
+            uniqueUsername = clean + "_" + counter;
+            counter++;
+        }
+        return uniqueUsername;
+    }
+
     @Transactional
     public void register(RegisterRequest request) {
         if (accountRepository.findByUsername(request.getUsername()).isPresent()) {
             throw new RuntimeException("Ten tai khoan da duoc su dung !");
+        }
+        if (request.getEmail() != null && !request.getEmail().trim().isEmpty()) {
+            if (customerRepository.findByEmail(request.getEmail().trim()).isPresent()) {
+                throw new RuntimeException("Email đã được sử dụng bởi tài khoản khác !");
+            }
         }
         Account account = new Account();
 
@@ -83,6 +102,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
+    @SuppressWarnings("unchecked")
     public AuthResponse processGoogleLogin(String accessToken) {
         RestTemplate restTemplate = new RestTemplate();
         String googleUserInfoUrl = "https://www.googleapis.com/oauth2/v3/userinfo?access_token=" + accessToken;
@@ -104,10 +124,11 @@ public class AuthServiceImpl implements AuthService {
 
             if (customer == null) {
                 account = new Account();
-                account.setUsername(email.split("@")[0]);
+                account.setUsername(generateUniqueUsername(email.split("@")[0]));
                 account.setProvider("GOOGLE");
                 account.setRole(Role.USER);
                 account.setStatus("ACTIVE");
+                account.setPassword(passwordEncoder != null ? passwordEncoder.encode(java.util.UUID.randomUUID().toString()) : "");
 
                 Account savedAccount = accountRepository.save(account);
 
@@ -151,6 +172,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional
+    @SuppressWarnings("unchecked")
     public AuthResponse processFacebookLogin(String accessToken) {
         RestTemplate restTemplate = new RestTemplate();
         String facebookApiUrl = "https://graph.facebook.com/me?fields=id,name,email,picture.type(large)&access_token=" + accessToken;
@@ -183,10 +205,12 @@ public class AuthServiceImpl implements AuthService {
 
             if (customer == null) {
                 account = new Account();
-                account.setUsername(email.split("@")[0]);
+                String candidate = (email != null && email.contains("@")) ? email.split("@")[0] : ("fb_" + fbId);
+                account.setUsername(generateUniqueUsername(candidate));
                 account.setProvider("FACEBOOK");
                 account.setRole(Role.USER);
                 account.setStatus("ACTIVE");
+                account.setPassword(passwordEncoder != null ? passwordEncoder.encode(java.util.UUID.randomUUID().toString()) : "");
 
                 Account savedAccount = accountRepository.save(account);
 

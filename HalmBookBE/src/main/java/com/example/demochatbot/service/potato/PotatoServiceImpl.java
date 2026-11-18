@@ -7,9 +7,11 @@ import com.example.demochatbot.model.Customer;
 import com.example.demochatbot.model.MembershipTier;
 import com.example.demochatbot.model.PotatoPackage;
 import com.example.demochatbot.model.PotatoTransaction;
+import com.example.demochatbot.model.Orders;
 import com.example.demochatbot.repository.CustomerRepository;
 import com.example.demochatbot.repository.PotatoPackageRepository;
 import com.example.demochatbot.repository.PotatoTransactionRepository;
+import com.example.demochatbot.repository.OrdersRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +20,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * ============================================================================
@@ -25,9 +28,9 @@ import java.util.Optional;
  * Mô tả: Hiện thực chi tiết toàn bộ nghiệp vụ Ví Khoai Tây cho độc giả HALM BOOK
  *        - Lấy số dư Khoai thực tế từ cơ sở dữ liệu
  *        - Khởi tạo & lấy danh sách các gói nạp
- *        - Nạp Khoai siêu tốc qua VietQR / Chuyển khoản
+ *        - Nạp Khoai siêu tốc qua VietQR / Chuyển khoản (có khóa Pessimistic - IMP-03)
  *        - Sổ cái minh bạch lịch sử giao dịch (cộng/trừ khoai)
- *        - Tặng khoai cho bạn bè độc giả
+ *        - Tặng khoai cho bạn bè độc giả (Khóa 2 chiều có thứ tự tránh deadlock - IMP-03)
  *        - Khấu trừ khoai khi thanh toán đơn thuê sách
  * ============================================================================
  */
@@ -44,20 +47,33 @@ public class PotatoServiceImpl implements PotatoService {
     private PotatoTransactionRepository potatoTransactionRepository;
 
     @Autowired
+    private OrdersRepository ordersRepository;
+
+    @Autowired
     private com.example.demochatbot.service.tier.TierService tierService;
+
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager entityManager;
 
     /**
      * Lấy thông tin ví và số dư Khoai thực tế của tài khoản đăng nhập
      */
     @Override
+    @Transactional
     public WalletResponseDto getWalletInfo(int accountId) {
         Customer customer = customerRepository.findCustomerById(accountId);
         if (customer == null) {
             throw new RuntimeException("Không tìm thấy thông tin khách hàng cho tài khoản ID: " + accountId);
         }
 
+        // Tier initialization can save this entity. Refresh it under the same wallet lock
+        // so a post-transfer wallet response cannot overwrite another committed transfer.
+        customer = customerRepository.findByIdForUpdate(customer.getCustomer_id()).orElse(customer);
+        if (entityManager != null) {
+            entityManager.refresh(customer, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        }
         try {
-                MembershipTier updatedTier = tierService.calculateAndUpdateCustomerTier(customer);
+            MembershipTier updatedTier = tierService.calculateAndUpdateCustomerTier(customer);
             if (updatedTier != null) {
                 customer.setMembershipTier(updatedTier);
             }
@@ -141,14 +157,19 @@ public class PotatoServiceImpl implements PotatoService {
     }
 
     /**
-     * Xử lý nạp Khoai Tây vào ví (VietQR 24/7)
+     * Xử lý nạp Khoai Tây vào ví (VietQR 24/7) - Khóa bản ghi tránh race condition (IMP-03)
      */
     @Override
     @Transactional
     public PotatoTransaction topupPotato(int accountId, TopupRequest request) {
-        Customer customer = customerRepository.findCustomerById(accountId);
-        if (customer == null) {
+        Customer initial = customerRepository.findCustomerById(accountId);
+        if (initial == null) {
             throw new RuntimeException("Không tìm thấy thông tin khách hàng!");
+        }
+        Customer customer = customerRepository.findByIdForUpdate(initial.getCustomer_id())
+                .orElse(initial);
+        if (entityManager != null) {
+            entityManager.refresh(customer, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
         }
 
         int totalKhoaiToAdd = 0;
@@ -197,11 +218,50 @@ public class PotatoServiceImpl implements PotatoService {
         return potatoTransactionRepository.save(transaction);
     }
 
-    /**
-     * Xử lý chuyển/tặng Khoai cho độc giả khác
-     */
+    /** Queue a top-up for admin verification; wallet credit happens only on approval. */
     @Override
     @Transactional
+    public Orders createTopupRequest(int accountId, TopupRequest request) {
+        Customer customer = customerRepository.findCustomerById(accountId);
+        if (customer == null) {
+            throw new RuntimeException("Không tìm thấy thông tin khách hàng!");
+        }
+        if (request == null) {
+            throw new IllegalArgumentException("Thông tin yêu cầu nạp không hợp lệ!");
+        }
+
+        Double amountMoney = request.getAmountMoney();
+        if (request.getPackageId() != null) {
+            PotatoPackage selectedPackage = potatoPackageRepository.findById(request.getPackageId())
+                    .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy gói nạp đã chọn!"));
+            if (Boolean.FALSE.equals(selectedPackage.getIsActive())) {
+                throw new IllegalArgumentException("Gói nạp này hiện không còn khả dụng!");
+            }
+            amountMoney = selectedPackage.getPriceVnd();
+        }
+        if (amountMoney == null || amountMoney <= 0) {
+            throw new IllegalArgumentException("Số tiền nạp phải lớn hơn 0!");
+        }
+
+        Orders order = new Orders();
+        order.setCustomer(customer);
+        order.setTotal_amount(amountMoney);
+        order.setPaymentCurrency("VND");
+        order.setOrderType("TOPUP_POTATO");
+        order.setOrder_date(LocalDateTime.now());
+        order.setPayment_status("PENDING");
+        order.setPayment_method(request.getPaymentMethod() != null && !request.getPaymentMethod().isBlank()
+                ? request.getPaymentMethod().trim() : "VIETQR");
+        order.setTransaction_no("TOPUP-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase());
+        order.setDiscount_amount(0);
+        return ordersRepository.save(order);
+    }
+
+    /**
+     * Xử lý chuyển/tặng Khoai cho độc giả khác (Khóa theo thứ tự sắp xếp tránh Deadlock - IMP-03)
+     */
+    @Override
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.READ_COMMITTED)
     public PotatoTransaction transferPotato(int accountId, TransferRequest request) {
         Customer sender = customerRepository.findCustomerById(accountId);
         if (sender == null) {
@@ -212,9 +272,9 @@ public class PotatoServiceImpl implements PotatoService {
             throw new RuntimeException("Số lượng Khoai tặng phải lớn hơn 0!");
         }
 
-        int currentSenderBalance = sender.getPotatoBalance() != null ? sender.getPotatoBalance() : 0;
-        if (currentSenderBalance < request.getAmount()) {
-            throw new RuntimeException("Số dư Khoai trong ví không đủ để thực hiện tặng (" + currentSenderBalance + " < " + request.getAmount() + ")!");
+        int preCheckBalance = sender.getPotatoBalance() != null ? sender.getPotatoBalance() : 0;
+        if (preCheckBalance < request.getAmount()) {
+            throw new RuntimeException("Số dư Khoai trong ví không đủ để thực hiện tặng (" + preCheckBalance + " < " + request.getAmount() + ")!");
         }
 
         // 1. Tìm và xác thực người nhận trước khi thực hiện trừ khoai
@@ -262,40 +322,66 @@ public class PotatoServiceImpl implements PotatoService {
             throw new RuntimeException("Bạn không thể tự tặng Khoai cho chính mình!");
         }
 
-        // 2. Trừ khoai người gửi
-        int newSenderBalance = currentSenderBalance - request.getAmount();
-        sender.setPotatoBalance(newSenderBalance);
-        customerRepository.save(sender);
+        // 2. Khóa dòng PESSIMISTIC_WRITE theo thứ tự từ điển của customer_id để tuyệt đối chống Deadlock (IMP-03)
+        String senderId = sender.getCustomer_id();
+        String receiverId = receiver.getCustomer_id();
+        Customer lockedSender;
+        Customer lockedReceiver;
 
-        // 3. Tạo giao dịch trừ cho người gửi
+        if (senderId.compareTo(receiverId) < 0) {
+            lockedSender = customerRepository.findByIdForUpdate(senderId).orElse(sender);
+            lockedReceiver = customerRepository.findByIdForUpdate(receiverId).orElse(receiver);
+        } else {
+            lockedReceiver = customerRepository.findByIdForUpdate(receiverId).orElse(receiver);
+            lockedSender = customerRepository.findByIdForUpdate(senderId).orElse(sender);
+        }
+        if (entityManager != null) {
+            entityManager.refresh(lockedSender, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+            entityManager.refresh(lockedReceiver, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+        }
+        customerRepository.synchronizeLockedWallet(lockedSender);
+        customerRepository.synchronizeLockedWallet(lockedReceiver);
+
+        // 3. Kiểm tra số dư người gửi trên bản ghi đã khóa
+        int currentSenderBalance = lockedSender.getPotatoBalance() != null ? lockedSender.getPotatoBalance() : 0;
+        if (currentSenderBalance < request.getAmount()) {
+            throw new RuntimeException("Số dư Khoai trong ví không đủ để thực hiện tặng (" + currentSenderBalance + " < " + request.getAmount() + ")!");
+        }
+
+        // 4. Trừ khoai người gửi
+        int newSenderBalance = currentSenderBalance - request.getAmount();
+        lockedSender.setPotatoBalance(newSenderBalance);
+        customerRepository.save(lockedSender);
+
+        // 5. Tạo giao dịch trừ cho người gửi
         PotatoTransaction senderTx = new PotatoTransaction();
-        senderTx.setCustomer(sender);
+        senderTx.setCustomer(lockedSender);
         senderTx.setAmount(-request.getAmount());
         senderTx.setBalanceAfter(newSenderBalance);
         senderTx.setType("TRANSFER_OUT");
         String noteMsg = (request.getNote() != null && !request.getNote().trim().isEmpty())
                 ? " - Lời nhắn: " + request.getNote().trim()
                 : "";
-        String receiverName = receiver.getCustomerName() != null ? receiver.getCustomerName() : receiver.getCustomer_id();
-        senderTx.setDescription("Tặng " + request.getAmount() + " Khoai cho độc giả " + receiverName + " (" + receiver.getCustomer_id() + ")" + noteMsg);
+        String receiverName = lockedReceiver.getCustomerName() != null ? lockedReceiver.getCustomerName() : lockedReceiver.getCustomer_id();
+        senderTx.setDescription("Tặng " + request.getAmount() + " Khoai cho độc giả " + receiverName + " (" + lockedReceiver.getCustomer_id() + ")" + noteMsg);
         senderTx.setCreatedAt(LocalDateTime.now());
         potatoTransactionRepository.save(senderTx);
 
-        // 4. Cộng khoai cho người nhận
-        int curRecBalance = receiver.getPotatoBalance() != null ? receiver.getPotatoBalance() : 0;
+        // 6. Cộng khoai cho người nhận
+        int curRecBalance = lockedReceiver.getPotatoBalance() != null ? lockedReceiver.getPotatoBalance() : 0;
         int newRecBalance = curRecBalance + request.getAmount();
-        receiver.setPotatoBalance(newRecBalance);
-        int recEarned = receiver.getTotalPotatoEarned() != null ? receiver.getTotalPotatoEarned() : curRecBalance;
-        receiver.setTotalPotatoEarned(recEarned + request.getAmount());
-        customerRepository.save(receiver);
+        lockedReceiver.setPotatoBalance(newRecBalance);
+        int recEarned = lockedReceiver.getTotalPotatoEarned() != null ? lockedReceiver.getTotalPotatoEarned() : curRecBalance;
+        lockedReceiver.setTotalPotatoEarned(recEarned + request.getAmount());
+        customerRepository.save(lockedReceiver);
 
-        // 5. Tạo giao dịch cộng cho người nhận
+        // 7. Tạo giao dịch cộng cho người nhận
         PotatoTransaction recTx = new PotatoTransaction();
-        recTx.setCustomer(receiver);
+        recTx.setCustomer(lockedReceiver);
         recTx.setAmount(request.getAmount());
         recTx.setBalanceAfter(newRecBalance);
         recTx.setType("TRANSFER_IN");
-        String senderName = sender.getCustomerName() != null ? sender.getCustomerName() : "bạn đọc HALM";
+        String senderName = lockedSender.getCustomerName() != null ? lockedSender.getCustomerName() : "bạn đọc HALM";
         recTx.setDescription("Nhận " + request.getAmount() + " Khoai tặng từ " + senderName + noteMsg);
         recTx.setCreatedAt(LocalDateTime.now());
         potatoTransactionRepository.save(recTx);
@@ -304,14 +390,19 @@ public class PotatoServiceImpl implements PotatoService {
     }
 
     /**
-     * Trừ Khoai khi thanh toán đơn thuê/mua sách
+     * Trừ Khoai khi thanh toán đơn thuê/mua sách (Có khóa Pessimistic - IMP-03)
      */
     @Override
     @Transactional
     public PotatoTransaction deductPotato(int accountId, int amount, String description) {
-        Customer customer = customerRepository.findCustomerById(accountId);
-        if (customer == null) {
+        Customer initial = customerRepository.findCustomerById(accountId);
+        if (initial == null) {
             throw new RuntimeException("Không tìm thấy thông tin khách hàng!");
+        }
+        Customer customer = customerRepository.findByIdForUpdate(initial.getCustomer_id())
+                .orElse(initial);
+        if (entityManager != null) {
+            entityManager.refresh(customer, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
         }
 
         int currentBalance = customer.getPotatoBalance() != null ? customer.getPotatoBalance() : 0;

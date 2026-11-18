@@ -78,7 +78,8 @@ function normalizeBook(book) {
     rent_price: book.rent_price || '',
     description: book.description || '',
     pdf_url: book.pdf_url || '',
-    img_url: book.img_url || ''
+    img_url: book.img_url || '',
+    tableOfContents: book.tableOfContents || ''
   };
 }
 
@@ -102,6 +103,15 @@ export default function QuanLySach() {
   const [imagePreview, setImagePreview] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+
+  // Modal State cho Quản Lý Mục Lục (TOC)
+  const [isTocModalOpen, setIsTocModalOpen] = useState(false);
+  const [tocBook, setTocBook] = useState(null);
+  const [tocList, setTocList] = useState([]);
+  const [bulkTocText, setBulkTocText] = useState('');
+  const [showBulkImport, setShowBulkImport] = useState(false);
+  const [isSavingToc, setIsSavingToc] = useState(false);
+  const [tocMessage, setTocMessage] = useState({ text: '', type: 'success' });
 
   const availableCategories = useMemo(() => {
     return categoriesList.length > 0 ? categoriesList : DEFAULT_CATEGORIES;
@@ -272,6 +282,121 @@ export default function QuanLySach() {
   };
 
   const location = useLocation();
+
+  // =========================================================================
+  // XỬ LÝ QUẢN LÝ MỤC LỤC SÁCH (TOC)
+  // =========================================================================
+
+  const openTocModal = async (book) => {
+    setTocBook(book);
+    setShowBulkImport(false);
+    setBulkTocText('');
+    setTocMessage({ text: '', type: 'success' });
+
+    let initialToc = [];
+    try {
+      if (book.tableOfContents) {
+        const parsed = typeof book.tableOfContents === 'string'
+          ? JSON.parse(book.tableOfContents)
+          : book.tableOfContents;
+        if (Array.isArray(parsed)) initialToc = parsed;
+      }
+    } catch (_) {}
+
+    if (initialToc.length === 0) {
+      try {
+        const res = await axiosInstance.get(`/api/admin/books/${book.id}/toc`);
+        if (res.data?.tableOfContents) {
+          const parsed = JSON.parse(res.data.tableOfContents);
+          if (Array.isArray(parsed)) initialToc = parsed;
+        }
+      } catch (_) {}
+    }
+
+    setTocList(initialToc);
+    setIsTocModalOpen(true);
+  };
+
+  const addTocItem = () => {
+    const lastPage = tocList.length > 0 ? (Number(tocList[tocList.length - 1].page) || 1) + 10 : 1;
+    setTocList([...tocList, { title: '', page: lastPage }]);
+  };
+
+  const updateTocItem = (index, field, value) => {
+    const updated = [...tocList];
+    updated[index] = { ...updated[index], [field]: value };
+    setTocList(updated);
+  };
+
+  const removeTocItem = (index) => {
+    setTocList(tocList.filter((_, i) => i !== index));
+  };
+
+  const moveTocItem = (index, direction) => {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= tocList.length) return;
+    const updated = [...tocList];
+    const temp = updated[index];
+    updated[index] = updated[targetIndex];
+    updated[targetIndex] = temp;
+    setTocList(updated);
+  };
+
+  const handleBulkParse = () => {
+    if (!bulkTocText.trim()) return;
+    const lines = bulkTocText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const parsed = [];
+
+    lines.forEach(line => {
+      const match = line.match(/^(.*?)[^\w\d\s]*(?:trang|tr\.?|p\.?|\s+)*(\d+)$/i);
+      if (match) {
+        const title = match[1].replace(/[.\-_–—\s:]+$/, '').trim();
+        const page = parseInt(match[2], 10);
+        if (title && !isNaN(page)) {
+          parsed.push({ title, page });
+        }
+      } else {
+        const estimatedPage = parsed.length > 0 ? (Number(parsed[parsed.length - 1].page) || 1) + 5 : 1;
+        parsed.push({ title: line, page: estimatedPage });
+      }
+    });
+
+    if (parsed.length > 0) {
+      setTocList(parsed);
+      setShowBulkImport(false);
+      setTocMessage({ text: `Đã phân tích thành công ${parsed.length} chương mục!`, type: 'success' });
+    } else {
+      setTocMessage({ text: 'Không nhận diện được chương mục nào. Vui lòng kiểm tra định dạng!', type: 'error' });
+    }
+  };
+
+  const handleSaveToc = async () => {
+    if (!tocBook) return;
+    setIsSavingToc(true);
+    setTocMessage({ text: '', type: 'success' });
+    try {
+      const validToc = tocList
+        .filter(item => item.title && item.title.trim())
+        .map(item => ({
+          title: item.title.trim(),
+          page: Math.max(1, parseInt(item.page, 10) || 1)
+        }));
+
+      await axiosInstance.put(`/api/admin/books/${tocBook.id}/toc`, {
+        tableOfContents: JSON.stringify(validToc)
+      });
+
+      setBooks(prev => prev.map(b => b.id === tocBook.id ? { ...b, tableOfContents: JSON.stringify(validToc) } : b));
+      setTocMessage({ text: 'Đã lưu mục lục sách vào cơ sở dữ liệu thành công!', type: 'success' });
+      setTimeout(() => {
+        setIsTocModalOpen(false);
+      }, 1200);
+    } catch (err) {
+      setTocMessage({ text: getApiMessage(err, 'Lỗi khi lưu mục lục sách.'), type: 'error' });
+    } finally {
+      setIsSavingToc(false);
+    }
+  };
 
   // Tự động tìm kiếm hoặc mở xem chi tiết sách nếu URL có param ?search=... hoặc ?bookId=... (tránh bị điều hướng sang user)
   useEffect(() => {
@@ -598,6 +723,15 @@ export default function QuanLySach() {
                       </td>
                       <td className="border border-slate-200 p-2 text-center dark:border-slate-700 whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1.5">
+                          {/* NÚT QUẢN LÝ MỤC LỤC SÁCH */}
+                          <button
+                            type="button"
+                            onClick={() => openTocModal(book)}
+                            className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-100/60 dark:text-emerald-400 dark:hover:bg-emerald-950/50 transition-colors"
+                            title="Quản lý mục lục sách (Chương & Trang)"
+                          >
+                            <i className="fa-solid fa-list-ol text-sm" />
+                          </button>
                           {/* NÚT CHỈNH SỬA SÁCH (ĐÃ BẬT) */}
                           <button
                             type="button"
@@ -1002,6 +1136,231 @@ export default function QuanLySach() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL QUẢN LÝ MỤC LỤC SÁCH (TABLE OF CONTENTS) */}
+      {/* ========================================================================= */}
+      {isTocModalOpen && tocBook && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto animate-fade-in">
+          <div className="relative w-full max-w-2xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 p-6 flex flex-col max-h-[90vh]">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-700">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/20">
+                  <i className="fa-solid fa-list-ol text-lg" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                    Quản Lý Mục Lục Sách
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300/40">
+                      {tocList.length} chương
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-md">
+                    Cuốn sách: <strong className="text-slate-700 dark:text-slate-200">{tocBook.title}</strong>
+                    {tocBook.totalPages ? ` (${tocBook.totalPages} trang)` : ''}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsTocModalOpen(false)}
+                className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+              >
+                <i className="fa-solid fa-xmark text-sm" />
+              </button>
+            </div>
+
+            {/* Thông báo Message */}
+            {tocMessage.text && (
+              <div className={`mt-3 p-3 rounded-xl text-xs font-semibold flex items-center gap-2 ${
+                tocMessage.type === 'error'
+                  ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200 dark:border-rose-800'
+                  : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+              }`}>
+                <i className={`fa-solid ${tocMessage.type === 'error' ? 'fa-triangle-exclamation' : 'fa-circle-check'}`} />
+                <span>{tocMessage.text}</span>
+              </div>
+            )}
+
+            {/* Action Toolbar */}
+            <div className="flex items-center justify-between gap-2 mt-4 mb-3">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={addTocItem}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5"
+                >
+                  <i className="fa-solid fa-plus text-[10px]" />
+                  <span>Thêm chương</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowBulkImport(!showBulkImport)}
+                  className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition flex items-center gap-1.5 ${
+                    showBulkImport
+                      ? 'bg-slate-200 dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-800 dark:text-slate-100'
+                      : 'border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <i className="fa-solid fa-file-import text-[10px]" />
+                  <span>{showBulkImport ? 'Quay lại bảng' : 'Nhập nhanh từ văn bản'}</span>
+                </button>
+              </div>
+
+              {tocList.length > 0 && !showBulkImport && (
+                <button
+                  type="button"
+                  onClick={() => setTocList([])}
+                  className="text-xs text-rose-500 hover:text-rose-600 font-semibold"
+                >
+                  Xoá toàn bộ
+                </button>
+              )}
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+              {showBulkImport ? (
+                <div className="space-y-2 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-200 dark:border-slate-700">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                      Dán danh sách mục lục (Mỗi dòng một chương kèm số trang):
+                    </label>
+                  </div>
+                  <textarea
+                    rows={8}
+                    value={bulkTocText}
+                    onChange={(e) => setBulkTocText(e.target.value)}
+                    placeholder={`Ví dụ định dạng hỗ trợ:\nChương 1: Lời mở đầu - 1\nChương 2: Tuổi thơ ở miền quê - Trang 15\nChương 3: Bước ngoặt cuộc đời: 42\nChương 4: Thành công và bài học 88`}
+                    className="w-full text-xs font-mono p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:border-emerald-500 outline-hidden"
+                  />
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Hệ thống tự động bóc tách tên chương và trang bắt đầu.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleBulkParse}
+                      disabled={!bulkTocText.trim()}
+                      className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold disabled:opacity-40 transition flex items-center gap-1.5"
+                    >
+                      <i className="fa-solid fa-wand-magic-sparkles text-xs" />
+                      <span>Phân tích & áp dụng</span>
+                    </button>
+                  </div>
+                </div>
+              ) : tocList.length === 0 ? (
+                <div className="py-12 text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
+                  <i className="fa-solid fa-book-bookmark text-3xl text-slate-300 dark:text-slate-600 mb-2" />
+                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                    Cuốn sách này hiện chưa được thiết lập mục lục.
+                  </p>
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 max-w-sm mx-auto">
+                    Bấm <strong>"+ Thêm chương"</strong> để nhập thủ công hoặc <strong>"Nhập nhanh từ văn bản"</strong> để dán mục lục có sẵn.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {tocList.map((item, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 group hover:border-emerald-500/50 transition-colors"
+                    >
+                      <span className="w-6 text-center text-xs font-bold text-slate-400 shrink-0">
+                        {idx + 1}
+                      </span>
+                      <input
+                        type="text"
+                        value={item.title}
+                        onChange={(e) => updateTocItem(idx, 'title', e.target.value)}
+                        placeholder="Tên chương / mục (vd: Chương 1: Khởi đầu)"
+                        className="flex-1 text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:border-emerald-500 outline-hidden"
+                      />
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className="text-[11px] text-slate-400">Trang:</span>
+                        <input
+                          type="number"
+                          min="1"
+                          max={tocBook.totalPages || 9999}
+                          value={item.page}
+                          onChange={(e) => updateTocItem(idx, 'page', e.target.value)}
+                          className="w-16 text-xs text-center px-2 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-bold focus:border-emerald-500 outline-hidden font-mono"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => moveTocItem(idx, -1)}
+                          disabled={idx === 0}
+                          className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 disabled:opacity-20"
+                          title="Di chuyển lên"
+                        >
+                          <i className="fa-solid fa-arrow-up text-[11px]" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveTocItem(idx, 1)}
+                          disabled={idx === tocList.length - 1}
+                          className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 disabled:opacity-20"
+                          title="Di chuyển xuống"
+                        >
+                          <i className="fa-solid fa-arrow-down text-[11px]" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeTocItem(idx)}
+                          className="p-1.5 rounded-md text-rose-500 hover:bg-rose-100/50 dark:hover:bg-rose-950/50"
+                          title="Xóa chương này"
+                        >
+                          <i className="fa-solid fa-trash-can text-[11px]" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-between border-t border-slate-200 dark:border-slate-700 pt-4 mt-3">
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                Mục lục này sẽ tự động ưu tiên hiển thị trong Trình đọc sách (HALM Reader) của độc giả.
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsTocModalOpen(false)}
+                  disabled={isSavingToc}
+                  className="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-600 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                >
+                  Đóng
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveToc}
+                  disabled={isSavingToc || tocList.length === 0}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md transition disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {isSavingToc ? (
+                    <>
+                      <i className="fa-solid fa-spinner animate-spin text-xs" />
+                      <span>Đang lưu mục lục...</span>
+                    </>
+                  ) : (
+                    <>
+                      <i className="fa-solid fa-floppy-disk text-xs" />
+                      <span>Lưu Mục Lục Lên CSDL</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+          </div>
         </div>
       )}
     </div>

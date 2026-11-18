@@ -224,12 +224,18 @@ public class PotatoController {
                         .body(createErrorMap("Vui lòng đăng nhập để thực hiện nạp Khoai!"));
             }
 
-            PotatoTransaction transaction = potatoService.topupPotato(accountId, request);
+            com.example.demochatbot.model.Orders order = potatoService.createTopupRequest(accountId, request);
             WalletResponseDto updatedWallet = potatoService.getWalletInfo(accountId);
 
             Map<String, Object> response = new HashMap<>();
-            response.put("message", "Nạp Khoai thành công!");
-            response.put("transaction", transaction);
+            response.put("message", "Yêu cầu nạp Khoai đã được gửi đến Admin để xác nhận thanh toán.");
+            response.put("order", Map.of(
+                    "id", order.getOrders_id(),
+                    "transactionNo", order.getTransaction_no(),
+                    "amountMoney", order.getTotal_amount(),
+                    "paymentStatus", order.getPayment_status(),
+                    "paymentMethod", order.getPayment_method()
+            ));
             response.put("wallet", updatedWallet);
 
             return ResponseEntity.ok(response);

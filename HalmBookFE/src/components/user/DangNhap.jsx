@@ -8,12 +8,18 @@ import { useGoogleLogin } from '@react-oauth/google';
 import fbLoginModule from 'react-facebook-login/dist/facebook-login-render-props';
 import { saveAuthSession, isTokenValid, getAuthRole, getAdminAuthRole } from '@/services/authToken';
 
-const API_BASE_URL = 'http://localhost:8082';
+import { API_BASE_URL } from '@/constants/apiEndpoints';
 const FacebookLogin = fbLoginModule.default || fbLoginModule;
 
 export default function DangNhap() {
   const navigate = useNavigate();
   const location = useLocation();
+
+  // --- STATE POPUP THÔNG BÁO ---
+  const [popup, setPopup] = useState({
+    message: '',
+    type: 'error',
+  });
 
   // Xác định đường dẫn đích sau khi đăng nhập (từ ProtectedRoute hoặc query param)
   const searchParams = new URLSearchParams(location.search);
@@ -28,7 +34,8 @@ export default function DangNhap() {
 
   // Tự động điều hướng nếu người dùng đã có phiên đăng nhập hợp lệ (ví dụ: bấm nút Back của trình duyệt)
   useEffect(() => {
-    const isLockedParam = searchParams.get('reason') === 'account_locked' || searchParams.get('locked') === 'true';
+    const params = new URLSearchParams(location.search);
+    const isLockedParam = params.get('reason') === 'account_locked' || params.get('locked') === 'true';
     if (isLockedParam) {
       setPopup({
         message: 'Tài khoản hiện đang bị khóa, vui lòng gọi hotline để hỗ trợ.',
@@ -70,12 +77,6 @@ export default function DangNhap() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [dieuKhoan, setDieuKhoan] = useState(false);
-
-  // --- STATE POPUP THÔNG BÁO ---
-  const [popup, setPopup] = useState({
-    message: '',
-    type: 'error',
-  });
 
   const handlePopupClose = () => {
     setPopup((prev) => ({ ...prev, message: '' }));

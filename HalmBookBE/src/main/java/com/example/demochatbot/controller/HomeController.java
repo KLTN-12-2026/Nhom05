@@ -21,6 +21,8 @@ import com.example.demochatbot.dto.CheckoutRequest;
 import com.example.demochatbot.dto.CheckoutResponse;
 import com.example.demochatbot.dto.RentedBookDto;
 import com.example.demochatbot.model.Book;
+import com.example.demochatbot.model.Category;
+import com.example.demochatbot.repository.CategoryRepository;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.core.io.ClassPathResource;
@@ -33,6 +35,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.io.File;
@@ -68,6 +71,17 @@ public class HomeController {
     @Autowired
     private TierService tierService;
 
+    @Autowired
+    private CategoryRepository categoryRepository;
+
+    /**
+     * API lấy danh sách toàn bộ thể loại sách từ cơ sở dữ liệu
+     */
+    @GetMapping("/categories")
+    public ResponseEntity<List<Category>> getCategories() {
+        return ResponseEntity.ok(categoryRepository.findAll());
+    }
+
     /**
      * API lấy danh sách sách (Đầy đủ)
      */
@@ -84,6 +98,25 @@ public class HomeController {
         Page<BookDto> books = bookService.findAllBook(resolvedPageable)
                 .map(BookDto::fromEntity);
         return ResponseEntity.ok(books);
+    }
+
+    /**
+     * API lấy danh sách sách xu hướng / đọc nhiều nhất
+     */
+    @GetMapping("/books/trending")
+    public ResponseEntity<List<BookBasicDto>> getTrendingBooks(
+            @RequestParam(value = "limit", defaultValue = "10") int limit) {
+        return ResponseEntity.ok(bookService.findTrendingBooks(limit));
+    }
+
+    /**
+     * API gợi ý sách thuê cùng cho giỏ hàng (Cart Recommendations)
+     */
+    @GetMapping("/books/recommendations")
+    public ResponseEntity<List<BookBasicDto>> getCartRecommendations(
+            @RequestParam(value = "cartBookIds", required = false) List<String> cartBookIds,
+            @RequestParam(value = "limit", defaultValue = "10") int limit) {
+        return ResponseEntity.ok(bookService.findCartRecommendations(cartBookIds, limit));
     }
 
     @GetMapping("/covers/{fileName}")
@@ -151,6 +184,16 @@ public class HomeController {
                     .body(Map.of("message", "Không tìm thấy cuốn sách với mã: " + bookId));
         }
         return ResponseEntity.ok(book);
+    }
+
+    /**
+     * API lấy danh sách sách cùng tác giả hoặc cùng thể loại (Author / Related Books)
+     */
+    @GetMapping("/books/{bookId}/author-books")
+    public ResponseEntity<List<BookBasicDto>> getAuthorBooks(
+            @PathVariable("bookId") String bookId,
+            @RequestParam(value = "limit", defaultValue = "8") int limit) {
+        return ResponseEntity.ok(bookService.findAuthorBooks(bookId, limit));
     }
 
     /**
@@ -438,7 +481,7 @@ public class HomeController {
      * API thực hiện thanh toán thuê sách bằng Khoai Tây
      */
     @PostMapping("/checkout")
-    public ResponseEntity<?> checkoutWithPotato(@RequestBody CheckoutRequest request) {
+    public ResponseEntity<?> checkoutWithPotato(@Valid @RequestBody CheckoutRequest request) {
         try {
             int accountId = customerService.getCurrentAccountId();
             if (accountId <= 0) {
@@ -448,6 +491,8 @@ public class HomeController {
 
             CheckoutResponse response = orderService.checkoutWithPotato(accountId, request);
             return ResponseEntity.ok(response);
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", e.getMessage()));
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(Map.of("message", e.getMessage()));

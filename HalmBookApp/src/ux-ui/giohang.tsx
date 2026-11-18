@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Platform, StatusBar } from 'react-native';
+import React, { useState } from 'react';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppNavigation, useAppThemeStyles } from './navigation';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';

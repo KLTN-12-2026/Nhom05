@@ -4,7 +4,9 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -30,9 +32,13 @@ public class Chat_Session {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "customer_id", referencedColumnName = "customer_id")
     @JsonIgnore
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private Customer customer;
 
     @OneToMany(mappedBy = "chat_session", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JsonIgnore
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private List<Chat_Message> messages;
 }

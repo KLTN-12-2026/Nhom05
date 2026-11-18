@@ -24,8 +24,8 @@ if (typeof window !== 'undefined') {
                 throw err;
             }
         },
-        replyTicket: async (ticketId, reply, status = 'resolved') => {
-            return await adminSupportService.replyAdminTicket(ticketId, reply, status);
+        replyTicket: async (ticketId, reply, status = 'resolved', requestId) => {
+            return await adminSupportService.replyAdminTicket(ticketId, reply, status, requestId);
         },
         updateStatus: async (ticketId, status) => {
             return await adminSupportService.updateAdminTicketStatus(ticketId, status);

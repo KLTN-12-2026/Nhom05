@@ -16,8 +16,19 @@ java {
 
 repositories {
     mavenCentral()
-    maven { url 'https://repo.spring.io/milestone' }
-    maven { url 'https://repo.spring.io/snapshot' }
+    maven { url = 'https://repo.spring.io/milestone' }
+    maven { url = 'https://repo.spring.io/snapshot' }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs << "-Xlint:deprecation" << "-Xlint:unchecked"
+}
+
+// IntelliJ's generated main() task is a JavaExec too; the Gradle daemon's charset
+// does not configure the child application's stdout/stderr on Windows.
+tasks.withType(JavaExec).configureEach {
+    jvmArgs '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8'
 }
 
 ext {
@@ -64,6 +75,19 @@ dependencyManagement {
 }
 
 tasks.named('test') {
+    exclude '**/live/**'
     useJUnitPlatform()
-    jvmArgs '-Dfile.encoding=UTF-8', '-Dsun.jnu.encoding=UTF-8'
+    jvmArgs '-Dfile.encoding=UTF-8', '-Dsun.jnu.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8'
+}
+
+tasks.register('liveTest', Test) {
+    description = 'Opt-in smoke tests against local MySQL and an isolated RabbitMQ queue; no real email or AI calls.'
+    group = 'verification'
+    outputs.upToDateWhen { false }
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    include '**/live/**'
+    useJUnitPlatform()
+    jvmArgs '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8'
+    shouldRunAfter tasks.named('test')
 }

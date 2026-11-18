@@ -4,7 +4,6 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -12,6 +11,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
+import com.example.demochatbot.service.auth.TokenBlacklistService;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
@@ -21,17 +21,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider tokenProvider;
     private final UserDetailsService userDetailsService;
+    private final TokenBlacklistService tokenBlacklistService;
 
-    public JwtAuthenticationFilter(JwtTokenProvider tokenProvider, UserDetailsService userDetailsService) {
+    public JwtAuthenticationFilter(JwtTokenProvider tokenProvider,
+                                   UserDetailsService userDetailsService,
+                                   TokenBlacklistService tokenBlacklistService) {
         this.tokenProvider = tokenProvider;
         this.userDetailsService = userDetailsService;
+        this.tokenBlacklistService = tokenBlacklistService;
     }
 
     @Override
     protected void doFilterInternal(
-            @NonNull HttpServletRequest request,
-            @NonNull HttpServletResponse response,
-            @NonNull FilterChain filterChain
+            HttpServletRequest request,
+            HttpServletResponse response,
+            FilterChain filterChain
     ) throws ServletException, IOException {
         try {
             // 1. Rút trích Token từ Request
@@ -39,6 +43,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             // 2. Nếu có Token và Token hợp lệ
             if (StringUtils.hasText(jwt) && tokenProvider.validateToken(jwt)) {
+
+                // 2b. Kiểm tra xem Token có bị thu hồi (đã đăng xuất) hay không
+                if (tokenBlacklistService != null && tokenBlacklistService.isBlacklisted(jwt)) {
+                    String origin = request.getHeader("Origin");
+                    if (origin != null && !origin.isEmpty()) {
+                        response.setHeader("Access-Control-Allow-Origin", origin);
+                        response.setHeader("Access-Control-Allow-Credentials", "true");
+                    }
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    response.setContentType("application/json;charset=UTF-8");
+                    response.getWriter().write("{\"error\":\"TOKEN_REVOKED\",\"message\":\"Phiên đăng nhập đã kết thúc do đăng xuất!\"}");
+                    response.getWriter().flush();
+                    return;
+                }
 
                 // 3. Lấy email/username từ Token
                 String email = tokenProvider.getEmailFromJWT(jwt);

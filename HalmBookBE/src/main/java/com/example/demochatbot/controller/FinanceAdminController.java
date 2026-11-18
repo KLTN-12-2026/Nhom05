@@ -3,11 +3,14 @@ package com.example.demochatbot.controller;
 import com.example.demochatbot.model.Customer;
 import com.example.demochatbot.model.Notification;
 import com.example.demochatbot.model.Orders;
+import com.example.demochatbot.model.PotatoPackage;
 import com.example.demochatbot.model.PotatoTransaction;
 import com.example.demochatbot.repository.CustomerRepository;
 import com.example.demochatbot.repository.NotificationRepository;
 import com.example.demochatbot.repository.OrdersRepository;
+import com.example.demochatbot.repository.PotatoPackageRepository;
 import com.example.demochatbot.repository.PotatoTransactionRepository;
+import com.example.demochatbot.service.tier.TierService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -43,6 +46,15 @@ public class FinanceAdminController {
 
     @Autowired
     private NotificationRepository notificationRepository;
+
+    @Autowired
+    private PotatoPackageRepository potatoPackageRepository;
+
+    @Autowired
+    private TierService tierService;
+
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager entityManager;
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
@@ -118,8 +130,11 @@ public class FinanceAdminController {
         try {
             List<Orders> allOrders = ordersRepository.findAll();
 
-            // Sắp xếp đơn hàng mới nhất lên đầu
+            // Ưu tiên giao dịch đang chờ duyệt, sau đó sắp xếp mới nhất lên đầu.
             allOrders.sort((a, b) -> {
+                boolean aPending = isPendingStatus(a.getPayment_status());
+                boolean bPending = isPendingStatus(b.getPayment_status());
+                if (aPending != bPending) return aPending ? -1 : 1;
                 LocalDateTime d1 = a.getOrder_date() != null ? a.getOrder_date() : LocalDateTime.MIN;
                 LocalDateTime d2 = b.getOrder_date() != null ? b.getOrder_date() : LocalDateTime.MIN;
                 return d2.compareTo(d1);
@@ -137,9 +152,11 @@ public class FinanceAdminController {
                 );
                 if (!isFinance) continue;
 
-                // Lọc theo kỳ
+                // Các đơn đang chờ duyệt luôn phải xuất hiện để admin xử lý,
+                // kể cả khi đơn cũ hơn khoảng thời gian đang xem.
                 LocalDateTime orderDate = o.getOrder_date() != null ? o.getOrder_date() : now;
-                if (!matchesPeriod(orderDate, now, period)) {
+                boolean isPending = isPendingStatus(o.getPayment_status());
+                if (!isPending && !matchesPeriod(orderDate, now, period)) {
                     continue;
                 }
 
@@ -211,38 +228,106 @@ public class FinanceAdminController {
     }
 
     /**
+     * Helper tìm giao dịch theo numeric ID hoặc mã giao dịch code (kể cả có hoặc không có dấu #)
+     */
+    private Optional<Orders> findOrderByIdOrCode(String idOrCode) {
+        if (idOrCode == null || idOrCode.trim().isEmpty()) {
+            return Optional.empty();
+        }
+        String clean = idOrCode.trim();
+        // 1. Thử parse ID dạng số nguyên
+        try {
+            int numericId = Integer.parseInt(clean);
+            Optional<Orders> byId = ordersRepository.findById(numericId);
+            if (byId.isPresent()) return byId;
+        } catch (NumberFormatException ignored) {}
+
+        // 2. Thử tìm theo transaction_no trực tiếp
+        Optional<Orders> byNo = ordersRepository.findByTransactionNo(clean);
+        if (byNo.isPresent()) return byNo;
+
+        // 3. Nếu có dấu # ở đầu (#TX-...) hoặc các tiền tố
+        String stripped = clean.replaceAll("^#+", "");
+        byNo = ordersRepository.findByTransactionNo(stripped);
+        if (byNo.isPresent()) return byNo;
+
+        // 4. Quét fallback
+        return ordersRepository.findAll().stream()
+                .filter(o -> o.getTransaction_no() != null && (
+                        o.getTransaction_no().equalsIgnoreCase(clean) ||
+                        o.getTransaction_no().equalsIgnoreCase(stripped) ||
+                        String.valueOf(o.getOrders_id()).equals(clean)
+                ))
+                .findFirst();
+    }
+
+    /**
      * 3. Duyệt giao dịch nạp tiền
      */
     @PostMapping("/transactions/{id}/approve")
     @Transactional
-    public ResponseEntity<?> approveTransaction(@PathVariable("id") int id) {
+    public ResponseEntity<?> approveTransaction(@PathVariable("id") String id) {
         try {
-            Optional<Orders> opt = ordersRepository.findById(id);
+            Optional<Orders> opt = findOrderByIdOrCode(id);
             if (opt.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("message", "Không tìm thấy giao dịch với mã #" + id));
             }
 
             Orders order = opt.get();
-            order.setPayment_status("APPROVED");
-            ordersRepository.save(order);
-
             Customer customer = order.getCustomer();
-            long potatoesToAdd = Math.round(order.getTotal_amount() / 1000.0);
+            if (customer != null) {
+                customer = customerRepository.findByIdForUpdate(customer.getCustomer_id()).orElse(customer);
+                if (entityManager != null) {
+                    entityManager.refresh(customer, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+                }
+            }
+            if (entityManager != null) {
+                entityManager.refresh(order, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+            }
+            if (!isPendingStatus(order.getPayment_status())) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of("message", "Giao dịch đã được xử lý trước đó (Trạng thái: " + order.getPayment_status() + ")."));
+            }
+            order.setPayment_status("APPROVED");
+            ordersRepository.saveAndFlush(order);
+
+            // Tính số củ khoai tây cộng vào ví (ưu tiên gói nạp có bonus)
+            int potatoesToAdd = 0;
+            try {
+                List<PotatoPackage> activePkgs = potatoPackageRepository.findByIsActiveTrueOrderByPriceVndAsc();
+                for (PotatoPackage pkg : activePkgs) {
+                    if (pkg.getPriceVnd() != null && Math.abs(pkg.getPriceVnd() - order.getTotal_amount()) < 1.0) {
+                        potatoesToAdd = pkg.getPotatoAmount() + (pkg.getBonusPotato() != null ? pkg.getBonusPotato() : 0);
+                        break;
+                    }
+                }
+            } catch (Exception ignored) {}
+
+            if (potatoesToAdd <= 0) {
+                potatoesToAdd = (int) Math.round(order.getTotal_amount() / 1000.0);
+            }
 
             if (customer != null && potatoesToAdd > 0) {
                 int curBalance = customer.getPotatoBalance() != null ? customer.getPotatoBalance() : 0;
-                int newBalance = curBalance + (int) potatoesToAdd;
+                int newBalance = curBalance + potatoesToAdd;
                 customer.setPotatoBalance(newBalance);
 
                 int totalEarned = customer.getTotalPotatoEarned() != null ? customer.getTotalPotatoEarned() : 0;
-                customer.setTotalPotatoEarned(totalEarned + (int) potatoesToAdd);
+                customer.setTotalPotatoEarned(totalEarned + potatoesToAdd);
                 customerRepository.save(customer);
+
+                // Cập nhật hạng thành viên độc giả nếu đủ điều kiện
+                try {
+                    tierService.calculateAndUpdateCustomerTier(customer);
+                } catch (Exception e) {
+                    System.err.println("Lỗi cập nhật hạng thành viên: " + e.getMessage());
+                }
 
                 // Ghi nhận biến động số dư khoai
                 PotatoTransaction pt = new PotatoTransaction();
                 pt.setCustomer(customer);
-                pt.setAmount((int) potatoesToAdd);
+                pt.setAmount(potatoesToAdd);
                 pt.setBalanceAfter(newBalance);
                 pt.setType("TOPUP");
                 pt.setDescription("Duyệt nạp củ khoai tây từ giao dịch " + (order.getTransaction_no() != null ? order.getTransaction_no() : "#" + order.getOrders_id()));
@@ -268,12 +353,17 @@ public class FinanceAdminController {
             res.put("id", order.getOrders_id());
             res.put("code", order.getTransaction_no() != null ? order.getTransaction_no() : "#" + order.getOrders_id());
             res.put("amount", order.getTotal_amount());
+            res.put("potatoes", potatoesToAdd);
             res.put("userName", customer != null ? customer.getCustomerName() : "Khách hàng");
             return ResponseEntity.ok(res);
         } catch (Exception e) {
-            e.printStackTrace();
+            String msg = e.getMessage() != null ? e.getMessage() : "";
+            if (msg.contains("Deadlock") || msg.contains("lock") || msg.contains("Lock")) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of("message", "Giao dịch đang được xử lý đồng thời hoặc đã được duyệt!"));
+            }
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("message", "Lỗi khi duyệt giao dịch: " + e.getMessage()));
+                    .body(Map.of("message", "Lỗi khi duyệt giao dịch"));
         }
     }
 
@@ -283,23 +373,36 @@ public class FinanceAdminController {
     @PostMapping("/transactions/{id}/reject")
     @Transactional
     public ResponseEntity<?> rejectTransaction(
-            @PathVariable("id") int id,
+            @PathVariable("id") String id,
             @RequestBody(required = false) Map<String, String> body
     ) {
         try {
-            Optional<Orders> opt = ordersRepository.findById(id);
+            Optional<Orders> opt = findOrderByIdOrCode(id);
             if (opt.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("message", "Không tìm thấy giao dịch với mã #" + id));
             }
 
             Orders order = opt.get();
+            Customer customer = order.getCustomer();
+            if (customer != null) {
+                customer = customerRepository.findByIdForUpdate(customer.getCustomer_id()).orElse(customer);
+                if (entityManager != null) {
+                    entityManager.refresh(customer, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+                }
+            }
+            if (entityManager != null) {
+                entityManager.refresh(order, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+            }
+            if (!isPendingStatus(order.getPayment_status())) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of("message", "Giao dịch đã được xử lý trước đó (Trạng thái: " + order.getPayment_status() + ")."));
+            }
             order.setPayment_status("REJECTED");
             ordersRepository.save(order);
 
             String reason = body != null && body.containsKey("reason") ? body.get("reason") : "Chưa nhận được thanh toán hợp lệ";
 
-            Customer customer = order.getCustomer();
             if (customer != null) {
                 Notification notif = Notification.builder()
                         .customerId(customer.getCustomer_id())
@@ -324,6 +427,10 @@ public class FinanceAdminController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("message", "Lỗi khi từ chối giao dịch: " + e.getMessage()));
         }
+    }
+
+    private boolean isPendingStatus(String status) {
+        return "PENDING".equalsIgnoreCase(status) || "WAITING".equalsIgnoreCase(status);
     }
 
     // Helper: kiểm tra đơn hàng có nằm trong kỳ lọc không

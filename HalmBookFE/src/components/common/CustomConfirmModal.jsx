@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 let openConfirmFn = null;
 
@@ -48,13 +48,13 @@ export default function CustomConfirmModal() {
     };
   }, []);
 
-  const handleClose = (result) => {
+  const handleClose = useCallback((result) => {
     if (resolver) {
       resolver(result);
     }
     setConfig(null);
     setResolver(null);
-  };
+  }, [resolver]);
 
   // Lắng nghe phím Escape để hủy
   useEffect(() => {
@@ -65,7 +65,7 @@ export default function CustomConfirmModal() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [config, resolver]);
+  }, [config, handleClose]);
 
   if (!config) return null;
 

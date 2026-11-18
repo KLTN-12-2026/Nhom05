@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { isTokenValid, getValidAuthToken, clearAuthSession } from '@/services/authToken';
+import { API_BASE_URL } from '@/constants/apiEndpoints';
 
 const CHECK_INTERVAL_MS = 4000; // Kiểm tra định kỳ mỗi 4 giây
 const COUNTDOWN_SECONDS = 10;   // Đếm ngược 10 giây trước khi về trang chủ
@@ -111,7 +112,7 @@ export default function AccountLockedCountdownModal() {
       if (!token) return;
 
       try {
-        const res = await axios.get('http://localhost:8082/api/auth/check-status', {
+        const res = await axios.get(`${API_BASE_URL}/api/auth/check-status`, {
           headers: {
             Authorization: `Bearer ${token}`,
             'Cache-Control': 'no-cache',

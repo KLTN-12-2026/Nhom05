@@ -1,63 +1,18 @@
-import { useState, useEffect, useRef } from 'react';
+import { halmTailwindConfig, inlinePageStyle1 } from './styles/NhiemVu.styles.js';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import UserLayout from './layout/UserLayout';
 import StreakDiemDanh from './StreakDiemDanh';
 import { getCurrentCustomer } from '@/services/customerService';
 import { getCustomerBookshelf } from '@/services/orderService';
 import { checkinDailyStreak, getMyTierSummary } from '@/services/tierService';
-import { isDarkMode, applyTheme } from '@/utils/theme';
-import { getTierInfo, formatCustomerId, getTierAvatarFrame, getTierBadgeClass, getTierLevel } from '@/utils/tierUtils';
+import { isDarkMode } from '@/utils/theme';
+import { formatCustomerId, getTierInfo, getTierBadgeClass } from '@/utils/tierUtils';
 import AvatarWithFrame from '@/components/common/AvatarWithFrame';
 import { getClaimedMissions, claimMissionReward } from '@/services/userFeatureService';
-import { clearAuthSession } from '@/services/authToken';
+import { logoutUser } from '@/services/authToken';
 
-const halmTailwindConfig = {
-    darkMode: 'class',
-    theme: {
-        extend: {
-            fontFamily: {
-                sans: ['var(--font-ui)', 'sans-serif'],
-                display: ['var(--font-display)', 'sans-serif'],
-                metadata: ['var(--font-metadata)', 'sans-serif'],
-                editorial: ['var(--font-editorial)', 'sans-serif'],
-            },
-            colors: {
-                paper: {
-                    50: '#FAF8F5',
-                    100: '#F5F2EB',
-                    200: '#EAE5D9',
-                    DEFAULT: '#F7F4EE',
-                    surface: '#FFFEFA',
-                    border: '#E3DDD0',
-                },
-                ink: {
-                    50: '#F5F5F4',
-                    300: '#A8A6A1',
-                    muted: '#66645E',
-                    DEFAULT: '#1E1F1D',
-                    pure: '#111210',
-                },
-                wine: {
-                    DEFAULT: '#8E3038',
-                    light: '#A83B46',
-                    dark: '#6F252C',
-                },
-                gold: {
-                    DEFAULT: '#B8860B',
-                    light: '#D4AF37',
-                },
-                night: {
-                    bg: '#111210',
-                    surface: '#181916',
-                    card: '#20221E',
-                    border: '#2C2E29',
-                    text: '#EDE9DF',
-                    muted: '#96938B',
-                }
-            }
-        }
-    }
-};
+
 
 const ASSETS = {
     fonts: 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Open+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,600&family=Roboto:wght@300;400;500;700;900&display=swap',
@@ -103,7 +58,7 @@ export default function NhiemVu() {
             if (Array.isArray(list)) {
                 setBookshelfCount(list.length);
             }
-        } catch (e) {
+        } catch {
             // silent fallback
         }
     };
@@ -163,21 +118,16 @@ export default function NhiemVu() {
         };
     }, []);
 
-    const userTierLevel = getTierLevel(customer?.membershipTier);
-    const avatarFrame = getTierAvatarFrame(userTierLevel);
-    const tierBadgeClass = getTierBadgeClass(userTierLevel);
-    const tierInfo = getTierInfo(customer?.membershipTier);
     const potatoBalance = customer?.potatoBalance ?? 0;
     const streakDays = customer?.streakDays ?? 0;
     const customerName = customer?.customerName || customer?.name || 'Bạn đọc HALM';
-    const customerInitial = customerName.charAt(0).toUpperCase();
     const avatarSrc = customer?.avatar || customer?.avatarUrl;
     const customerIdDisplay = formatCustomerId(customer?.customerId || customer?.customer_id);
 
     const navigate = useNavigate();
-    const todayKey = new Date().toISOString().slice(0, 10);
+    const todayKey = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
-    const getInitialDailyTasks = () => {
+    const getInitialDailyTasks = useCallback(() => {
         try {
             return {
                 checkin: localStorage.getItem(`halm_daily_action_checkin_${todayKey}`) === 'true',
@@ -190,7 +140,7 @@ export default function NhiemVu() {
         } catch {
             return { checkin: false, read: false, chat: false, search: false, offers: false, bookshelf: false };
         }
-    };
+    }, [todayKey]);
 
     const [dailyTasks, setDailyTasks] = useState(getInitialDailyTasks);
 
@@ -213,7 +163,7 @@ export default function NhiemVu() {
                     } catch {}
                     setDailyTasks(prev => ({ ...prev, checkin: true }));
                 }
-            } catch (err) {
+            } catch {
                 // ignore
             }
         };
@@ -221,7 +171,7 @@ export default function NhiemVu() {
 
         window.addEventListener('halm-daily-task-completed', handleTaskCompleted);
         return () => window.removeEventListener('halm-daily-task-completed', handleTaskCompleted);
-    }, [todayKey]);
+    }, [todayKey, getInitialDailyTasks]);
 
     const markTaskDone = (key) => {
         try {
@@ -246,7 +196,7 @@ export default function NhiemVu() {
                 } else {
                     showToast("Điểm Danh Hằng Ngày", res?.message || "Đã ghi nhận điểm danh hôm nay! Nhận thưởng nhé 🔥");
                 }
-            } catch (err) {
+            } catch {
                 markTaskDone('checkin');
                 showToast("Điểm Danh Hằng Ngày", "Đã ghi nhận điểm danh thành công! Nhận thưởng nhé 🔥");
             }
@@ -534,96 +484,7 @@ export default function NhiemVu() {
 
     return (
         <>
-            <style>{String.raw`
-                :root {
-                    --font-display: "Inter", sans-serif;
-                    --font-ui: "Inter", sans-serif;
-                    --font-metadata: "Roboto", sans-serif;
-                    --font-editorial: "Open Sans", sans-serif;
-                }
-                .nhiem-vu-page {
-                    font-family: var(--font-ui);
-                    background-color: #F7F4EE;
-                    color: #1E1F1D;
-                    -webkit-font-smoothing: antialiased;
-                }
-                .dark .nhiem-vu-page {
-                    background-color: #111210;
-                    color: #EDE9DF;
-                }
-                .nhiem-vu-page [class~="bg-paper"] { background: #F7F4EE; }
-                .nhiem-vu-page [class~="bg-paper-surface"] { background: #FFFEFA; }
-                .nhiem-vu-page [class~="bg-paper-50"] { background: #FAF8F5; }
-                .nhiem-vu-page [class~="bg-paper-100"] { background: #F5F2EB; }
-                .nhiem-vu-page [class~="bg-paper-200"] { background: #EAE5D9; }
-                .nhiem-vu-page [class~="bg-wine"] { background: #8E3038; }
-                .nhiem-vu-page [class~="bg-gold"] { background: #B8860B; }
-                .nhiem-vu-page [class~="bg-night-card"] { background: #20221E; }
-                .nhiem-vu-page [class~="bg-night-surface"] { background: #181916; }
-                .nhiem-vu-page [class~="text-ink"] { color: #1E1F1D; }
-                .nhiem-vu-page [class~="text-ink-muted"] { color: #66645E; }
-                .nhiem-vu-page [class~="text-wine"] { color: #8E3038; }
-                .nhiem-vu-page [class~="text-gold"] { color: #B8860B; }
-                .nhiem-vu-page [class~="border-paper-border"] { border-color: #E3DDD0; }
-                .nhiem-vu-page [class~="border-night-border"] { border-color: #2C2E29; }
-                .nhiem-vu-page [class~="potato-badge"] { background: rgb(184 134 11/.12); color: #B8860B; border: 1px solid rgb(184 134 11/.25); }
-
-                html.dark .nhiem-vu-page [class~="dark:bg-night-card"] { background: #20221E; }
-                html.dark .nhiem-vu-page [class~="dark:bg-night-surface"] { background: #181916; }
-                html.dark .nhiem-vu-page [class~="dark:bg-gold"] { background: #B8860B; }
-                html.dark .nhiem-vu-page [class~="dark:text-gold"] { color: #B8860B; }
-                html.dark .nhiem-vu-page [class~="dark:text-night-text"] { color: #EDE9DF; }
-                html.dark .nhiem-vu-page [class~="dark:text-night-muted"] { color: #96938B; }
-                html.dark .nhiem-vu-page [class~="potato-badge"] { background: rgb(212 175 55/.15); color: #D4AF37; border-color: rgb(212 175 55/.3); }
-
-                html.dark .nhiem-vu-page [class*="user-sidebar-card"],
-                html.dark .nhiem-vu-page [class*="dark:bg-night-surface"],
-                html.dark .nhiem-vu-page [class*="dark:bg-[#181916]"] {
-                    background-color: #181916 !important;
-                    border-color: #2C2E29 !important;
-                }
-                html.dark .nhiem-vu-page [class*="user-sidebar-box"] {
-                    background-color: #181916 !important;
-                    border-color: #2C2E29 !important;
-                }
-                html.dark .nhiem-vu-page [class*="user-sidebar-card"] h2,
-                html.dark .nhiem-vu-page [class*="user-sidebar-card"] [class*="font-display"],
-                html.dark .nhiem-vu-page [class*="user-sidebar-box"] span.text-2xl,
-                html.dark .nhiem-vu-page [class*="user-sidebar-box"] span:first-child {
-                    color: #EDE9DF !important;
-                }
-                html.dark .nhiem-vu-page [class*="user-sidebar-box"] span:last-child,
-                html.dark .nhiem-vu-page [class*="user-sidebar-card"] p {
-                    color: #9CA3AF !important;
-                }
-                html.dark .nhiem-vu-page [class*="dark:border-night-border"],
-                html.dark .nhiem-vu-page [class*="dark:border-[#2C2E29]"] {
-                    border-color: #2C2E29 !important;
-                }
-                html.dark .nhiem-vu-page [class*="dark:bg-[#242116]"] {
-                    background-color: #242116 !important;
-                }
-                html.dark .nhiem-vu-page [class*="dark:border-[#52441D]"] {
-                    border-color: #52441D !important;
-                }
-                html.dark .nhiem-vu-page [class~="bg-paper-surface"] {
-                    background-color: #181916 !important;
-                }
-                html.dark .nhiem-vu-page [class~="bg-paper"] {
-                    background-color: #111210 !important;
-                }
-                html.dark .nhiem-vu-page [class~="border-paper-border"] {
-                    border-color: #2C2E29 !important;
-                }
-                html.dark .nhiem-vu-page [class~="text-ink"],
-                html.dark .nhiem-vu-page .text-ink {
-                    color: #EDE9DF !important;
-                }
-                html.dark .nhiem-vu-page [class~="text-ink-muted"],
-                html.dark .nhiem-vu-page .text-ink-muted {
-                    color: #9CA3AF !important;
-                }
-            `}</style>
+            <style>{inlinePageStyle1}</style>
 
             <UserLayout className="nhiem-vu-page" onThemeChange={setIsDark}>
                 {/* Toast Notification */}
@@ -773,8 +634,8 @@ export default function NhiemVu() {
                                 <div className="pt-2 border-t border-paper-border dark:border-[#2C2E29] mt-2">
                                     <button
                                         type="button"
-                                        onClick={() => {
-                                            clearAuthSession();
+                                        onClick={async () => {
+                                            await logoutUser();
                                             window.location.assign('/');
                                         }}
                                         className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-metadata-spec font-bold text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"

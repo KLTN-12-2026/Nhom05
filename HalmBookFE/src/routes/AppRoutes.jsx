@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import ProtectedRoute from '@/components/guards/ProtectedRoute';
-import { ROUTES } from '@/constants/routes';
+import { ROUTES, ROUTE_ALIASES } from '@/constants/routes';
 
 // ==================== EAGER IMPORT CRITICAL PAGES (Cho tốc độ tải trang chủ & đăng nhập nhanh nhất) ====================
 import TrangChu from '@/components/user/TrangChu';
@@ -45,20 +45,20 @@ export default function AppRoutes() {
       <Routes>
         {/* 1. KHU VỰC CÔNG KHAI: Khách vãng lai và Thành viên đều xem được */}
         <Route path={ROUTES.ROOT} element={<TrangChu />} />
-        <Route path="/trangchu" element={<Navigate to="/" replace />} />
-        <Route path="/trang-chu" element={<Navigate to="/" replace />} />
+        {ROUTE_ALIASES.public.map(({ path, to }) => <Route key={path} path={path} element={<Navigate to={to} replace />} />)}
+        
         <Route path={ROUTES.LOGIN} element={<DangNhap />} />
         <Route path="/login" element={<DangNhap />} />
         <Route path={ROUTES.ADMIN_LOGIN || "/admin/login"} element={<DangNhap />} />
         <Route path={ROUTES.FORGOT_PASSWORD} element={<QuenMatKhau />} />
         <Route path={ROUTES.TIERS} element={<HangTv />} />
         <Route path={ROUTES.OFFERS} element={<UuDai />} />
-        <Route path="/uu-dai" element={<Navigate to="/uudai" replace />} />
-        <Route path="/offers" element={<Navigate to="/uudai" replace />} />
-        <Route path="/khuyen-mai" element={<Navigate to="/uudai" replace />} />
+        
+        
+        
         <Route path={ROUTES.CATEGORY} element={<DanhMucSach />} />
         <Route path={ROUTES.CATEGORY_BY_TOPIC} element={<DanhMucSach />} />
-        <Route path="/danh-muc" element={<Navigate to="/danhmuc" replace />} />
+        
         <Route path="/danh-muc/:topic" element={<DanhMucSach />} />
         <Route path={ROUTES.BOOK_DETAIL} element={<ChiTietSach />} />
         <Route path={ROUTES.BOOK_DETAIL_BY_ID} element={<ChiTietSach />} />
@@ -69,27 +69,27 @@ export default function AppRoutes() {
         {/* 2. KHU VỰC USER: Bắt buộc đăng nhập (Token còn hạn) */}
         <Route element={<ProtectedRoute />}>
           <Route path={ROUTES.PROFILE} element={<CaNhan />} />
-          <Route path="/profile" element={<Navigate to="/canhan" replace />} />
-          <Route path="/ca-nhan" element={<Navigate to="/canhan" replace />} />
-          <Route path="/thongtincanhan" element={<Navigate to="/canhan" replace />} />
+          {ROUTE_ALIASES.user.map(({ path, to }) => <Route key={path} path={path} element={<Navigate to={to} replace />} />)}
+          
+          
           <Route path={ROUTES.MY_BOOKSHELF} element={<TuSachCn />} />
           <Route path={ROUTES.CART} element={<GioHang />} />
           <Route path={ROUTES.PAYMENT} element={<ThanhToan />} />
-          <Route path={ROUTES.WALLET} element={<Navigate to="/canhan?tab=wallet" replace />} />
-          <Route path="/wallet" element={<Navigate to="/canhan?tab=wallet" replace />} />
-          <Route path="/vi" element={<Navigate to="/canhan?tab=wallet" replace />} />
-          <Route path="/vi-khoai" element={<Navigate to="/canhan?tab=wallet" replace />} />
-          <Route path="/lich-su" element={<Navigate to="/canhan?tab=history" replace />} />
-          <Route path="/lichsu" element={<Navigate to="/canhan?tab=history" replace />} />
-          <Route path="/lichsugiaodich" element={<Navigate to="/canhan?tab=history" replace />} />
-          <Route path="/history" element={<Navigate to="/canhan?tab=history" replace />} />
+          
+          
+          
+          
+          
+          
+          
+          
           <Route path={ROUTES.MISSIONS} element={<NhiemVu />} />
-          <Route path="/nhiemvu" element={<NhiemVu />} />
-          <Route path="/hotro" element={<Navigate to="/canhan?tab=support" replace />} />
-          <Route path="/ho-tro" element={<Navigate to="/canhan?tab=support" replace />} />
-          <Route path="/support" element={<Navigate to="/canhan?tab=support" replace />} />
-          <Route path="/khieunai" element={<Navigate to="/canhan?tab=support" replace />} />
-          <Route path="/khieu-nai" element={<Navigate to="/canhan?tab=support" replace />} />
+          
+          
+          
+          
+          
+          
         </Route>
 
         {/* 3. KHU VỰC ADMIN (Bắt buộc quyền ADMIN) */}
@@ -105,16 +105,16 @@ export default function AppRoutes() {
           <Route path={ROUTES.ADMIN_SUPPORT} element={<HoTroThongBao />} />
 
           {/* Đường dẫn alias/legacy từ các file HTML của Admin - tránh rơi vào 404 về User */}
-          <Route path="/TongQuan.html" element={<Navigate to={ROUTES.ADMIN} replace />} />
-          <Route path="/BaoCao&ThongKe.html" element={<Navigate to={ROUTES.ADMIN_STATISTICS} replace />} />
-          <Route path="/BaoCaoThongKe.html" element={<Navigate to={ROUTES.ADMIN_STATISTICS} replace />} />
-          <Route path="/QuanLySach.html" element={<Navigate to={ROUTES.ADMIN_BOOKS} replace />} />
-          <Route path="/GiaoDichThueSach.html" element={<Navigate to={ROUTES.ADMIN_RENTAL_TRANSACTIONS} replace />} />
-          <Route path="/QuanLyTaiChinh.html" element={<Navigate to={ROUTES.ADMIN_FINANCE} replace />} />
-          <Route path="/QuanLyKhachHang.html" element={<Navigate to={ROUTES.ADMIN_CUSTOMERS} replace />} />
-          <Route path="/QuanLyUuDai.html" element={<Navigate to={ROUTES.ADMIN_OFFERS} replace />} />
-          <Route path="/ThongBaoHoTro.html" element={<Navigate to={ROUTES.ADMIN_SUPPORT} replace />} />
-          <Route path="/QuanLyGiaoDien.html" element={<Navigate to={ROUTES.ADMIN_UI} replace />} />
+          {ROUTE_ALIASES.admin.map(({ path, to }) => <Route key={path} path={path} element={<Navigate to={to} replace />} />)}
+          
+          
+          
+          
+          
+          
+          
+          
+          
         </Route>
 
         {/* 4. FALLBACK 404 CATCH-ALL */}

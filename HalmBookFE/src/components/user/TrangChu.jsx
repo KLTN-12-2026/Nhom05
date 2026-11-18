@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, useMemo } from "react";
-import logo from "@/assets/images/logo.png";
+import { PAGE_STYLES } from './styles/TrangChu.styles.js';
+import { useEffect, useState, useMemo } from "react";
 import axiosInstance from "@/services/axiosClient";
 import UserLayout from "./layout/UserLayout";
-import { getBanners } from "@/services/bannerService";
+import { getBanners, fetchBanners } from "@/services/bannerService";
 
 
 
@@ -15,921 +15,7 @@ function applyImageFallback(event, fallbackSrc) {
   image.src = fallbackSrc;
 }
 
-const PAGE_STYLES = [
-  "",
-  "        /* ========================================================",
-  "           TYPOGRAPHY & CSS VARIABLES (STRICTLY 3 FONTS)",
-  "           ======================================================== */",
-  "        :root {",
-  "            --font-display: \"Inter\", sans-serif;",
-  "            --font-ui: \"Inter\", sans-serif;",
-  "            --font-metadata: \"Roboto\", sans-serif;",
-  "            --font-editorial: \"Open Sans\", sans-serif;",
-  "        }",
-  "",
-  "        html {",
-  "            scroll-behavior: smooth;",
-  "            overscroll-behavior-x: none;",
-  "        }",
-  "",
-  "        body {",
-  "            font-family: var(--font-ui);",
-  "            background-color: #F7F4EE;",
-  "            color: #1E1F1D;",
-  "            overflow-x: hidden;",
-  "            overscroll-behavior-x: none;",
-  "            -webkit-font-smoothing: antialiased;",
-  "            transition: background-color 0.4s ease, color 0.4s ease;",
-  "        }",
-  "",
-  "        .dark body {",
-  "            background-color: #111210;",
-  "            color: #EDE9DF;",
-  "        }",
-  "",
-  "        .font-display-hero {",
-  "            font-family: var(--font-display);",
-  "            font-weight: 900;",
-  "            letter-spacing: -0.03em;",
-  "        }",
-  "",
-  "        .font-editorial-body {",
-  "            font-family: var(--font-editorial);",
-  "            line-height: 1.75;",
-  "        }",
-  "",
-  "        .font-metadata-spec {",
-  "            font-family: var(--font-metadata);",
-  "        }",
-  "",
-  "        /* Subtle paper grain texture overlay */",
-  "        .paper-grain {",
-  "            background-image: radial-gradient(rgba(30, 31, 29, 0.04) 1px, transparent 1px);",
-  "            background-size: 28px 28px;",
-  "        }",
-  "        .dark .paper-grain {",
-  "            background-image: radial-gradient(rgba(237, 233, 223, 0.04) 1px, transparent 1px);",
-  "            background-size: 28px 28px;",
-  "        }",
-  "",
-  "        /* Starry sky overlay for dark mode */",
-  "        #starry-background {",
-  "            position: fixed;",
-  "            top: 0;",
-  "            left: 0;",
-  "            width: 100%;",
-  "            height: 100%;",
-  "            pointer-events: none;",
-  "            z-index: 1;",
-  "            opacity: 0;",
-  "            transition: opacity 0.6s ease;",
-  "        }",
-  "        .dark #starry-background {",
-  "            opacity: 1;",
-  "        }",
-  "        .star {",
-  "            position: absolute;",
-  "            background-color: #fff;",
-  "            border-radius: 50%;",
-  "            pointer-events: none;",
-  "        }",
-  "        @keyframes starTwinkle {",
-  "            0%, 100% { opacity: 0.2; transform: scale(0.8); }",
-  "            50% { opacity: 0.9; transform: scale(1.3); }",
-  "        }",
-  "",
-  "        /* HALMBOOK Editorial Header Styles */",
-  "        .font-nunito {",
-  "            font-family: 'Nunito', sans-serif;",
-  "        }",
-  "",
-  "        .header-transition {",
-  "            transition: transform 0.38s cubic-bezier(0.16, 1, 0.3, 1), padding 0.3s ease, background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;",
-  "        }",
-  "",
-  "        /* HALMBOOK Chromatic Header - Hòa quyện đa sắc, chuyển tầng mượt mà và đồng nhất */",
-  "        #navbar {",
-  "            background: linear-gradient(",
-  "                90deg, ",
-  "                #EBE3D5 0%,        /* Bên trái: màu đậm hơn (warm parchment & amber-wine tint) */",
-  "                #F2EDE3 12%,       /* Chuyển tầng mượt mà */",
-  "                #FAF7F2 26%,       /* Bên trái nhạt dần (airy luminous cream) */",
-  "                #F8F5EE 38%,       /* Nhẹ nhàng thanh thoát */",
-  "                #ECE3D0 50%,       /* Ở giữa lại đậm (warm gold-parchment depth) */",
-  "                #E8DECB 54%,       /* Điểm nhấn đậm trung tâm */",
-  "                #F6F2E8 68%,       /* Chuyển tiếp dịu lại */",
-  "                #FAF7F2 78%,       /* Êm dịu */",
-  "                #EFE7D8 88%,       /* Ánh ấm chuyển dần */",
-  "                #EBE2D2 100%       /* Bên phải: hòa quyện tông ấm đồng nhất */",
-  "            ) !important;",
-  "            backdrop-filter: blur(16px);",
-  "            -webkit-backdrop-filter: blur(16px);",
-  "            border-bottom: 1px solid rgba(220, 212, 198, 0.7) !important;",
-  "            color: #242321;",
-  "            box-shadow: 0 4px 20px -4px rgba(36, 35, 33, 0.05) !important;",
-  "            transition: transform 0.38s cubic-bezier(0.16, 1, 0.3, 1), padding 0.3s ease, background 0.4s ease, border-color 0.3s ease, box-shadow 0.3s ease;",
-  "            will-change: transform;",
-  "            position: fixed;",
-  "            top: 0;",
-  "            width: 100%;",
-  "        }",
-  "",
-  "        /* Lớp hòa quyện đa sắc tăng cường (Chromatic Blend Layers) */",
-  "        #navbar::before {",
-  "            content: '';",
-  "            position: absolute;",
-  "            inset: 0;",
-  "            pointer-events: none;",
-  "            z-index: 0;",
-  "            background: ",
-  "                /* Bên trái đậm hơn với sắc đỏ rượu vang và hổ phách trầm */",
-  "                radial-gradient(ellipse 460px 100% at 0% 50%, rgba(139, 74, 60, 0.12) 0%, rgba(212, 175, 55, 0.08) 50%, transparent 80%),",
-  "                /* Ở giữa đậm với ánh hoàng kim quý phái */",
-  "                radial-gradient(ellipse 380px 100% at 50% 50%, rgba(212, 175, 55, 0.15) 0%, rgba(139, 74, 60, 0.06) 60%, transparent 80%),",
-  "                /* Bên phải hòa quyện hổ phách và đỏ rượu */",
-  "                radial-gradient(ellipse 400px 100% at 100% 50%, rgba(212, 175, 55, 0.15) 0%, rgba(139, 74, 60, 0.08) 55%, transparent 80%);",
-  "            transition: opacity 0.4s ease;",
-  "        }",
-  "",
-  "        /* Seamless blended bottom edge transition (Đường viền đáy hòa quyện đa sắc liền mạch) */",
-  "        #navbar::after {",
-  "            content: '';",
-  "            position: absolute;",
-  "            bottom: -1px;",
-  "            left: 0;",
-  "            right: 0;",
-  "            height: 1px;",
-  "            background: linear-gradient(90deg, ",
-  "                rgba(139, 74, 60, 0.5) 0%, ",
-  "                rgba(212, 175, 55, 0.35) 15%, ",
-  "                rgba(230, 225, 216, 0.7) 28%, ",
-  "                rgba(212, 175, 55, 0.55) 50%, ",
-  "                rgba(139, 74, 60, 0.45) 54%, ",
-  "                rgba(230, 225, 216, 0.7) 75%, ",
-  "                rgba(212, 175, 55, 0.5) 100%",
-  "            );",
-  "            pointer-events: none;",
-  "            z-index: 1;",
-  "        }",
-  "",
-  "        #navbar.nav-hidden {",
-  "            transform: translateY(-100%) !important;",
-  "        }",
-  "",
-  "        .dark #navbar {",
-  "            background: linear-gradient(",
-  "                90deg, ",
-  "                #251618 0%,        /* Bên trái: màu đậm hơn (rich obsidian wine-dark tone) */",
-  "                #1e1616 12%,       /* Chuyển tiếp mượt */",
-  "                #131411 26%,       /* Nhạt dần (deep smooth obsidian dark) */",
-  "                #10110F 38%,       /* Êm dịu */",
-  "                #261F14 50%,       /* Ở giữa lại đậm (rich obsidian amber-gold tone) */",
-  "                #221A11 54%,       /* Đậm nét ánh kim trầm */",
-  "                #161714 68%,       /* Chuyển tiếp dịu lại */",
-  "                #111210 78%,       /* Êm dịu */",
-  "                #1E1815 88%,       /* Ánh ấm chuyển dần */",
-  "                #241518 100%       /* Bên phải: hòa quyện tông trầm đồng nhất */",
-  "            ) !important;",
-  "            backdrop-filter: blur(16px);",
-  "            -webkit-backdrop-filter: blur(16px);",
-  "            border-bottom: 1px solid rgba(56, 52, 44, 0.7) !important;",
-  "            color: #EDE9DF;",
-  "            box-shadow: 0 4px 25px -4px rgba(0, 0, 0, 0.6) !important;",
-  "        }",
-  "",
-  "        .dark #navbar::before {",
-  "            background: ",
-  "                radial-gradient(ellipse 460px 100% at 0% 50%, rgba(139, 74, 60, 0.28) 0%, rgba(212, 175, 55, 0.15) 50%, transparent 80%),",
-  "                radial-gradient(ellipse 380px 100% at 50% 50%, rgba(212, 175, 55, 0.22) 0%, rgba(139, 74, 60, 0.12) 60%, transparent 80%),",
-  "                radial-gradient(ellipse 400px 100% at 100% 50%, rgba(212, 175, 55, 0.25) 0%, rgba(139, 74, 60, 0.18) 55%, transparent 80%);",
-  "        }",
-  "",
-  "        .dark #navbar::after {",
-  "            background: linear-gradient(90deg, ",
-  "                rgba(139, 74, 60, 0.6) 0%, ",
-  "                rgba(212, 175, 55, 0.45) 15%, ",
-  "                rgba(44, 46, 41, 0.8) 28%, ",
-  "                rgba(212, 175, 55, 0.65) 50%, ",
-  "                rgba(139, 74, 60, 0.55) 54%, ",
-  "                rgba(44, 46, 41, 0.8) 75%, ",
-  "                rgba(212, 175, 55, 0.6) 100%",
-  "            );",
-  "        }",
-  "",
-  "        /* Functional label font sizing (+2px: 10px -> 12px) */",
-  "        #navbar .icon-text {",
-  "            font-size: 12px !important;",
-  "            line-height: 1.25 !important;",
-  "        }",
-  "",
-  "        /* Hover colors matching HALMBOOK wine / gold palette */",
-  "        #navbar .group:hover .nav-text,",
-  "        #navbar .group:hover .icon-text,",
-  "        #navbar .nav-text:hover,",
-  "        #navbar button:hover .nav-text {",
-  "            color: #8B4A3C !important;",
-  "        }",
-  "",
-  "        .dark #navbar .group:hover .nav-text,",
-  "        .dark #navbar .group:hover .icon-text,",
-  "        .dark #navbar .nav-text:hover,",
-  "        .dark #navbar button:hover .nav-text {",
-  "            color: #D4AF37 !important;",
-  "        }",
-  "",
-  "        /* ========================================================",
-  "           HOẠT CẢNH MÁY BAY KÉO CỜ VIỆT NAM TRÊN HEADER",
-  "           ======================================================== */",
-  "        #airplane-stage-layer {",
-  "            position: fixed;",
-  "            inset: 0;",
-  "            width: 100vw;",
-  "            height: 100vh;",
-  "            overflow: hidden;",
-  "            pointer-events: none;",
-  "            z-index: 1;",
-  "        }",
-  "",
-  "        #airplane-effects-canvas {",
-  "            position: absolute;",
-  "            inset: 0;",
-  "            width: 100%;",
-  "            height: 100%;",
-  "            pointer-events: none;",
-  "        }",
-  "",
-  "        #header-content-wrapper {",
-  "            will-change: transform;",
-  "            transform-origin: left center;",
-  "            position: relative;",
-  "            z-index: 20;",
-  "        }",
-  "",
-  "        .airplane-entity {",
-  "            position: absolute;",
-  "            top: 48px;",
-  "            transform: translateY(-50%);",
-  "            display: flex;",
-  "            align-items: center;",
-  "            pointer-events: none;",
-  "            user-select: none;",
-  "            z-index: 1;",
-  "            filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.28));",
-  "            will-change: transform;",
-  "        }",
-  "",
-  "        /* WebGL 3D Cloth Simulation Container */",
-  "        .airplane-flag-canvas {",
-  "            position: relative;",
-  "            transform-origin: right center;",
-  "            will-change: transform;",
-  "            overflow: visible;",
-  "        }",
-  "",
-  "        /* Propeller & Rotor spin blur */",
-  "        .airplane-propeller {",
-  "            transform-box: fill-box;",
-  "            transform-origin: center;",
-  "            animation: aeroPropSpin 0.05s linear infinite;",
-  "        }",
-  "",
-  "        @keyframes aeroPropSpin {",
-  "            0% { transform: rotate(0deg); }",
-  "            100% { transform: rotate(360deg); }",
-  "        }",
-  "",
-  "        @media (prefers-reduced-motion: reduce) {",
-  "            .airplane-flag-canvas {",
-  "                animation: none !important;",
-  "            }",
-  "            .airplane-propeller {",
-  "                animation: none !important;",
-  "            }",
-  "        }",
-  "",
-  "        /* ========================================================",
-  "           EDITORIAL BROADCAST & HERO PRESENTATION",
-  "           ======================================================== */",
-  "",
-  "        .hero-broadcast {",
-  "            width: 100%;",
-  "            height: 100%;",
-  "            /* Adjust these two values to control the banner's responsive height. */",
-  "            min-height: 100vh;",
-  "            max-height: 120vh;",
-  "            margin: 0;",
-  "            border: none;",
-  "            border-radius: 0;",
-  "            overflow: hidden;",
-  "            background: transparent;",
-  "            box-shadow: none;",
-  "            display: flex;",
-  "            flex-direction: column;",
-  "            justify-content: space-between;",
-  "            position: relative;",
-  "            transition: background 0.4s ease;",
-  "        }",
-  "        /* Ambient luminous color aura */",
-  "        .hero-broadcast::before {",
-  "            content: '';",
-  "            position: absolute;",
-  "            inset: 0;",
-  "            background: radial-gradient(circle at 82% 40%, rgba(212,175,55,0.12) 0%, transparent 55%),",
-  "                        radial-gradient(circle at 18% 70%, rgba(142,48,56,0.1) 0%, transparent 60%);",
-  "            pointer-events: none;",
-  "            z-index: 1;",
-  "        }",
-  "        .hero-broadcast::after {",
-  "            display: none;",
-  "        }",
-  "        /* Dark mode: Deep seamless harmony with night-bg (#111210) */",
-  "        .dark .hero-broadcast {",
-  "            background: transparent;",
-  "            border: none;",
-  "            box-shadow: none;",
-  "        }",
-  "        .dark .hero-broadcast::before {",
-  "            background: radial-gradient(circle at 80% 40%, rgba(212,175,55,0.1) 0%, transparent 55%),",
-  "                        radial-gradient(circle at 18% 75%, rgba(142,48,56,0.15) 0%, transparent 60%);",
-  "        }",
-  "        .dark .hero-broadcast::after {",
-  "            display: none;",
-  "        }",
-  "        .hero-broadcast-viewport {",
-  "            position: relative;",
-  "            flex: 1;",
-  "            min-height: 0;",
-  "            overflow: hidden;",
-  "            z-index: 3;",
-  "        }",
-  "        .hero-broadcast-slide {",
-  "            position: absolute;",
-  "            inset: 0;",
-  "            display: grid;",
-  "            grid-template-columns: 1fr;",
-  "            gap: 24px;",
-  "            align-items: center;",
-  "            padding: 28px clamp(20px, 4vw, 64px);",
-  "            opacity: 0;",
-  "            transform: translateY(16px);",
-  "            pointer-events: none;",
-  "            transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);",
-  "        }",
-  "        @media (min-width: 900px) {",
-  "            .hero-broadcast-slide {",
-  "                /* The first track controls banner copy width; the second holds the book cards. */",
-  "                grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.65fr);",
-  "                gap: clamp(32px, 5vw, 72px);",
-  "                padding: 32px clamp(32px, 5vw, 80px);",
-  "            }",
-  "        }",
-  "        .hero-broadcast-slide.is-active {",
-  "            opacity: 1;",
-  "            transform: translateY(0);",
-  "            pointer-events: auto;",
-  "        }",
-  "        .hero-broadcast-books {",
-  "            display: flex;",
-  "            align-items: center;",
-  "            justify-content: center;",
-  "            gap: 18px;",
-  "            perspective: 1200px;",
-  "        }",
-  "        .hero-broadcast-book-card {",
-  "            position: relative;",
-  "            width: 120px;",
-  "            height: 175px;",
-  "            border-radius: 10px;",
-  "            overflow: hidden;",
-  "            box-shadow: 0 16px 32px rgba(0,0,0,0.38), 0 3px 8px rgba(0,0,0,0.2);",
-  "            transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.35s ease;",
-  "            transform-style: preserve-3d;",
-  "            background: #2a141a;",
-  "            flex-shrink: 0;",
-  "            border: 1px solid rgba(255,255,255,0.25);",
-  "        }",
-  "        @media (min-width: 640px) {",
-  "            .hero-broadcast-book-card {",
-  "                width: 135px;",
-  "                height: 195px;",
-  "            }",
-  "        }",
-  "        @media (min-width: 1280px) {",
-  "            .hero-broadcast-book-card {",
-  "                width: 155px;",
-  "                height: 220px;",
-  "            }",
-  "        }",
-  "        .hero-broadcast-book-card:hover {",
-  "            transform: translateY(-8px) scale(1.05) rotateY(-5deg);",
-  "            box-shadow: 0 24px 45px rgba(0,0,0,0.5);",
-  "        }",
-  "        .hero-broadcast-book-card img {",
-  "            width: 100%;",
-  "            height: 100%;",
-  "            object-fit: cover;",
-  "            display: block;",
-  "        }",
-  "        .hero-broadcast-book-card .card-badge {",
-  "            position: absolute;",
-  "            top: 8px;",
-  "            left: 8px;",
-  "            padding: 2px 8px;",
-  "            font-size: 9px;",
-  "            font-weight: 800;",
-  "            letter-spacing: 0.1em;",
-  "            text-transform: uppercase;",
-  "            border-radius: 4px;",
-  "            background: rgba(142,48,56,0.95);",
-  "            color: #fff;",
-  "            backdrop-filter: blur(4px);",
-  "            box-shadow: 0 2px 6px rgba(0,0,0,0.3);",
-  "        }",
-  "        .hero-broadcast-controls {",
-  "            display: flex;",
-  "            align-items: center;",
-  "            justify-content: space-between;",
-  "            padding: 10px clamp(20px, 4vw, 64px);",
-  "            border: none;",
-  "            background: transparent;",
-  "            position: relative;",
-  "            z-index: 4;",
-  "        }",
-  "        .dark .hero-broadcast-controls {",
-  "            border: none;",
-  "            background: transparent;",
-  "        }",
-  "        .hero-broadcast-controls button[data-broadcast-prev],",
-  "        .hero-broadcast-controls button[data-broadcast-next] {",
-  "            width: 34px;",
-  "            height: 34px;",
-  "            display: grid;",
-  "            place-items: center;",
-  "            border-radius: 50%;",
-  "            border: 1px solid rgba(142,48,56,0.25);",
-  "            background: rgba(255,255,255,0.75);",
-  "            color: #1E1F1D;",
-  "            font-size: 18px;",
-  "            font-weight: bold;",
-  "            cursor: pointer;",
-  "            transition: all 0.2s ease;",
-  "        }",
-  "        .dark .hero-broadcast-controls button[data-broadcast-prev],",
-  "        .dark .hero-broadcast-controls button[data-broadcast-next] {",
-  "            border-color: rgba(212,175,55,0.3);",
-  "            background: rgba(255,255,255,0.08);",
-  "            color: #EDE9DF;",
-  "        }",
-  "        .hero-broadcast-controls button:hover {",
-  "            transform: scale(1.1);",
-  "            background: #8E3038;",
-  "            color: #fff;",
-  "            border-color: #8E3038;",
-  "        }",
-  "        .dark .hero-broadcast-controls button:hover {",
-  "            background: #D4AF37;",
-  "            color: #111210;",
-  "            border-color: #D4AF37;",
-  "        }",
-  "        .hero-broadcast-dots {",
-  "            display: flex;",
-  "            gap: 8px;",
-  "            align-items: center;",
-  "        }",
-  "        .hero-broadcast-dots button {",
-  "            width: 8px;",
-  "            height: 8px;",
-  "            padding: 0;",
-  "            border: 0;",
-  "            border-radius: 50%;",
-  "            background: rgba(0,0,0,0.2);",
-  "            cursor: pointer;",
-  "            transition: all 0.25s ease;",
-  "        }",
-  "        .dark .hero-broadcast-dots button {",
-  "            background: rgba(255,255,255,0.25);",
-  "        }",
-  "        .hero-broadcast-dots button[aria-current=\"true\"] {",
-  "            width: 26px;",
-  "            border-radius: 999px;",
-  "            background: #8E3038;",
-  "        }",
-  "        .dark .hero-broadcast-dots button[aria-current=\"true\"] {",
-  "            background: #D4AF37;",
-  "        }",
-  "        @media (max-width:639px) { .floating-book-stage { min-height:390px; } .floating-book { transform:scale(.88); } .hero-broadcast-slide { grid-template-columns:1fr; gap:11px; } .hero-broadcast-art { height:118px; font-size:31px; } .hero-broadcast-books { gap:10px; } .hero-broadcast-book-card { width:82px; height:118px; } }",
-  "",
-  "        /* ========================================================",
-  "           CHAPTER 2 — FULL-VIEWPORT CINEMATIC BOOK REVEAL",
-  "           ======================================================== */",
-  "        .ch2-viewport-scene {",
-  "            position: relative;",
-  "            width: 100vw;",
-  "            isolation: isolate;",
-  "            left: 50%;",
-  "            right: 50%;",
-  "            margin-left: -50vw;",
-  "            margin-right: -50vw;",
-  "            min-height: auto;",
-  "            perspective: 2200px;",
-  "            perspective-origin: 50% 50%;",
-  "            overflow-x: clip;",
-  "            overflow-y: visible;",
-  "        }",
-  "",
-  "        .ch2-book-assembly-spread {",
-  "            position: relative;",
-  "            width: 100%;",
-  "            max-width: 1180px;",
-  "            margin: 0 auto;",
-  "            transform-style: preserve-3d;",
-  "        }",
-  "",
-  "        /* Deep editorial rich book wings */",
-  "        .ch2-wing {",
-  "            position: relative;",
-  "            transform-style: preserve-3d;",
-  "            will-change: transform, opacity;",
-  "            border-radius: 14px;",
-  "            box-shadow: 0 30px 70px -15px rgba(0, 0, 0, 0.28), 0 10px 25px -5px rgba(0, 0, 0, 0.15);",
-  "        }",
-  "        .dark .ch2-wing {",
-  "            box-shadow: 0 35px 80px -15px rgba(0, 0, 0, 0.7), 0 12px 30px -5px rgba(0, 0, 0, 0.5);",
-  "        }",
-  "",
-  "        /* Left wing: Royal Wine & Gold hardcover spread harmonizing with brand identity */",
-  "        .ch2-wing-left {",
-  "            background: linear-gradient(145deg, #3E1217 0%, #5C1B23 45%, #7D262F 80%, #320E12 100%);",
-  "            border: 1px solid rgba(212, 175, 55, 0.45);",
-  "            color: #EDE9DF;",
-  "            border-top-right-radius: 3px;",
-  "            border-bottom-right-radius: 3px;",
-  "        }",
-  "        .ch2-wing-left::after {",
-  "            content: '';",
-  "            position: absolute;",
-  "            top: 0;",
-  "            right: 0;",
-  "            width: 48px;",
-  "            height: 100%;",
-  "            background: linear-gradient(to left, rgba(0, 0, 0, 0.5), transparent);",
-  "            pointer-events: none;",
-  "            border-radius: 0 3px 3px 0;",
-  "        }",
-  "",
-  "        /* Right wing: Warm amber/wine-accented paper spread */",
-  "        .ch2-wing-right {",
-  "            background: linear-gradient(145deg, #FAF7EE 0%, #F5EFE0 60%, #EFE8D6 100%);",
-  "            border: 1px solid rgba(212, 175, 55, 0.35);",
-  "            color: #1E1F1D;",
-  "            border-top-left-radius: 3px;",
-  "            border-bottom-left-radius: 3px;",
-  "        }",
-  "        .dark .ch2-wing-right {",
-  "            background: linear-gradient(145deg, #20242B 0%, #1B1E24 60%, #15181D 100%);",
-  "            color: #EDE9DF;",
-  "            border-color: rgba(212, 175, 55, 0.25);",
-  "        }",
-  "        .ch2-wing-right::after {",
-  "            content: '';",
-  "            position: absolute;",
-  "            top: 0;",
-  "            left: 0;",
-  "            width: 48px;",
-  "            height: 100%;",
-  "            background: linear-gradient(to right, rgba(0, 0, 0, 0.3), transparent);",
-  "            pointer-events: none;",
-  "            border-radius: 3px 0 0 3px;",
-  "        }",
-  "",
-  "        /* Center Spine Hinge Bar */",
-  "        .ch2-spine-hinge {",
-  "            position: absolute;",
-  "            top: 0;",
-  "            bottom: 0;",
-  "            left: 50%;",
-  "            width: 14px;",
-  "            margin-left: -7px;",
-  "            background: linear-gradient(90deg, #0d131f 0%, #303746 40%, #D4AF37 50%, #303746 60%, #0d131f 100%);",
-  "            box-shadow: inset 0 0 8px rgba(0,0,0,0.8), 0 0 15px rgba(0,0,0,0.4);",
-  "            z-index: 30;",
-  "            border-radius: 3px;",
-  "            opacity: 0;",
-  "            transition: opacity 0.4s ease;",
-  "        }",
-  "",
-  "        /* ========================================================",
-  "           SCROLL SCENES TRANSITIONS & KEYFRAMES",
-  "           ======================================================== */",
-  "        .shelf-scroll-row {",
-  "            scrollbar-width: none;",
-  "            -ms-overflow-style: none;",
-  "            padding-top: 1.25rem;",
-  "            padding-bottom: 1.25rem;",
-  "            -webkit-overflow-scrolling: touch;",
-  "            overscroll-behavior-x: none;",
-  "            overscroll-behavior-y: auto;",
-  "            will-change: scroll-position;",
-  "            transform: translateZ(0);",
-  "        }",
-  "        .shelf-scroll-row::-webkit-scrollbar {",
-  "            display: none;",
-  "            width: 0;",
-  "            height: 0;",
-  "        }",
-  "        .book-card-item {",
-  "            position: relative;",
-  "            z-index: 1;",
-  "        }",
-  "        .book-card-item:hover {",
-  "            z-index: 20;",
-  "        }",
-  "        .book-hover-popup {",
-  "            position: fixed;",
-  "            z-index: 10000;",
-  "            width: min(300px, calc(100vw - 24px));",
-  "            padding: 14px;",
-  "            border: 1px solid rgba(142, 48, 56, 0.28);",
-  "            border-radius: 14px;",
-  "            background: rgba(255, 254, 250, 0.98);",
-  "            color: #1E1F1D;",
-  "            box-shadow: 0 18px 45px rgba(30, 31, 29, 0.22);",
-  "            pointer-events: none;",
-  "            opacity: 0;",
-  "            transform: translateY(5px);",
-  "            transition: opacity 0.16s ease, transform 0.16s ease;",
-  "        }",
-  "        .book-hover-popup.is-visible {",
-  "            opacity: 1;",
-  "            transform: translateY(0);",
-  "        }",
-  "        .dark .book-hover-popup {",
-  "            border-color: rgba(212, 175, 55, 0.35);",
-  "            background: rgba(32, 34, 30, 0.98);",
-  "            color: #EDE9DF;",
-  "            box-shadow: 0 18px 45px rgba(0, 0, 0, 0.5);",
-  "        }",
-  "        .book-hover-popup__title {",
-  "            margin: 0 0 3px;",
-  "            font-weight: 800;",
-  "            line-height: 1.3;",
-  "        }",
-  "        .book-hover-popup__author, .book-hover-popup__meta {",
-  "            color: #66645E;",
-  "            font-size: 12px;",
-  "        }",
-  "        .dark .book-hover-popup__author, .dark .book-hover-popup__meta {",
-  "            color: #96938B;",
-  "        }",
-  "        .book-hover-popup__description {",
-  "            display: -webkit-box;",
-  "            margin: 10px 0 0;",
-  "            overflow: hidden;",
-  "            color: #66645E;",
-  "            font-size: 12px;",
-  "            line-height: 1.5;",
-  "            -webkit-box-orient: vertical;",
-  "            -webkit-line-clamp: 3;",
-  "        }",
-  "        .dark .book-hover-popup__description { color: #B8B5AC; }",
-  "",
-  "        /* ========================================================",
-  "           CHAPTER 03 & 04 — DISTINCT EDITORIAL TRANSITIONS",
-  "           Chapter 3: Elegant upward perspective reveal",
-  "           Chapter 4: Smooth horizontal panoramic unfold",
-  "           ======================================================== */",
-  "        .ch3-page-stage {",
-  "            perspective: 1200px;",
-  "        }",
-  "        .ch3-page-leaf {",
-  "            position: relative;",
-  "            transform-style: preserve-3d;",
-  "            will-change: transform, opacity;",
-  "        }",
-  "",
-  "        .ch4-page-stage {",
-  "            perspective: 1400px;",
-  "        }",
-  "        .ch4-page-leaf {",
-  "            position: relative;",
-  "            transform-style: preserve-3d;",
-  "            will-change: transform, opacity;",
-  "        }",
-  "",
-  "        #trending-section #trending-cat-nav {",
-  "            scrollbar-width: none;",
-  "        }",
-  "        #trending-section #trending-cat-nav::-webkit-scrollbar {",
-  "            display: none;",
-  "        }",
-  "        #trending-section #trending-cat-nav .trending-cat-btn.is-active {",
-  "            background-color: #8E3038;",
-  "            color: #FFFEFA;",
-  "            border-color: #8E3038;",
-  "        }",
-  "        .dark #trending-section #trending-cat-nav .trending-cat-btn.is-active {",
-  "            background-color: #B8860B;",
-  "            color: #111210;",
-  "            border-color: #B8860B;",
-  "        }",
-  "        #trending-section #trending-shelf {",
-  "            gap: 1rem;",
-  "            padding-top: 1.5rem !important;",
-  "            padding-bottom: 1.5rem !important;",
-  "            padding-left: 1rem !important;",
-  "            padding-right: 1.5rem !important;",
-  "            scroll-behavior: auto !important;",
-  "        }",
-  "        .trending-card-custom {",
-  "            overflow: visible !important;",
-  "            position: relative;",
-  "            z-index: 10;",
-  "        }",
-  "        .trending-card-custom:hover {",
-  "            z-index: 30 !important;",
-  "        }",
-  "",
-  "        /* Trending Shelf: Compact 6 cards on desktop with dedicated ranking badges */",
-  "        @media (min-width: 1280px) {",
-  "            #trending-shelf > div {",
-  "                flex: 0 0 calc((100% - (5 * 1rem)) / 6) !important;",
-  "                width: calc((100% - (5 * 1rem)) / 6) !important;",
-  "                max-width: calc((100% - (5 * 1rem)) / 6) !important;",
-  "            }",
-  "        }",
-  "        @media (min-width: 1024px) and (max-width: 1279px) {",
-  "            #trending-shelf > div {",
-  "                flex: 0 0 calc((100% - (4 * 1rem)) / 5) !important;",
-  "                width: calc((100% - (4 * 1rem)) / 5) !important;",
-  "                max-width: calc((100% - (4 * 1rem)) / 5) !important;",
-  "            }",
-  "        }",
-  "        @media (min-width: 640px) and (max-width: 1023px) {",
-  "            #trending-shelf > div {",
-  "                flex: 0 0 calc((100% - (2 * 0.75rem)) / 3) !important;",
-  "                width: calc((100% - (2 * 0.75rem)) / 3) !important;",
-  "                max-width: calc((100% - (2 * 0.75rem)) / 3) !important;",
-  "            }",
-  "        }",
-  "        @media (max-width: 639px) {",
-  "            #trending-shelf > div {",
-  "                flex: 0 0 160px !important;",
-  "                width: 160px !important;",
-  "                max-width: 160px !important;",
-  "            }",
-  "        }",
-  "",
-  "        /* Children, Literature & Selfgrowth Shelves: Exactly 6 cards visible (no overflow fraction) */",
-  "        @media (min-width: 1280px) {",
-  "            #children-shelf > div,",
-  "            #literature-shelf > div,",
-  "            #selfgrowth-shelf > div,",
-  "            #science-shelf > div,",
-  "            #business-shelf > div,",
-  "            #history-shelf > div,",
-  "            #philosophy-shelf > div,",
-  "            #artlifestyle-shelf > div,",
-  "            #biography-shelf > div {",
-  "                flex: 0 0 calc((100% - (5 * 1.25rem)) / 6) !important;",
-  "                width: calc((100% - (5 * 1.25rem)) / 6) !important;",
-  "                max-width: calc((100% - (5 * 1.25rem)) / 6) !important;",
-  "            }",
-  "        }",
-  "        @media (min-width: 1024px) and (max-width: 1279px) {",
-  "            #children-shelf > div,",
-  "            #literature-shelf > div,",
-  "            #selfgrowth-shelf > div,",
-  "            #science-shelf > div,",
-  "            #business-shelf > div,",
-  "            #history-shelf > div,",
-  "            #philosophy-shelf > div,",
-  "            #artlifestyle-shelf > div,",
-  "            #biography-shelf > div {",
-  "                flex: 0 0 calc((100% - (4 * 1.25rem)) / 5) !important;",
-  "                width: calc((100% - (4 * 1.25rem)) / 5) !important;",
-  "                max-width: calc((100% - (4 * 1.25rem)) / 5) !important;",
-  "            }",
-  "        }",
-  "",
-  "        /* Topic Shelf: Exactly 3 cards visible per row with horizontal scrolling */",
-  "        @media (min-width: 1024px) {",
-  "            #topic-shelf > div {",
-  "                flex: 0 0 calc((100% - (2 * 1.5rem)) / 3) !important;",
-  "                width: calc((100% - (2 * 1.5rem)) / 3) !important;",
-  "                max-width: calc((100% - (2 * 1.5rem)) / 3) !important;",
-  "            }",
-  "        }",
-  "        @media (min-width: 640px) and (max-width: 1023px) {",
-  "            #topic-shelf > div {",
-  "                flex: 0 0 calc((100% - 1.5rem) / 2) !important;",
-  "                width: calc((100% - 1.5rem) / 2) !important;",
-  "                max-width: calc((100% - 1.5rem) / 2) !important;",
-  "            }",
-  "        }",
-  "        @media (max-width: 639px) {",
-  "            #topic-shelf > div {",
-  "                flex: 0 0 85% !important;",
-  "                width: 85% !important;",
-  "                max-width: 85% !important;",
-  "            }",
-  "        }",
-  "",
-  "",
-  "        /* ========================================================",
-  "           SEAMLESS CHAPTER AMBIENT HARMONY & 4-CORNER CHROMATIC AURAS",
-  "           Triệt tiêu phân mảng/phân bảng - Hòa quyện liền mạch toàn trang",
-  "           ======================================================== */",
-  "        .chapter-ambient-wrapper {",
-  "            position: relative;",
-  "            isolation: isolate;",
-  "        }",
-  "",
-  "        /* Seamless borderless transition between chapters */",
-  "        .chapter-divider {",
-  "            border: none !important;",
-  "            border-top: none !important;",
-  "            border-bottom: none !important;",
-  "        }",
-  "        .dark .chapter-divider {",
-  "            border: none !important;",
-  "            border-top: none !important;",
-  "            border-bottom: none !important;",
-  "        }",
-  "",
-  "        /* 4-Corner Chromatic Aura - Pattern A (Top: Wine/Gold | Bottom: Gold/Wine) */",
-  "        .ambient-glow-a::before {",
-  "            content: '';",
-  "            position: absolute;",
-  "            inset: 0;",
-  "            pointer-events: none;",
-  "            z-index: 0;",
-  "            background: ",
-  "                radial-gradient(ellipse 480px 380px at 0% 0%, rgba(142, 48, 56, 0.08) 0%, transparent 70%),",
-  "                radial-gradient(ellipse 480px 380px at 100% 0%, rgba(212, 175, 55, 0.08) 0%, transparent 70%),",
-  "                radial-gradient(ellipse 480px 380px at 0% 100%, rgba(212, 175, 55, 0.08) 0%, transparent 70%),",
-  "                radial-gradient(ellipse 480px 380px at 100% 100%, rgba(142, 48, 56, 0.08) 0%, transparent 70%);",
-  "            transition: opacity 0.4s ease;",
-  "        }",
-  "        .dark .ambient-glow-a::before {",
-  "            background: ",
-  "                radial-gradient(ellipse 540px 420px at 0% 0%, rgba(142, 48, 56, 0.17) 0%, transparent 72%),",
-  "                radial-gradient(ellipse 540px 420px at 100% 0%, rgba(212, 175, 55, 0.14) 0%, transparent 72%),",
-  "                radial-gradient(ellipse 540px 420px at 0% 100%, rgba(212, 175, 55, 0.14) 0%, transparent 72%),",
-  "                radial-gradient(ellipse 540px 420px at 100% 100%, rgba(142, 48, 56, 0.17) 0%, transparent 72%);",
-  "        }",
-  "",
-  "        /* 4-Corner Chromatic Aura - Pattern B (Top: Gold/Wine | Bottom: Wine/Gold) ",
-  "           Seamlessly matches Pattern A's bottom corners */",
-  "        .ambient-glow-b::before {",
-  "            content: '';",
-  "            position: absolute;",
-  "            inset: 0;",
-  "            pointer-events: none;",
-  "            z-index: 0;",
-  "            background: ",
-  "                radial-gradient(ellipse 480px 380px at 0% 0%, rgba(212, 175, 55, 0.08) 0%, transparent 70%),",
-  "                radial-gradient(ellipse 480px 380px at 100% 0%, rgba(142, 48, 56, 0.08) 0%, transparent 70%),",
-  "                radial-gradient(ellipse 480px 380px at 0% 100%, rgba(142, 48, 56, 0.08) 0%, transparent 70%),",
-  "                radial-gradient(ellipse 480px 380px at 100% 100%, rgba(212, 175, 55, 0.08) 0%, transparent 70%);",
-  "            transition: opacity 0.4s ease;",
-  "        }",
-  "        .dark .ambient-glow-b::before {",
-  "            background: ",
-  "                radial-gradient(ellipse 540px 420px at 0% 0%, rgba(212, 175, 55, 0.14) 0%, transparent 72%),",
-  "                radial-gradient(ellipse 540px 420px at 100% 0%, rgba(142, 48, 56, 0.17) 0%, transparent 72%),",
-  "                radial-gradient(ellipse 540px 420px at 0% 100%, rgba(142, 48, 56, 0.17) 0%, transparent 72%),",
-  "                radial-gradient(ellipse 540px 420px at 100% 100%, rgba(212, 175, 55, 0.14) 0%, transparent 72%);",
-  "        }",
-  "",
-  "        /* Publisher Marquee Track */",
-  "        .publisher-marquee {",
-  "            display: flex;",
-  "            width: max-content;",
-  "            animation: marquee 35s linear infinite;",
-  "        }",
-  "        .publisher-marquee:hover {",
-  "            animation-play-state: paused;",
-  "        }",
-  "        @keyframes marquee {",
-  "            0% { transform: translateX(0); }",
-  "            100% { transform: translateX(-50%); }",
-  "        }",
-  "",
-  "",
-  "        /* Accessibility: Reduced Motion */",
-  "        @media (prefers-reduced-motion: reduce) {",
-  "            * {",
-  "                animation-duration: 0.001s !important;",
-  "                transition-duration: 0.001s !important;",
-  "            }",
-  "            .publisher-marquee {",
-  "                animation: none !important;",
-  "                flex-wrap: wrap;",
-  "                justify-content: center;",
-  "            }",
-  "        }",
-  "    "
-].join("\n");
+
 
 
 const PAGE_SCRIPT = [
@@ -3126,9 +2212,6 @@ export default function Test() {
   const [books, setBooks] = useState([]);
   const [isBooksLoading, setIsBooksLoading] = useState(true);
   const [booksError, setBooksError] = useState("");
-  const [pageNumber, setPageNumber] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
-  const [totalElements, setTotalElements] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -3168,13 +2251,6 @@ export default function Test() {
               : Array.isArray(payload?.books)
                 ? payload.books
                 : [];
-
-        if (payload?.totalPages !== undefined) {
-          setTotalPages(payload.totalPages);
-        }
-        if (payload?.totalElements !== undefined) {
-          setTotalElements(payload.totalElements);
-        }
 
         // Chuẩn hóa trường dữ liệu đồng bộ giữa BookDto (BE) và Template (FE)
         const normalizedBooks = rawBooks.map((item, idx) => ({
@@ -3228,6 +2304,9 @@ export default function Test() {
 
   // Đồng bộ Banner động thời gian thực từ Admin (QLGiaoDien)
   useEffect(() => {
+    // Tải banner mới nhất từ CSDL Backend
+    fetchBanners();
+
     const handleBannersUpdated = (e) => {
       if (Array.isArray(e.detail?.banners)) {
         setBanners([...e.detail.banners]);
@@ -4015,10 +3094,10 @@ export default function Test() {
                         “Mỗi trang sách tuổi thơ là một chiếc chìa khóa diệu kỳ gieo vào tâm hồn con trẻ hạt mầm của lòng dũng cảm, sự thấu cảm và ước mơ không giới hạn.”
                       </div>
                       <div className="flex items-center justify-end gap-2 pt-3">
-                        <button onClick={(event) => { window.scrollShelfByCard('children-shelf', -1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn lùi 1 sách" title="Lùi 1 sách">
+                        <button onClick={() => { window.scrollShelfByCard('children-shelf', -1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn lùi 1 sách" title="Lùi 1 sách">
                           <i className="ph-bold ph-caret-left"></i>
                         </button>
-                        <button onClick={(event) => { window.scrollShelfByCard('children-shelf', 1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn tiến 1 sách" title="Tiến 1 sách">
+                        <button onClick={() => { window.scrollShelfByCard('children-shelf', 1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn tiến 1 sách" title="Tiến 1 sách">
                           <i className="ph-bold ph-caret-right"></i>
                         </button>
                       </div>
@@ -4160,10 +3239,10 @@ export default function Test() {
                         “Đôi khi, một cuốn sách không mang đến câu trả lời. Nó giúp chúng ta đặt ra những câu hỏi tốt hơn và thấu cảm sâu sắc hơn với từng phận đời.”
                       </div>
                       <div className="flex items-center justify-end gap-2 pt-3">
-                        <button onClick={(event) => { window.scrollShelfByCard('literature-shelf', -1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn lùi 1 sách" title="Lùi 1 sách">
+                        <button onClick={() => { window.scrollShelfByCard('literature-shelf', -1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn lùi 1 sách" title="Lùi 1 sách">
                           <i className="ph-bold ph-caret-left"></i>
                         </button>
-                        <button onClick={(event) => { window.scrollShelfByCard('literature-shelf', 1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn tiến 1 sách" title="Tiến 1 sách">
+                        <button onClick={() => { window.scrollShelfByCard('literature-shelf', 1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn tiến 1 sách" title="Tiến 1 sách">
                           <i className="ph-bold ph-caret-right"></i>
                         </button>
                       </div>
@@ -4220,10 +3299,10 @@ export default function Test() {
                         “Tri thức chỉ thực sự tạo nên bước ngoặt khi được soi sáng qua tư duy phản biện và chuyển hóa thành thói quen hành động kỷ luật mỗi ngày.”
                       </div>
                       <div className="flex items-center justify-end gap-2 pt-3">
-                        <button onClick={(event) => { window.scrollShelfByCard('selfgrowth-shelf', -1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn lùi 1 sách" title="Lùi 1 sách">
+                        <button onClick={() => { window.scrollShelfByCard('selfgrowth-shelf', -1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn lùi 1 sách" title="Lùi 1 sách">
                           <i className="ph-bold ph-caret-left"></i>
                         </button>
-                        <button onClick={(event) => { window.scrollShelfByCard('selfgrowth-shelf', 1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn tiến 1 sách" title="Tiến 1 sách">
+                        <button onClick={() => { window.scrollShelfByCard('selfgrowth-shelf', 1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn tiến 1 sách" title="Tiến 1 sách">
                           <i className="ph-bold ph-caret-right"></i>
                         </button>
                       </div>
@@ -4362,10 +3441,10 @@ export default function Test() {
                         “Khoa học không chỉ là kho tàng kiến thức; nó là một thái độ hoài nghi lành mạnh và lòng say mê khám phá chân lý vô tận.”
                       </div>
                       <div className="flex items-center justify-end gap-2 pt-3">
-                        <button onClick={(event) => { window.scrollShelfByCard('science-shelf', -1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn lùi 1 sách" title="Lùi 1 sách">
+                        <button onClick={() => { window.scrollShelfByCard('science-shelf', -1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn lùi 1 sách" title="Lùi 1 sách">
                           <i className="ph-bold ph-caret-left"></i>
                         </button>
-                        <button onClick={(event) => { window.scrollShelfByCard('science-shelf', 1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn tiến 1 sách" title="Tiến 1 sách">
+                        <button onClick={() => { window.scrollShelfByCard('science-shelf', 1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn tiến 1 sách" title="Tiến 1 sách">
                           <i className="ph-bold ph-caret-right"></i>
                         </button>
                       </div>
@@ -4410,10 +3489,10 @@ export default function Test() {
                         “Thành công thương trường không đến từ vận may ngẫu nhiên, mà bắt nguồn từ tư duy chiến lược kiên định và khả năng thích ứng linh hoạt.”
                       </div>
                       <div className="flex items-center justify-end gap-2 pt-3">
-                        <button onClick={(event) => { window.scrollShelfByCard('business-shelf', -1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn lùi 1 sách" title="Lùi 1 sách">
+                        <button onClick={() => { window.scrollShelfByCard('business-shelf', -1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn lùi 1 sách" title="Lùi 1 sách">
                           <i className="ph-bold ph-caret-left"></i>
                         </button>
-                        <button onClick={(event) => { window.scrollShelfByCard('business-shelf', 1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn tiến 1 sách" title="Tiến 1 sách">
+                        <button onClick={() => { window.scrollShelfByCard('business-shelf', 1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn tiến 1 sách" title="Tiến 1 sách">
                           <i className="ph-bold ph-caret-right"></i>
                         </button>
                       </div>
@@ -4551,10 +3630,10 @@ export default function Test() {
                         “Ai không hiểu được quá khứ sẽ phải chịu số phận lặp lại những sai lầm của chính tiền nhân.”
                       </div>
                       <div className="flex items-center justify-end gap-2 pt-3">
-                        <button onClick={(event) => { window.scrollShelfByCard('history-shelf', -1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn lùi 1 sách" title="Lùi 1 sách">
+                        <button onClick={() => { window.scrollShelfByCard('history-shelf', -1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn lùi 1 sách" title="Lùi 1 sách">
                           <i className="ph-bold ph-caret-left"></i>
                         </button>
-                        <button onClick={(event) => { window.scrollShelfByCard('history-shelf', 1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn tiến 1 sách" title="Tiến 1 sách">
+                        <button onClick={() => { window.scrollShelfByCard('history-shelf', 1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn tiến 1 sách" title="Tiến 1 sách">
                           <i className="ph-bold ph-caret-right"></i>
                         </button>
                       </div>
@@ -4599,10 +3678,10 @@ export default function Test() {
                         “Không phải những sự việc bên ngoài làm chúng ta phiền muộn, mà chính là cách chúng ta phán xét và nhìn nhận về chúng.”
                       </div>
                       <div className="flex items-center justify-end gap-2 pt-3">
-                        <button onClick={(event) => { window.scrollShelfByCard('philosophy-shelf', -1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn lùi 1 sách" title="Lùi 1 sách">
+                        <button onClick={() => { window.scrollShelfByCard('philosophy-shelf', -1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn lùi 1 sách" title="Lùi 1 sách">
                           <i className="ph-bold ph-caret-left"></i>
                         </button>
-                        <button onClick={(event) => { window.scrollShelfByCard('philosophy-shelf', 1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn tiến 1 sách" title="Tiến 1 sách">
+                        <button onClick={() => { window.scrollShelfByCard('philosophy-shelf', 1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn tiến 1 sách" title="Tiến 1 sách">
                           <i className="ph-bold ph-caret-right"></i>
                         </button>
                       </div>
@@ -4739,10 +3818,10 @@ export default function Test() {
                         “Nghệ thuật rửa sạch khỏi tâm hồn lớp bụi bặm thường nhật của cuộc sống và đánh thức mỹ cảm thuần khiết.”
                       </div>
                       <div className="flex items-center justify-end gap-2 pt-3">
-                        <button onClick={(event) => { window.scrollShelfByCard('artlifestyle-shelf', -1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn lùi 1 sách" title="Lùi 1 sách">
+                        <button onClick={() => { window.scrollShelfByCard('artlifestyle-shelf', -1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn lùi 1 sách" title="Lùi 1 sách">
                           <i className="ph-bold ph-caret-left"></i>
                         </button>
-                        <button onClick={(event) => { window.scrollShelfByCard('artlifestyle-shelf', 1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn tiến 1 sách" title="Tiến 1 sách">
+                        <button onClick={() => { window.scrollShelfByCard('artlifestyle-shelf', 1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn tiến 1 sách" title="Tiến 1 sách">
                           <i className="ph-bold ph-caret-right"></i>
                         </button>
                       </div>
@@ -4787,10 +3866,10 @@ export default function Test() {
                         “Đọc một cuốn hồi ký là sống thêm một cuộc đời, học từ những vết thương và thắp sáng khát vọng từ những ngọn hải đăng của nhân loại.”
                       </div>
                       <div className="flex items-center justify-end gap-2 pt-3">
-                        <button onClick={(event) => { window.scrollShelfByCard('biography-shelf', -1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn lùi 1 sách" title="Lùi 1 sách">
+                        <button onClick={() => { window.scrollShelfByCard('biography-shelf', -1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn lùi 1 sách" title="Lùi 1 sách">
                           <i className="ph-bold ph-caret-left"></i>
                         </button>
-                        <button onClick={(event) => { window.scrollShelfByCard('biography-shelf', 1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn tiến 1 sách" title="Tiến 1 sách">
+                        <button onClick={() => { window.scrollShelfByCard('biography-shelf', 1) }} className="w-9 h-9 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors" aria-label="Cuộn tiến 1 sách" title="Tiến 1 sách">
                           <i className="ph-bold ph-caret-right"></i>
                         </button>
                       </div>
@@ -4832,10 +3911,10 @@ export default function Test() {
 
                     {/* Carousel Controls for 3-cards row */}
                     <div className="flex items-center gap-2 shrink-0">
-                      <button onClick={(event) => { window.scrollShelfByCard('topic-shelf', -1) }} className="w-10 h-10 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors shadow-sm" aria-label="Chủ đề trước" title="Chủ đề trước">
+                      <button onClick={() => { window.scrollShelfByCard('topic-shelf', -1) }} className="w-10 h-10 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors shadow-sm" aria-label="Chủ đề trước" title="Chủ đề trước">
                         <i className="ph-bold ph-caret-left text-lg"></i>
                       </button>
-                      <button onClick={(event) => { window.scrollShelfByCard('topic-shelf', 1) }} className="w-10 h-10 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors shadow-sm" aria-label="Chủ đề tiếp theo" title="Chủ đề tiếp theo">
+                      <button onClick={() => { window.scrollShelfByCard('topic-shelf', 1) }} className="w-10 h-10 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card flex items-center justify-center text-ink dark:text-night-text transition-colors shadow-sm" aria-label="Chủ đề tiếp theo" title="Chủ đề tiếp theo">
                         <i className="ph-bold ph-caret-right text-lg"></i>
                       </button>
                     </div>
@@ -4845,7 +3924,7 @@ export default function Test() {
                   <div id="topic-shelf" className="shelf-scroll-row flex gap-6 overflow-x-auto pb-4 snap-x snap-proximity scroll-smooth">
 
                     {/* Topic 1 */}
-                    <div onClick={(event) => { window.filterTopic('van-hoc') }} className="shrink-0 snap-start cursor-pointer p-8 rounded-2xl bg-paper dark:bg-night-card border border-paper-border dark:border-night-border shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all group flex flex-col justify-between min-h-[230px]">
+                    <div onClick={() => { window.filterTopic('van-hoc') }} className="shrink-0 snap-start cursor-pointer p-8 rounded-2xl bg-paper dark:bg-night-card border border-paper-border dark:border-night-border shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all group flex flex-col justify-between min-h-[230px]">
                       <div>
                         <div className="flex items-center justify-between text-xs font-bold text-wine dark:text-gold mb-3 font-metadata-spec">
                           <span>CHỦ ĐỀ 01</span>
@@ -4865,7 +3944,7 @@ export default function Test() {
                     </div>
 
                     {/* Topic 2 */}
-                    <div onClick={(event) => { window.filterTopic('thieu-nhi') }} className="shrink-0 snap-start cursor-pointer p-8 rounded-2xl bg-paper dark:bg-night-card border border-paper-border dark:border-night-border shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all group flex flex-col justify-between min-h-[230px]">
+                    <div onClick={() => { window.filterTopic('thieu-nhi') }} className="shrink-0 snap-start cursor-pointer p-8 rounded-2xl bg-paper dark:bg-night-card border border-paper-border dark:border-night-border shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all group flex flex-col justify-between min-h-[230px]">
                       <div>
                         <div className="flex items-center justify-between text-xs font-bold text-wine dark:text-gold mb-3 font-metadata-spec">
                           <span>CHỦ ĐỀ 02</span>
@@ -4885,7 +3964,7 @@ export default function Test() {
                     </div>
 
                     {/* Topic 3 */}
-                    <div onClick={(event) => { window.filterTopic('phat-trien') }} className="shrink-0 snap-start cursor-pointer p-8 rounded-2xl bg-paper dark:bg-night-card border border-paper-border dark:border-night-border shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all group flex flex-col justify-between min-h-[230px]">
+                    <div onClick={() => { window.filterTopic('phat-trien') }} className="shrink-0 snap-start cursor-pointer p-8 rounded-2xl bg-paper dark:bg-night-card border border-paper-border dark:border-night-border shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all group flex flex-col justify-between min-h-[230px]">
                       <div>
                         <div className="flex items-center justify-between text-xs font-bold text-wine dark:text-gold mb-3 font-metadata-spec">
                           <span>CHỦ ĐỀ 03</span>
@@ -4905,7 +3984,7 @@ export default function Test() {
                     </div>
 
                     {/* Topic 4 */}
-                    <div onClick={(event) => { window.filterTopic('kinh-doanh') }} className="shrink-0 snap-start cursor-pointer p-8 rounded-2xl bg-paper dark:bg-night-card border border-paper-border dark:border-night-border shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all group flex flex-col justify-between min-h-[230px]">
+                    <div onClick={() => { window.filterTopic('kinh-doanh') }} className="shrink-0 snap-start cursor-pointer p-8 rounded-2xl bg-paper dark:bg-night-card border border-paper-border dark:border-night-border shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all group flex flex-col justify-between min-h-[230px]">
                       <div>
                         <div className="flex items-center justify-between text-xs font-bold text-wine dark:text-gold mb-3 font-metadata-spec">
                           <span>CHỦ ĐỀ 04</span>
@@ -4925,7 +4004,7 @@ export default function Test() {
                     </div>
 
                     {/* Topic 5 */}
-                    <div onClick={(event) => { window.filterTopic('khoa-hoc') }} className="shrink-0 snap-start cursor-pointer p-8 rounded-2xl bg-paper dark:bg-night-card border border-paper-border dark:border-night-border shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all group flex flex-col justify-between min-h-[230px]">
+                    <div onClick={() => { window.filterTopic('khoa-hoc') }} className="shrink-0 snap-start cursor-pointer p-8 rounded-2xl bg-paper dark:bg-night-card border border-paper-border dark:border-night-border shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all group flex flex-col justify-between min-h-[230px]">
                       <div>
                         <div className="flex items-center justify-between text-xs font-bold text-wine dark:text-gold mb-3 font-metadata-spec">
                           <span>CHỦ ĐỀ 05</span>
@@ -4945,7 +4024,7 @@ export default function Test() {
                     </div>
 
                     {/* Topic 6 */}
-                    <div onClick={(event) => { window.filterTopic('lich-su') }} className="shrink-0 snap-start cursor-pointer p-8 rounded-2xl bg-paper dark:bg-night-card border border-paper-border dark:border-night-border shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all group flex flex-col justify-between min-h-[230px]">
+                    <div onClick={() => { window.filterTopic('lich-su') }} className="shrink-0 snap-start cursor-pointer p-8 rounded-2xl bg-paper dark:bg-night-card border border-paper-border dark:border-night-border shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all group flex flex-col justify-between min-h-[230px]">
                       <div>
                         <div className="flex items-center justify-between text-xs font-bold text-wine dark:text-gold mb-3 font-metadata-spec">
                           <span>CHỦ ĐỀ 06</span>
@@ -5073,7 +4152,7 @@ export default function Test() {
                 <i className="ph-bold ph-gear text-xl"></i>
                 <span>Cài Đặt Trải Nghiệm</span>
               </div>
-              <button type="button" onClick={(event) => { window.closeSettingsModal() }} className="text-ink-muted hover:text-ink dark:hover:text-white transition-colors" aria-label="Đóng cài đặt">
+              <button type="button" onClick={() => { window.closeSettingsModal() }} className="text-ink-muted hover:text-ink dark:hover:text-white transition-colors" aria-label="Đóng cài đặt">
                 <i className="ph-bold ph-x text-lg"></i>
               </button>
             </div>
@@ -5099,7 +4178,7 @@ export default function Test() {
                 <span>Xem trang Cài đặt tài khoản</span>
                 <i className="ph-bold ph-arrow-up-right text-[11px]"></i>
               </a>
-              <button type="button" onClick={(event) => { window.closeSettingsModal() }} className="px-5 py-2 rounded-full bg-wine hover:bg-wine-dark text-white font-metadata-spec text-xs font-bold transition-colors shadow-sm">
+              <button type="button" onClick={() => { window.closeSettingsModal() }} className="px-5 py-2 rounded-full bg-wine hover:bg-wine-dark text-white font-metadata-spec text-xs font-bold transition-colors shadow-sm">
                 Xong
               </button>
             </div>

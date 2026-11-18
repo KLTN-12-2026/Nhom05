@@ -19,6 +19,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@SuppressWarnings("unchecked")
 public class CloudinaryService {
 
     @Autowired

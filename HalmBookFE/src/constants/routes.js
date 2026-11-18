@@ -33,3 +33,43 @@ export const ROUTES = {
   ADMIN_UI: '/admin/quan-ly-giao-dien',
   ADMIN_SUPPORT: '/admin/thong-bao-ho-tro',
 };
+
+export const ROUTE_ALIASES = {
+  public: [
+    { path: "/trangchu", to: "/" },
+    { path: "/trang-chu", to: "/" },
+    { path: "/uu-dai", to: "/uudai" },
+    { path: "/offers", to: "/uudai" },
+    { path: "/khuyen-mai", to: "/uudai" },
+    { path: "/danh-muc", to: "/danhmuc" }
+  ],
+  user: [
+    { path: "/profile", to: "/canhan" },
+    { path: "/ca-nhan", to: "/canhan" },
+    { path: "/thongtincanhan", to: "/canhan" },
+    { path: ROUTES.WALLET, to: "/canhan?tab=wallet" },
+    { path: "/wallet", to: "/canhan?tab=wallet" },
+    { path: "/vi", to: "/canhan?tab=wallet" },
+    { path: "/lich-su", to: "/canhan?tab=history" },
+    { path: "/lichsu", to: "/canhan?tab=history" },
+    { path: "/lichsugiaodich", to: "/canhan?tab=history" },
+    { path: "/history", to: "/canhan?tab=history" },
+    { path: "/hotro", to: "/canhan?tab=support" },
+    { path: "/ho-tro", to: "/canhan?tab=support" },
+    { path: "/support", to: "/canhan?tab=support" },
+    { path: "/khieunai", to: "/canhan?tab=support" },
+    { path: "/khieu-nai", to: "/canhan?tab=support" }
+  ],
+  admin: [
+    { path: "/TongQuan.html", to: ROUTES.ADMIN },
+    { path: "/BaoCao&ThongKe.html", to: ROUTES.ADMIN_STATISTICS },
+    { path: "/BaoCaoThongKe.html", to: ROUTES.ADMIN_STATISTICS },
+    { path: "/QuanLySach.html", to: ROUTES.ADMIN_BOOKS },
+    { path: "/GiaoDichThueSach.html", to: ROUTES.ADMIN_RENTAL_TRANSACTIONS },
+    { path: "/QuanLyTaiChinh.html", to: ROUTES.ADMIN_FINANCE },
+    { path: "/QuanLyKhachHang.html", to: ROUTES.ADMIN_CUSTOMERS },
+    { path: "/QuanLyUuDai.html", to: ROUTES.ADMIN_OFFERS },
+    { path: "/ThongBaoHoTro.html", to: ROUTES.ADMIN_SUPPORT },
+    { path: "/QuanLyGiaoDien.html", to: ROUTES.ADMIN_UI }
+  ]
+};

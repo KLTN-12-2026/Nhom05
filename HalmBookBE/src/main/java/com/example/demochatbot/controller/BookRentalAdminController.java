@@ -4,6 +4,7 @@ import com.example.demochatbot.model.*;
 import com.example.demochatbot.repository.AccessRecordRepository;
 import com.example.demochatbot.repository.CustomerRepository;
 import com.example.demochatbot.repository.NotificationRepository;
+import com.example.demochatbot.repository.OrderItemRepository;
 import com.example.demochatbot.repository.PotatoTransactionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -40,6 +41,12 @@ public class BookRentalAdminController {
 
     @Autowired
     private NotificationRepository notificationRepository;
+
+    @Autowired
+    private OrderItemRepository orderItemRepository;
+
+    @jakarta.persistence.PersistenceContext
+    private jakarta.persistence.EntityManager entityManager;
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
@@ -219,20 +226,45 @@ public class BookRentalAdminController {
         }
     }
 
+    private Optional<Access_Record> findRentalByIdOrCode(String idOrCode) {
+        if (idOrCode == null || idOrCode.trim().isEmpty()) {
+            return Optional.empty();
+        }
+        String clean = idOrCode.trim().replaceAll("^#+", "");
+        try {
+            int numericId = Integer.parseInt(clean);
+            Optional<Access_Record> byId = accessRecordRepository.findById(numericId);
+            if (byId.isPresent()) return byId;
+        } catch (NumberFormatException ignored) {}
+
+        return accessRecordRepository.findAll().stream()
+                .filter(ar -> {
+                    String code = "RENT-" + String.format("%05d", ar.getAccess_record_id());
+                    return code.equalsIgnoreCase(idOrCode.trim()) ||
+                           code.equalsIgnoreCase(clean) ||
+                           String.valueOf(ar.getAccess_record_id()).equals(clean);
+                })
+                .findFirst();
+    }
+
     /**
      * 3. Duyệt đơn thuê sách
      */
     @PostMapping("/{id}/approve")
     @Transactional
-    public ResponseEntity<?> approveRental(@PathVariable("id") int id) {
+    public ResponseEntity<?> approveRental(@PathVariable("id") String id) {
         try {
-            Optional<Access_Record> opt = accessRecordRepository.findById(id);
+            Optional<Access_Record> opt = findRentalByIdOrCode(id);
             if (opt.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("message", "Không tìm thấy yêu cầu thuê sách với mã #" + id));
             }
 
             Access_Record ar = opt.get();
+            if ("REJECTED".equalsIgnoreCase(ar.getStatus()) || "REVOKED".equalsIgnoreCase(ar.getStatus())) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of("message", "Đơn thuê sách này đã bị từ chối hoặc thu hồi, không thể duyệt lại mà không có thanh toán mới!"));
+            }
             ar.setStatus("ACTIVE");
             if (ar.getStart_date() == null) {
                 ar.setStart_date(LocalDateTime.now());
@@ -245,6 +277,8 @@ public class BookRentalAdminController {
             Customer c = ar.getCustomer();
             Book b = ar.getBook();
             if (c != null && b != null) {
+                // Khóa bi quan bản ghi customer để bảo vệ cập nhật số dư hoàn khoai (IMP-03)
+                c = customerRepository.findByIdForUpdate(c.getCustomer_id()).orElse(c);
                 Notification notif = Notification.builder()
                         .customerId(c.getCustomer_id())
                         .title("Yêu Cầu Thuê Sách Đã Được Duyệt! 📖")
@@ -276,42 +310,74 @@ public class BookRentalAdminController {
     @PostMapping("/{id}/reject")
     @Transactional
     public ResponseEntity<?> rejectRental(
-            @PathVariable("id") int id,
+            @PathVariable("id") String id,
             @RequestBody(required = false) Map<String, String> body
     ) {
         try {
-            Optional<Access_Record> opt = accessRecordRepository.findById(id);
+            Optional<Access_Record> opt = findRentalByIdOrCode(id);
             if (opt.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("message", "Không tìm thấy yêu cầu thuê sách với mã #" + id));
             }
 
             Access_Record ar = opt.get();
-            ar.setStatus("REJECTED");
-            accessRecordRepository.save(ar);
-
-            String reason = body != null && body.containsKey("reason") ? body.get("reason") : "Đầu sách đang bảo trì bản quyền";
-
             Customer c = ar.getCustomer();
             Book b = ar.getBook();
 
+            if (c != null) {
+                // Khóa bi quan bản ghi customer để bảo vệ cập nhật số dư hoàn khoai (IMP-03)
+                c = customerRepository.findByIdForUpdate(c.getCustomer_id()).orElse(c);
+                if (entityManager != null) {
+                    entityManager.refresh(c, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+                }
+            }
+
+            ar = accessRecordRepository.findById(ar.getAccess_record_id()).orElse(ar);
+            if (entityManager != null) {
+                entityManager.refresh(ar, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+            }
+
+            if ("REJECTED".equalsIgnoreCase(ar.getStatus()) || "REVOKED".equalsIgnoreCase(ar.getStatus())) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of("message", "Đơn thuê sách này đã bị từ chối hoặc thu hồi trước đó!"));
+            }
+
+            ar.setStatus("REJECTED");
+            accessRecordRepository.saveAndFlush(ar);
+
+            String reason = body != null && body.containsKey("reason") ? body.get("reason") : "Đầu sách đang bảo trì bản quyền";
+
             if (c != null && b != null) {
-                long refundPotatoes = b.getRent_price() != null ? Math.round(b.getRent_price()) : 10;
+                // Xác định số khoai thực tế độc giả đã thanh toán cho cuốn sách này từ Order_Item (IMP-01/02)
+                long refundPotatoes = 0;
+                List<Order_Item> orderItems = orderItemRepository.findLatestByCustomerAndBook(c, b);
+                if (orderItems != null && !orderItems.isEmpty()) {
+                    Order_Item latestItem = orderItems.get(0);
+                    if (latestItem.getPrice() != null) {
+                        refundPotatoes = Math.max(0, Math.round(latestItem.getPrice()));
+                    }
+                } else if (b.getRent_price() != null) {
+                    refundPotatoes = Math.round(b.getRent_price());
+                } else {
+                    refundPotatoes = 10;
+                }
 
-                int curBalance = c.getPotatoBalance() != null ? c.getPotatoBalance() : 0;
-                int newBalance = curBalance + (int) refundPotatoes;
-                c.setPotatoBalance(newBalance);
-                customerRepository.save(c);
+                if (refundPotatoes > 0) {
+                    int curBalance = c.getPotatoBalance() != null ? c.getPotatoBalance() : 0;
+                    int newBalance = curBalance + (int) refundPotatoes;
+                    c.setPotatoBalance(newBalance);
+                    customerRepository.save(c);
 
-                // Ghi nhận biến động số dư hoàn khoai
-                PotatoTransaction pt = new PotatoTransaction();
-                pt.setCustomer(c);
-                pt.setAmount((int) refundPotatoes);
-                pt.setBalanceAfter(newBalance);
-                pt.setType("REWARD");
-                pt.setDescription("Hoàn củ khoai cho đơn thuê sách \"" + b.getBookName() + "\" bị từ chối: " + reason);
-                pt.setCreatedAt(LocalDateTime.now());
-                potatoTransactionRepository.save(pt);
+                    // Ghi nhận biến động số dư hoàn khoai
+                    PotatoTransaction pt = new PotatoTransaction();
+                    pt.setCustomer(c);
+                    pt.setAmount((int) refundPotatoes);
+                    pt.setBalanceAfter(newBalance);
+                    pt.setType("REFUND");
+                    pt.setDescription("Hoàn củ khoai cho đơn thuê sách \"" + b.getBookName() + "\" bị từ chối: " + reason);
+                    pt.setCreatedAt(LocalDateTime.now());
+                    potatoTransactionRepository.save(pt);
+                }
 
                 // Gửi thông báo
                 Notification notif = Notification.builder()
@@ -352,6 +418,14 @@ public class BookRentalAdminController {
             }
 
             Access_Record ar = opt.get();
+            if ("REJECTED".equalsIgnoreCase(ar.getStatus())) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of("message", "Đơn thuê sách này đã bị từ chối và hoàn tiền, không thể thu hồi!"));
+            }
+            if ("REVOKED".equalsIgnoreCase(ar.getStatus())) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of("message", "Đơn thuê sách này đã bị thu hồi trước đó!"));
+            }
             ar.setStatus("REVOKED");
             accessRecordRepository.save(ar);
 
@@ -359,6 +433,8 @@ public class BookRentalAdminController {
             Book b = ar.getBook();
 
             if (c != null && b != null) {
+                // Khóa bi quan bản ghi customer để bảo vệ cập nhật số dư hoàn khoai (IMP-03)
+                c = customerRepository.findByIdForUpdate(c.getCustomer_id()).orElse(c);
                 Notification notif = Notification.builder()
                         .customerId(c.getCustomer_id())
                         .title("Thu Hồi Quyền Đọc Sách")

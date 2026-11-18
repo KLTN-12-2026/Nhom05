@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
-import Constants from 'expo-constants';
+import { API_BASE_URL, CANDIDATE_API_URLS } from '../config/api';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -33,17 +33,20 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 // Cấu hình kết nối Backend - Tái sử dụng cấu hình từ loginlogout.tsx và hỗ trợ fallback môi trường
 
-const debuggerHost = Constants.expoConfig?.hostUri;
-const localhost = debuggerHost ? debuggerHost.split(':')[0] : 'localhost';
-const API_BASE_URL = `http://${localhost}:8082`;
+// API_BASE_URL & CANDIDATE_API_URLS được import từ ../config/api (IMP-06)
+// const debuggerHost = Constants.expoConfig?.hostUri;
+// const localhost = debuggerHost ? debuggerHost.split(':')[0] : 'localhost';
+// const API_BASE_URL = `http://${localhost}:8082`;
 
-const CANDIDATE_API_URLS = [
+/*
+const CANDIDATE_API_URLS_OLD = [
   API_BASE_URL,
   'http://localhost:8082',
   'http://127.0.0.1:8082',
   'http://192.168.1.165:8082',
   'http://10.0.2.2:8082',
 ];
+*/
 
 export interface HomeBookItem extends BookData {
   id: string;

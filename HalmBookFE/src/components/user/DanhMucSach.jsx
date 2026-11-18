@@ -1,17 +1,179 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom';
 import UserLayout from '@/components/user/layout/UserLayout';
 import axiosInstance from '@/services/axiosClient';
 import { TOPICS, getTopicByKeyOrSlug, filterBooksByTopic } from '@/utils/categoryUtils';
+
+// Helper xác định icon sinh động theo tên thể loại lấy từ Database
+const getCategoryIcon = (name = '') => {
+  const n = name.toLowerCase();
+  if (n.includes('tiểu thuyết') || n.includes('văn học')) return 'ph-feather';
+  if (n.includes('khoa học') || n.includes('viễn tưởng')) return 'ph-planet';
+  if (n.includes('phát triển') || n.includes('kỹ năng')) return 'ph-brain';
+  if (n.includes('kinh doanh') || n.includes('kinh tế')) return 'ph-briefcase';
+  if (n.includes('lịch sử')) return 'ph-hourglass-high';
+  if (n.includes('tâm lý') || n.includes('triết học')) return 'ph-compass';
+  if (n.includes('trinh thám')) return 'ph-detective';
+  if (n.includes('hồi ký') || n.includes('tiểu sử')) return 'ph-user-focus';
+  if (n.includes('thiếu nhi') || n.includes('tuổi thơ')) return 'ph-balloon';
+  if (n.includes('tôn giáo') || n.includes('tâm linh')) return 'ph-flower-lotus';
+  if (n.includes('thơ')) return 'ph-scroll';
+  if (n.includes('phong tục') || n.includes('văn hóa')) return 'ph-sparkle';
+  if (n.includes('nghệ thuật')) return 'ph-palette';
+  return 'ph-books';
+};
+
+// Component Custom Dropdown cao cấp, chống menu native xấu của trình duyệt
+function CustomFilterDropdown({ label, value, options, onChange }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectedOption = options.find((opt) => opt.value === value) || options[0];
+
+  return (
+    <div className="relative inline-block" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        className="flex items-center gap-2 bg-white dark:bg-[#1E201B] px-3.5 py-2 rounded-xl border border-[#E8E2D5] dark:border-[#2F322B] hover:border-[#8E3038]/50 dark:hover:border-[#D4AF37]/50 shadow-xs text-xs font-outfit transition-all cursor-pointer focus:outline-none"
+        aria-expanded={isOpen}
+      >
+        <span className="text-[#6E6D7A] dark:text-[#A8A6A1] font-medium">{label}:</span>
+        <span className="font-bold text-[#1E1F1D] dark:text-[#FAF7F0] flex items-center gap-1">
+          {selectedOption?.label}
+        </span>
+        <i
+          className={`ph-bold ph-caret-down text-xs text-stone-400 transition-transform duration-200 ${
+            isOpen ? 'rotate-180 text-[#8E3038] dark:text-[#D4AF37]' : ''
+          }`}
+        ></i>
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 top-full mt-2 w-56 p-1.5 rounded-2xl bg-[#FFFDF9] dark:bg-[#181916] border border-[#E8E2D5] dark:border-[#2F322B] shadow-2xl z-40 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-150">
+          <div className="space-y-1">
+            {options.map((opt) => {
+              const isSelected = opt.value === value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => {
+                    onChange(opt.value);
+                    setIsOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all text-left cursor-pointer ${
+                    isSelected
+                      ? 'bg-[#8E3038]/10 dark:bg-[#D4AF37]/15 text-[#8E3038] dark:text-[#F5D061] font-black'
+                      : 'text-[#1E1F1D] dark:text-[#EDE9DF] hover:bg-stone-100 dark:hover:bg-white/5'
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">{opt.label}</span>
+                  {isSelected && (
+                    <i className="ph-bold ph-check text-xs text-[#8E3038] dark:text-[#D4AF37]"></i>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function DanhMucSach() {
   const { topic: routeTopic } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  // Xác định chủ đề hiện tại từ params hoặc query string
+  // Danh mục thể loại lấy động trực tiếp từ Database
+  const [dbCategories, setDbCategories] = useState([]);
+
+  // Tải danh mục thể loại từ database
+  useEffect(() => {
+    let isCancelled = false;
+    const fetchCategories = async () => {
+      try {
+        const res = await axiosInstance.get('/api/home/categories');
+        const list = Array.isArray(res.data) ? res.data : [];
+        if (!isCancelled && list.length > 0) {
+          setDbCategories(list);
+        }
+      } catch (err) {
+        console.warn('Không thể tải danh mục thể loại từ máy chủ:', err);
+      }
+    };
+    fetchCategories();
+    return () => { isCancelled = true; };
+  }, []);
+
+  // Xây dựng danh sách tabs thể loại động từ CSDL
+  const topicTabs = useMemo(() => {
+    const tabs = [
+      {
+        key: 'all',
+        slug: 'tat-ca',
+        title: 'Tất Cả Tác Phẩm',
+        shortTitle: 'Tất Cả',
+        subtitle: 'Khám phá toàn bộ kho tàng tri thức và ấn phẩm bản quyền chọn lọc tại HALM Book',
+        icon: 'ph-books',
+        badge: 'KHO SÁCH',
+        categoryId: null
+      },
+      {
+        key: 'trending',
+        slug: 'trending',
+        title: 'Bảng Xếp Hạng Thịnh Hành',
+        shortTitle: 'Thịnh Hành',
+        subtitle: 'Top các ấn phẩm được độc giả đón đọc nhiều nhất và nhận đánh giá tích cực trong tuần',
+        icon: 'ph-fire',
+        badge: 'BẢNG VÀNG',
+        categoryId: null
+      }
+    ];
+
+    if (dbCategories.length > 0) {
+      dbCategories.forEach((cat) => {
+        tabs.push({
+          key: `cat-${cat.category_id}`,
+          slug: `cat-${cat.category_id}`,
+          title: cat.category_name,
+          shortTitle: cat.category_name,
+          subtitle: `Tuyển tập các tác phẩm ${cat.category_name} đặc sắc và được chọn lọc kỹ lưỡng tại HALM`,
+          icon: getCategoryIcon(cat.category_name),
+          badge: cat.category_name.toUpperCase(),
+          categoryId: cat.category_id
+        });
+      });
+    } else {
+      TOPICS.slice(2).forEach((t) => tabs.push(t));
+    }
+
+    return tabs;
+  }, [dbCategories]);
+
+  // Xác định chủ đề hiện tại
   const currentTopicKey = routeTopic || searchParams.get('topic') || 'all';
-  const currentTopic = useMemo(() => getTopicByKeyOrSlug(currentTopicKey), [currentTopicKey]);
+  const currentTopic = useMemo(() => {
+    const match = topicTabs.find((t) =>
+      t.key === currentTopicKey ||
+      t.slug === currentTopicKey ||
+      String(t.categoryId) === String(currentTopicKey) ||
+      t.title.toLowerCase() === currentTopicKey.toLowerCase()
+    );
+    return match || getTopicByKeyOrSlug(currentTopicKey) || topicTabs[0];
+  }, [topicTabs, currentTopicKey]);
 
   // State danh sách sách
   const [allBooks, setAllBooks] = useState([]);
@@ -19,22 +181,68 @@ export default function DanhMucSach() {
   const [error, setError] = useState('');
 
   // State bộ lọc và tìm kiếm trong trang danh mục
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState('popular'); // 'popular' | 'rating' | 'price-asc' | 'price-desc' | 'newest'
-  const [priceFilter, setPriceFilter] = useState('all'); // 'all' | 'free' | 'under10' | '10plus'
+  const [searchQuery, setSearchQuery] = useState(() => searchParams.get('q') || searchParams.get('search') || '');
+  const [sortBy, setSortBy] = useState('popular');
+  const [priceFilter, setPriceFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const booksPerPage = 18;
 
-  // Cuộn lên đầu trang tức thì mỗi khi đổi chủ đề (tránh trôi vị trí đè lấp navbar)
+  const PRICE_OPTIONS = [
+    { value: 'all', label: 'Tất cả mức giá' },
+    { value: 'under10', label: 'Dưới 10 Khoai 🥔' },
+    { value: '10to25', label: '10 - 25 Khoai 🥔' },
+    { value: '25plus', label: 'Trên 25 Khoai 🥔' },
+  ];
+
+  const SORT_OPTIONS = [
+    { value: 'popular', label: 'Lượt đọc nhiều nhất 🔥' },
+    { value: 'rating', label: 'Đánh giá cao nhất ⭐' },
+    { value: 'newest', label: 'Mới cập nhật 🆕' },
+    { value: 'price-asc', label: 'Giá Khoai tăng dần 🥔' },
+    { value: 'price-desc', label: 'Giá Khoai giảm dần 🥔' },
+  ];
+
+  const handleClearSearch = () => {
+    setSearchQuery('');
+    setCurrentPage(1);
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('q');
+    newParams.delete('search');
+    setSearchParams(newParams, { replace: true });
+  };
+
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setPriceFilter('all');
+    setSortBy('popular');
+    setCurrentPage(1);
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('q');
+    newParams.delete('search');
+    setSearchParams(newParams, { replace: true });
+  };
+
+  const [prevTopic, setPrevTopic] = useState(currentTopicKey);
+  const [prevQuery, setPrevQuery] = useState(() => searchParams.get('q') || searchParams.get('search') || '');
+  if (prevTopic !== currentTopicKey) {
+    setPrevTopic(currentTopicKey);
+    setCurrentPage(1);
+  }
+  const urlQ = searchParams.get('q') || searchParams.get('search') || '';
+  if (prevQuery !== urlQ) {
+    setPrevQuery(urlQ);
+    setSearchQuery(urlQ);
+    setCurrentPage(1);
+  }
+
+  // Cuộn lên đầu trang tức thì mỗi khi đổi chủ đề hoặc từ khóa tìm kiếm
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     const timer = setTimeout(() => {
       window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     }, 40);
-    setCurrentPage(1);
-    setSearchQuery('');
     return () => clearTimeout(timer);
-  }, [currentTopicKey]);
+  }, [currentTopicKey, searchParams]);
 
   // Tải danh sách sách từ backend API
   useEffect(() => {
@@ -85,8 +293,22 @@ export default function DanhMucSach() {
     return () => { isCancelled = true; };
   }, []);
 
-  // Lọc sách theo chủ đề hiện tại
+  // Lọc sách theo chủ đề hiện tại (chuẩn theo categoryId từ database)
   const topicBooks = useMemo(() => {
+    if (!allBooks || allBooks.length === 0) return [];
+    if (!currentTopic || currentTopic.key === 'all') {
+      return allBooks;
+    }
+    if (currentTopic.key === 'trending') {
+      return [...allBooks].sort((a, b) => (Number(b.rating) || 5) - (Number(a.rating) || 5));
+    }
+    if (currentTopic.categoryId !== null && currentTopic.categoryId !== undefined) {
+      return allBooks.filter((b) =>
+        b.category_id === currentTopic.categoryId ||
+        b.category?.category_id === currentTopic.categoryId ||
+        (b.category_name && b.category_name.toLowerCase() === currentTopic.title.toLowerCase())
+      );
+    }
     return filterBooksByTopic(allBooks, currentTopic.key);
   }, [allBooks, currentTopic]);
 
@@ -97,20 +319,20 @@ export default function DanhMucSach() {
     // 1. Tìm kiếm theo từ khóa
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
-      list = list.filter(b => 
-        (b.title || '').toLowerCase().includes(q) || 
+      list = list.filter((b) =>
+        (b.title || '').toLowerCase().includes(q) ||
         (b.author || '').toLowerCase().includes(q) ||
         (b.desc || '').toLowerCase().includes(q)
       );
     }
 
-    // 2. Lọc theo khoảng giá Khoai
-    if (priceFilter === 'free') {
-      list = list.filter(b => !b.price || Number(b.price) === 0);
-    } else if (priceFilter === 'under10') {
-      list = list.filter(b => Number(b.price) > 0 && Number(b.price) < 10);
-    } else if (priceFilter === '10plus') {
-      list = list.filter(b => Number(b.price) >= 10);
+    // 2. Lọc theo khoảng giá Khoai (chuẩn mức giá 1-100 Khoai)
+    if (priceFilter === 'under10') {
+      list = list.filter((b) => Number(b.price) > 0 && Number(b.price) < 10);
+    } else if (priceFilter === '10to25') {
+      list = list.filter((b) => Number(b.price) >= 10 && Number(b.price) <= 25);
+    } else if (priceFilter === '25plus') {
+      list = list.filter((b) => Number(b.price) > 25);
     }
 
     // 3. Sắp xếp
@@ -198,11 +420,11 @@ export default function DanhMucSach() {
               </div>
             </div>
 
-            {/* Category Quick Filter Pills Bar */}
+            {/* Category Quick Filter Pills Bar - Dữ liệu lấy từ Database */}
             <div className="mt-8 pt-6 border-t border-[#E8E2D5]/70 dark:border-[#2F322B]/70">
               <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar" style={{ scrollbarWidth: 'none' }}>
-                {TOPICS.map((topic) => {
-                  const isActive = currentTopic.key === topic.key;
+                {topicTabs.map((topic) => {
+                  const isActive = currentTopic.key === topic.key || (topic.categoryId && currentTopic.categoryId === topic.categoryId);
                   return (
                     <button
                       key={topic.key}
@@ -226,7 +448,7 @@ export default function DanhMucSach() {
         </section>
 
         {/* ========================================================
-           2. TOOLBAR: TÌM KIẾM & BỘ LỌC
+           2. TOOLBAR: TÌM KIẾM & BỘ LỌC (CUSTOM DROPDOWN SANG TRỌNG)
            ======================================================== */}
         <section className="py-6 sm:py-7 border-b border-[#E8E2D5]/60 dark:border-[#2F322B]/60">
           <div className="w-[94%] max-w-7xl mx-auto flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between">
@@ -247,59 +469,40 @@ export default function DanhMucSach() {
               {searchQuery && (
                 <button
                   type="button"
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6E6D7A] hover:text-[#1E1F1D] dark:hover:text-white text-xs"
+                  onClick={handleClearSearch}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6E6D7A] hover:text-[#1E1F1D] dark:hover:text-white text-xs cursor-pointer"
                 >
                   <i className="ph-bold ph-x-circle text-sm"></i>
                 </button>
               )}
             </div>
 
-            {/* Filters & Sorting */}
+            {/* Filters & Sorting - Custom Floating Dropdowns */}
             <div className="flex flex-wrap items-center gap-3 text-xs font-outfit">
-              {/* Lọc Giá Khoai */}
-              <div className="flex items-center gap-1.5 bg-white dark:bg-[#1E201B] px-3 py-2 rounded-xl border border-[#E8E2D5] dark:border-[#2F322B]">
-                <span className="text-[#6E6D7A] dark:text-[#A8A6A1] font-medium">Khoai:</span>
-                <select
-                  value={priceFilter}
-                  onChange={(e) => {
-                    setPriceFilter(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  className="bg-transparent font-bold text-[#1E1F1D] dark:text-[#EDE9DF] focus:outline-none cursor-pointer"
-                >
-                  <option value="all">Tất cả mức giá</option>
-                  <option value="free">Miễn phí 0 Khoai</option>
-                  <option value="under10">Dưới 10 Khoai</option>
-                  <option value="10plus">Từ 10 Khoai trở lên</option>
-                </select>
-              </div>
+              {/* Custom Dropdown: Lọc Giá Khoai */}
+              <CustomFilterDropdown
+                label="Khoai"
+                value={priceFilter}
+                options={PRICE_OPTIONS}
+                onChange={(val) => {
+                  setPriceFilter(val);
+                  setCurrentPage(1);
+                }}
+              />
 
-              {/* Sắp xếp */}
-              <div className="flex items-center gap-1.5 bg-white dark:bg-[#1E201B] px-3 py-2 rounded-xl border border-[#E8E2D5] dark:border-[#2F322B]">
-                <span className="text-[#6E6D7A] dark:text-[#A8A6A1] font-medium">Sắp xếp:</span>
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                  className="bg-transparent font-bold text-[#1E1F1D] dark:text-[#EDE9DF] focus:outline-none cursor-pointer"
-                >
-                  <option value="popular">Lượt đọc nhiều nhất 🔥</option>
-                  <option value="rating">Đánh giá cao nhất ⭐</option>
-                  <option value="newest">Mới cập nhật 🆕</option>
-                  <option value="price-asc">Giá Khoai tăng dần 🥔</option>
-                  <option value="price-desc">Giá Khoai giảm dần 🥔</option>
-                </select>
-              </div>
+              {/* Custom Dropdown: Sắp xếp */}
+              <CustomFilterDropdown
+                label="Sắp xếp"
+                value={sortBy}
+                options={SORT_OPTIONS}
+                onChange={(val) => setSortBy(val)}
+              />
 
               {/* Reset filter nếu có thay đổi */}
               {(searchQuery || priceFilter !== 'all' || sortBy !== 'popular') && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setSearchQuery('');
-                    setPriceFilter('all');
-                    setSortBy('popular');
-                  }}
+                  onClick={handleResetFilters}
                   className="px-3 py-2 rounded-xl text-rose-600 dark:text-rose-400 font-bold hover:bg-rose-50 dark:hover:bg-rose-950/30 transition flex items-center gap-1 cursor-pointer"
                 >
                   <i className="ph-bold ph-arrow-counter-clockwise"></i>
@@ -350,11 +553,7 @@ export default function DanhMucSach() {
                 </p>
                 <button
                   type="button"
-                  onClick={() => {
-                    setSearchQuery('');
-                    setPriceFilter('all');
-                    setSortBy('popular');
-                  }}
+                  onClick={handleResetFilters}
                   className="px-4 py-2 bg-[#8E3038] dark:bg-[#B8860B] text-white dark:text-[#111210] rounded-xl text-xs font-outfit font-black tracking-wider uppercase transition shadow cursor-pointer"
                 >
                   Xem Toàn Bộ Sách
