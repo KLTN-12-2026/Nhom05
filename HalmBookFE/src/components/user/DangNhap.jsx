@@ -8,12 +8,18 @@ import { useGoogleLogin } from '@react-oauth/google';
 import fbLoginModule from 'react-facebook-login/dist/facebook-login-render-props';
 import { saveAuthSession, isTokenValid, getAuthRole, getAdminAuthRole } from '@/services/authToken';
 
-const API_BASE_URL = 'http://localhost:8082';
+import { API_BASE_URL } from '@/constants/apiEndpoints';
 const FacebookLogin = fbLoginModule.default || fbLoginModule;
 
 export default function DangNhap() {
   const navigate = useNavigate();
   const location = useLocation();
+
+  // --- STATE POPUP THÔNG BÁO ---
+  const [popup, setPopup] = useState({
+    message: '',
+    type: 'error',
+  });
 
   // Xác định đường dẫn đích sau khi đăng nhập (từ ProtectedRoute hoặc query param)
   const searchParams = new URLSearchParams(location.search);
@@ -24,11 +30,12 @@ export default function DangNhap() {
     : (typeof redirectQuery === 'string' && redirectQuery.trim() ? redirectQuery : '');
 
   // Phát hiện nếu đang cố đăng nhập vào khu vực Admin
-  const isAdminPortal = fromPath.startsWith('/admin') || location.pathname.startsWith('/admin') || searchParams.get('portal') === 'admin';
+  const isAdminPortal = location.pathname.startsWith('/admin') || fromPath.startsWith('/admin') || searchParams.get('portal') === 'admin' || location.state?.portal === 'admin';
 
   // Tự động điều hướng nếu người dùng đã có phiên đăng nhập hợp lệ (ví dụ: bấm nút Back của trình duyệt)
   useEffect(() => {
-    const isLockedParam = searchParams.get('reason') === 'account_locked' || searchParams.get('locked') === 'true';
+    const params = new URLSearchParams(location.search);
+    const isLockedParam = params.get('reason') === 'account_locked' || params.get('locked') === 'true';
     if (isLockedParam) {
       setPopup({
         message: 'Tài khoản hiện đang bị khóa, vui lòng gọi hotline để hỗ trợ.',
@@ -40,10 +47,12 @@ export default function DangNhap() {
     if (isTokenValid()) {
       const userRole = (getAuthRole() || '').replace(/^ROLE_/, '').toUpperCase();
       const adminRole = (getAdminAuthRole() || '').replace(/^ROLE_/, '').toUpperCase();
-      if (isAdminPortal && (adminRole === 'ADMIN' || userRole === 'ADMIN')) {
-        navigate('/admin', { replace: true });
-      } else if (!isAdminPortal) {
-        const dest = (fromPath && !fromPath.startsWith('/dangnhap') && !fromPath.startsWith('/login')) ? fromPath : '/';
+      if (isAdminPortal) {
+        if (adminRole === 'ADMIN' || userRole === 'ADMIN') {
+          navigate('/admin', { replace: true });
+        }
+      } else {
+        const dest = (fromPath && !fromPath.startsWith('/dangnhap') && !fromPath.startsWith('/login') && !fromPath.startsWith('/admin')) ? fromPath : '/';
         navigate(dest, { replace: true });
       }
     }
@@ -69,12 +78,6 @@ export default function DangNhap() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [dieuKhoan, setDieuKhoan] = useState(false);
 
-  // --- STATE POPUP THÔNG BÁO ---
-  const [popup, setPopup] = useState({
-    message: '',
-    type: 'error',
-  });
-
   const handlePopupClose = () => {
     setPopup((prev) => ({ ...prev, message: '' }));
   };
@@ -86,7 +89,7 @@ export default function DangNhap() {
     setTimeout(() => {
       if (normalizedRole === 'ADMIN') {
         // Tài khoản Quản trị viên: Ưu tiên quay lại trang quản trị trước đó, hoặc vào thẳng /admin
-        const targetAdminUrl = (fromPath && fromPath.startsWith('/admin')) ? fromPath : '/admin';
+        const targetAdminUrl = (fromPath && fromPath.startsWith('/admin') && !fromPath.startsWith('/admin/login')) ? fromPath : '/admin';
         window.location.assign(targetAdminUrl);
       } else {
         // Tài khoản Độc giả / Người dùng bình thường:
@@ -358,7 +361,7 @@ export default function DangNhap() {
 
           {/* ================= FORM ĐĂNG NHẬP ================= */}
           <div className={`form-container ${activeForm === 'login' ? 'active' : 'hidden'}`}>
-            <h2 className="auth-title">Đăng Nhập</h2>
+            <h2 className="auth-title">{isAdminPortal ? 'Đăng Nhập Quản Trị Viên' : 'Đăng Nhập'}</h2>
 
             <form onSubmit={handleLogin}>
               <div className="input-group">
@@ -437,49 +440,53 @@ export default function DangNhap() {
               </button>
             </form>
 
-            <div className="divider">Hoặc đăng nhập bằng</div>
+            {!isAdminPortal && (
+              <>
+                <div className="divider">Hoặc đăng nhập bằng</div>
 
-            <div className="social-logins">
-              <button
-                type="button"
-                className="social-btn google"
-                title="Đăng nhập với Google"
-                onClick={() => loginWithGoogle()}
-                disabled={isSubmitting}
-              >
-                <i className="fab fa-brands fa-google"></i>
-              </button>
-
-              <FacebookLogin
-                appId={import.meta.env.VITE_FACEBOOK_APP_ID || '1559212956245733'}
-                autoLoad={false}
-                fields="name,email,picture"
-                callback={loginWithFacebook}
-                render={(renderProps) => (
+                <div className="social-logins">
                   <button
                     type="button"
-                    className="social-btn facebook"
-                    title="Đăng nhập với Facebook"
-                    onClick={renderProps.onClick}
+                    className="social-btn google"
+                    title="Đăng nhập với Google"
+                    onClick={() => loginWithGoogle()}
                     disabled={isSubmitting}
                   >
-                    <i className="fab fa-brands fa-facebook"></i>
+                    <i className="fab fa-brands fa-google"></i>
                   </button>
-                )}
-              />
-            </div>
 
-            <div className="switch-form-text">
-              <span style={{ color: 'var(--text-muted)', fontSize: '0.92rem' }}>Chưa có tài khoản? </span>
-              <button
-                type="button"
-                className="link-text"
-                style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontWeight: '700' }}
-                onClick={() => setActiveForm('register')}
-              >
-                Đăng ký thành viên
-              </button>
-            </div>
+                  <FacebookLogin
+                    appId={import.meta.env.VITE_FACEBOOK_APP_ID || '1559212956245733'}
+                    autoLoad={false}
+                    fields="name,email,picture"
+                    callback={loginWithFacebook}
+                    render={(renderProps) => (
+                      <button
+                        type="button"
+                        className="social-btn facebook"
+                        title="Đăng nhập với Facebook"
+                        onClick={renderProps.onClick}
+                        disabled={isSubmitting}
+                      >
+                        <i className="fab fa-brands fa-facebook"></i>
+                      </button>
+                    )}
+                  />
+                </div>
+
+                <div className="switch-form-text">
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.92rem' }}>Chưa có tài khoản? </span>
+                  <button
+                    type="button"
+                    className="link-text"
+                    style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontWeight: '700' }}
+                    onClick={() => setActiveForm('register')}
+                  >
+                    Đăng ký thành viên
+                  </button>
+                </div>
+              </>
+            )}
 
             <div style={{ textAlign: 'center', marginTop: '16px' }}>
               <Link to="/" className="link-text" style={{ fontSize: '0.85rem', color: '#636e72' }}>

@@ -1,39 +1,13 @@
+import { cartThemeStyles, cartStyles, inlinePageStyle1 } from './styles/GioHang.styles.js';
 import { useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import UserLayout from './layout/UserLayout';
 import axiosInstance from '@/services/axiosClient';
 import { getTierInfo } from '@/utils/tierUtils';
 
-const cartThemeStyles = `
-    html:not(.dark) .bg-paper-surface { background-color: #FFFEFA; }
-    html:not(.dark) .bg-paper-200 { background-color: #EAE5D9; }
-    html:not(.dark) .bg-paper { background-color: #F7F4EE; }
-    html:not(.dark) .bg-wine { background-color: #8E3038; }
-    html:not(.dark) .bg-gold { background-color: #B8860B; }
-    html:not(.dark) .text-ink { color: #1E1F1D; }
-    html:not(.dark) .text-ink-muted { color: #66645E; }
-    html:not(.dark) .border-paper-border { border-color: #E3DDD0; }
 
-    html.dark .bg-night-bg { background-color: #111210 !important; }
-    html.dark .bg-night-surface { background-color: #181916 !important; }
-    html.dark .bg-night-card { background-color: #20221E !important; }
-    html.dark .border-night-border { border-color: #2C2E29 !important; }
-    html.dark .text-night-text { color: #EDE9DF !important; }
-    html.dark .text-night-muted { color: #96938B !important; }
-    html.dark [class*="bg-paper-surface"] { background-color: #181916 !important; }
-    html.dark [class*="text-ink"] { color: #EDE9DF !important; }
-    html.dark [class*="border-paper-border"] { border-color: #2C2E29 !important; }
-    .dark .dark\\:bg-paper-surface { background-color: #FFFEFA; }
-    .dark .dark\\:bg-paper-200 { background-color: #EAE5D9; }
-    .dark .dark\\:bg-night-surface { background-color: #181916; }
-    .dark .dark\\:bg-night-card { background-color: #20221E; }
-    .dark .dark\\:bg-night-bg { background-color: #111210; }
-    .dark .dark\\:text-night-text { color: #EDE9DF; }
-    .dark .dark\\:text-night-muted { color: #96938B; }
-    .dark .dark\\:text-gold { color: #B8860B; }
-    .dark .dark\\:border-night-border { border-color: #2C2E29; }
-`;
 
-const cartStyles = "/* ========================================================\n           TYPOGRAPHY & CSS VARIABLES (STRICTLY IDENTICAL TO HOME)\n           ======================================================== */\n        :root {\n            --font-display: \"Inter\", sans-serif;\n            --font-ui: \"Inter\", sans-serif;\n            --font-metadata: \"Roboto\", sans-serif;\n            --font-editorial: \"Open Sans\", sans-serif;\n        }\n\n        html {\n            scroll-behavior: smooth;\n        }\n\n        body {\n            font-family: var(--font-ui);\n            background-color: #F7F4EE;\n            color: #1E1F1D;\n            overflow-x: hidden;\n            -webkit-font-smoothing: antialiased;\n            transition: background-color 0.4s ease, color 0.4s ease;\n        }\n\n        .dark body {\n            background-color: #111210;\n            color: #EDE9DF;\n        }\n\n        /* Subtle paper grain texture */\n        .paper-grain {\n            background-image: radial-gradient(rgba(30, 31, 29, 0.04) 1px, transparent 0);\n            background-size: 24px 24px;\n        }\n        .dark .paper-grain {\n            background-image: radial-gradient(rgba(237, 233, 223, 0.03) 1px, transparent 0);\n            background-size: 24px 24px;\n        }\n\n        /* Starry background in Dark Mode */\n        #starry-background {\n            position: fixed;\n            top: 0;\n            left: 0;\n            width: 100%;\n            height: 100%;\n            pointer-events: none;\n            z-index: 0;\n            opacity: 0;\n            transition: opacity 0.5s ease;\n        }\n        .dark #starry-background {\n            opacity: 1;\n        }\n        .star {\n            position: absolute;\n            background: white;\n            border-radius: 50%;\n            opacity: 0.3;\n            animation: twinkle var(--duration, 4s) infinite ease-in-out;\n        }\n        @keyframes twinkle {\n            0%, 100% { opacity: 0.2; transform: scale(0.8); }\n            50% { opacity: 0.8; transform: scale(1.2); }\n        }\n\n        /* Glassmorphism Navbar */\n        .glass-nav {\n            background: rgba(247, 244, 238, 0.88);\n            backdrop-filter: blur(14px);\n            -webkit-backdrop-filter: blur(14px);\n            border-color: rgba(227, 221, 208, 0.8);\n        }\n        .dark .glass-nav {\n            background: rgba(17, 18, 16, 0.90);\n            backdrop-filter: blur(14px);\n            -webkit-backdrop-filter: blur(14px);\n            border-color: rgba(44, 46, 41, 0.8);\n        }\n\n        /* Custom luxury checkbox matching theme */\n        .luxury-checkbox {\n            appearance: none;\n            -webkit-appearance: none;\n            width: 20px;\n            height: 20px;\n            border: 2px solid #C5B7A1;\n            border-radius: 5px;\n            outline: none;\n            cursor: pointer;\n            position: relative;\n            background-color: transparent;\n            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);\n            display: inline-flex;\n            align-items: center;\n            justify-content: center;\n            flex-shrink: 0;\n        }\n        .dark .luxury-checkbox {\n            border-color: #4A5B74;\n        }\n        .luxury-checkbox:checked {\n            background-color: #8E3038;\n            border-color: #8E3038;\n        }\n        .dark .luxury-checkbox:checked {\n            background-color: #D4AF37;\n            border-color: #D4AF37;\n        }\n        .luxury-checkbox:checked::after {\n            content: '';\n            width: 5px;\n            height: 10px;\n            border: solid white;\n            border-width: 0 2px 2px 0;\n            transform: rotate(45deg) translate(-1px, -1px);\n            display: block;\n        }\n        .dark .luxury-checkbox:checked::after {\n            border-color: #111210;\n        }\n\n        /* Select option dark/light theme support */\n        select option {\n            background-color: #FFFEFA;\n            color: #111210;\n        }\n        .dark select option {\n            background-color: #181916;\n            color: #F5F2EB;\n        }\n\n        /* Horizontal Shelf Scrollbar Hidden */\n        .shelf-scroll-container {\n            display: flex;\n            gap: 1.25rem;\n            overflow-x: auto;\n            scroll-behavior: smooth;\n            -ms-overflow-style: none;\n            scrollbar-width: none;\n            padding: 0.25rem 0.25rem 0.75rem 0.25rem;\n        }\n        .shelf-scroll-container::-webkit-scrollbar {\n            display: none;\n        }\n\n        /* Gift Progress Animated Stripes */\n        .progress-striped {\n            background-image: repeating-linear-gradient(\n                45deg,\n                rgba(255, 255, 255, 0.18),\n                rgba(255, 255, 255, 0.18) 10px,\n                transparent 10px,\n                transparent 20px\n            );\n            background-size: 28px 28px;\n            animation: moveStripes 2s linear infinite;\n        }\n        @keyframes moveStripes {\n            from { background-position: 0 0; }\n            to { background-position: 28px 0; }\n        }\n\n        /* Toast notification */\n        #toast-notification {\n            position: fixed;\n            bottom: 28px;\n            right: 28px;\n            z-index: 100;\n            transform: translateY(120%);\n            opacity: 0;\n            transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);\n            pointer-events: none;\n        }\n        #toast-notification.show {\n            transform: translateY(0);\n            opacity: 1;\n            pointer-events: auto;\n        }\n\n        /* Scroll to Top Floating Button */\n        #btnScrollToTop {\n            position: fixed;\n            bottom: 24px;\n            right: 84px;\n            width: 44px;\n            height: 44px;\n            border-radius: 9999px;\n            background-color: #8E3038;\n            color: #ffffff;\n            display: flex;\n            align-items: center;\n            justify-content: center;\n            box-shadow: 0 4px 14px rgba(142, 48, 56, 0.35);\n            cursor: pointer;\n            z-index: 40;\n            opacity: 0;\n            visibility: hidden;\n            pointer-events: none;\n            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);\n        }\n        .dark #btnScrollToTop {\n            background-color: #D4AF37;\n            color: #111210;\n            box-shadow: 0 4px 14px rgba(212, 175, 55, 0.35);\n        }\n        #btnScrollToTop.visible {\n            opacity: 1;\n            visibility: visible;\n            pointer-events: auto;\n        }\n        #btnScrollToTop:hover {\n            transform: translateY(-3px);\n        }\n\n        /* Custom luxury scrollbar for cart items */\n        #cart-items-scroll-wrapper {\n            scrollbar-width: thin;\n            scrollbar-color: rgba(142, 48, 56, 0.3) transparent;\n            scrollbar-gutter: stable;\n            max-height: 604px;\n            padding-top: 2px;\n            padding-bottom: 8px;\n        }\n        .dark #cart-items-scroll-wrapper {\n            scrollbar-color: rgba(212, 175, 55, 0.3) transparent;\n        }\n        #cart-items-scroll-wrapper::-webkit-scrollbar {\n            width: 10px;\n        }\n        #cart-items-scroll-wrapper::-webkit-scrollbar-track {\n            background: transparent;\n        }\n        #cart-items-scroll-wrapper::-webkit-scrollbar-thumb {\n            background-color: rgba(142, 48, 56, 0.25);\n            border-radius: 9999px;\n            border: 2px solid transparent;\n            background-clip: content-box;\n        }\n        .dark #cart-items-scroll-wrapper::-webkit-scrollbar-thumb {\n            background-color: rgba(212, 175, 55, 0.25);\n        }\n        #cart-items-scroll-wrapper::-webkit-scrollbar-thumb:hover {\n            background-color: rgba(142, 48, 56, 0.5);\n        }\n        .dark #cart-items-scroll-wrapper::-webkit-scrollbar-thumb:hover {\n            background-color: rgba(212, 175, 55, 0.5);\n        }\n        #cart-toolbar {\n            width: calc(100% - 10px);\n        }\n\n        /* Book cover luxury styling with rounded corners on all 4 sides */\n        .cart-book-cover {\n            border-radius: 12px !important;\n            overflow: hidden !important;\n            isolation: isolate !important;\n            transform: translateZ(0);\n        }\n        .cart-book-cover img {\n            border-radius: 12px !important;\n            width: 100%;\n            height: 100%;\n            object-fit: cover;\n            display: block;\n        }\n\n        /* Chatbot widget */\n        #chatbot-container {\n            position: fixed;\n            bottom: 24px;\n            right: 24px;\n            z-index: 50;\n        }\n        #chat-window {\n            position: absolute;\n            bottom: 60px;\n            right: 0;\n            width: 380px;\n            height: 520px;\n            max-width: calc(100vw - 32px);\n            background: #FFFEFA;\n            border: 1px solid #E3DDD0;\n            border-radius: 18px;\n            box-shadow: 0 20px 45px rgba(0,0,0,0.18);\n            display: flex;\n            flex-direction: column;\n            overflow: hidden;\n            transform: scale(0.92) translateY(20px);\n            opacity: 0;\n            pointer-events: none;\n            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);\n        }\n        .dark #chat-window {\n            background: #181916;\n            border-color: #2C2E29;\n            box-shadow: 0 20px 45px rgba(0,0,0,0.5);\n        }\n        #chat-window.open {\n            transform: scale(1) translateY(0);\n            opacity: 1;\n            pointer-events: auto;\n        }";
+
 
 export default function CartEnd() {
     useEffect(() => {
@@ -77,9 +51,8 @@ export default function CartEnd() {
         let userWalletBalance = 0; // Lấy số dư Khoai thực tế từ tài khoản đăng nhập
         let userTierDiscountPercent = 0; // Chiết khấu theo hạng hội viên (5%, 10%, 20%)
         let userTierName = 'Thợ Cày';
-        let appliedCouponDiscount = 5; // Default coupon discount active
-        let appliedCouponName = 'HALM2026';
-        let giftTargetThreshold = 30; // Khoai threshold to receive Golden Bookmark
+        let appliedCouponDiscount = 0; // Mặc định không áp mã giảm giá
+        let appliedCouponName = '';
 
         // Cart items data state
         let cartItems = [];
@@ -151,55 +124,46 @@ export default function CartEnd() {
             const userKhoaiNavEl = document.getElementById('user-khoai-nav');
             if (userKhoaiNavEl) userKhoaiNavEl.textContent = userWalletBalance.toLocaleString();
 
-            // Gift Progress
-            const giftNeededKhoaiEl = document.getElementById('gift-needed-khoai');
-            const giftProgressPctEl = document.getElementById('gift-progress-pct');
-            const giftProgressBarEl = document.getElementById('gift-progress-bar');
-            const giftStatusTextEl = document.getElementById('gift-status-text');
-
-            if (subtotal >= giftTargetThreshold) {
-                if (giftProgressPctEl) giftProgressPctEl.textContent = '100%';
-                if (giftProgressBarEl) giftProgressBarEl.style.width = '100%';
-                if (giftStatusTextEl) {
-                    giftStatusTextEl.innerHTML = '🎉 Chúc mừng! Bạn đã <b>đủ điều kiện nhận Bookmark mạ vàng HALM</b> kèm đơn này!';
-                }
-            } else {
-                const needed = giftTargetThreshold - subtotal;
-                const pct = Math.round((subtotal / giftTargetThreshold) * 100);
-                if (giftNeededKhoaiEl) giftNeededKhoaiEl.textContent = `${needed} Khoai`;
-                if (giftProgressPctEl) giftProgressPctEl.textContent = `${pct}%`;
-                if (giftProgressBarEl) giftProgressBarEl.style.width = `${pct}%`;
-                if (giftStatusTextEl) {
-                    giftStatusTextEl.innerHTML = `Thuê thêm <b class="text-wine dark:text-gold font-metadata">${needed} Khoai</b> để nhận Bookmark mạ vàng HALM!`;
-                }
-            }
-
             // Select all checkbox state
             const checkAllEl = document.getElementById('check-all');
             if (checkAllEl) {
                 checkAllEl.checked = totalItemsCount > 0 && selectedItemsCount === totalItemsCount;
             }
 
-            // Empty state toggle
+            // Empty state toggle & matching height with right summary sidebar
             const emptyStateEl = document.getElementById('cart-empty-state');
-            const itemsContainerEl = document.getElementById('cart-items-container');
+            const hasItemsWrapperEl = document.getElementById('cart-has-items-wrapper');
             const checkoutBtnEl = document.getElementById('btn-checkout');
 
             if (totalItemsCount === 0) {
-                if (emptyStateEl) emptyStateEl.classList.remove('hidden');
-                if (itemsContainerEl) itemsContainerEl.classList.add('hidden');
+                if (emptyStateEl) {
+                    emptyStateEl.classList.remove('hidden');
+                    emptyStateEl.classList.add('flex');
+                }
+                if (hasItemsWrapperEl) {
+                    hasItemsWrapperEl.classList.add('hidden');
+                }
                 if (checkoutBtnEl) {
                     checkoutBtnEl.disabled = true;
                     checkoutBtnEl.classList.add('opacity-50', 'cursor-not-allowed');
                 }
             } else {
-                if (emptyStateEl) emptyStateEl.classList.add('hidden');
-                if (itemsContainerEl) itemsContainerEl.classList.remove('hidden');
+                if (emptyStateEl) {
+                    emptyStateEl.classList.add('hidden');
+                    emptyStateEl.classList.remove('flex');
+                }
+                if (hasItemsWrapperEl) {
+                    hasItemsWrapperEl.classList.remove('hidden');
+                }
                 if (checkoutBtnEl) {
                     checkoutBtnEl.disabled = selectedItemsCount === 0;
                     checkoutBtnEl.classList.toggle('opacity-50', selectedItemsCount === 0);
                     checkoutBtnEl.classList.toggle('cursor-not-allowed', selectedItemsCount === 0);
                 }
+            }
+
+            if (typeof updateRecommendationShelfStatus === 'function') {
+                updateRecommendationShelfStatus();
             }
         }
 
@@ -971,7 +935,7 @@ export default function CartEnd() {
             themeToggleBtn.addEventListener('click', () => {
                 const isDark = document.documentElement.classList.toggle('dark');
                 const tVal = isDark ? 'dark' : 'light';
-                ['color-theme', 'halm-theme', 'halm_theme', 'theme'].forEach(k => { try { localStorage.setItem(k, tVal); } catch(e){} });
+                ['color-theme', 'halm-theme', 'halm_theme', 'theme'].forEach(k => { try { localStorage.setItem(k, tVal); } catch {} });
                 window.dispatchEvent(new CustomEvent('halm-theme-change', { detail: { isDark } }));
                 if (themeIcon) {
                     if (isDark) {
@@ -1030,7 +994,7 @@ export default function CartEnd() {
                     if (walletEl) walletEl.textContent = userWalletBalance.toLocaleString();
                     recalculateCart();
                 }
-            } catch (err) {
+            } catch {
                 // Keep default
             }
         }
@@ -1061,17 +1025,386 @@ export default function CartEnd() {
                 console.error('Không thể tải giỏ hàng từ máy chủ:', error);
                 cartItems = [];
                 recalculateCart();
+            } finally {
+                loadRecommendations();
+            }
+        }
+
+        // --- 13. RECOMMENDATION & TRENDING RENT-TOGETHER SYSTEM ---
+        const CURATED_TRENDING_BOOKS = [
+            {
+                book_id: 'B0001',
+                bookName: 'Nhà Giả Kim',
+                author: 'Paulo Coelho',
+                img_url: 'https://covers.openlibrary.org/b/id/10522444-L.jpg',
+                rent_price: 9,
+                category_name: 'Tiểu thuyết',
+                rating: '4.9',
+                readCount: 154,
+                description: 'Hành trình theo đuổi giấc mơ và lắng nghe trái tim của cậu bé chăn cừu Santiago.'
+            },
+            {
+                book_id: 'B0002',
+                bookName: 'Đắc Nhân Tâm',
+                author: 'Dale Carnegie',
+                img_url: 'https://covers.openlibrary.org/b/id/8225266-L.jpg',
+                rent_price: 9,
+                category_name: 'Kỹ năng sống',
+                rating: '5.0',
+                readCount: 142,
+                description: 'Nghệ thuật thu phục lòng người và xây dựng mối quan hệ tốt đẹp.'
+            },
+            {
+                book_id: 'B0003',
+                bookName: 'Mắt Biếc',
+                author: 'Nguyễn Nhật Ánh',
+                img_url: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=600&q=80',
+                rent_price: 9,
+                category_name: 'Văn học',
+                rating: '4.8',
+                readCount: 128,
+                description: 'Câu chuyện tình yêu tuổi học trò đầy tiếc nuối của Ngạn và Hà Lan.'
+            },
+            {
+                book_id: 'B0004',
+                bookName: 'Hoàng Tử Bé',
+                author: 'Antoine de Saint-Exupéry',
+                img_url: 'https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=600&q=80',
+                rent_price: 9,
+                category_name: 'Kinh điển',
+                rating: '4.9',
+                readCount: 115,
+                description: 'Một cái nhìn trong trẻo về tình bạn, tình yêu và ý nghĩa cuộc sống qua đôi mắt trẻ thơ.'
+            },
+            {
+                book_id: 'B0005',
+                bookName: 'Cây Cam Ngọt Của Tôi',
+                author: 'José Mauro de Vasconcelos',
+                img_url: 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?auto=format&fit=crop&w=600&q=80',
+                rent_price: 9,
+                category_name: 'Văn học',
+                rating: '5.0',
+                readCount: 98,
+                description: 'Câu chuyện cảm động về nỗi đau và tình thương của cậu bé Zezé năm tuổi.'
+            },
+            {
+                book_id: 'B0006',
+                bookName: 'Tôi Thấy Hoa Vàng Trên Cỏ Xanh',
+                author: 'Nguyễn Nhật Ánh',
+                img_url: 'https://images.unsplash.com/photo-1532012164546-f432f2e3edd4?auto=format&fit=crop&w=600&q=80',
+                rent_price: 9,
+                category_name: 'Tuổi học trò',
+                rating: '4.8',
+                readCount: 89,
+                description: 'Những mảnh ký ức ấu thơ mộc mạc nơi làng quê Việt Nam thanh bình.'
+            }
+        ];
+
+        let recommendedBooksCache = [...CURATED_TRENDING_BOOKS];
+
+        function renderRecommendedShelf(books) {
+            const shelfContainer = document.getElementById('trending-cart-shelf');
+            if (!shelfContainer) return;
+
+            let displayBooks = (books && books.length > 0) ? books.slice(0, 6) : CURATED_TRENDING_BOOKS.slice(0, 6);
+
+            const cartBookIds = new Set(cartItems.map(i => String(i.bookId || i.id)));
+
+            const cardsHTML = displayBooks.map((book, idx) => {
+                const bookId = String(book.book_id);
+                const title = book.bookName;
+                const author = book.author;
+                const cover = book.img_url;
+                const price = (book.rent_price !== undefined && book.rent_price !== null) ? book.rent_price : 9;
+                const category = book.category_name || 'Văn học';
+                const rating = book.rating || '5.0';
+                const readCount = book.readCount || (120 - idx * 7);
+                const isInCart = cartBookIds.has(bookId);
+
+                // Rank Badge Styling
+                let rankBadge = '';
+                let rankBorder = 'border-paper-border dark:border-night-border';
+                let rankGlow = '';
+                if (idx === 0) {
+                    rankBadge = `<div class="absolute -top-2.5 -left-2 z-20 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 text-slate-950 font-metadata font-black text-[10px] tracking-wider shadow-lg shadow-amber-500/40 border border-yellow-100"><span>👑</span><span>TOP 1</span></div>`;
+                    rankBorder = 'border-amber-400/80 ring-1 ring-amber-400/30';
+                    rankGlow = 'shadow-[0_4px_20px_rgba(245,158,11,0.18)]';
+                } else if (idx === 1) {
+                    rankBadge = `<div class="absolute -top-2.5 -left-2 z-20 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-slate-200 via-gray-100 to-slate-300 text-slate-900 font-metadata font-black text-[10px] tracking-wider shadow-lg shadow-slate-400/30 border border-white"><span>🥈</span><span>TOP 2</span></div>`;
+                    rankBorder = 'border-slate-300 dark:border-slate-400/60 ring-1 ring-slate-300/30';
+                } else if (idx === 2) {
+                    rankBadge = `<div class="absolute -top-2.5 -left-2 z-20 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-700 via-amber-600 to-orange-700 text-white font-metadata font-black text-[10px] tracking-wider shadow-lg shadow-orange-900/30 border border-amber-300/50"><span>🥉</span><span>TOP 3</span></div>`;
+                    rankBorder = 'border-amber-600/60 dark:border-amber-600/60 ring-1 ring-amber-600/30';
+                } else {
+                    rankBadge = `<div class="absolute -top-2 -left-1.5 z-20 flex items-center gap-0.5 px-2 py-0.5 rounded-lg bg-black/80 dark:bg-black/90 backdrop-blur-md text-amber-300 font-metadata font-black text-[9px] border border-amber-500/40 shadow"><span>🔥</span><span>#${idx + 1}</span></div>`;
+                }
+
+                // Button CTA state
+                const actionButtonHTML = isInCart ? `
+                    <button type="button" disabled class="w-full py-1.5 px-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-metadata font-bold text-[11px] flex items-center justify-center gap-1.5 cursor-default transition-all">
+                        <i class="ph-bold ph-check-circle text-xs"></i> <span>Đã Trong Giỏ</span>
+                    </button>
+                ` : `
+                    <button type="button" onclick="window.handleQuickRentTogether('${bookId}')" id="btn-rent-${bookId}" class="w-full py-1.5 px-2 rounded-xl bg-wine hover:bg-wine-light text-white dark:bg-gold dark:hover:bg-gold-light dark:text-night-bg font-metadata font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-sm hover:shadow-md transition-all active:scale-95 cursor-pointer">
+                        <i class="ph-bold ph-plus-circle text-xs"></i> <span>+ Thuê Cùng</span>
+                    </button>
+                `;
+
+                return `
+                    <div class="trending-cart-card relative shrink-0 snap-start p-3 sm:p-3.5 rounded-2xl bg-paper-surface dark:bg-night-card border ${rankBorder} ${rankGlow} group flex flex-col justify-between hover:-translate-y-2 hover:shadow-xl transition-all duration-300 w-[190px] sm:w-[210px]" data-book-id="${bookId}">
+                        ${rankBadge}
+                        <div>
+                            <div class="relative w-full aspect-[2/3] rounded-xl overflow-hidden bg-night-card shadow-md mb-2.5 cursor-pointer" onclick="window.location.href='/chitietsach/${bookId}'">
+                                <img src="${cover}" alt="${title}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" onerror="this.onerror=null;this.src='/logo.png';">
+                                <div class="font-metadata absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full bg-black/75 backdrop-blur-sm text-[9px] text-amber-300 font-bold flex items-center gap-0.5 shadow">
+                                    <i class="ph-fill ph-star text-amber-400"></i> ${rating}
+                                </div>
+                                <div class="font-metadata absolute bottom-1.5 inset-x-1.5 px-2 py-0.5 rounded-md bg-black/75 backdrop-blur-sm text-[9px] text-emerald-300 font-medium flex items-center justify-between">
+                                    <span class="flex items-center gap-1"><i class="ph-bold ph-fire text-amber-400"></i> ${readCount} đọc</span>
+                                    <span class="text-[8px] text-gray-300 uppercase truncate max-w-[65px]">${category}</span>
+                                </div>
+                            </div>
+                            <div class="space-y-1">
+                                <h4 class="font-display font-bold text-xs sm:text-[13px] text-ink dark:text-night-text line-clamp-1 group-hover:text-wine dark:group-hover:text-gold transition-colors cursor-pointer" title="${title}" onclick="window.location.href='/chitietsach/${bookId}'">
+                                    ${title}
+                                </h4>
+                                <p class="font-metadata text-[11px] text-ink-muted dark:text-night-muted line-clamp-1">
+                                    ${author}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="pt-2.5 mt-2.5 border-t border-paper-border/70 dark:border-night-border/70 space-y-2">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <span class="font-display font-black text-xs sm:text-[13px] text-wine dark:text-gold flex items-center gap-1">
+                                        <span>🥔</span> ${price} Khoai
+                                    </span>
+                                    <span class="text-[9px] font-metadata text-ink-muted dark:text-night-muted block leading-none">
+                                        Gói 7 ngày
+                                    </span>
+                                </div>
+                                <button type="button" onclick="window.previewRecommendedBook('${bookId}')" class="px-2 py-1 rounded-lg border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-surface text-[10px] font-metadata font-bold text-ink dark:text-night-text transition-colors flex items-center gap-1" title="Đọc thử trích đoạn">
+                                    <i class="ph-bold ph-book-open text-xs"></i> <span>Đọc thử</span>
+                                </button>
+                            </div>
+                            <div id="action-wrapper-${bookId}">
+                                ${actionButtonHTML}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            shelfContainer.innerHTML = cardsHTML;
+        }
+
+        async function loadRecommendations() {
+            const shelfContainer = document.getElementById('trending-cart-shelf');
+            if (!shelfContainer) return;
+
+            const cartBookIds = cartItems.map(i => i.bookId || i.id).filter(Boolean);
+            const cartSet = new Set(cartBookIds.map(String));
+            const limit = 6;
+            let fetchedBooks = [];
+
+            try {
+                let url = `/api/home/books/recommendations?limit=${limit}`;
+                if (cartBookIds.length > 0) {
+                    url += '&cartBookIds=' + cartBookIds.map(encodeURIComponent).join(',');
+                }
+                const res = await axiosInstance.get(url);
+                fetchedBooks = Array.isArray(res.data) ? res.data : (res.data?.content || []);
+            } catch {
+                // Endpoint /books/recommendations may be pending or returning 404
+            }
+
+            if (!fetchedBooks || fetchedBooks.length === 0) {
+                try {
+                    const trendingRes = await axiosInstance.get(`/api/home/books/trending?limit=${limit}`);
+                    fetchedBooks = Array.isArray(trendingRes.data) ? trendingRes.data : (trendingRes.data?.content || []);
+                } catch {}
+            }
+
+            if (!fetchedBooks || fetchedBooks.length === 0) {
+                try {
+                    const fallbackRes = await axiosInstance.get('/api/home/books', {
+                        params: { page: 0, size: 10 }
+                    });
+                    const allBooks = Array.isArray(fallbackRes.data?.content) ? fallbackRes.data.content : (Array.isArray(fallbackRes.data) ? fallbackRes.data : []);
+                    fetchedBooks = allBooks.filter(b => !cartSet.has(String(b.book_id || b.id)));
+                } catch {}
+            }
+
+            // Chuẩn hóa và làm sạch dữ liệu từ API
+            let combinedBooks = (fetchedBooks || []).filter(b => !cartSet.has(String(b.book_id || b.id))).map((b, idx) => {
+                let rawPrice = (b.rent_price !== undefined && b.rent_price !== null) ? Number(b.rent_price) : 9;
+                let normalizedPrice = (rawPrice > 0 && rawPrice <= 50) ? Math.round(rawPrice) : 9;
+                return {
+                    book_id: b.book_id || b.id || `rec-${idx}`,
+                    bookName: b.bookName || b.title || 'Tác phẩm HALM',
+                    author: b.author || 'HALM BOOK',
+                    img_url: b.img_url || b.cover || b.img || '/logo.png',
+                    rent_price: normalizedPrice,
+                    category_name: b.category_name || b.category?.category_name || 'Văn học',
+                    readCount: b.readCount || (120 - idx * 7),
+                    rating: b.rating || '5.0',
+                    description: b.description || 'Tác phẩm xuất sắc được chọn lọc trong tuần trên HALM Book.'
+                };
+            });
+
+            // Nếu số lượng sách chưa đủ 6 cuốn, bổ sung từ kho sách CURATED_TRENDING_BOOKS
+            if (combinedBooks.length < 6) {
+                const existingIds = new Set(combinedBooks.map(b => String(b.book_id)));
+                for (const fallbackBook of CURATED_TRENDING_BOOKS) {
+                    if (combinedBooks.length >= 6) break;
+                    if (!existingIds.has(String(fallbackBook.book_id)) && !cartSet.has(String(fallbackBook.book_id))) {
+                        combinedBooks.push(fallbackBook);
+                        existingIds.add(String(fallbackBook.book_id));
+                    }
+                }
+            }
+
+            recommendedBooksCache = combinedBooks.slice(0, 6);
+            renderRecommendedShelf(recommendedBooksCache);
+        }
+
+        async function handleQuickRentTogether(bookId) {
+            const book = recommendedBooksCache.find(b => String(b.book_id) === String(bookId));
+            if (!book) return;
+
+            const title = book.bookName;
+            const author = book.author;
+            const cover = book.img_url;
+            const price = (book.rent_price !== undefined && book.rent_price !== null) ? book.rent_price : 9;
+            const category = book.category_name || 'Văn học';
+            const planKey = '7';
+            const rentalDays = 7;
+
+            const existing = cartItems.find(i => String(i.bookId) === String(bookId) || i.title === title);
+            if (existing) {
+                showToast('Thông báo', `"${title}" đã có sẵn trong giỏ hàng của bạn.`);
+                updateRecommendationShelfStatus();
+                return;
+            }
+
+            const actionWrapper = document.getElementById(`action-wrapper-${bookId}`);
+            if (actionWrapper) {
+                actionWrapper.innerHTML = `
+                    <button type="button" disabled class="w-full py-1.5 px-2 rounded-xl bg-paper-200 dark:bg-night-surface border border-paper-border dark:border-night-border text-ink-muted dark:text-night-muted font-metadata font-bold text-[11px] flex items-center justify-center gap-1 cursor-wait">
+                        <div class="w-3.5 h-3.5 rounded-full border-2 border-wine dark:border-gold border-t-transparent animate-spin"></div>
+                        <span>Đang thêm...</span>
+                    </button>
+                `;
+            }
+
+            try {
+                const res = await axiosInstance.post('/api/home/cart/add', {
+                    bookId: String(bookId),
+                    planKey: planKey,
+                    price: price
+                });
+                const serverCartItemId = res.data?.cartItemId || null;
+
+                addRecommendedBook(
+                    serverCartItemId || bookId,
+                    title,
+                    author,
+                    cover,
+                    price,
+                    category,
+                    rentalDays,
+                    planKey,
+                    bookId
+                );
+
+                window.dispatchEvent(new Event('halm-cart-updated'));
+                updateRecommendationShelfStatus();
+            } catch (err) {
+                console.error('Lỗi khi thêm sách gợi ý vào giỏ:', err);
+                updateRecommendationShelfStatus();
+                showToast('Lỗi', 'Không thể thêm sách vào giỏ hàng. Vui lòng thử lại!');
+            }
+        }
+
+        function previewRecommendedBook(bookId) {
+            const book = recommendedBooksCache.find(b => String(b.book_id) === String(bookId));
+            const titleEl = document.getElementById('preview-modal-title');
+            const authorEl = document.getElementById('preview-modal-author');
+            const contentEl = document.getElementById('preview-modal-content');
+            const modal = document.getElementById('preview-modal');
+            const dialog = document.getElementById('preview-modal-dialog');
+
+            if (book) {
+                if (titleEl) titleEl.textContent = book.bookName || 'Đọc Thử Tác Phẩm';
+                if (authorEl) authorEl.textContent = `${book.author || 'HALM BOOK'} • ${book.category_name || 'Bản quyền số'}`;
+                if (contentEl) {
+                    contentEl.innerHTML = `
+                        <div class="space-y-4 font-editorial text-sm leading-relaxed text-ink dark:text-night-text">
+                            <div class="p-3.5 rounded-xl bg-paper-200/60 dark:bg-night-surface border border-paper-border dark:border-night-border mb-3">
+                                <span class="text-xs font-metadata font-bold text-wine dark:text-gold uppercase tracking-wider block mb-1">
+                                    <i class="ph-bold ph-info"></i> Giới thiệu tác phẩm:
+                                </span>
+                                <p class="text-xs text-ink-muted dark:text-night-muted leading-relaxed">
+                                    ${book.description || 'Tác phẩm chọn lọc thuộc kho tàng tri thức bản quyền số của HALM BOOK.'}
+                                </p>
+                            </div>
+                            <p class="font-display font-semibold text-ink dark:text-night-text text-sm">Trích đoạn xem trước:</p>
+                            <p>Chào mừng bạn đến với không gian đọc thử của <b>${book.bookName}</b>. Hệ thống HALM BOOK áp dụng tiêu chuẩn bảo vệ bản quyền số chuẩn quốc tế, cho phép bạn trải nghiệm trích đoạn nguyên bản với chất lượng dàn trang tối ưu.</p>
+                            <p>Hãy bấm <b>"+ Thuê Cùng"</b> ngay trong giỏ hàng để mở khóa toàn bộ nội dung, tính năng ghi chú thông minh và đồng bộ hóa đa thiết bị với mức chiết khấu hội viên tốt nhất!</p>
+                        </div>
+                    `;
+                }
+            } else {
+                openBookPreview('generic');
+                return;
+            }
+
+            if (modal && dialog) {
+                modal.classList.remove('opacity-0', 'pointer-events-none');
+                dialog.classList.remove('scale-95');
+                dialog.classList.add('scale-100');
+            }
+        }
+
+        function updateRecommendationShelfStatus() {
+            const cartBookIds = new Set(cartItems.map(i => String(i.bookId || i.id)));
+            if (recommendedBooksCache && recommendedBooksCache.length > 0) {
+                recommendedBooksCache.forEach(book => {
+                    const bookId = String(book.book_id);
+                    const actionWrapper = document.getElementById(`action-wrapper-${bookId}`);
+                    if (actionWrapper) {
+                        const isInCart = cartBookIds.has(bookId);
+                        if (isInCart) {
+                            actionWrapper.innerHTML = `
+                                <button type="button" disabled class="w-full py-1.5 px-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-metadata font-bold text-[11px] flex items-center justify-center gap-1.5 cursor-default transition-all">
+                                    <i class="ph-bold ph-check-circle text-xs"></i> <span>Đã Trong Giỏ</span>
+                                </button>
+                            `;
+                        } else {
+                            actionWrapper.innerHTML = `
+                                <button type="button" onclick="window.handleQuickRentTogether('${bookId}')" id="btn-rent-${bookId}" class="w-full py-1.5 px-2 rounded-xl bg-wine hover:bg-wine-light text-white dark:bg-gold dark:hover:bg-gold-light dark:text-night-bg font-metadata font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-sm hover:shadow-md transition-all active:scale-95 cursor-pointer">
+                                    <i class="ph-bold ph-plus-circle text-xs"></i> <span>+ Thuê Cùng</span>
+                                </button>
+                            `;
+                        }
+                    }
+                });
             }
         }
 
         // Initialize on load
         const initializeCart = () => {
             initTheme();
+            if (typeof renderRecommendedShelf === 'function') {
+                renderRecommendedShelf(CURATED_TRENDING_BOOKS);
+            }
             recalculateCart();
             fetchUserInfo();
             loadCartFromServer();
+            loadRecommendations();
             const badge = document.getElementById('coupon-active-badge');
-            if (badge) badge.classList.remove('hidden');
+            if (badge) badge.classList.add('hidden');
 
             document.getElementById('delete-confirm-modal')?.addEventListener('click', function(e) {
                 if (e.target === this) closeDeleteConfirmModal();
@@ -1108,24 +1441,18 @@ export default function CartEnd() {
         window.handleHeaderSearch = handleHeaderSearch;
         window.initTheme = initTheme;
         window.createStarrySky = createStarrySky;
+        window.loadRecommendations = loadRecommendations;
+        window.renderRecommendedShelf = renderRecommendedShelf;
+        window.handleQuickRentTogether = handleQuickRentTogether;
+        window.previewRecommendedBook = previewRecommendedBook;
+        window.updateRecommendationShelfStatus = updateRecommendationShelfStatus;
     }, []);
 
     return (
         <>
             <style dangerouslySetInnerHTML={{ __html: cartStyles }} />
             <style dangerouslySetInnerHTML={{ __html: cartThemeStyles }} />
-            <style>{`
-                #trending-cart-shelf {
-                    padding-top: 0.85rem;
-                }
-                #trending-cart-shelf > div {
-                    position: relative;
-                    z-index: 1;
-                }
-                #trending-cart-shelf > div:hover {
-                    z-index: 2;
-                }
-            `}</style>
+            <style>{inlinePageStyle1}</style>
             <link rel="preconnect" href="https://fonts.googleapis.com" />
             <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
             <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Open+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,600&family=Roboto:wght@300;400;500;700;900&display=swap" rel="stylesheet" />
@@ -1150,102 +1477,6 @@ export default function CartEnd() {
                     </div>
                 
                     {/* ========================================================
-                         NAVBAR: EDITORIAL NAVIGATION (ĐỒNG BỘ 1520PX VỚI TRANG CHỦ)
-                         ======================================================== */}
-                    {false && (<header id="navbar" className="fixed top-0 inset-x-0 z-40 transition-all duration-300 py-4 border-b border-transparent">
-                        <div className="w-full max-w-[1520px] mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
-                            
-                            {/* Logo & Brand */}
-                            <a href="testhome/tc.html" className="flex items-center gap-3 group shrink-0" aria-label="HALM BOOK Homepage">
-                                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-lg bg-wine flex items-center justify-center text-white shadow-md group-hover:scale-105 transition-transform">
-                                    <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src='/logo.png' }} />
-                                </div>
-                                <div className="flex flex-col">
-                                    <span className="font-display font-black text-xl sm:text-2xl tracking-tight text-ink dark:text-night-text leading-tight group-hover:text-wine dark:group-hover:text-gold transition-colors">
-                                        HALM BOOK
-                                    </span>
-                                    <span className="font-metadata text-[9px] uppercase tracking-[0.22em] font-bold text-ink-muted dark:text-night-muted -mt-0.5">
-                                        Reading Ecosystem & Library
-                                    </span>
-                                </div>
-                            </a>
-                
-                            {/* Navigation Links */}
-                            <nav className="hidden lg:flex items-center gap-7 text-xs font-bold tracking-wider uppercase text-ink/80 dark:text-night-muted" aria-label="Main Navigation">
-                                <a href="testhome/tc.html" className="hover:text-wine dark:hover:text-gold transition-colors">Trang Chủ</a>
-                                <a href="offers.html" className="hover:text-wine dark:hover:text-gold transition-colors">Ưu Đãi</a>
-                                <a href="tiers.html" className="hover:text-wine dark:hover:text-gold transition-colors">Gói Hội Viên</a>
-                                <a href="my-books.html" className="hover:text-wine dark:hover:text-gold transition-colors">Tủ Sách</a>
-                                <a href="news.html" className="hover:text-wine dark:hover:text-gold transition-colors">Tin Tức</a>
-                                <button type="button" onClick={() => { window.openChatbot('Chào bạn! Tôi muốn hỏi về chính sách thuê sách và tích lũy Khoai.') }} className="text-wine dark:text-gold flex items-center gap-1 font-black cursor-pointer hover:opacity-80 transition-opacity">
-                                    <i className="ph-bold ph-sparkle text-sm"></i> Trợ Lý AI
-                                </button>
-                            </nav>
-                
-                            {/* Search Bar */}
-                            <div className="hidden md:flex flex-1 max-w-xs lg:max-w-sm relative">
-                                <form id="search-form" className="w-full relative flex items-center" onSubmit={(event) => { event.preventDefault(); window.handleHeaderSearch() }}>
-                                    <i className="ph ph-magnifying-glass absolute left-3.5 text-ink-muted text-sm"></i>
-                                    <input type="text" id="header-search-input" placeholder="Tìm sách, tác giả, gói thuê..." 
-                                           className="w-full pl-9 pr-8 py-2 rounded-full text-xs font-medium bg-paper-200/70 dark:bg-night-card border border-paper-border dark:border-night-border focus:outline-none focus:border-wine dark:focus:border-gold text-ink dark:text-night-text placeholder-ink-muted/80 transition-all shadow-inner"
-                                           autoComplete="off" />
-                                </form>
-                            </div>
-                
-                            {/* Utilities: Potato Balance, Cart, Account, Theme Toggle, Mobile Menu */}
-                            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                                {/* User Potato Balance */}
-                                <a href="/canhan?tab=wallet" className="hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border shadow-sm text-xs font-metadata font-bold text-ink dark:text-night-text hover:border-gold transition-colors" title="Số dư Khoai thưởng của bạn - Bấm để vào Ví Khoai">
-                                    <span className="w-2 h-2 rounded-full bg-gold animate-pulse"></span>
-                                    <span id="user-khoai-nav">0</span>
-                                    <span className="text-gold font-extrabold flex items-center gap-0.5">Khoai <i className="ph-fill ph-coins text-[11px]"></i></span>
-                                </a>
-                
-                                {/* Cart Icon Button (Active Highlight) */}
-                                <a href="cart.html" className="p-2.5 rounded-full bg-wine/10 dark:bg-gold/15 text-wine dark:text-gold border border-wine/25 dark:border-gold/30 transition-colors relative" title="Giỏ hàng hiện tại">
-                                    <i className="ph-fill ph-shopping-bag text-xl"></i>
-                                    <span id="header-cart-badge" className="font-metadata absolute top-1 right-1 w-4 h-4 bg-wine dark:bg-gold text-white dark:text-night-bg text-[10px] font-bold rounded-full flex items-center justify-center">2</span>
-                                </a>
-                
-                                {/* Account Link */}
-                                <a href="profile.html" className="flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold text-ink dark:text-night-text hover:bg-paper-200 dark:hover:bg-night-card border border-paper-border dark:border-night-border transition-colors">
-                                    <i className="ph-bold ph-user text-xs"></i>
-                                    <span className="hidden sm:inline">Hồ Sơ</span>
-                                </a>
-                
-                                {/* Theme Toggle */}
-                                <button id="theme-toggle" className="p-2.5 rounded-full text-ink dark:text-night-text hover:bg-paper-200 dark:hover:bg-night-card transition-colors" title="Đổi giao diện Sáng / Tối" aria-label="Đổi giao diện Sáng / Tối">
-                                    <i id="theme-icon" className="ph-bold ph-moon text-xl"></i>
-                                </button>
-                
-                                {/* Mobile Menu Button */}
-                                <button id="mobile-menu-btn" className="lg:hidden p-2.5 rounded-full text-ink dark:text-night-text hover:bg-paper-200 dark:hover:bg-night-card" aria-label="Mở Menu">
-                                    <i className="ph-bold ph-list text-2xl"></i>
-                                </button>
-                            </div>
-                        </div>
-                
-                        {/* Mobile Drawer */}
-                        <div id="mobile-drawer" className="hidden lg:hidden px-6 py-5 bg-paper-surface dark:bg-night-surface border-b border-paper-border dark:border-night-border space-y-3">
-                            <div className="flex items-center justify-between pb-3 border-b border-paper-border dark:border-night-border">
-                                <span className="text-xs font-metadata text-ink-muted dark:text-night-muted">Số dư khoai:</span>
-                                <a href="/canhan?tab=wallet" id="drawer-potato-balance" className="text-xs font-metadata font-bold text-gold flex items-center gap-1">0 Khoai <i className="ph-fill ph-coins"></i></a>
-                            </div>
-                            <nav className="flex flex-col gap-2 font-bold text-xs uppercase tracking-wider">
-                                <a href="testhome/tc.html" className="py-1.5 text-ink dark:text-night-text hover:text-wine">Trang Chủ</a>
-                                <a href="offers.html" className="py-1.5 text-ink dark:text-night-text hover:text-wine">Ưu Đãi Đặc Quyền</a>
-                                <a href="tiers.html" className="py-1.5 text-ink dark:text-night-text hover:text-wine">Gói Hội Viên</a>
-                                <a href="my-books.html" className="py-1.5 text-ink dark:text-night-text hover:text-wine">Tủ Sách</a>
-                                <a href="news.html" className="py-1.5 text-ink dark:text-night-text hover:text-wine">Tin Tức & Sự Kiện</a>
-                                <a href="cart.html" className="py-1.5 text-wine dark:text-gold">Giỏ Hàng</a>
-                                <a href="profile.html" className="py-1.5 text-ink dark:text-night-text hover:text-wine">Thông Tin Cá Nhân</a>
-                                <a href="login.html" className="py-1.5 text-rose-600 dark:text-rose-400">Đăng Xuất</a>
-                            </nav>
-                        </div>
-                    </header>)}
-                
-                
-                    {/* ========================================================
                          MAIN CONTENT: TIÊU CHUẨN MAX-W 1520PX, ĐỒNG BỘ FONT INTER
                          ======================================================== */}
                     <main className="w-full max-w-[1520px] mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-12 sm:pt-28 sm:pb-16 flex-1">
@@ -1254,7 +1485,7 @@ export default function CartEnd() {
                         <div className="mb-6 sm:mb-8 border-b border-paper-border dark:border-night-border pb-5">
                             {/* Breadcrumbs */}
                             <nav className="flex items-center gap-2 text-xs font-metadata text-ink-muted dark:text-night-muted mb-2">
-                                <a href="testhome/tc.html" className="hover:text-wine dark:hover:text-gold transition-colors">Trang Chủ</a>
+                                <a href="/" className="hover:text-wine dark:hover:text-gold transition-colors">Trang Chủ</a>
                                 <span>/</span>
                                 <span className="text-ink dark:text-night-text font-bold">Giỏ Hàng & Thuê Sách</span>
                             </nav>
@@ -1267,30 +1498,56 @@ export default function CartEnd() {
                 
                         {/* ========================================================
                              CART MAIN LAYOUT: TWO-COLUMN ALIGNED AT BOOK 1
-                             - Left Column (7 cols): Toolbar (row 1) + Scrollable Cart Items (row 2)
-                             - Right Column (5 cols): Checkout Summary Card (row 2, starts level with Book 1)
+                             - Left Column (7 cols): Toolbar + Cart Items (when has items) OR Full-Height Empty Card (when empty)
+                             - Right Column (5 cols): Wallet Balance Card + Checkout Summary Card
                              ======================================================== */}
-                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-x-8 gap-y-4 items-start mb-12">
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch mb-12">
                 
-                            {/* 1. Cột trái hàng 1: Thanh công cụ riêng (Chọn tất cả + Xóa mục đã chọn) */}
-                            <div className="lg:col-span-7">
-                                <div id="cart-toolbar" className="p-3.5 sm:p-4 rounded-xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border shadow-sm flex items-center justify-between gap-3">
-                                    <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                                        <input type="checkbox" id="check-all" defaultChecked onChange={(event) => { window.toggleSelectAll(event.currentTarget.checked) }} className="luxury-checkbox" />
-                                        <span className="font-display font-bold text-xs sm:text-sm text-ink dark:text-night-text whitespace-nowrap">
-                                            Chọn tất cả (<span id="select-all-count">2</span>)
-                                        </span>
-                                    </label>
+                            {/* CỘT TRÁI: 7 CỘT */}
+                            <div className="lg:col-span-7 flex flex-col justify-between">
+                                {/* Khối hiển thị khi có sách trong giỏ: Thanh công cụ + Danh sách cuộn */}
+                                <div id="cart-has-items-wrapper" className="space-y-4">
+                                    <div id="cart-toolbar" className="p-3.5 sm:p-4 rounded-xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border shadow-sm flex items-center justify-between gap-3">
+                                        <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                                            <input type="checkbox" id="check-all" defaultChecked onChange={(event) => { window.toggleSelectAll(event.currentTarget.checked) }} className="luxury-checkbox" />
+                                            <span className="font-display font-bold text-xs sm:text-sm text-ink dark:text-night-text whitespace-nowrap">
+                                                Chọn tất cả (<span id="select-all-count">0</span>)
+                                            </span>
+                                        </label>
+                    
+                                        <button type="button" onClick={() => { window.deleteSelectedItems() }} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rose-300 dark:border-rose-900/60 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-xs font-metadata font-bold transition-colors cursor-pointer">
+                                            <i className="ph-bold ph-trash text-sm"></i>
+                                            <span>Xóa mục đã chọn</span>
+                                        </button>
+                                    </div>
+
+                                    {/* Khung cuộn giới hạn chiều cao tối đa (max-h) không làm đẩy nội dung bên dưới */}
+                                    <div id="cart-items-scroll-wrapper" className="w-full max-h-[604px] pt-0.5 pb-2 overflow-y-auto overflow-x-hidden space-y-4 rounded-2xl">
+                                        <div id="cart-items-container" className="space-y-4"></div>
+                                    </div>
+                                </div>
                 
-                                    <button type="button" onClick={() => { window.deleteSelectedItems() }} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rose-300 dark:border-rose-900/60 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-xs font-metadata font-bold transition-colors cursor-pointer">
-                                        <i className="ph-bold ph-trash text-sm"></i>
-                                        <span>Xóa mục đã chọn</span>
-                                    </button>
+                                {/* Khối hiển thị khi giỏ hàng trống: Div màu be kéo rộng cao bằng khung chi tiết bên phải */}
+                                <div id="cart-empty-state" className="hidden w-full h-full min-h-[480px] lg:min-h-[520px] py-14 px-8 rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border text-center flex-col items-center justify-center space-y-6 shadow-sm transition-all">
+                                    <div className="w-20 h-20 rounded-full bg-paper-200 dark:bg-night-surface mx-auto flex items-center justify-center text-ink-muted dark:text-night-muted text-3xl shadow-inner">
+                                        <i className="ph-bold ph-shopping-bag-open"></i>
+                                    </div>
+                                    <div className="space-y-2.5 max-w-md mx-auto">
+                                        <h3 className="font-display font-black text-2xl text-ink dark:text-night-text">Giỏ hàng của bạn đang trống</h3>
+                                        <p className="font-editorial text-sm text-ink-muted dark:text-night-muted max-w-md mx-auto leading-relaxed">
+                                            Hiện chưa có tác phẩm nào trong giỏ thuê. Hãy khám phá kho tàng sách phong phú của HALM ngay bên dưới!
+                                        </p>
+                                    </div>
+                                    <a href="#trending-cart-shelf" onClick={(e) => { e.preventDefault(); document.getElementById('trending-cart-shelf')?.scrollIntoView({ behavior: 'smooth' }); }} className="inline-flex items-center gap-2 px-7 py-3 rounded-xl bg-wine hover:bg-wine-light text-white dark:bg-gold dark:hover:bg-gold-light dark:text-night-bg font-metadata font-bold text-xs uppercase tracking-wider shadow-md hover:shadow-lg transition-all cursor-pointer">
+                                        <span>Khám Phá Sách Mới</span>
+                                        <i className="ph-bold ph-arrow-down"></i>
+                                    </a>
                                 </div>
                             </div>
                 
-                            {/* 2. Cột phải hàng 1: Thẻ div riêng hiển thị số dư ví Khoai (Nằm trên thẻ thanh toán) */}
-                            <div className="lg:col-span-5">
+                            {/* CỘT PHẢI: 5 CỘT (STICKY SUMMARY + VÍ KHOAI) */}
+                            <div id="cart-summary-sidebar" className="lg:col-span-5 space-y-4 sticky top-24">
+                                {/* Thẻ hiển thị số dư ví Khoai */}
                                 <div id="cart-balance-card" className="p-3.5 sm:p-4 rounded-xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border shadow-sm flex items-center justify-between gap-3">
                                     <div className="flex items-center gap-2.5">
                                         <div className="w-8 h-8 rounded-lg bg-gold/15 text-gold flex items-center justify-center text-sm shrink-0">
@@ -1304,214 +1561,11 @@ export default function CartEnd() {
                                             </div>
                                         </div>
                                     </div>
-                                    <a href="profile.html" className="px-3 py-1.5 rounded-lg bg-gold/10 hover:bg-gold/20 text-gold text-xs font-metadata font-bold transition-colors flex items-center gap-1">
+                                    <Link to="/canhan?tab=wallet" className="px-3 py-1.5 rounded-lg bg-gold/10 hover:bg-gold/20 text-gold text-xs font-metadata font-bold transition-colors flex items-center gap-1">
                                         <span>Nạp thêm</span>
                                         <i className="ph-bold ph-plus text-[10px]"></i>
-                                    </a>
+                                    </Link>
                                 </div>
-                            </div>
-                
-                            {/* 2. Khung danh sách sách (Hàng 2 bên trái, bắt đầu bằng cuốn sách đầu tiên) */}
-                            <div className="lg:col-span-7">
-                                {/* Khung cuộn giới hạn chiều cao tối đa (max-h) không làm đẩy nội dung bên dưới */}
-                                <div id="cart-items-scroll-wrapper" className="w-full max-h-[604px] pt-0.5 pb-2 overflow-y-auto overflow-x-hidden space-y-4 rounded-2xl">
-                                    <div id="cart-items-container" className="space-y-4">
-                                    {false && (<>
-                                    
-                                    {/* Sách 1: Có Hai Con Mèo Ngồi Bên Cửa Sổ */}
-                                    <div className="cart-item-card p-4 sm:p-5 rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border shadow-sm hover:shadow-md transition-all relative group" data-item-id="book-1" data-price="10" data-duration="7">
-                                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-5">
-                                            
-                                            {/* Selection Checkbox */}
-                                            <div className="flex items-center pt-1 sm:pt-0 shrink-0">
-                                                <input type="checkbox" defaultChecked onChange={() => { window.handleItemCheckboxChange('book-1') }} className="luxury-checkbox item-checkbox" data-target="book-1" />
-                                            </div>
-                
-                                            {/* Book Cover Image (Tỷ lệ aspect-[2/3] thanh thoát chuẩn tc.html) */}
-                                            <div className="relative w-20 sm:w-24 aspect-[2/3] rounded-xl overflow-hidden border border-paper-border dark:border-night-border shrink-0 shadow-md bg-night-card cart-book-cover">
-                                                <img src="https://www.nxbtre.com.vn/Images/Book/nxbtre_full_07292022_022951.jpg" 
-                                                     alt="Có Hai Con Mèo Ngồi Bên Cửa Sổ" 
-                                                     className="w-full h-full object-cover rounded-xl group-hover:scale-105 transition-transform duration-500" />
-                                                <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur text-white text-[9px] font-metadata font-bold uppercase">
-                                                     Văn học
-                                                </span>
-                                            </div>
-                
-                                            {/* Book Info Details */}
-                                            <div className="flex-1 min-w-0 space-y-2">
-                                                <div>
-                                                    <div className="flex items-center gap-2 mb-1">
-                                                        <span className="text-[11px] font-metadata font-bold text-wine dark:text-gold uppercase tracking-wider">
-                                                            NXB Trẻ
-                                                        </span>
-                                                        <span className="text-xs text-ink-muted dark:text-night-muted">•</span>
-                                                        <span className="text-[11px] font-metadata text-ink-muted dark:text-night-muted">
-                                                            Bản quyền số chính thức
-                                                        </span>
-                                                    </div>
-                                                    <h3 className="font-display font-black text-base sm:text-lg text-ink dark:text-night-text group-hover:text-wine dark:group-hover:text-gold transition-colors truncate">
-                                                        Có Hai Con Mèo Ngồi Bên Cửa Sổ
-                                                    </h3>
-                                                    <p className="font-editorial text-xs text-ink-muted dark:text-night-muted">
-                                                        Tác giả: <span className="font-semibold text-ink dark:text-night-text">Nguyễn Nhật Ánh</span>
-                                                    </p>
-                                                </div>
-                
-                                                {/* Rental Duration Custom Selector */}
-                                                <div className="flex flex-wrap items-center gap-2.5 pt-1">
-                                                    <span className="text-xs font-metadata font-bold text-ink-muted dark:text-night-muted flex items-center gap-1">
-                                                        <i className="ph-bold ph-calendar text-sm text-wine dark:text-gold"></i>
-                                                        Thời hạn thuê:
-                                                    </span>
-                                                    <div className="relative">
-                                                        <select onChange={(event) => { window.updateItemDuration('book-1', event.currentTarget.value) }} className="appearance-none pl-3 pr-8 py-1.5 rounded-lg text-xs font-metadata font-bold bg-paper-200/80 dark:bg-night-surface border border-paper-border dark:border-night-border text-ink dark:text-night-text focus:outline-none focus:border-wine dark:focus:border-gold cursor-pointer transition-colors shadow-sm">
-                                                            <option value="1|3" className="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">1 ngày (3 Khoai)</option>
-                                                            <option value="3|6" className="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">3 ngày (6 Khoai)</option>
-                                                            <option value="7|10" selected className="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">7 ngày (10 Khoai - Tiêu chuẩn)</option>
-                                                            <option value="15|18" className="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">15 ngày (18 Khoai)</option>
-                                                            <option value="30|28" className="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">30 ngày (28 Khoai - Tiết kiệm)</option>
-                                                        </select>
-                                                        <i className="ph-bold ph-caret-down text-xs text-ink-muted dark:text-night-muted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
-                                                    </div>
-                                                </div>
-                                            </div>
-                
-                                            {/* Price & Actions Right Column */}
-                                            <div className="w-full sm:w-auto flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-3 pt-3 sm:pt-0 border-t sm:border-t-0 border-paper-border dark:border-night-border shrink-0">
-                                                <div className="text-left sm:text-right">
-                                                    <div className="font-display font-black text-lg sm:text-xl text-wine dark:text-gold flex items-center sm:justify-end gap-1">
-                                                        <span id="price-book-1">10</span>
-                                                        <span className="text-xs font-metadata font-extrabold uppercase text-gold">Khoai <i className="ph-fill ph-coins"></i></span>
-                                                    </div>
-                                                    <div className="text-[10px] font-metadata text-ink-muted dark:text-night-muted">
-                                                        Gia hạn tự động: Tắt
-                                                    </div>
-                                                </div>
-                
-                                                <div className="flex items-center gap-2">
-                                                    <button type="button" onClick={() => { window.openBookPreview('meo-ben-cua-so') }} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-surface text-xs font-metadata font-bold text-ink dark:text-night-text transition-colors" title="Đọc thử vài chương">
-                                                        <i className="ph-bold ph-book-open text-xs"></i>
-                                                        <span>Đọc thử</span>
-                                                    </button>
-                                                    <button type="button" onClick={() => { window.deleteSingleItem('book-1') }} className="p-1.5 rounded-lg border border-paper-border dark:border-night-border hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 dark:text-rose-400 transition-colors" title="Xóa khỏi giỏ hàng">
-                                                        <i className="ph-bold ph-trash text-sm"></i>
-                                                    </button>
-                                                </div>
-                                            </div>
-                
-                                        </div>
-                                    </div>
-                
-                                    {/* Sách 2: Hồ Sơ Mật – Phản Gián */}
-                                    <div className="cart-item-card p-4 sm:p-5 rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border shadow-sm hover:shadow-md transition-all relative group" data-item-id="book-2" data-price="15" data-duration="3">
-                                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-5">
-                                            
-                                            {/* Selection Checkbox */}
-                                            <div className="flex items-center pt-1 sm:pt-0 shrink-0">
-                                                <input type="checkbox" defaultChecked onChange={() => { window.handleItemCheckboxChange('book-2') }} className="luxury-checkbox item-checkbox" data-target="book-2" />
-                                            </div>
-                
-                                            {/* Book Cover Image (Tỷ lệ aspect-[2/3] thanh thoát) */}
-                                            <div className="relative w-20 sm:w-24 aspect-[2/3] rounded-xl overflow-hidden border border-paper-border dark:border-night-border shrink-0 shadow-md bg-night-card cart-book-cover">
-                                                <img src="https://bizweb.dktcdn.net/100/197/269/files/ho-so-mat-phan-gian-nhung-cuoc-dau-tri-tham-lang-qua-ngoi-but-nxb-chinh-tri-quoc-gia-su-that.jpg?v=1686733221945" 
-                                                     alt="Hồ Sơ Mật – Phản Gián" 
-                                                     className="w-full h-full object-cover rounded-xl group-hover:scale-105 transition-transform duration-500" />
-                                                <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur text-white text-[9px] font-metadata font-bold uppercase">
-                                                    Lịch sử CAND
-                                                </span>
-                                            </div>
-                
-                                            {/* Book Info Details */}
-                                            <div className="flex-1 min-w-0 space-y-2">
-                                                <div>
-                                                    <div className="flex items-center gap-2 mb-1">
-                                                        <span className="text-[11px] font-metadata font-bold text-wine dark:text-gold uppercase tracking-wider">
-                                                            NXB Chính Trị Quốc Gia Sự Thật
-                                                        </span>
-                                                        <span className="text-xs text-ink-muted dark:text-night-muted">•</span>
-                                                        <span className="text-[11px] font-metadata text-ink-muted dark:text-night-muted">
-                                                            Tài liệu chuyên khảo
-                                                        </span>
-                                                    </div>
-                                                    <h3 className="font-display font-black text-base sm:text-lg text-ink dark:text-night-text group-hover:text-wine dark:group-hover:text-gold transition-colors truncate">
-                                                        Hồ Sơ Mật – Phản Gián: Cuộc Đấu Trí Thầm Lặng
-                                                    </h3>
-                                                    <p className="font-editorial text-xs text-ink-muted dark:text-night-muted">
-                                                        Tác giả: <span className="font-semibold text-ink dark:text-night-text">Nhiều tác giả</span>
-                                                    </p>
-                                                </div>
-                
-                                                {/* Rental Duration Custom Selector */}
-                                                <div className="flex flex-wrap items-center gap-2.5 pt-1">
-                                                    <span className="text-xs font-metadata font-bold text-ink-muted dark:text-night-muted flex items-center gap-1">
-                                                        <i className="ph-bold ph-calendar text-sm text-wine dark:text-gold"></i>
-                                                        Thời hạn thuê:
-                                                    </span>
-                                                    <div className="relative">
-                                                        <select defaultValue="3|15" onChange={(event) => { window.updateItemDuration('book-2', event.currentTarget.value) }} className="appearance-none pl-3 pr-8 py-1.5 rounded-lg text-xs font-metadata font-bold bg-paper-200/80 dark:bg-night-surface border border-paper-border dark:border-night-border text-ink dark:text-night-text focus:outline-none focus:border-wine dark:focus:border-gold cursor-pointer transition-colors shadow-sm">
-                                                            <option value="1|5" className="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">1 ngày (5 Khoai)</option>
-                                                            <option value="3|15" className="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">3 ngày (15 Khoai - Đề xuất)</option>
-                                                            <option value="7|25" className="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">7 ngày (25 Khoai)</option>
-                                                            <option value="15|45" className="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">15 ngày (45 Khoai)</option>
-                                                            <option value="30|70" className="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">30 ngày (70 Khoai)</option>
-                                                        </select>
-                                                        <i className="ph-bold ph-caret-down text-xs text-ink-muted dark:text-night-muted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
-                                                    </div>
-                                                </div>
-                                            </div>
-                
-                                            {/* Price & Actions Right Column */}
-                                            <div className="w-full sm:w-auto flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-3 pt-3 sm:pt-0 border-t sm:border-t-0 border-paper-border dark:border-night-border shrink-0">
-                                                <div className="text-left sm:text-right">
-                                                    <div className="font-display font-black text-lg sm:text-xl text-wine dark:text-gold flex items-center sm:justify-end gap-1">
-                                                        <span id="price-book-2">15</span>
-                                                        <span className="text-xs font-metadata font-extrabold uppercase text-gold">Khoai <i className="ph-fill ph-coins"></i></span>
-                                                    </div>
-                                                    <div className="text-[10px] font-metadata text-ink-muted dark:text-night-muted">
-                                                        Gia hạn tự động: Tắt
-                                                    </div>
-                                                </div>
-                
-                                                <div className="flex items-center gap-2">
-                                                    <button type="button" onClick={() => { window.openBookPreview('ho-so-mat') }} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-surface text-xs font-metadata font-bold text-ink dark:text-night-text transition-colors" title="Đọc thử vài chương">
-                                                        <i className="ph-bold ph-book-open text-xs"></i>
-                                                        <span>Đọc thử</span>
-                                                    </button>
-                                                    <button type="button" onClick={() => { window.deleteSingleItem('book-2') }} className="p-1.5 rounded-lg border border-paper-border dark:border-night-border hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 dark:text-rose-400 transition-colors" title="Xóa khỏi giỏ hàng">
-                                                        <i className="ph-bold ph-trash text-sm"></i>
-                                                    </button>
-                                                </div>
-                                            </div>
-                
-                                        </div>
-                                    </div>
-                
-                                    </>)}
-                                    </div>
-                                </div>
-                
-                                {/* 3. Empty State (Hidden when items exist) */}
-                                <div id="cart-empty-state" className="hidden py-14 px-6 rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border text-center space-y-4">
-                                    <div className="w-16 h-16 rounded-full bg-paper-200 dark:bg-night-surface mx-auto flex items-center justify-center text-ink-muted dark:text-night-muted text-3xl">
-                                        <i className="ph-bold ph-shopping-bag-open"></i>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <h3 className="font-display font-black text-xl text-ink dark:text-night-text">Giỏ hàng của bạn đang trống</h3>
-                                        <p className="font-editorial text-xs text-ink-muted dark:text-night-muted max-w-md mx-auto">
-                                            Hiện chưa có tác phẩm nào trong giỏ thuê. Hãy khám phá kho tàng sách phong phú của HALM ngay bên dưới!
-                                        </p>
-                                    </div>
-                                    <a href="testhome/tc.html" className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-wine hover:bg-wine-light text-white dark:bg-gold dark:hover:bg-gold-light dark:text-night-bg font-metadata font-bold text-xs uppercase tracking-wider shadow-md transition-all">
-                                        <span>Khám Phá Sách Mới</span>
-                                        <i className="ph-bold ph-arrow-right"></i>
-                                    </a>
-                                </div>
-                
-                            </div>
-                
-                
-                            {/* ================= RIGHT AREA: 5 COLS (STICKY SUMMARY) ================= */}
-                            <div id="cart-summary-sidebar" className="lg:col-span-5 sticky top-24 space-y-5">
                                 
                                 <div className="rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-6 shadow-sm space-y-5">
                                     
@@ -1524,7 +1578,7 @@ export default function CartEnd() {
                                             </h2>
                                         </div>
                                         <span className="text-xs font-metadata text-ink-muted dark:text-night-muted">
-                                            <span id="summary-items-count">2</span> sách
+                                            <span id="summary-items-count">0</span> sách
                                         </span>
                                     </div>
                 
@@ -1536,7 +1590,7 @@ export default function CartEnd() {
                                         <div className="flex items-center gap-2">
                                             <div className="relative flex-1">
                                                 <i className="ph-bold ph-tag absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted text-xs"></i>
-                                                <input type="text" id="coupon-input" placeholder="VD: HALM2026, VIPBOOK" 
+                                                <input type="text" id="coupon-input" placeholder="VD: VIPBOOK, KHOAI5" 
                                                        className="w-full pl-8 pr-3 py-2 rounded-xl text-xs font-metadata font-bold uppercase bg-paper-200/70 dark:bg-night-surface border border-paper-border dark:border-night-border focus:outline-none focus:border-wine dark:focus:border-gold text-ink dark:text-night-text placeholder-ink-muted/60 transition-colors" />
                                             </div>
                                             <button type="button" onClick={() => { window.applyCoupon() }} className="px-4 py-2 rounded-xl bg-paper-200 dark:bg-night-surface hover:bg-wine hover:text-white dark:hover:bg-gold dark:hover:text-night-bg border border-paper-border dark:border-night-border text-xs font-metadata font-bold text-ink dark:text-night-text transition-all">
@@ -1546,7 +1600,7 @@ export default function CartEnd() {
                                         <div id="coupon-active-badge" className="hidden flex items-center justify-between px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs font-metadata text-emerald-700 dark:text-emerald-300">
                                             <span className="flex items-center gap-1.5 font-bold">
                                                 <i className="ph-bold ph-seal-check"></i>
-                                                <span id="coupon-name-text">HALM2026</span> (-5 Khoai)
+                                                <span id="coupon-name-text"></span> (-0 Khoai)
                                             </span>
                                             <button type="button" onClick={() => { window.removeCoupon() }} className="text-emerald-600 dark:text-emerald-400 hover:text-rose-500 transition-colors">
                                                 <i className="ph-bold ph-x"></i>
@@ -1554,31 +1608,15 @@ export default function CartEnd() {
                                         </div>
                                     </div>
                 
-                                    {/* Gift Progress Meter Box */}
-                                    <div className="p-3.5 rounded-xl bg-gold/10 dark:bg-gold/15 border border-gold/30 dark:border-gold/40 space-y-2">
-                                        <div className="flex items-center justify-between text-xs font-metadata">
-                                            <span className="font-bold text-wine dark:text-gold flex items-center gap-1.5">
-                                                <i className="ph-fill ph-gift text-sm"></i> Quà Tặng Độc Quyền
-                                            </span>
-                                            <span id="gift-progress-pct" className="font-extrabold text-gold">70%</span>
-                                        </div>
-                                        <p className="font-editorial text-[11px] text-ink-muted dark:text-night-muted leading-relaxed" id="gift-status-text">
-                                            Thuê thêm <b className="text-wine dark:text-gold font-metadata" id="gift-needed-khoai">10 Khoai</b> để nhận Bookmark mạ vàng HALM!
-                                        </p>
-                                        <div className="w-full h-2 rounded-full bg-paper-border dark:border-night-border overflow-hidden">
-                                            <div id="gift-progress-bar" className="h-full bg-gradient-to-r from-wine to-gold progress-striped transition-all duration-500" style={{width: "70%"}}></div>
-                                        </div>
-                                    </div>
-                
                                     {/* Cost Breakdown Details */}
                                     <div className="space-y-2.5 text-xs font-metadata border-t border-paper-border dark:border-night-border pt-4">
                                         <div className="flex items-center justify-between text-ink-muted dark:text-night-muted">
-                                            <span>Tạm tính (<span id="subtotal-count-text">2</span> sách):</span>
-                                            <span className="font-bold text-ink dark:text-night-text"><span id="summary-subtotal">25</span> Khoai</span>
+                                            <span>Tạm tính (<span id="subtotal-count-text">0</span> sách):</span>
+                                            <span className="font-bold text-ink dark:text-night-text"><span id="summary-subtotal">0</span> Khoai</span>
                                         </div>
                                         <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400">
                                             <span>Ưu đãi giảm giá:</span>
-                                            <span className="font-bold"><span id="summary-discount">-5</span> Khoai</span>
+                                            <span className="font-bold"><span id="summary-discount">0</span> Khoai</span>
                                         </div>
                                         <div className="flex items-center justify-between text-ink-muted dark:text-night-muted">
                                             <span>Phí cấp quyền tài liệu số:</span>
@@ -1595,13 +1633,13 @@ export default function CartEnd() {
                                         <div className="flex items-baseline justify-between">
                                             <span className="font-display font-bold text-sm text-ink dark:text-night-text">Tổng Thanh Toán:</span>
                                             <div className="text-right">
-                                                <span className="font-display font-black text-2xl sm:text-3xl text-wine dark:text-gold" id="summary-total">20</span>
+                                                <span className="font-display font-black text-2xl sm:text-3xl text-wine dark:text-gold" id="summary-total">0</span>
                                                 <span className="font-metadata font-bold text-xs uppercase text-gold ml-1">Khoai <i className="ph-fill ph-coins"></i></span>
                                             </div>
                                         </div>
                                         <div className="flex items-center justify-between text-[11px] font-metadata text-ink-muted dark:text-night-muted">
                                             <span>Số dư sau khi thanh toán:</span>
-                                            <span className="font-bold text-emerald-600 dark:text-emerald-400"><span id="remaining-balance-display">1,230</span> Khoai</span>
+                                            <span className="font-bold text-emerald-600 dark:text-emerald-400"><span id="remaining-balance-display">0</span> Khoai</span>
                                         </div>
                                     </div>
                 
@@ -1645,215 +1683,10 @@ export default function CartEnd() {
                 
                             {/* Interactive Shelf: Tỉ lệ card w-[190px] sm:w-[210px] aspect-[2/3] chuẩn xác 100% tc.html */}
                             <div className="shelf-scroll-container" id="trending-cart-shelf">
-                                <div className="w-full py-10 text-center text-sm font-editorial text-ink-muted dark:text-night-muted">
-                                    Dữ liệu sách xu hướng đang được cập nhật.
+                                <div className="w-full py-8 flex items-center justify-center gap-3 text-ink-muted dark:text-night-muted">
+                                    <div className="w-5 h-5 rounded-full border-2 border-wine dark:border-gold border-t-transparent animate-spin"></div>
+                                    <span className="text-xs font-metadata">Đang tải đề xuất sách phù hợp với bạn...</span>
                                 </div>
-                                {false && <>
-                                
-                                {/* Card 1: Mắt Biếc (Top 1 trending) */}
-                                <div className="w-[185px] sm:w-[205px] lg:w-[215px] shrink-0 snap-start p-3 rounded-xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border group flex flex-col justify-between hover:-translate-y-1.5 transition-all duration-300 shadow-sm" data-book-id="rec-1">
-                                    <div className="relative w-full aspect-[2/3] rounded-lg overflow-hidden bg-night-card shadow-md mb-3">
-                                        <img src="https://images.unsplash.com/photo-1495640388908-05fa85288e61?q=80&w=400&auto=format&fit=crop" 
-                                             alt="Mắt Biếc" 
-                                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
-                                        {/* Top ranking badge */}
-                                        <div className="font-metadata absolute top-2 left-2 px-1.5 py-0.5 rounded bg-rose-600/90 backdrop-blur-sm text-[10px] text-white font-bold flex items-center gap-0.5">
-                                            <i className="ph-bold ph-fire"></i> Top 1
-                                        </div>
-                                        {/* Star rating */}
-                                        <div className="font-metadata absolute top-2 right-2 px-1.5 py-0.5 rounded bg-black/65 backdrop-blur-sm text-[10px] text-gold font-bold flex items-center gap-0.5">
-                                            <i className="ph-fill ph-star"></i> 4.9
-                                        </div>
-                                        {/* View count badge */}
-                                        <div className="font-metadata absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/65 backdrop-blur-sm text-[10px] text-white font-medium flex items-center gap-1">
-                                            <i className="ph-bold ph-eye"></i> 38.2k đọc
-                                        </div>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <h4 className="font-display font-bold text-sm text-ink dark:text-night-text line-clamp-1 group-hover:text-wine dark:group-hover:text-gold transition-colors" title="Mắt Biếc">
-                                            Mắt Biếc
-                                        </h4>
-                                        <p className="font-metadata text-xs text-ink-muted dark:text-night-muted line-clamp-1">
-                                            Nguyễn Nhật Ánh
-                                        </p>
-                                    </div>
-                                    <div className="pt-3 mt-3 border-t border-paper-border/70 dark:border-night-border/70 flex items-center justify-between">
-                                        <div>
-                                            <span className="font-metadata font-bold text-xs text-wine dark:text-gold">8 Khoai</span>
-                                            <span className="text-[10px] font-metadata text-ink-muted dark:text-night-muted">/7n</span>
-                                        </div>
-                                        <button type="button" onClick={() => { window.addRecommendedBook('rec-1', 'Mắt Biếc', 'Nguyễn Nhật Ánh', 'https://images.unsplash.com/photo-1495640388908-05fa85288e61?q=80&w=400&auto=format&fit=crop', 8, 'Văn học') }} className="w-7 h-7 rounded-full bg-paper-200 dark:bg-night-surface hover:bg-wine hover:text-white dark:hover:bg-gold dark:hover:text-night-bg flex items-center justify-center text-xs transition-colors" title="Thêm vào giỏ">
-                                            <i className="ph-bold ph-plus"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                
-                                {/* Card 2: Đắc Nhân Tâm (Top 2 trending) */}
-                                <div className="w-[185px] sm:w-[205px] lg:w-[215px] shrink-0 snap-start p-3 rounded-xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border group flex flex-col justify-between hover:-translate-y-1.5 transition-all duration-300 shadow-sm" data-book-id="rec-2">
-                                    <div className="relative w-full aspect-[2/3] rounded-lg overflow-hidden bg-night-card shadow-md mb-3">
-                                        <img src="https://images.unsplash.com/photo-1589998059171-988d887df646?q=80&w=400&auto=format&fit=crop" 
-                                             alt="Đắc Nhân Tâm" 
-                                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
-                                        <div className="font-metadata absolute top-2 left-2 px-1.5 py-0.5 rounded bg-amber-600/90 backdrop-blur-sm text-[10px] text-white font-bold flex items-center gap-0.5">
-                                            Top 2
-                                        </div>
-                                        <div className="font-metadata absolute top-2 right-2 px-1.5 py-0.5 rounded bg-black/65 backdrop-blur-sm text-[10px] text-gold font-bold flex items-center gap-0.5">
-                                            <i className="ph-fill ph-star"></i> 4.8
-                                        </div>
-                                        <div className="font-metadata absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/65 backdrop-blur-sm text-[10px] text-white font-medium flex items-center gap-1">
-                                            <i className="ph-bold ph-eye"></i> 29.4k đọc
-                                        </div>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <h4 className="font-display font-bold text-sm text-ink dark:text-night-text line-clamp-1 group-hover:text-wine dark:group-hover:text-gold transition-colors" title="Đắc Nhân Tâm">
-                                            Đắc Nhân Tâm
-                                        </h4>
-                                        <p className="font-metadata text-xs text-ink-muted dark:text-night-muted line-clamp-1">
-                                            Dale Carnegie
-                                        </p>
-                                    </div>
-                                    <div className="pt-3 mt-3 border-t border-paper-border/70 dark:border-night-border/70 flex items-center justify-between">
-                                        <div>
-                                            <span className="font-metadata font-bold text-xs text-wine dark:text-gold">10 Khoai</span>
-                                            <span className="text-[10px] font-metadata text-ink-muted dark:text-night-muted">/7n</span>
-                                        </div>
-                                        <button type="button" onClick={() => { window.addRecommendedBook('rec-2', 'Đắc Nhân Tâm', 'Dale Carnegie', 'https://images.unsplash.com/photo-1589998059171-988d887df646?q=80&w=400&auto=format&fit=crop', 10, 'Kỹ năng') }} className="w-7 h-7 rounded-full bg-paper-200 dark:bg-night-surface hover:bg-wine hover:text-white dark:hover:bg-gold dark:hover:text-night-bg flex items-center justify-center text-xs transition-colors" title="Thêm vào giỏ">
-                                            <i className="ph-bold ph-plus"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                
-                                {/* Card 3: Chiến Binh Cầu Vồng (Top 3 trending) */}
-                                <div className="w-[185px] sm:w-[205px] lg:w-[215px] shrink-0 snap-start p-3 rounded-xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border group flex flex-col justify-between hover:-translate-y-1.5 transition-all duration-300 shadow-sm" data-book-id="rec-3">
-                                    <div className="relative w-full aspect-[2/3] rounded-lg overflow-hidden bg-night-card shadow-md mb-3">
-                                        <img src="https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?q=80&w=400&auto=format&fit=crop" 
-                                             alt="Chiến Binh Cầu Vồng" 
-                                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
-                                        <div className="font-metadata absolute top-2 left-2 px-1.5 py-0.5 rounded bg-indigo-600/90 backdrop-blur-sm text-[10px] text-white font-bold flex items-center gap-0.5">
-                                            Top 3
-                                        </div>
-                                        <div className="font-metadata absolute top-2 right-2 px-1.5 py-0.5 rounded bg-black/65 backdrop-blur-sm text-[10px] text-gold font-bold flex items-center gap-0.5">
-                                            <i className="ph-fill ph-star"></i> 5.0
-                                        </div>
-                                        <div className="font-metadata absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/65 backdrop-blur-sm text-[10px] text-white font-medium flex items-center gap-1">
-                                            <i className="ph-bold ph-eye"></i> 24.1k đọc
-                                        </div>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <h4 className="font-display font-bold text-sm text-ink dark:text-night-text line-clamp-1 group-hover:text-wine dark:group-hover:text-gold transition-colors" title="Chiến Binh Cầu Vồng">
-                                            Chiến Binh Cầu Vồng
-                                        </h4>
-                                        <p className="font-metadata text-xs text-ink-muted dark:text-night-muted line-clamp-1">
-                                            Andrea Hirata
-                                        </p>
-                                    </div>
-                                    <div className="pt-3 mt-3 border-t border-paper-border/70 dark:border-night-border/70 flex items-center justify-between">
-                                        <div>
-                                            <span className="font-metadata font-bold text-xs text-wine dark:text-gold">12 Khoai</span>
-                                            <span className="text-[10px] font-metadata text-ink-muted dark:text-night-muted">/7n</span>
-                                        </div>
-                                        <button type="button" onClick={() => { window.addRecommendedBook('rec-3', 'Chiến Binh Cầu Vồng', 'Andrea Hirata', 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?q=80&w=400&auto=format&fit=crop', 12, 'Tiểu thuyết') }} className="w-7 h-7 rounded-full bg-paper-200 dark:bg-night-surface hover:bg-wine hover:text-white dark:hover:bg-gold dark:hover:text-night-bg flex items-center justify-center text-xs transition-colors" title="Thêm vào giỏ">
-                                            <i className="ph-bold ph-plus"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                
-                                {/* Card 4: Những Ngày Thu Lịch Sử */}
-                                <div className="w-[185px] sm:w-[205px] lg:w-[215px] shrink-0 snap-start p-3 rounded-xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border group flex flex-col justify-between hover:-translate-y-1.5 transition-all duration-300 shadow-sm" data-book-id="rec-4">
-                                    <div className="relative w-full aspect-[2/3] rounded-lg overflow-hidden bg-night-card shadow-md mb-3">
-                                        <img src="https://bizweb.dktcdn.net/100/197/269/products/nhung-ngay-thu-lich-su-nxb-chinh-tri-quoc-gia-su-that-1.jpg?v=1629864270453" 
-                                             alt="Những Ngày Thu Lịch Sử" 
-                                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
-                                        <div className="font-metadata absolute top-2 right-2 px-1.5 py-0.5 rounded bg-black/65 backdrop-blur-sm text-[10px] text-gold font-bold flex items-center gap-0.5">
-                                            <i className="ph-fill ph-star"></i> 4.9
-                                        </div>
-                                        <div className="font-metadata absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/65 backdrop-blur-sm text-[10px] text-white font-medium flex items-center gap-1">
-                                            <i className="ph-bold ph-eye"></i> 18.6k đọc
-                                        </div>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <h4 className="font-display font-bold text-sm text-ink dark:text-night-text line-clamp-1 group-hover:text-wine dark:group-hover:text-gold transition-colors" title="Những Ngày Thu Lịch Sử">
-                                            Những Ngày Thu Lịch Sử
-                                        </h4>
-                                        <p className="font-metadata text-xs text-ink-muted dark:text-night-muted line-clamp-1">
-                                            NXB Chính Trị Quốc Gia
-                                        </p>
-                                    </div>
-                                    <div className="pt-3 mt-3 border-t border-paper-border/70 dark:border-night-border/70 flex items-center justify-between">
-                                        <div>
-                                            <span className="font-metadata font-bold text-xs text-wine dark:text-gold">10 Khoai</span>
-                                            <span className="text-[10px] font-metadata text-ink-muted dark:text-night-muted">/7n</span>
-                                        </div>
-                                        <button type="button" onClick={() => { window.addRecommendedBook('rec-4', 'Những Ngày Thu Lịch Sử', 'NXB Chính Trị Quốc Gia', 'https://bizweb.dktcdn.net/100/197/269/products/nhung-ngay-thu-lich-su-nxb-chinh-tri-quoc-gia-su-that-1.jpg?v=1629864270453', 10, 'Tư liệu lịch sử') }} className="w-7 h-7 rounded-full bg-paper-200 dark:bg-night-surface hover:bg-wine hover:text-white dark:hover:bg-gold dark:hover:text-night-bg flex items-center justify-center text-xs transition-colors" title="Thêm vào giỏ">
-                                            <i className="ph-bold ph-plus"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                
-                                {/* Card 5: Bác Hồ Viết Di Chúc */}
-                                <div className="w-[185px] sm:w-[205px] lg:w-[215px] shrink-0 snap-start p-3 rounded-xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border group flex flex-col justify-between hover:-translate-y-1.5 transition-all duration-300 shadow-sm" data-book-id="rec-5">
-                                    <div className="relative w-full aspect-[2/3] rounded-lg overflow-hidden bg-night-card shadow-md mb-3">
-                                        <img src="https://images.unsplash.com/photo-1589829085413-56de8ae18c73?q=80&w=400&auto=format&fit=crop" 
-                                             alt="Bác Hồ Viết Di Chúc" 
-                                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
-                                        <div className="font-metadata absolute top-2 right-2 px-1.5 py-0.5 rounded bg-black/65 backdrop-blur-sm text-[10px] text-gold font-bold flex items-center gap-0.5">
-                                            <i className="ph-fill ph-star"></i> 4.9
-                                        </div>
-                                        <div className="font-metadata absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/65 backdrop-blur-sm text-[10px] text-white font-medium flex items-center gap-1">
-                                            <i className="ph-bold ph-eye"></i> 21.0k đọc
-                                        </div>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <h4 className="font-display font-bold text-sm text-ink dark:text-night-text line-clamp-1 group-hover:text-wine dark:group-hover:text-gold transition-colors" title="Bác Hồ Viết Di Chúc">
-                                            Bác Hồ Viết Di Chúc
-                                        </h4>
-                                        <p className="font-metadata text-xs text-ink-muted dark:text-night-muted line-clamp-1">
-                                            Vũ Kỳ
-                                        </p>
-                                    </div>
-                                    <div className="pt-3 mt-3 border-t border-paper-border/70 dark:border-night-border/70 flex items-center justify-between">
-                                        <div>
-                                            <span className="font-metadata font-bold text-xs text-wine dark:text-gold">10 Khoai</span>
-                                            <span className="text-[10px] font-metadata text-ink-muted dark:text-night-muted">/7n</span>
-                                        </div>
-                                        <button type="button" onClick={() => { window.addRecommendedBook('rec-5', 'Bác Hồ Viết Di Chúc', 'Vũ Kỳ', 'https://images.unsplash.com/photo-1589829085413-56de8ae18c73?q=80&w=400&auto=format&fit=crop', 10, 'Hồi ký') }} className="w-7 h-7 rounded-full bg-paper-200 dark:bg-night-surface hover:bg-wine hover:text-white dark:hover:bg-gold dark:hover:text-night-bg flex items-center justify-center text-xs transition-colors" title="Thêm vào giỏ">
-                                            <i className="ph-bold ph-plus"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                
-                                {/* Card 6: Chất Michelle (Becoming) */}
-                                <div className="w-[185px] sm:w-[205px] lg:w-[215px] shrink-0 snap-start p-3 rounded-xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border group flex flex-col justify-between hover:-translate-y-1.5 transition-all duration-300 shadow-sm" data-book-id="rec-6">
-                                    <div className="relative w-full aspect-[2/3] rounded-lg overflow-hidden bg-night-card shadow-md mb-3">
-                                        <img src="https://images.unsplash.com/photo-1499750310107-5fef28a66643?q=80&w=400&auto=format&fit=crop" 
-                                             alt="Chất Michelle" 
-                                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
-                                        <div className="font-metadata absolute top-2 right-2 px-1.5 py-0.5 rounded bg-black/65 backdrop-blur-sm text-[10px] text-gold font-bold flex items-center gap-0.5">
-                                            <i className="ph-fill ph-star"></i> 4.9
-                                        </div>
-                                        <div className="font-metadata absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/65 backdrop-blur-sm text-[10px] text-white font-medium flex items-center gap-1">
-                                            <i className="ph-bold ph-eye"></i> 16.5k đọc
-                                        </div>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <h4 className="font-display font-bold text-sm text-ink dark:text-night-text line-clamp-1 group-hover:text-wine dark:group-hover:text-gold transition-colors" title="Chất Michelle (Becoming)">
-                                            Chất Michelle
-                                        </h4>
-                                        <p className="font-metadata text-xs text-ink-muted dark:text-night-muted line-clamp-1">
-                                            Michelle Obama
-                                        </p>
-                                    </div>
-                                    <div className="pt-3 mt-3 border-t border-paper-border/70 dark:border-night-border/70 flex items-center justify-between">
-                                        <div>
-                                            <span className="font-metadata font-bold text-xs text-wine dark:text-gold">14 Khoai</span>
-                                            <span className="text-[10px] font-metadata text-ink-muted dark:text-night-muted">/7n</span>
-                                        </div>
-                                        <button type="button" onClick={() => { window.addRecommendedBook('rec-6', 'Chất Michelle', 'Michelle Obama', 'https://images.unsplash.com/photo-1499750310107-5fef28a66643?q=80&w=400&auto=format&fit=crop', 14, 'Tự truyện') }} className="w-7 h-7 rounded-full bg-paper-200 dark:bg-night-surface hover:bg-wine hover:text-white dark:hover:bg-gold dark:hover:text-night-bg flex items-center justify-center text-xs transition-colors" title="Thêm vào giỏ">
-                                            <i className="ph-bold ph-plus"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                                </>}
                             </div>
                 
                         </section>
@@ -1864,98 +1697,7 @@ export default function CartEnd() {
                     {/* ========================================================
                          FOOTER: 5 CỘT SANG TRỌNG ĐỒNG BỘ TOÀN HỆ THỐNG
                          ======================================================== */}
-                    {false && (<footer className="bg-paper-surface dark:bg-night-surface border-t border-paper-border dark:border-night-border pt-12 pb-8 text-ink dark:text-night-text transition-colors">
-                        <div className="w-full max-w-[1520px] mx-auto px-4 sm:px-6 lg:px-8">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8 mb-10">
-                                
-                                {/* Col 1: Brand Info */}
-                                <div className="lg:col-span-2 space-y-4">
-                                    <a href="testhome/tc.html" className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-lg bg-wine flex items-center justify-center text-white shadow-md">
-                                            <img src="/logo.png" alt="Logo" className="w-8 h-8 object-contain" onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src='/logo.png' }} />
-                                        </div>
-                                        <span className="font-display font-black text-2xl tracking-tight text-ink dark:text-night-text">HALM BOOK</span>
-                                    </a>
-                                    <p className="font-editorial text-xs text-ink-muted dark:text-night-muted max-w-sm leading-relaxed">
-                                        Nền tảng đọc sách thông minh và hệ sinh thái tài liệu số hàng đầu Việt Nam. Tích hợp trợ lý trí tuệ nhân tạo, tối ưu hoá trải nghiệm học thuật và phát triển tư duy đọc.
-                                    </p>
-                                    <div className="flex items-center gap-3 pt-1">
-                                        <a href="#" className="w-8 h-8 rounded-full border border-paper-border dark:border-night-border flex items-center justify-center text-ink-muted dark:text-night-muted hover:text-wine dark:hover:text-gold hover:border-wine dark:hover:border-gold transition-colors">
-                                            <i className="ph-bold ph-facebook-logo"></i>
-                                        </a>
-                                        <a href="#" className="w-8 h-8 rounded-full border border-paper-border dark:border-night-border flex items-center justify-center text-ink-muted dark:text-night-muted hover:text-wine dark:hover:text-gold hover:border-wine dark:hover:border-gold transition-colors">
-                                            <i className="ph-bold ph-youtube-logo"></i>
-                                        </a>
-                                        <a href="#" className="w-8 h-8 rounded-full border border-paper-border dark:border-night-border flex items-center justify-center text-ink-muted dark:text-night-muted hover:text-wine dark:hover:text-gold hover:border-wine dark:hover:border-gold transition-colors">
-                                            <i className="ph-bold ph-tiktok-logo"></i>
-                                        </a>
-                                        <a href="#" className="w-8 h-8 rounded-full border border-paper-border dark:border-night-border flex items-center justify-center text-ink-muted dark:text-night-muted hover:text-wine dark:hover:text-gold hover:border-wine dark:hover:border-gold transition-colors">
-                                            <i className="ph-bold ph-telegram-logo"></i>
-                                        </a>
-                                    </div>
-                                </div>
-                
-                                {/* Col 2: Khám Phá */}
-                                <div className="space-y-3">
-                                    <h4 className="font-display font-bold text-xs uppercase tracking-wider text-ink dark:text-night-text">Khám Phá</h4>
-                                    <ul className="space-y-2 text-xs font-metadata text-ink-muted dark:text-night-muted">
-                                        <li><a href="testhome/tc.html" className="hover:text-wine dark:hover:text-gold transition-colors">Trang Chủ</a></li>
-                                        <li><a href="offers.html" className="hover:text-wine dark:hover:text-gold transition-colors">Ưu Đãi Đặc Quyền</a></li>
-                                        <li><a href="tiers.html" className="hover:text-wine dark:hover:text-gold transition-colors">Gói Hội Viên</a></li>
-                                        <li><a href="my-books.html" className="hover:text-wine dark:hover:text-gold transition-colors">Tủ Sách Cá Nhân</a></li>
-                                        <li><a href="news.html" className="hover:text-wine dark:hover:text-gold transition-colors">Tin Tức & Sự Kiện</a></li>
-                                    </ul>
-                                </div>
-                
-                                {/* Col 3: Dịch Vụ Thuê */}
-                                <div className="space-y-3">
-                                    <h4 className="font-display font-bold text-xs uppercase tracking-wider text-ink dark:text-night-text">Dịch Vụ Thuê</h4>
-                                    <ul className="space-y-2 text-xs font-metadata text-ink-muted dark:text-night-muted">
-                                        <li><a href="cart.html" className="text-wine dark:text-gold font-bold">Giỏ Hàng Của Bạn</a></li>
-                                        <li><a href="profile.html" className="hover:text-wine dark:hover:text-gold transition-colors">Lịch Sử Thuê Sách</a></li>
-                                        <li><a href="tiers.html" className="hover:text-wine dark:hover:text-gold transition-colors">Nạp Khoai Thưởng</a></li>
-                                        <li><a href="offers.html" className="hover:text-wine dark:hover:text-gold transition-colors">Mã Giảm Giá Đang Có</a></li>
-                                        <li><a href="my-books.html" className="hover:text-wine dark:hover:text-gold transition-colors">Gia Hạn Bản Quyền</a></li>
-                                    </ul>
-                                </div>
-                
-                                {/* Col 4: Hỗ Trợ & Liên Hệ */}
-                                <div className="space-y-3">
-                                    <h4 className="font-display font-bold text-xs uppercase tracking-wider text-ink dark:text-night-text">Liên Hệ</h4>
-                                    <ul className="space-y-2 text-xs font-metadata text-ink-muted dark:text-night-muted">
-                                        <li className="flex items-start gap-2">
-                                            <i className="ph-bold ph-map-pin text-sm text-wine dark:text-gold shrink-0 mt-0.5"></i>
-                                            <span>03 Quang Trung, Q. Hải Châu, TP. Đà Nẵng</span>
-                                        </li>
-                                        <li className="flex items-center gap-2">
-                                            <i className="ph-bold ph-phone text-sm text-wine dark:text-gold shrink-0"></i>
-                                            <span>0793 503 369</span>
-                                        </li>
-                                        <li className="flex items-center gap-2">
-                                            <i className="ph-bold ph-envelope text-sm text-wine dark:text-gold shrink-0"></i>
-                                            <span>contact@halmbook.vn</span>
-                                        </li>
-                                        <li className="flex items-center gap-2">
-                                            <i className="ph-bold ph-clock text-sm text-wine dark:text-gold shrink-0"></i>
-                                            <span>T2 - CN: 08:00 - 22:00</span>
-                                        </li>
-                                    </ul>
-                                </div>
-                            </div>
-                
-                            {/* Bottom Copyright */}
-                            <div className="pt-6 border-t border-paper-border dark:border-night-border flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] font-metadata text-ink-muted dark:text-night-muted">
-                                <div>
-                                    © 2026 HALM BOOK. Bản quyền thuộc về Đồ Án Tốt Nghiệp 2026.
-                                </div>
-                                <div className="flex items-center gap-4">
-                                    <a href="#" className="hover:underline">Điều khoản thuê sách</a>
-                                    <a href="#" className="hover:underline">Chính sách hoàn Khoai</a>
-                                    <a href="#" className="hover:underline">Bản quyền số</a>
-                                </div>
-                            </div>
-                        </div>
-                    </footer>)}
+                    
                 
                 
                     {/* ========================================================

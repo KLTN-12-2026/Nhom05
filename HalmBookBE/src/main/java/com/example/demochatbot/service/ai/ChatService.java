@@ -6,11 +6,12 @@ import com.example.demochatbot.repository.*;
 import com.example.demochatbot.service.customer.CustomerService;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
-import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -24,8 +25,8 @@ public class ChatService {
     private final MembershipTierRepository membershipTierRepository;
     private final CustomerRepository customerRepository;
     private final CustomerService customerService;
-    private final ChatSessionRepository chatSessionRepository;
-    private final ChatMessageRepository chatMessageRepository;
+    private final ChatHistoryStore historyStore;
+    private final Object[] conversationLocks = java.util.stream.IntStream.range(0, 64).mapToObj(i -> new Object()).toArray();
     private final ChatMemory chatMemory;
 
     public ChatService(
@@ -36,8 +37,7 @@ public class ChatService {
             MembershipTierRepository membershipTierRepository,
             CustomerRepository customerRepository,
             CustomerService customerService,
-            ChatSessionRepository chatSessionRepository,
-            ChatMessageRepository chatMessageRepository,
+            ChatHistoryStore historyStore,
             ChatMemory chatMemory) {
 
         this.chatClient = builder.build();
@@ -47,8 +47,7 @@ public class ChatService {
         this.membershipTierRepository = membershipTierRepository;
         this.customerRepository = customerRepository;
         this.customerService = customerService;
-        this.chatSessionRepository = chatSessionRepository;
-        this.chatMessageRepository = chatMessageRepository;
+        this.historyStore = historyStore;
         this.chatMemory = chatMemory;
     }
 
@@ -59,7 +58,8 @@ public class ChatService {
     @Tool(description = "Sử dụng hàm này để tra cứu thông tin sách theo tên tác phẩm, tác giả hoặc thể loại trong thư viện sách HALM BOOK.")
     public String searchBooksInDatabase(String keyword) {
         try {
-            var books = bookRepository.findByBookNameContainingIgnoreCase(keyword);
+            var books = bookRepository.searchBooksForChat(keyword == null ? "" : keyword.trim(),
+                    org.springframework.data.domain.PageRequest.of(0, 20));
 
             if (books.isEmpty()) {
                 return "Không tìm thấy tác phẩm nào khớp với từ khóa: '" + keyword + "'.";
@@ -204,14 +204,25 @@ public class ChatService {
             throw new IllegalArgumentException("accountId không được để trống");
         }
 
-        // 1. Lưu tin nhắn của người dùng vào Database
-        Customer customer = resolveCustomer(accountId);
-        Chat_Session session = null;
-        if (customer != null) {
-            session = getOrCreateChatSession(customer);
-            saveChatMessage(session, "USER", chatRequest.message());
+        String conversationId = conversationId(accountId, chatRequest.conversationId());
+        synchronized (lockFor(conversationId)) {
+            return chatTurn(chatRequest, accountId, conversationId);
         }
+    }
 
+    private String chatTurn(ChatRequest chatRequest, String accountId, String conversationId) {
+        Customer customer = resolveCustomer(accountId);
+        List<Message> context = new ArrayList<>();
+        if (customer != null) {
+            List<Chat_Message> stored = historyStore.read(customer);
+            for (Chat_Message message : stored.subList(Math.max(0, stored.size() - 20), stored.size())) {
+                context.add("USER".equalsIgnoreCase(message.getSender())
+                        ? new UserMessage(message.getContent()) : new AssistantMessage(message.getContent()));
+            }
+        } else {
+            context.addAll(chatMemory.get(conversationId));
+        }
+        String aiResponse;
         try {
             // 2. Định nghĩa System Prompt hình tượng Linh vật Củ Khoai Tây
             String systemPrompt = """
@@ -230,104 +241,72 @@ public class ChatService {
                     """;
 
             // 3. Gọi Gemini qua Spring AI Client
-            String aiResponse = chatClient.prompt()
+            aiResponse = chatClient.prompt()
                     .system(systemPrompt)
+                    .messages(context)
                     .user(chatRequest.message())
-                    .advisors(
-                            MessageChatMemoryAdvisor.builder(chatMemory).build()
-                    )
-                    .advisors(advisorSpec -> advisorSpec.param(
-                            ChatMemory.CONVERSATION_ID,
-                            accountId
-                    ))
                     .tools(this)
                     .call()
                     .content();
 
-            // 4. Lưu câu trả lời của AI vào Database
-            if (session != null && aiResponse != null) {
-                saveChatMessage(session, "BOT", aiResponse);
+            if (aiResponse == null || aiResponse.isBlank()) {
+                throw new IllegalStateException("AI returned an empty response");
             }
-
-            return aiResponse;
-
         } catch (Exception e) {
             if (e.getMessage() != null && e.getMessage().contains("429")) {
-                String quotaMsg = "Khoai Nhỏ hơi mệt một xíu do nhiều bạn đọc hỏi quá cùng lúc (giới hạn lượt gọi AI). Bạn đọc đợi Khoai Nhỏ khoảng 20-30 giây rồi hỏi lại nhé! 🥔🌱";
-                if (session != null) saveChatMessage(session, "BOT", quotaMsg);
-                return quotaMsg;
+                aiResponse = "Khoai Nhỏ đang nhận nhiều câu hỏi. Bạn đọc đợi khoảng 20-30 giây rồi thử lại nhé! 🥔🌱";
+            } else {
+                org.slf4j.LoggerFactory.getLogger(ChatService.class).warn("AI chat failed", e);
+                aiResponse = "Khoai Nhỏ đang gặp chút trục trặc kết nối. Bạn đọc vui lòng thử lại sau giây lát nhé! 🥔";
             }
-            e.printStackTrace();
-            String fallback = "Khoai Nhỏ đang gặp chút trục trặc kết nối đến thư viện sách. Bạn đọc vui lòng thử lại sau giây lát nhé! 🥔";
-            if (session != null) saveChatMessage(session, "BOT", fallback);
-            return fallback;
         }
+        // Persistence failures propagate, instead of claiming that an unsaved message succeeded.
+        if (customer != null) {
+            historyStore.saveTurn(customer, chatRequest.message(), aiResponse);
+        } else {
+            chatMemory.add(conversationId, List.of(new UserMessage(chatRequest.message()), new AssistantMessage(aiResponse)));
+        }
+        return aiResponse;
     }
 
-    /**
-     * Lấy toàn bộ lịch sử trò chuyện của độc giả từ MySQL Database
-     */
     public List<Map<String, Object>> getChatHistory(String accountId) {
         Customer customer = resolveCustomer(accountId);
-        if (customer == null) {
-            return Collections.emptyList();
-        }
-
-        List<Chat_Message> list = chatMessageRepository.findByCustomerIdOrderBySentAtAsc(customer.getCustomer_id());
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (Chat_Message m : list) {
-            Map<String, Object> map = new HashMap<>();
-            map.put("id", m.getChatMessage_id());
-            map.put("sender", m.getSender().equalsIgnoreCase("USER") ? "user" : "bot");
-            map.put("content", m.getContent());
-            map.put("sentAt", m.getSent_at());
-            result.add(map);
-        }
-        return result;
+        if (customer == null) return Collections.emptyList();
+        return historyStore.read(customer).stream().map(m -> {
+            Map<String, Object> row = new HashMap<>();
+            row.put("id", m.getChatMessage_id());
+            row.put("sender", "USER".equalsIgnoreCase(m.getSender()) ? "user" : "bot");
+            row.put("content", m.getContent());
+            row.put("sentAt", m.getSent_at());
+            return row;
+        }).toList();
     }
 
-    // =========================================================================
-    // HELPER METHODS LƯU DATABASE
-    // =========================================================================
+    public void clearChatHistory(String accountId, String guestConversationId) {
+        String key = conversationId(accountId, guestConversationId);
+        synchronized (lockFor(key)) {
+            Customer customer = resolveCustomer(accountId);
+            if (customer != null) historyStore.clear(customer);
+            chatMemory.clear(key);
+        }
+    }
+
+    private Object lockFor(String conversationId) {
+        return conversationLocks[Math.floorMod(conversationId.hashCode(), conversationLocks.length)];
+    }
+
+    private String conversationId(String accountId, String guestConversationId) {
+        if (!"guest_session".equals(accountId)) return "account:" + accountId;
+        // A missing/invalid guest identifier must never fall back to shared memory.
+        try { return "guest:" + UUID.fromString(guestConversationId); }
+        catch (Exception e) { return "guest:" + UUID.randomUUID(); }
+    }
 
     private Customer resolveCustomer(String accountId) {
-        try {
-            int accId = customerService.getCurrentAccountId();
-            if (accId > 0) {
-                Customer c = customerRepository.findCustomerById(accId);
-                if (c != null) return c;
-            }
-            return customerRepository.findByEmail(accountId).orElse(null);
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private Chat_Session getOrCreateChatSession(Customer customer) {
-        Optional<Chat_Session> latest = chatSessionRepository.findLatestSessionByCustomer(customer);
-        if (latest.isPresent()) {
-            Chat_Session session = latest.get();
-            session.setLast_interaction(LocalDateTime.now());
-            return chatSessionRepository.save(session);
-        }
-
-        Chat_Session newSession = new Chat_Session();
-        newSession.setCustomer(customer);
-        newSession.setStart_at(LocalDateTime.now());
-        newSession.setLast_interaction(LocalDateTime.now());
-        return chatSessionRepository.save(newSession);
-    }
-
-    private void saveChatMessage(Chat_Session session, String sender, String content) {
-        try {
-            Chat_Message msg = new Chat_Message();
-            msg.setChat_session(session);
-            msg.setSender(sender);
-            msg.setContent(content);
-            msg.setSent_at(LocalDateTime.now());
-            chatMessageRepository.save(msg);
-        } catch (Exception e) {
-            System.err.println("Lỗi lưu tin nhắn chat vào database: " + e.getMessage());
-        }
+        if (accountId == null || "guest_session".equals(accountId)) return null;
+        int accId;
+        try { accId = customerService.getCurrentAccountId(); }
+        catch (RuntimeException e) { return customerRepository.findByEmail(accountId).orElse(null); }
+        return customerService.findCustomerById(accId);
     }
 }

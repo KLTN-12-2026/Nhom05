@@ -1,6 +1,8 @@
 let allTickets = [];
 let pollingInterval = null;
 let activeOpenTicketId = null;
+let ticketLoadVersion = 0;
+let pendingReplyRequest = null;
 
 // Custom Toast Notification System
 function showAdminToast(title, message, type = 'success') {
@@ -82,9 +84,11 @@ window.addEventListener('beforeunload', function() {
 });
 
 async function loadTickets(isSilent = false) {
+    const version = ++ticketLoadVersion;
     try {
         if (window.AdminSupportAPI && typeof window.AdminSupportAPI.getTickets === 'function') {
             const res = await window.AdminSupportAPI.getTickets();
+            if (version !== ticketLoadVersion || isSubmittingReply) return;
             allTickets = res.tickets || (Array.isArray(res) ? res : []);
             if (res.totalTickets != null) {
                 const elTot = document.getElementById('statTotalTickets');
@@ -99,11 +103,12 @@ async function loadTickets(isSilent = false) {
             renderTicketStats();
         }
     } catch (err) {
-        if (!isSilent) console.warn('Lỗi API tickets, dùng DB fallback:', err);
-        if (window.DB && typeof window.DB.getTickets === 'function') {
-            allTickets = window.DB.getTickets();
-            renderTicketStats();
+        if (version !== ticketLoadVersion || isSubmittingReply) return;
+        if (!isSilent) {
+            console.warn('Lỗi API tickets:', err);
+            showAdminToast('Không tải được lịch sử', 'Vui lòng thử lại khi kết nối ổn định.', 'error');
         }
+        return;
     }
     filterTickets(isSilent);
 
@@ -433,33 +438,39 @@ async function submitTicketReply() {
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span>Đang gửi...</span>';
     }
     isSubmittingReply = true;
+    ticketLoadVersion += 1;
+    const requestKey = JSON.stringify([id, reply, chosenStatus]);
+    if (pendingReplyRequest?.key !== requestKey) pendingReplyRequest = { key: requestKey, id: crypto.randomUUID() };
 
     try {
         // 1. Gọi Backend API thật
-        if (window.AdminSupportAPI && typeof window.AdminSupportAPI.replyTicket === 'function') {
-            await window.AdminSupportAPI.replyTicket(id, reply, chosenStatus);
-        }
+        if (!window.AdminSupportAPI?.replyTicket) throw new Error('API hỗ trợ chưa sẵn sàng');
+        const result = await window.AdminSupportAPI.replyTicket(id, reply, chosenStatus, pendingReplyRequest.id);
+        pendingReplyRequest = null;
 
         // 2. Cập nhật trạng thái trong allTickets
         const t = allTickets.find(ticket => String(ticket.id) === String(id) || String(ticket.code) === String(id));
         if (t) {
             t.status = chosenStatus;
             t.adminReply = reply;
+            if (Array.isArray(result.chatHistory)) t.chatHistory = result.chatHistory;
         }
 
         showAdminToast('Thành Công', 'Đã lưu phản hồi và cập nhật trạng thái yêu cầu!', 'success');
 
         // Xóa nội dung vừa gõ
-        if (replyInput) replyInput.value = '';
+        if (replyInput?.value.trim() === reply) replyInput.value = '';
+        updateActiveChatThread(id);
 
         // Nạp lại dữ liệu ngay lập tức để chat thread hiển thị tin nhắn mới
-        await loadTickets(true);
 
     } catch (err) {
         console.error('Lỗi phản hồi ticket:', err);
         showAdminToast('Lỗi Gửi Phản Hồi', 'Có lỗi xảy ra trong quá trình lưu phản hồi, vui lòng thử lại!', 'error');
     } finally {
         isSubmittingReply = false;
+        ticketLoadVersion += 1;
+        loadTickets(true);
         if (btn) {
             btn.disabled = false;
             btn.innerHTML = origHtml;

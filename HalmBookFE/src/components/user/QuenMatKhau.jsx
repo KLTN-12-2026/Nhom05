@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { ToastContainer, toast, Zoom } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import "./css/QuenMatKhau.css";
@@ -142,7 +143,7 @@ export default function ForgotPassword() {
                 const response = await fetch(`${API_BASE_URL}/api/password/reset-password`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ email: email, newPassword: password })
+                    body: JSON.stringify({ email: email, otp: otp.trim(), newPassword: password })
                 });
 
                 const text = await response.text();
@@ -250,7 +251,7 @@ export default function ForgotPassword() {
                             </div>
                             <button className="btn-submit" type="submit">Nhận mã</button>
                             <div className="switch-form-text" style={{ marginTop: 35 }}>
-                                <a href="/" className="link-text"><i className="fas fa-arrow-left" aria-hidden="true" /> Quay lại Đăng nhập</a>
+                                <Link to="/" state={{ openLoginModal: true, loginMessage: 'Vui lòng đăng nhập vào tài khoản của bạn!' }} className="link-text"><i className="fas fa-arrow-left" aria-hidden="true" /> Quay lại Đăng nhập</Link>
                             </div>
                         </form>
                     )}
@@ -287,7 +288,7 @@ export default function ForgotPassword() {
                             </div>
                             <button className="btn-submit" type="submit">Xác nhận đổi</button>
                             <div className="switch-form-text" style={{ marginTop: 35 }}>
-                                <a href="/" className="link-text"><i className="fas fa-times" aria-hidden="true" /> Hủy bỏ</a>
+                                <Link to="/" className="link-text"><i className="fas fa-times" aria-hidden="true" /> Hủy bỏ</Link>
                             </div>
                         </form>
                     )}

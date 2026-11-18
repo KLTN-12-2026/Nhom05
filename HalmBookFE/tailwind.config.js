@@ -56,6 +56,7 @@ export default {
         editorial: ['var(--font-editorial, "Open Sans")', 'Open Sans', 'sans-serif'],
         nunito: ['Nunito', 'sans-serif'],
         outfit: ['var(--font-outfit, "Plus Jakarta Sans")', '"Plus Jakarta Sans"', '"Be Vietnam Pro"', 'Inter', 'sans-serif'],
+        serif: ['Lora', 'Merriweather', 'serif'],
       },
 
       boxShadow: {

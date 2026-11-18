@@ -331,7 +331,7 @@ export function openBookReaderTransition({ bookCard, coverUrl, book, onComplete 
             overlay.remove();
             bookCard.style.opacity = '';
             document.body.style.overflow = '';
-        } catch (_) {}
+        } catch {}
         onComplete();
     };
 

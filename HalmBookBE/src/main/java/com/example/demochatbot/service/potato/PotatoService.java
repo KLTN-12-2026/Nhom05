@@ -4,6 +4,7 @@ import com.example.demochatbot.dto.TransferRequest;
 import com.example.demochatbot.dto.WalletResponseDto;
 import com.example.demochatbot.model.PotatoPackage;
 import com.example.demochatbot.model.PotatoTransaction;
+import com.example.demochatbot.model.Orders;
 
 import java.util.List;
 
@@ -34,6 +35,9 @@ public interface PotatoService {
      * Cộng Khoai cho giao dịch nạp đã được cổng thanh toán xác nhận.
      */
     PotatoTransaction creditVerifiedTopup(int accountId, int amount, String description);
+
+    /** Creates a pending top-up order for admin review without crediting the wallet. */
+    Orders createTopupRequest(int accountId, TopupRequest request);
 
     /**
      * Thực hiện chuyển/tặng Khoai cho độc giả khác bằng email hoặc số điện thoại

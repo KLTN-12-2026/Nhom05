@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import useFloatingBubble from '@/hooks/useFloatingBubble';
 import { useLocation } from 'react-router-dom';
-import { sendChatMessage, getChatHistory } from '@/services/chatService';
+import { sendChatMessage, getChatHistory, clearChatHistory, getChatOwner, formatChatTime } from '@/services/chatService';
 
 // =========================================================================
 // GỢI Ý CÂU HỎI THÔNG MINH THEO TỪNG MÀN HÌNH (CONTEXT-AWARE CHIPS)
@@ -93,11 +93,17 @@ export default function PotatoChatbot() {
     const [messages, setMessages] = useState([]);
     const [inputValue, setInputValue] = useState('');
     const [isLoading, setIsLoading] = useState(false);
-    const [hasLoadedHistory, setHasLoadedHistory] = useState(false);
+    const [chatError, setChatError] = useState('');
+    const historyRequestRef = useRef(null);
+    const historyLoadedRef = useRef(false);
+    const busyRef = useRef(false);
+    const generationRef = useRef(0);
+    const ownerRef = useRef(getChatOwner());
     const [showBubble, setShowBubble] = useState(true);
     const [greetingIndex, setGreetingIndex] = useState(0);
     const messagesEndRef = useRef(null);
     const inputRef = useRef(null);
+    const handleSendRef = useRef(null);
 
     const suggestions = useMemo(() => {
         return getContextSuggestions(location.pathname, location.search);
@@ -106,6 +112,50 @@ export default function PotatoChatbot() {
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
+
+    const syncOwner = useCallback(() => {
+        const owner = getChatOwner();
+        if (owner === ownerRef.current) return false;
+        ownerRef.current = owner;
+        generationRef.current += 1;
+        historyRequestRef.current = null;
+        historyLoadedRef.current = false;
+        busyRef.current = false;
+        setMessages([]);
+        setInputValue('');
+        setChatError('');
+        setIsLoading(false);
+        return true;
+    }, []);
+
+    const loadHistory = useCallback(() => {
+        if (historyLoadedRef.current) return Promise.resolve();
+        if (historyRequestRef.current) return historyRequestRef.current;
+        const generation = generationRef.current;
+        const request = getChatHistory().then(history => {
+            if (generation !== generationRef.current) return;
+            setMessages(history.map(item => ({ ...item, id: item.id || item.messageId || crypto.randomUUID(),
+                sender: item.sender?.toLowerCase() === 'user' ? 'user' : 'bot' })));
+            historyLoadedRef.current = true;
+        }).finally(() => {
+            if (historyRequestRef.current === request) historyRequestRef.current = null;
+        });
+        historyRequestRef.current = request;
+        return request;
+    }, []);
+
+    useEffect(() => {
+        const checkOwner = () => {
+            if (!syncOwner()) return;
+            if (isOpen) loadHistory().catch(() => setChatError('Không tải được lịch sử. Vui lòng mở lại chat để thử lại.'));
+        };
+        checkOwner();
+        const events = ['halm-auth-success', 'halm-auth-expired', 'halm-auth-change', 'storage'];
+        events.forEach(event => window.addEventListener(event, checkOwner));
+        return () => events.forEach(event => window.removeEventListener(event, checkOwner));
+    }, [isOpen, loadHistory, syncOwner, location.pathname]);
+
+    useEffect(() => () => { generationRef.current += 1; }, []);
 
     // Tự động xoay tua lời chào của bong bóng thoại lơ lửng
     useEffect(() => {
@@ -120,12 +170,11 @@ export default function PotatoChatbot() {
     useEffect(() => {
         if (isOpen) {
             scrollToBottom();
-            setTimeout(() => inputRef.current?.focus(), 180);
-            if (!hasLoadedHistory) {
-                loadHistory();
-            }
+            const timer = setTimeout(() => inputRef.current?.focus(), 180);
+            loadHistory().catch(() => setChatError('Không tải được lịch sử. Vui lòng mở lại chat để thử lại.'));
+            return () => clearTimeout(timer);
         }
-    }, [isOpen]);
+    }, [isOpen, loadHistory]);
 
     useEffect(() => {
         scrollToBottom();
@@ -138,7 +187,7 @@ export default function PotatoChatbot() {
             setShowBubble(false);
             if (event?.detail?.message) {
                 setTimeout(() => {
-                    handleSend(event.detail.message);
+                    handleSendRef.current?.(event.detail.message);
                 }, 200);
             }
         };
@@ -146,79 +195,69 @@ export default function PotatoChatbot() {
         return () => window.removeEventListener('halm-open-chatbot', handleOpenEvent);
     }, []);
 
-    const loadHistory = async () => {
+    const handleClearHistory = async () => {
+        if (syncOwner()) return;
+        if (busyRef.current) return;
+        busyRef.current = true;
+        setIsLoading(true);
+        const generation = generationRef.current;
         try {
-            const history = await getChatHistory();
-            if (Array.isArray(history) && history.length > 0) {
-                const formatted = history.map((item) => ({
-                    id: item.messageId || item.id || Math.random(),
-                    sender: item.sender === 'user' ? 'user' : 'bot',
-                    content: item.content,
-                    sentAt: item.sentAt || new Date().toISOString()
-                }));
-                setMessages(formatted);
-            }
-        } catch (e) {
-            console.error("Lỗi khi tải lịch sử chat:", e);
+            await loadHistory();
+            if (generation !== generationRef.current) return;
+            await clearChatHistory();
+            if (generation !== generationRef.current) return;
+            setMessages([]);
+            setChatError('');
+        } catch {
+            if (generation === generationRef.current) setChatError('Chưa xóa được lịch sử. Bạn thử lại nhé.');
         } finally {
-            setHasLoadedHistory(true);
+            if (generation === generationRef.current) {
+                busyRef.current = false;
+                setIsLoading(false);
+            }
         }
-    };
-
-    const handleClearHistory = () => {
-        setMessages([]);
     };
 
     const handleSend = async (customText = null) => {
-        const text = (customText || inputValue).trim();
-        if (!text || isLoading) return;
-
-        // Ghi nhận hoàn thành nhiệm vụ hằng ngày: Tương tác cùng AI
-        const todayKey = new Date().toISOString().slice(0, 10);
-        try {
-            localStorage.setItem(`halm_daily_action_chat_${todayKey}`, 'true');
-        } catch {}
-        window.dispatchEvent(new CustomEvent('halm-daily-task-completed', { detail: { task: 'chat' } }));
-
-        const now = new Date();
-        const timeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-
-        const userMsg = {
-            id: Date.now(),
-            sender: 'user',
-            content: text,
-            sentAt: timeString
-        };
-
-        setMessages((prev) => [...prev, userMsg]);
-        if (!customText) setInputValue('');
+        if (syncOwner()) return;
+        const text = (customText ?? inputValue).trim();
+        if (!text || busyRef.current) return;
+        busyRef.current = true;
         setIsLoading(true);
-
+        setChatError('');
+        const generation = generationRef.current;
+        const userId = crypto.randomUUID();
         try {
+            await loadHistory();
+            if (generation !== generationRef.current) return;
+            const userMessage = { id: userId, sender: 'user', content: text, sentAt: new Date().toISOString() };
+            setMessages(prev => [...prev, userMessage]);
+            if (!customText) setInputValue('');
             const reply = await sendChatMessage(text);
-            const botMsg = {
-                id: Date.now() + 1,
-                sender: 'bot',
-                content: reply,
-                sentAt: timeString
-            };
-            setMessages((prev) => [...prev, botMsg]);
+            if (generation !== generationRef.current) return;
+            const botMessage = { id: crypto.randomUUID(), sender: 'bot', content: reply, sentAt: new Date().toISOString() };
+            setMessages(prev => [...prev, botMessage]);
+            const todayKey = new Date().toISOString().slice(0, 10);
+            try { localStorage.setItem(`halm_daily_action_chat_${todayKey}`, 'true'); } catch {}
+            window.dispatchEvent(new CustomEvent('halm-daily-task-completed', { detail: { task: 'chat' } }));
         } catch (error) {
-            console.error("Lỗi gửi tin nhắn AI:", error);
-            const errorMsg = {
-                id: Date.now() + 1,
-                sender: 'bot',
-                content: 'Khoai Nhỏ gặp chút sự cố kết nối. Bạn đọc thử lại câu hỏi nhé! 🥔',
-                sentAt: timeString
-            };
-            setMessages((prev) => [...prev, errorMsg]);
+            if (generation !== generationRef.current) return;
+            setMessages(prev => prev.map(msg => msg.id === userId ? { ...msg, failed: true } : msg));
+            setInputValue(text);
+            setChatError(error.response?.status === 429 ? 'AI đang bận. Bạn chờ một chút rồi thử lại nhé.'
+                : 'Chưa xác nhận được tin nhắn đã lưu. Bạn mở lại chat để kiểm tra trước khi gửi lại.');
+            historyLoadedRef.current = false;
         } finally {
-            setIsLoading(false);
+            if (generation === generationRef.current) {
+                busyRef.current = false;
+                setIsLoading(false);
+            }
         }
     };
+    useEffect(() => { handleSendRef.current = handleSend; });
 
     const handleKeyDown = (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
+        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
             handleSend();
         }
@@ -318,6 +357,7 @@ export default function PotatoChatbot() {
                                 <button
                                     type="button"
                                     onClick={handleClearHistory}
+                                    disabled={isLoading}
                                     title="Xóa lịch sử trò chuyện"
                                     className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 dark:bg-white/5 dark:hover:bg-white/15 text-white/80 hover:text-white flex items-center justify-center transition-all cursor-pointer hover:rotate-180 duration-300 text-xs shadow-xs"
                                 >
@@ -425,7 +465,7 @@ export default function PotatoChatbot() {
                                             {m.content}
                                         </div>
                                         <span className={`text-[9px] text-[#96938B] dark:text-[#7A7870] mt-1 px-1 ${isUser ? 'self-end' : 'self-start'}`}>
-                                            {m.sentAt}
+                                            {formatChatTime(m.sentAt)}{m.failed ? ' · Chưa xác nhận gửi' : ''}
                                         </span>
                                     </div>
                                 </div>
@@ -458,6 +498,7 @@ export default function PotatoChatbot() {
 
                     {/* VÙNG NHẬP LIỆU DẠNG VIÊN CON NHỘNG (CAPSULE INPUT) */}
                     <div className="p-3 bg-white/95 dark:bg-[#181916]/95 border-t border-[#D4AF37]/30 shrink-0">
+                        {chatError && <p role="alert" className="mb-2 text-xs text-red-600">{chatError}</p>}
                         <form
                             onSubmit={(e) => {
                                 e.preventDefault();

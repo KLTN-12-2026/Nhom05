@@ -1,4 +1,4 @@
-import axiosInstance from './axiosClient';
+import axiosInstance from './axiosClient.js';
 
 /**
  * userSupportService.js
@@ -15,10 +15,17 @@ export const getMySupportTickets = async (params = {}) => {
   return response.data;
 };
 
-export const sendTicketMessage = async (ticketId, message, senderName) => {
+export const sendTicketMessage = async (ticketId, message, senderName, requestId = crypto.randomUUID(), code) => {
   const response = await axiosInstance.post(`/api/user/support-tickets/${ticketId}/message`, {
     message,
-    senderName
+    senderName, requestId, code
+  });
+  return response.data;
+};
+
+export const deleteSupportTicket = async (ticketId, code) => {
+  const response = await axiosInstance.delete(`/api/user/support-tickets/${ticketId}`, {
+    params: { code }
   });
   return response.data;
 };

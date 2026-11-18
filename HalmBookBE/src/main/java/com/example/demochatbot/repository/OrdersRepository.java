@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * ============================================================================
@@ -23,4 +24,7 @@ public interface OrdersRepository extends JpaRepository<Orders, Integer> {
 
     @Query("SELECT o FROM Orders o WHERE o.customer.customer_id = :customerId ORDER BY o.order_date DESC")
     List<Orders> findByCustomerIdOrderByOrderDateDesc(@Param("customerId") String customerId);
+
+    @Query("SELECT o FROM Orders o WHERE LOWER(o.transaction_no) = LOWER(:transactionNo)")
+    Optional<Orders> findByTransactionNo(@Param("transactionNo") String transactionNo);
 }

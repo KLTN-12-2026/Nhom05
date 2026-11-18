@@ -8,4 +8,5 @@ public class ResetPasswordRequest {
     private String username;
     private String oldPassword;
     private String newPassword;
+    private String otp;
 }

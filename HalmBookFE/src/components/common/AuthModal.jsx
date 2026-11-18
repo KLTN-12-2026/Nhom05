@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { useGoogleLogin } from '@react-oauth/google';
 import fbLoginModule from 'react-facebook-login/dist/facebook-login-render-props';
@@ -7,9 +7,8 @@ import { getCurrentCustomer } from '@/services/customerService';
 import AvatarWithFrame from '@/components/common/AvatarWithFrame';
 import { getTierInfo } from '@/utils/tierUtils';
 import logo from '@/assets/images/logo.png';
-import mascotReading from '@/assets/images/mascot-reading.png';
 
-const API_BASE_URL = "http://localhost:8082";
+import { API_BASE_URL } from '@/constants/apiEndpoints';
 const FacebookLogin = fbLoginModule.default || fbLoginModule;
 
 /**
@@ -79,6 +78,7 @@ export default function AuthModal({
       setIsDarkTheme(document.documentElement.classList.contains('dark'));
     };
 
+    checkTheme();
     window.addEventListener('halm-theme-change', checkTheme);
     const observer = new MutationObserver(checkTheme);
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
@@ -88,7 +88,7 @@ export default function AuthModal({
       observer.disconnect();
       if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     };
-  }, []);
+  }, [isOpen]);
 
   // Quản lý Toast thông báo đẹp, nổi bật và có độ tương phản cao
   const triggerToast = (type, message) => {
@@ -145,6 +145,12 @@ export default function AuthModal({
     }
   }, [isOpen]);
 
+  const handleClose = useCallback(() => {
+    setIsOpen(false);
+    setIsLoading(false);
+    propOnClose?.();
+  }, [propOnClose]);
+
   // Đóng modal bằng phím ESC
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -158,13 +164,7 @@ export default function AuthModal({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, showTermsModal, welcomeData]);
-
-  const handleClose = () => {
-    setIsOpen(false);
-    setIsLoading(false);
-    propOnClose?.();
-  };
+  }, [isOpen, showTermsModal, welcomeData, handleClose]);
 
   // Xử lý sau khi đăng nhập thành công
   const notifyAuthSuccess = async (responseData) => {
@@ -480,7 +480,13 @@ export default function AuthModal({
          ======================================================== */}
       {welcomeData ? (
         <div
-          className={`relative w-full max-w-[460px] overflow-hidden rounded-3xl border border-[#D4AF37]/60 bg-[#FFFDF9]/95 dark:bg-[#161714]/98 backdrop-blur-2xl text-[#1E1F1D] dark:text-[#EDE9DF] shadow-[0_25px_70px_rgba(212,175,55,0.2)] dark:shadow-[0_25px_80px_rgba(0,0,0,0.9)] transition-all duration-300 ease-out transform ${
+          style={{
+            backgroundColor: isDarkTheme ? '#181916' : '#FFFDF9',
+            color: isDarkTheme ? '#EDE9DF' : '#1E1F1D',
+          }}
+          className={`relative w-full max-w-[460px] overflow-hidden rounded-3xl border ${
+            isDarkTheme ? 'border-[#D4AF37]/50 shadow-[0_25px_80px_rgba(0,0,0,0.95)]' : 'border-[#D4AF37]/60 shadow-[0_25px_70px_rgba(212,175,55,0.2)]'
+          } backdrop-blur-2xl transition-all duration-300 ease-out transform ${
             isVisible ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-4'
           }`}
         >
@@ -568,7 +574,13 @@ export default function AuthModal({
             POPUP 2: POPUP ĐIỀU KHOẢN & CHÍNH SÁCH BẢO MẬT
            ======================================================== */
         <div
-          className={`relative w-full max-w-[560px] max-h-[85vh] flex flex-col overflow-hidden rounded-3xl border border-[#D4AF37]/50 bg-[#FFFDF9]/98 dark:bg-[#161714]/98 backdrop-blur-2xl text-[#1E1F1D] dark:text-[#EDE9DF] shadow-[0_25px_70px_rgba(0,0,0,0.5)] transition-all duration-300 ease-out transform ${
+          style={{
+            backgroundColor: isDarkTheme ? '#181916' : '#FFFDF9',
+            color: isDarkTheme ? '#EDE9DF' : '#1E1F1D',
+          }}
+          className={`relative w-full max-w-[560px] max-h-[85vh] flex flex-col overflow-hidden rounded-3xl border ${
+            isDarkTheme ? 'border-[#D4AF37]/40 shadow-[0_25px_80px_rgba(0,0,0,0.95)]' : 'border-[#D4AF37]/50 shadow-[0_25px_70px_rgba(0,0,0,0.5)]'
+          } backdrop-blur-2xl transition-all duration-300 ease-out transform ${
             isVisible ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-4'
           }`}
         >
@@ -725,7 +737,13 @@ export default function AuthModal({
            ======================================================== */
         <div
           ref={modalRef}
-          className={`relative w-full max-w-[460px] overflow-hidden rounded-3xl border border-[#D4AF37]/45 bg-[#FFFDF9]/95 dark:bg-[#161714]/98 backdrop-blur-2xl text-[#1E1F1D] dark:text-[#EDE9DF] shadow-[0_25px_60px_rgba(212,175,55,0.18)] dark:shadow-[0_25px_80px_rgba(0,0,0,0.9)] transition-all duration-300 ease-out transform ${
+          style={{
+            backgroundColor: isDarkTheme ? '#181916' : '#FFFDF9',
+            color: isDarkTheme ? '#EDE9DF' : '#1E1F1D',
+          }}
+          className={`relative w-full max-w-[460px] overflow-hidden rounded-3xl border ${
+            isDarkTheme ? 'border-[#D4AF37]/40 shadow-[0_25px_80px_rgba(0,0,0,0.95)]' : 'border-[#D4AF37]/45 shadow-[0_25px_60px_rgba(212,175,55,0.18)]'
+          } backdrop-blur-2xl transition-all duration-300 ease-out transform ${
             isVisible ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-4'
           }`}
         >

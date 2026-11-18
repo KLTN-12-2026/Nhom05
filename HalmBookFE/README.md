@@ -1,16 +1,15 @@
-# React + Vite
+# HALM Book Web
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Frontend React/Vite của HALM Book. Cấu trúc module, quy tắc phiên đăng nhập và dữ liệu được mô tả trong [ARCHITECTURE.md](./ARCHITECTURE.md).
 
-Currently, two official plugins are available:
+## Chạy local
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Cài dependency theo lockfile bằng npm ci. Backend mặc định http://localhost:8082; đặt VITE_API_BASE_URL trước khi chạy dev/build nếu dùng địa chỉ khác. Không ghi token hay mật khẩu vào cấu hình frontend.
 
-## React Compiler
+- npm run dev: máy chủ Vite local (cấu hình HTTPS hiện có).
+- npm run build: tạo bản production.
+- npm run preview: xem bản đã build.
+- npm run lint: kiểm tra mã, bao gồm lỗi JSX thiếu import.
+- npm test: kiểm tra phiên, chính sách chọn JWT theo endpoint và cấu hình route.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+Đối chiếu thay đổi và kết quả xác minh tại báo cáo WEB_REFACTOR_REPORT.md ở thư mục gốc repo.

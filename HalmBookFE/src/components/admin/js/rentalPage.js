@@ -193,7 +193,14 @@ function renderRentalsTable(rentals) {
                 : '';
 
             let actions = '';
-            if (r.status === 'active') {
+            if (r.status === 'pending') {
+                actions = `
+                    <div class="flex items-center justify-center space-x-1">
+                        <button onclick="approveRental('${r.id}')" class="p-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded border border-emerald-500 shadow-sm transition cursor-pointer" title="Duyệt yêu cầu thuê"><i class="fa-solid fa-check text-[11px]"></i></button>
+                        <button onclick="rejectRental('${r.id}')" class="p-1 bg-rose-600 hover:bg-rose-700 text-white rounded border border-rose-500 shadow-sm transition cursor-pointer" title="Từ chối"><i class="fa-solid fa-xmark text-[11px]"></i></button>
+                    </div>
+                `;
+            } else if (r.status === 'active') {
                 actions = `
                     <div class="flex items-center justify-center">
                         <button onclick="revokeRental('${r.id}')" class="px-2.5 py-1 bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 rounded-lg text-[10px] font-bold border border-rose-300 dark:border-rose-700 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition flex items-center space-x-1 cursor-pointer" title="Thu hồi quyền đọc sách">
@@ -331,6 +338,60 @@ function resetRentalFilters() {
     if (statusFilter) statusFilter.value = '';
     currentRentalPage = 1;
     filterRentalsTable();
+}
+
+async function approveRental(id) {
+    let confirmed = false;
+    if (typeof window.halmConfirm === 'function') {
+        confirmed = await window.halmConfirm({
+            title: 'Duyệt Đơn Thuê Sách',
+            message: 'Bạn có chắc chắn muốn duyệt đơn thuê sách này? Hệ thống sẽ kích hoạt quyền đọc ngay lập tức cho độc giả.',
+            confirmText: 'Duyệt yêu cầu',
+            type: 'warning',
+        });
+    } else {
+        confirmed = true;
+    }
+    if (!confirmed) return;
+
+    try {
+        if (window.AdminRentalAPI && typeof window.AdminRentalAPI.approve === 'function') {
+            const res = await window.AdminRentalAPI.approve(id);
+            if (window.DB) window.DB.notify(res.message || 'Đã duyệt đơn thuê sách thành công!', 'success');
+        } else if (window.DB && typeof window.DB.approveRental === 'function') {
+            const rental = window.DB.approveRental(id);
+            if (rental && window.DB) window.DB.notify(`Đã duyệt đơn thuê sách ${rental.code}!`, 'success');
+        }
+        await loadRentals();
+    } catch (err) {
+        if (window.DB) window.DB.notify('Lỗi khi duyệt đơn thuê: ' + (err.response?.data?.message || err.message), 'error');
+    }
+}
+
+async function rejectRental(id) {
+    let reason = 'Đầu sách đang bảo trì bản quyền hoặc lỗi kỹ thuật';
+    if (window.AdminUI && typeof window.AdminUI.prompt === 'function') {
+        reason = await window.AdminUI.prompt({
+            title: 'Từ Chối Đơn Thuê Sách',
+            message: 'Vui lòng cung cấp lý do từ chối đơn thuê để gửi thông báo cho khách hàng.',
+            label: 'Lý do từ chối *',
+            defaultValue: reason,
+            placeholder: 'Nhập lý do chi tiết...',
+            requireInput: true,
+            confirmText: 'Từ Chối Đơn',
+        });
+        if (!reason) return;
+    }
+
+    try {
+        if (window.AdminRentalAPI && typeof window.AdminRentalAPI.reject === 'function') {
+            const res = await window.AdminRentalAPI.reject(id, reason);
+            if (window.DB) window.DB.notify(res.message || 'Đã từ chối đơn thuê sách!', 'info');
+        }
+        await loadRentals();
+    } catch (err) {
+        if (window.DB) window.DB.notify('Lỗi khi từ chối đơn thuê: ' + (err.response?.data?.message || err.message), 'error');
+    }
 }
 
 async function revokeRental(id) {
@@ -473,5 +534,7 @@ window.filterRentalsTable = filterRentalsTable;
 window.resetRentalFilters = resetRentalFilters;
 window.exportRentalsExcel = exportRentalsExcel;
 window.changeRentalPage = changeRentalPage;
+window.approveRental = approveRental;
+window.rejectRental = rejectRental;
 window.revokeRental = revokeRental;
 window.loadRentals = loadRentals;

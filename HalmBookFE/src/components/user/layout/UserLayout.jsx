@@ -1,3 +1,7 @@
+import UserHeader from './UserHeader';
+import UserFooter from './UserFooter';
+import PotatoChatbot from '@/components/common/PotatoChatbot';
+import AuthModal from '@/components/common/AuthModal';
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import logo from "@/assets/images/logo.png";

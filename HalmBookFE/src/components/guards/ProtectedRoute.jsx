@@ -7,6 +7,10 @@ const ProtectedRoute = ({ allowedRoles }) => {
 
     // 1. Phân luồng kiểm tra cho khu vực Quản trị viên (Admin Portal)
     const isAdminRoute = (allowedRoles && allowedRoles.some((role) => role.includes('ADMIN'))) || location.pathname.startsWith('/admin');
+    if (location.pathname === '/admin/login' || location.pathname === '/login') {
+        return <Outlet />;
+    }
+
     if (isAdminRoute) {
         const adminToken = getAdminAuthToken();
         const isAdminValid = isTokenValid(adminToken);
@@ -18,13 +22,13 @@ const ProtectedRoute = ({ allowedRoles }) => {
             sessionStorage.getItem('role')
         )?.replace(/^ROLE_/, "")?.toUpperCase();
 
-        // Chống tự động đá văng ra login: Cho phép truy cập nếu token còn hạn HOẶC có role ADMIN
-        const hasAdminAccess = (adminToken && isAdminValid) || adminRole === 'ADMIN';
+        // Bắt buộc phải có Admin token hợp lệ VÀ quyền ADMIN (Ngăn chặn bypass bằng cách sửa thô localStorage)
+        const hasAdminAccess = !!adminToken && isAdminValid && adminRole === 'ADMIN';
 
         if (!hasAdminAccess) {
             return (
                 <Navigate
-                    to="/login"
+                    to="/admin/login"
                     state={{ from: location.pathname + location.search, portal: 'admin', loginMessage: 'Vui lòng đăng nhập với tài khoản Quản trị viên để truy cập!' }}
                     replace
                 />
@@ -37,7 +41,8 @@ const ProtectedRoute = ({ allowedRoles }) => {
     const isValid = isTokenValid();
     const userRole = (getAuthRole() || localStorage.getItem('role') || sessionStorage.getItem('role'))?.replace(/^ROLE_/, "")?.toUpperCase();
 
-    if (!isValid && !userRole) {
+    // Bắt buộc phải có token hợp lệ và còn hạn
+    if (!isValid) {
         // Đối với người dùng thông thường: Chuyển về Trang Chủ kèm yêu cầu mở popup đăng nhập tại chỗ
         return (
             <Navigate

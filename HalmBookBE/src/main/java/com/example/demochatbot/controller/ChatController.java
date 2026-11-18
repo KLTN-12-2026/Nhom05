@@ -69,4 +69,13 @@ public class ChatController {
         List<Map<String, Object>> history = chatService.getChatHistory(accountId);
         return ResponseEntity.ok(history);
     }
+
+    @DeleteMapping("/history")
+    public ResponseEntity<Void> clearChatHistory(Authentication authentication,
+            @RequestParam(value = "conversationId", required = false) String conversationId) {
+        String accountId = authentication != null && authentication.isAuthenticated()
+                && !"anonymousUser".equals(authentication.getName()) ? authentication.getName() : "guest_session";
+        chatService.clearChatHistory(accountId, conversationId);
+        return ResponseEntity.noContent().build();
+    }
 }

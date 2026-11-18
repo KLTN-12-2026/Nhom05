@@ -1,5 +1,7 @@
 package com.example.demochatbot.repository;
 
+import com.example.demochatbot.model.Book;
+import com.example.demochatbot.model.Customer;
 import com.example.demochatbot.model.Order_Item;
 import com.example.demochatbot.model.Orders;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -23,4 +25,7 @@ public interface OrderItemRepository extends JpaRepository<Order_Item, Integer> 
 
     @Query("SELECT oi FROM Order_Item oi WHERE oi.orders.orders_id = :ordersId")
     List<Order_Item> findByOrdersId(@Param("ordersId") int ordersId);
+
+    @Query("SELECT oi FROM Order_Item oi WHERE oi.orders.customer = :customer AND oi.book = :book ORDER BY oi.orders.order_date DESC")
+    List<Order_Item> findLatestByCustomerAndBook(@Param("customer") Customer customer, @Param("book") Book book);
 }

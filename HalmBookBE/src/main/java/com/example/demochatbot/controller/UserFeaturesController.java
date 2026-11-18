@@ -8,6 +8,7 @@ import com.example.demochatbot.repository.*;
 import com.example.demochatbot.service.customer.CustomerService;
 import com.example.demochatbot.service.data.CloudinaryService;
 import com.example.demochatbot.service.order.OrderService;
+import com.example.demochatbot.service.tier.TierService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -37,6 +38,34 @@ public class UserFeaturesController {
     private final FavoriteBookRepository favoriteBookRepository;
     private final PotatoTransactionRepository potatoTransactionRepository;
     private final BookRepository bookRepository;
+    private final TierService tierService;
+
+    private static class MissionDefinition {
+        final int potatoReward;
+        final int xpReward;
+        final boolean isMilestone;
+        final String name;
+
+        MissionDefinition(int potatoReward, int xpReward, boolean isMilestone, String name) {
+            this.potatoReward = potatoReward;
+            this.xpReward = xpReward;
+            this.isMilestone = isMilestone;
+            this.name = name;
+        }
+    }
+
+    private static final Map<String, MissionDefinition> VALID_MISSIONS = Map.of(
+            "m1", new MissionDefinition(5, 20, false, "Điểm danh đọc sách hằng ngày"),
+            "m2", new MissionDefinition(10, 30, false, "Đọc sách hoặc khám phá chương mới"),
+            "m3", new MissionDefinition(5, 20, false, "Đàm đạo cùng Trợ lý AI Khoai Nhỏ"),
+            "m4", new MissionDefinition(5, 20, false, "Tìm kiếm tác phẩm yêu thích"),
+            "m5", new MissionDefinition(5, 20, false, "Khám phá kho Ưu Đãi & Gói Khoai"),
+            "m6", new MissionDefinition(5, 20, false, "Kiểm tra Tủ Sách Cá Nhân"),
+            "ms1", new MissionDefinition(50, 150, true, "Độc Giả Chăm Chỉ (Chuỗi 7 Ngày)"),
+            "ms2", new MissionDefinition(30, 100, true, "Tủ Sách Khởi Đầu (3 Cuốn)"),
+            "ms3", new MissionDefinition(40, 120, true, "Nhà Tích Lũy Tri Thức (100 Khoai)"),
+            "ms4", new MissionDefinition(100, 300, true, "Đại Sứ HALM BOOK (500 Khoai)")
+    );
 
     // Helper: Lấy customer đăng nhập hiện tại
     private Customer getAuthenticatedCustomer() {
@@ -79,6 +108,7 @@ public class UserFeaturesController {
         }
 
         Access_Record ar = recordOpt.get();
+
         boolean isExpired = false;
         long remainingDays = 0;
 
@@ -133,6 +163,15 @@ public class UserFeaturesController {
         }
 
         Access_Record ar = recordOpt.get();
+
+        LocalDateTime now = LocalDateTime.now();
+        boolean isExpired = ar.getEnd_date() != null && ar.getEnd_date().isBefore(now);
+        boolean hasAccess = !isExpired && "ACTIVE".equalsIgnoreCase(ar.getStatus());
+        if (!hasAccess) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("message", "Quyền đọc sách đã hết hạn hoặc đã bị thu hồi!"));
+        }
+
         ar.setCurrentPage(request.getCurrentPage());
 
         if (request.getReadingPercentage() != null) {
@@ -259,12 +298,50 @@ public class UserFeaturesController {
                     .body(Map.of("message", "Vui lòng đăng nhập để nhận thưởng nhiệm vụ!"));
         }
 
+        // Khóa bi quan bản ghi customer để bảo vệ chống nhận thưởng đồng thời (IMP-03)
+        Optional<Customer> lockedCustomerOpt = customerRepository.findByIdForUpdate(customer.getCustomer_id());
+        if (lockedCustomerOpt.isPresent()) {
+            customer = lockedCustomerOpt.get();
+        }
+
         if (request == null || request.getMissionId() == null || request.getMissionId().trim().isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("message", "Mã nhiệm vụ không hợp lệ!"));
         }
 
         String missionId = request.getMissionId().trim();
-        boolean isMilestone = Boolean.TRUE.equals(request.getIsMilestone()) || missionId.startsWith("ms");
+        MissionDefinition missionDef = VALID_MISSIONS.get(missionId);
+        if (missionDef == null) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Nhiệm vụ '" + missionId + "' không tồn tại trong hệ thống!"));
+        }
+        boolean isMilestone = missionDef.isMilestone;
+
+        // Kiểm tra điều kiện hoàn thành thực tế phía server (QA7-05)
+        if ("ms1".equals(missionId)) {
+            int streak = customer.getStreakDays() != null ? customer.getStreakDays() : 0;
+            if (streak < 7) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Bạn chưa đủ điều kiện nhận mốc này (Cần chuỗi điểm danh tối thiểu 7 ngày, hiện tại: " + streak + " ngày)!"));
+            }
+        } else if ("ms2".equals(missionId)) {
+            long bookCount = accessRecordRepository.countByCustomer(customer);
+            if (bookCount < 3) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Bạn cần sở hữu hoặc thuê tối thiểu 3 cuốn sách trong Tủ sách (Hiện có: " + bookCount + ")!"));
+            }
+        } else if ("ms3".equals(missionId)) {
+            int earned = customer.getTotalPotatoEarned() != null ? customer.getTotalPotatoEarned() : 0;
+            if (earned < 100) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Bạn cần tích lũy tối thiểu 100 Khoai (Hiện có: " + earned + ")!"));
+            }
+        } else if ("ms4".equals(missionId)) {
+            int earned = customer.getTotalPotatoEarned() != null ? customer.getTotalPotatoEarned() : 0;
+            if (earned < 500) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Bạn cần tích lũy tối thiểu 500 Khoai (Hiện có: " + earned + ")!"));
+            }
+        } else if ("m1".equals(missionId)) {
+            LocalDate todayCheck = LocalDate.now();
+            if (customer.getLastStreakDate() == null || !customer.getLastStreakDate().equals(todayCheck)) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Bạn chưa hoàn thành điểm danh đọc sách hôm nay!"));
+            }
+        }
         LocalDate today = LocalDate.now();
 
         // Kiểm tra xem đã nhận thưởng chưa
@@ -278,12 +355,13 @@ public class UserFeaturesController {
             }
         }
 
-        int reward = (request.getRewardPotato() != null && request.getRewardPotato() > 0) ? request.getRewardPotato() : 5;
+        int reward = missionDef.potatoReward;
         int currentBalance = customer.getPotatoBalance() != null ? customer.getPotatoBalance() : 0;
         int newBalance = currentBalance + reward;
 
         // 1. Cập nhật số dư khoai của người dùng
         customer.setPotatoBalance(newBalance);
+        customer.setTotalPotatoEarned((customer.getTotalPotatoEarned() != null ? customer.getTotalPotatoEarned() : 0) + reward);
         customerRepository.save(customer);
 
         // 2. Ghi nhận giao dịch khoai tây

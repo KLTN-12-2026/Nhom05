@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.List;
 
 @Service
 public interface BookService {
@@ -36,4 +37,14 @@ public interface BookService {
     Boolean deleteBook(String bookId);
 
     Page<Book> findAllBook(Pageable pageable);
+
+    Boolean updateTableOfContents(String bookId, String tableOfContentsJson);
+
+    String getTableOfContents(String bookId);
+
+    List<BookBasicDto> findTrendingBooks(int limit);
+
+    List<BookBasicDto> findCartRecommendations(List<String> cartBookIds, int limit);
+
+    List<BookBasicDto> findAuthorBooks(String bookId, int limit);
 }

@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { isDarkMode, applyTheme } from '@/utils/theme';
 import UserLayout from './layout/UserLayout';
 import { getCurrentCustomer } from '@/services/customerService';
@@ -9,8 +8,22 @@ import { openAuthModal } from '@/components/common/AuthModal';
 import axiosInstance from '@/services/axiosClient';
 import { getCombos, getSingleDeals } from '@/services/offerService';
 
+const STATIC_STARS = Array.from({ length: 60 }, (_, i) => {
+  const pseudoRand1 = ((i * 137 + 43) % 100) / 100;
+  const pseudoRand2 = ((i * 269 + 71) % 100) / 100;
+  const pseudoRand3 = ((i * 353 + 97) % 100) / 100;
+  const pseudoRand4 = ((i * 491 + 131) % 100) / 100;
+  const size = pseudoRand1 * 2.5 + 0.5;
+  return {
+    id: i,
+    size,
+    top: `${pseudoRand2 * 100}%`,
+    left: `${pseudoRand3 * 100}%`,
+    animation: `starTwinkle ${(pseudoRand4 * 3 + 2).toFixed(1)}s infinite ease-in-out ${(pseudoRand1 * 3).toFixed(1)}s`
+  };
+});
+
 export default function OffersEnd() {
-  const navigate = useNavigate();
   const [khoaiBalance, setKhoaiBalance] = useState(0);
   const [isDark, setIsDark] = useState(() => isDarkMode());
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -34,9 +47,9 @@ export default function OffersEnd() {
   // TODO(API): Tải danh sách các gói cước, gói upload, combo sách, sách giảm giá từ database
   const [subscriptionOffers, setSubscriptionOffers] = useState([]);
   const [uploadOffers, setUploadOffers] = useState([]);
-  const [comboOffers, setComboOffers] = useState([]);
-  const [singleBookDeals, setSingleBookDeals] = useState([]);
-  const [challengeOffers, setChallengeOffers] = useState([]);
+  const [comboOffers, setComboOffers] = useState(() => getCombos());
+  const [singleBookDeals, setSingleBookDeals] = useState(() => getSingleDeals());
+  const [challengeOffers] = useState([]);
 
   const popupHideTimeout = useRef(null);
   const popupCloseTimeout = useRef(null);
@@ -54,8 +67,6 @@ export default function OffersEnd() {
           }
         })
         .catch(() => {});
-    } else {
-      setKhoaiBalance(0);
     }
 
     const handlePotatoUpdated = (event) => {
@@ -85,6 +96,7 @@ export default function OffersEnd() {
               tag,
               category: 'Gói Nạp Khoai',
               duration: 'nạp ngay',
+              description: desc,
               features: [
                 `Nhận ${potato} Khoai vào ví đọc sách`,
                 bonus > 0 ? `Tặng thêm +${bonus} Khoai ưu đãi` : 'Sử dụng thuê sách và mở khóa trọn đời',
@@ -128,10 +140,7 @@ export default function OffersEnd() {
       })
       .catch(() => {});
 
-    // 2.2. Nạp dữ liệu Combo Sách & Sách Lẻ Giảm Sâu từ Quản Trị Hệ Thống (offerService)
-    setComboOffers(getCombos());
-    setSingleBookDeals(getSingleDeals());
-
+    // 2.2. Lắng nghe cập nhật Combo Sách & Sách Lẻ Giảm Sâu từ Quản Trị Hệ Thống
     const handleOffersUpdated = () => {
       if (isMounted) {
         setComboOffers(getCombos());
@@ -139,9 +148,6 @@ export default function OffersEnd() {
       }
     };
     window.addEventListener('halm-offers-updated', handleOffersUpdated);
-
-    // 2.3. Thử thách đọc sách: khởi tạo mảng rỗng (sẵn sàng kết nối sự kiện CSDL)
-    setChallengeOffers([]);
 
     // 3. Ghi nhận hoàn thành nhiệm vụ hằng ngày: Khám phá ưu đãi
     const todayKey = new Date().toISOString().slice(0, 10);
@@ -184,7 +190,7 @@ export default function OffersEnd() {
     window.addEventListener('scroll', handleScroll);
 
     // 6. Theme initialization
-    applyTheme(isDark);
+    applyTheme(isDarkMode());
 
     const handleThemeChange = (e) => {
       if (typeof e.detail?.isDark === 'boolean') {
@@ -204,18 +210,23 @@ export default function OffersEnd() {
 
   const renderStars = () => {
     if (!isDark) return null;
-    const stars = [];
-    for (let i = 0; i < 60; i++) {
-      const size = Math.random() * 2.5 + 0.5;
-      stars.push(
-        <div key={i} className="star" style={{
-          width: `${size}px`, height: `${size}px`,
-          top: `${Math.random() * 100}%`, left: `${Math.random() * 100}%`,
-          animation: `starTwinkle ${Math.random() * 3 + 2}s infinite ease-in-out ${Math.random() * 3}s`
-        }} />
-      );
-    }
-    return <div id="starry-background">{stars}</div>;
+    return (
+      <div id="starry-background">
+        {STATIC_STARS.map((star) => (
+          <div
+            key={star.id}
+            className="star"
+            style={{
+              width: `${star.size}px`,
+              height: `${star.size}px`,
+              top: star.top,
+              left: star.left,
+              animation: star.animation
+            }}
+          />
+        ))}
+      </div>
+    );
   };
 
   const triggerToast = (title, message) => {
@@ -650,7 +661,20 @@ export default function OffersEnd() {
                         <div className="space-y-1 pt-2 border-t border-paper-border/60 dark:border-night-border/60">
                           <p className="text-[10px] font-bold uppercase tracking-wider text-ink-muted dark:text-night-muted">Gồm {item.books.length} tác phẩm:</p>
                           {item.books.slice(0, 3).map((b, i) => (
-                            <div key={i} className="flex items-center gap-1.5 text-xs text-ink/80 dark:text-night-text/80 truncate">
+                            <div
+                              key={i}
+                              className="combo-book-item flex items-center gap-1.5 text-xs text-ink/80 dark:text-night-text/80 truncate cursor-pointer hover:text-wine dark:hover:text-gold"
+                              onMouseEnter={(e) => handleBookEnter(e, {
+                                title: b,
+                                category: item.name,
+                                author: 'Nhiều tác giả',
+                                pages: 'Tác phẩm chọn lọc',
+                                rating: '4.9 ★',
+                                summary: `Tác phẩm "${b}" tuyển chọn trong combo "${item.name}".`,
+                                price: 'Đã bao gồm trong combo'
+                              })}
+                              onMouseLeave={handleBookLeave}
+                            >
                               <i className="ph-bold ph-bookmark-simple text-wine dark:text-gold text-xs shrink-0"></i>
                               <span className="truncate">{b}</span>
                             </div>

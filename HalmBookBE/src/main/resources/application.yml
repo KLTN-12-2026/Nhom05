@@ -18,8 +18,9 @@ spring:
       api-key: ${GEMINI_KEY:default-gemini-key}
       base-url: https://generativelanguage.googleapis.com/v1beta/openai
       chat:
+        completions-path: /chat/completions
         options:
-          model: gemini-3.6-flash
+          model: ${GEMINI_MODEL:gemini-3.6-flash}
           max-tokens: 2048
 
   # Cấu hình database nguyên vẹn của bạn
@@ -41,9 +42,19 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME:guest}
     password: ${RABBITMQ_PASSWORD:guest}
+    listener:
+      simple:
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-retries: 2
+          initial-interval: 500ms
+          multiplier: 2
+          max-interval: 2s
 
   # Khối mail đã được lùi vào đúng cấp của thẻ spring
   mail:
+    default-encoding: UTF-8
     host: smtp.gmail.com
     port: 587
     username: ${MAIL_USERNAME:buihuonga33w@gmail.com}
@@ -72,3 +83,12 @@ google:
 jwt:
     secret: ${JWT_SECRET:HALMBOOK_Super_Secret_Key_For_JWT_Authentication_2026_Must_Be_Long}
     expiration: 86400000 # Thời gian sống của Token (1 ngày = 86400000 ms)
+
+halm:
+  support:
+    confirmation-email:
+      enabled: ${SUPPORT_EMAIL_ENABLED:true}
+
+logging:
+  charset:
+    console: UTF-8

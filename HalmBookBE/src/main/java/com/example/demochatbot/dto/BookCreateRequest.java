@@ -20,4 +20,5 @@ public class BookCreateRequest {
     private Integer category_id;
     private String status;
     private String fileFormat;
+    private String tableOfContents;
 }
