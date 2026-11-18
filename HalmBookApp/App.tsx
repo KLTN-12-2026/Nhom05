@@ -5,7 +5,6 @@ import { ComponentRef, ComponentType, useCallback, useEffect, useMemo, useRef, u
 import { Alert, Animated, BackHandler, Easing, Modal, Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import ChatBotScreen, { ChatMessage } from './src/ux-ui/chatbot';
-import FloatingChatbotBubble from './src/ux-ui/FloatingChatbotBubble';
 import ReaderLeaderboard from './src/ux-ui/ReaderLeaderboard';
 import BookDetailScreen from './src/ux-ui/chitietsach';
 import DmTrangChu from './src/ux-ui/dmtrangchu';
@@ -38,6 +37,7 @@ interface ScreenRoute extends NavigationOptions {
 }
 
 const SCREENS_WITH_SHARED_HEADER: AppScreen[] = [
+  'categories',
   'transactions',
 ];
 
@@ -744,7 +744,7 @@ export default function App() {
                 {screen}
               </Animated.View>
             </BlurTargetView>
-            {!['auth', 'reader', 'chatbot', 'notifications', 'payment'].includes(currentRoute.name) && (
+            {!['auth', 'reader', 'chatbot', 'notifications', 'payment', 'transactions'].includes(currentRoute.name) && (
               <Footer
                 activeNav={activeNav}
                 floating={['home', 'categories', 'genreBooks', 'bookDetail', 'offers', 'upload', 'bookshelf', 'profile'].includes(currentRoute.name)}
@@ -758,12 +758,6 @@ export default function App() {
             Hiển thị đè lên trên màn hình khi khách vãng lai nhấn uploadfile, trangcanhan,
             tusach hoặc thanh toán giỏ hàng. Có dòng 'Đăng nhập ngay' để vào màn đăng nhập.
             ============================================================================ */}
-        <FloatingChatbotBubble
-          hidden={!isLoggedIn || currentRoute.name === 'chatbot'}
-          onOpen={() => navigate('chatbot')}
-          isDarkMode={isDarkMode}
-          isEnglish={lang === 'en'}
-        />
         <AuthRequiredModal
           visible={authModal.visible && !authModal.showForm}
           message={authModal.message}

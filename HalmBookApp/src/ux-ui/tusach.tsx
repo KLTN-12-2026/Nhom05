@@ -46,7 +46,7 @@ const GAP = 12;
 const ITEM_WIDTH = Math.floor((SCREEN_WIDTH - (HORIZONTAL_PADDING * 2) - (GAP * 2)) / 3);
 const COVER_HEIGHT = Math.floor(ITEM_WIDTH * 1.42);
 
-export type BookshelfTab = 'dangdoc' | 'dangthue' | 'yeuthich' | 'tailen' | 'duoctang';
+export type BookshelfTab = 'dangdoc' | 'dangthue' | 'dathue' | 'yeuthich' | 'tailen' | 'duoctang';
 
 interface TabConfig {
   id: BookshelfTab;
@@ -55,13 +55,14 @@ interface TabConfig {
   icon: keyof typeof Ionicons.glyphMap;
 }
 
-// 5 Tab nằm ngang với các icon sắc nét, bắt mắt
+// 6 Tab nằm ngang với các icon sắc nét, bắt mắt
 const TABS: TabConfig[] = [
   { id: 'dangdoc', label: 'Sách đang đọc', labelEn: 'Reading', icon: 'book' },
   { id: 'dangthue', label: 'Đang thuê', labelEn: 'Renting', icon: 'time' },
   { id: 'yeuthich', label: 'Yêu thích', labelEn: 'Favorites', icon: 'heart' },
   { id: 'tailen', label: 'Tải lên', labelEn: 'Uploaded', icon: 'cloud-upload' },
   { id: 'duoctang', label: 'Được tặng', labelEn: 'Gifted', icon: 'gift' },
+  { id: 'dathue', label: 'Sách đã thuê', labelEn: 'Rented', icon: 'hourglass' },
 ];
 
 export interface BookshelfItem {
@@ -83,6 +84,59 @@ export interface BookshelfItem {
   isForever?: boolean;
   expired?: boolean;
   categoryName?: string;
+  accessRecordId?: number;
+  startDate?: unknown;
+  endDate?: unknown;
+}
+
+function parseEndTimestamp(rawDate: unknown): number | null {
+  if (!rawDate) return null;
+  if (typeof rawDate === 'number' && Number.isFinite(rawDate)) {
+    return rawDate > 1e11 ? rawDate : rawDate * 1000;
+  }
+  if (Array.isArray(rawDate) && rawDate.length >= 3) {
+    const [year, month, day, hour = 0, minute = 0, second = 0] = rawDate;
+    return new Date(year, month - 1, day, hour, minute, second).getTime();
+  }
+  if (typeof rawDate === 'string') {
+    const match = rawDate.trim().match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?)?/);
+    if (match) {
+      const [, y, m, d, h = '0', min = '0', s = '0'] = match;
+      return new Date(Number(y), Number(m) - 1, Number(d), Number(h), Number(min), Number(s)).getTime();
+    }
+    const cleaned = rawDate.trim().replace(' ', 'T').replace(/(\.\d{3})\d+/, '$1');
+    const parsed = Date.parse(cleaned);
+    if (!isNaN(parsed)) return parsed;
+    const d = new Date(cleaned);
+    if (!isNaN(d.getTime())) return d.getTime();
+  }
+  return null;
+}
+
+function getItemRemainingMs(item: BookshelfItem, currentNow: number): number | null {
+  if (item.isForever || item.expired) return null;
+  const parsed = parseEndTimestamp(item.endDate);
+  if (parsed && Number.isFinite(parsed)) {
+    const diff = parsed - currentNow;
+    return diff > 0 ? diff : 0;
+  }
+  if (item.remainingDays === 1) {
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+    const diff = endOfDay.getTime() - currentNow;
+    return diff > 0 ? diff : 0;
+  }
+  return null;
+}
+
+function formatCountdown(remainingMs: number): string {
+  if (!Number.isFinite(remainingMs) || remainingMs <= 0) return '00:00:00';
+  const totalSeconds = Math.floor(remainingMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
 }
 
 // Các màu bìa tối giản phong cách ấn phẩm xuất bản khi sách chưa có ảnh bìa
@@ -130,6 +184,16 @@ export default function TuSach({ initialTab = 'dangdoc' }: { initialTab?: Booksh
   const [isLoadingRented, setIsLoadingRented] = useState(false);
   const [rentedError, setRentedError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [now, setNow] = useState<number>(() => Date.now());
+
+  // Tự động đếm ngược thời gian thực mỗi giây khi ở tab Đang thuê
+  useEffect(() => {
+    if (activeTab !== 'dangthue') return;
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [activeTab]);
 
   useEffect(() => {
     getUnreadNotificationCount().then(setUnreadNotifCount).catch(() => {});
@@ -224,6 +288,7 @@ export default function TuSach({ initialTab = 'dangdoc' }: { initialTab?: Booksh
         try {
           const mapRentedDto = (item: RentedBookItem): BookshelfItem => ({
             id: item.bookId,
+            accessRecordId: item.accessRecordId,
             title: item.title,
             author: item.author,
             chapter: item.expired
@@ -237,6 +302,8 @@ export default function TuSach({ initialTab = 'dangdoc' }: { initialTab?: Booksh
             isForever: item.isForever,
             expired: item.expired,
             categoryName: item.categoryName,
+            startDate: item.startDate,
+            endDate: item.endDate,
           });
 
           const [bookshelfRes, syncedFavs] = await Promise.all([
@@ -244,8 +311,56 @@ export default function TuSach({ initialTab = 'dangdoc' }: { initialTab?: Booksh
             fetchFavoriteBooksFromApi().catch(() => null),
           ]);
 
-          setRentedList(bookshelfRes.books.map(mapRentedDto));
-          setExpiredRentedList(bookshelfRes.expiredBooks.map(mapRentedDto));
+          // Tách bạch sách còn hạn vào "Đang thuê" và sách hết hạn vào "Sách đã thuê"
+          const nowMs = Date.now();
+          const mappedRented = bookshelfRes.books.map(mapRentedDto);
+          const mappedExpired = bookshelfRes.expiredBooks.map(mapRentedDto);
+
+          const activeCandidates: BookshelfItem[] = [];
+          const expiredCandidates: BookshelfItem[] = [...mappedExpired];
+
+          for (const b of mappedRented) {
+            const parsedEnd = parseEndTimestamp(b.endDate);
+            const isActuallyExpired = b.expired || (!b.isForever && parsedEnd !== null && parsedEnd <= nowMs);
+            if (isActuallyExpired) {
+              expiredCandidates.push({
+                ...b,
+                expired: true,
+                chapter: lang === 'en' ? 'Expired' : 'Hết hạn thuê',
+              });
+            } else {
+              activeCandidates.push(b);
+            }
+          }
+
+          // Lọc trùng theo id sách trong mục Đang thuê (giữ bản ghi có thời hạn dài nhất)
+          const seenRented = new Map<string, BookshelfItem>();
+          for (const b of activeCandidates) {
+            const existing = seenRented.get(b.id);
+            if (!existing) {
+              seenRented.set(b.id, b);
+            } else {
+              const bEnd = parseEndTimestamp(b.endDate) ?? 0;
+              const exEnd = parseEndTimestamp(existing.endDate) ?? 0;
+              if (b.isForever || bEnd > exEnd || ((b.remainingDays || 0) > (existing.remainingDays || 0))) {
+                seenRented.set(b.id, b);
+              }
+            }
+          }
+          const deduplicatedRented = Array.from(seenRented.values());
+          setRentedList(deduplicatedRented);
+
+          // Lọc trùng trong mục Sách đã thuê (loại trừ các sách hiện đang còn hạn thuê)
+          const deduplicatedExpired: BookshelfItem[] = [];
+          const seenExpired = new Set<string>();
+          for (const b of expiredCandidates) {
+            if (!seenRented.has(b.id) && !seenExpired.has(b.id)) {
+              seenExpired.add(b.id);
+              deduplicatedExpired.push(b);
+            }
+          }
+          setExpiredRentedList(deduplicatedExpired);
+
           if (bookshelfRes.networkError && bookshelfRes.errorMessage) {
             setRentedError(bookshelfRes.errorMessage);
           }
@@ -311,6 +426,8 @@ export default function TuSach({ initialTab = 'dangdoc' }: { initialTab?: Booksh
         return readingList;
       case 'dangthue':
         return rentedList;
+      case 'dathue':
+        return expiredRentedList;
       case 'yeuthich':
         return favoritesList;
       case 'tailen':
@@ -419,6 +536,24 @@ export default function TuSach({ initialTab = 'dangdoc' }: { initialTab?: Booksh
     });
     loadBookshelfData();
 
+    // Nếu sách đã hết hạn thuê, điều hướng tới chi tiết sách để gia hạn/thuê lại
+    const isBookExpired =
+      activeTab === 'dathue' ||
+      item.expired ||
+      (!item.isForever && parseEndTimestamp(item.endDate) !== null && (parseEndTimestamp(item.endDate) ?? 0) <= Date.now());
+    if (isBookExpired) {
+      navigate('bookDetail', {
+        id: item.id,
+        title: item.title,
+        author: item.author,
+        category_name: item.categoryName,
+        img_url: item.img_url,
+        coverImage: rawCover,
+        coverUri: rawCover,
+      });
+      return;
+    }
+
     const effectiveFileUri = item.fileUri || item.pdf_url;
     if (effectiveFileUri) {
       const bookData: BookData = {
@@ -452,7 +587,9 @@ export default function TuSach({ initialTab = 'dangdoc' }: { initialTab?: Booksh
       case 'dangdoc':
         return lang === 'en' ? 'You have no books currently being read.' : 'Bạn chưa có cuốn sách nào đang đọc.';
       case 'dangthue':
-        return lang === 'en' ? 'You have no rented books.' : 'Bạn chưa thuê cuốn sách nào.';
+        return lang === 'en' ? 'You have no active rented books.' : 'Bạn chưa có cuốn sách nào đang thuê.';
+      case 'dathue':
+        return lang === 'en' ? 'You have no expired rented books.' : 'Bạn chưa có cuốn sách thuê nào đã hết hạn.';
       case 'yeuthich':
         return lang === 'en' ? 'You have no favorite books.' : 'Bạn chưa có cuốn sách yêu thích nào.';
       case 'tailen':
@@ -668,7 +805,7 @@ export default function TuSach({ initialTab = 'dangdoc' }: { initialTab?: Booksh
           />
         }
       >
-        {activeTab === 'dangthue' && rentedError ? (
+        {(activeTab === 'dangthue' || activeTab === 'dathue') && rentedError && currentBooks.length === 0 ? (
           <View style={themeStyles.rentedRetryBanner}>
             <Ionicons
               name="alert-circle-outline"
@@ -690,14 +827,27 @@ export default function TuSach({ initialTab = 'dangdoc' }: { initialTab?: Booksh
           </View>
         ) : null}
 
-        {activeTab === 'dangthue' && isLoadingRented && currentBooks.length === 0 ? (
+        {activeTab === 'dathue' && currentBooks.length > 0 && (
+          <View style={themeStyles.dathueHeaderBanner}>
+            <Ionicons name="information-circle-outline" size={16} color={isDarkMode ? '#9CA3AF' : '#6B7280'} />
+            <Text style={themeStyles.dathueHeaderBannerText}>
+              {lang === 'en'
+                ? 'Books whose rental has ended. Tap any book to view and renew.'
+                : 'Danh sách sách đã hết hạn thuê. Chạm vào sách để xem chi tiết và gia hạn thuê tiếp.'}
+            </Text>
+          </View>
+        )}
+
+        {(activeTab === 'dangthue' || activeTab === 'dathue') && isLoadingRented && currentBooks.length === 0 ? (
           <View style={themeStyles.emptyContainer}>
             <ActivityIndicator size="large" color={isDarkMode ? '#34D399' : '#2F6B5F'} />
             <Text style={[themeStyles.emptyDesc, { marginTop: 12 }]}>
-              {lang === 'en' ? 'Loading rented books...' : 'Đang tải danh sách sách đang thuê...'}
+              {lang === 'en'
+                ? (activeTab === 'dathue' ? 'Loading expired rentals...' : 'Loading rented books...')
+                : (activeTab === 'dathue' ? 'Đang tải danh sách sách đã thuê...' : 'Đang tải danh sách sách đang thuê...')}
             </Text>
           </View>
-        ) : currentBooks.length === 0 && (activeTab !== 'dangthue' || expiredRentedList.length === 0) ? (
+        ) : currentBooks.length === 0 ? (
           <View style={themeStyles.emptyContainer}>
             <View style={themeStyles.emptyIconCircle}>
               <Ionicons
@@ -706,11 +856,13 @@ export default function TuSach({ initialTab = 'dangdoc' }: { initialTab?: Booksh
                     ? 'book-outline'
                     : activeTab === 'dangthue'
                       ? 'time-outline'
-                      : activeTab === 'yeuthich'
-                        ? 'heart-outline'
-                        : activeTab === 'tailen'
-                          ? 'cloud-upload-outline'
-                          : 'gift-outline'
+                      : activeTab === 'dathue'
+                        ? 'hourglass-outline'
+                        : activeTab === 'yeuthich'
+                          ? 'heart-outline'
+                          : activeTab === 'tailen'
+                            ? 'cloud-upload-outline'
+                            : 'gift-outline'
                 }
                 size={32}
                 color={isDarkMode ? '#34D399' : '#2F6B5F'}
@@ -741,7 +893,7 @@ export default function TuSach({ initialTab = 'dangdoc' }: { initialTab?: Booksh
           </View>
         ) : (
           <View style={themeStyles.gridContainer}>
-            {currentBooks.map((item) => {
+            {currentBooks.map((item, index) => {
               const rawCover = item.coverUri || item.coverImage || item.img_url;
               const isDirectUri =
                 typeof rawCover === 'string' &&
@@ -753,16 +905,31 @@ export default function TuSach({ initialTab = 'dangdoc' }: { initialTab?: Booksh
               const placeholderStyle = getPlaceholderColors(item.title);
               const isSelected = selectedIds.includes(item.id);
               const isCloud = item.isSyncedWithBE || !!item.beBookId;
+
+              // Tính toán thời gian đếm ngược chính xác khi hạn còn <= 1 ngày
+              const remainingMs = activeTab === 'dangthue' ? getItemRemainingMs(item, now) : null;
+              const isExpiredNow =
+                activeTab === 'dangthue' &&
+                !item.isForever &&
+                (item.expired || (remainingMs !== null && remainingMs <= 0));
+              const isUnderOneDay =
+                activeTab === 'dangthue' &&
+                !item.isForever &&
+                !isExpiredNow &&
+                remainingMs !== null &&
+                remainingMs > 0 &&
+                (item.remainingDays === 1 || remainingMs <= 25 * 3600 * 1000);
+              const countdownText = isUnderOneDay && remainingMs !== null ? formatCountdown(remainingMs) : null;
+
               const isExpiringSoon =
                 activeTab === 'dangthue' &&
                 !item.isForever &&
-                typeof item.remainingDays === 'number' &&
-                item.remainingDays <= 2;
+                (isUnderOneDay || isExpiredNow || (typeof item.remainingDays === 'number' && item.remainingDays <= 2));
 
               return (
                 <TouchableOpacity
-                  key={item.id}
-                  style={themeStyles.bookCard}
+                  key={`${item.id}_${item.accessRecordId ?? index}`}
+                  style={[themeStyles.bookCard, activeTab === 'dathue' && { opacity: 0.88 }]}
                   activeOpacity={0.85}
                   onPress={() => handleBookPress(item)}
                 >
@@ -814,9 +981,11 @@ export default function TuSach({ initialTab = 'dangdoc' }: { initialTab?: Booksh
                           themeStyles.rentalBadge,
                           item.isForever
                             ? themeStyles.rentalBadgeForever
-                            : isExpiringSoon
-                              ? themeStyles.rentalBadgeWarning
-                              : themeStyles.rentalBadgeActive,
+                            : isExpiredNow
+                              ? themeStyles.rentalBadgeExpired
+                              : countdownText || isExpiringSoon
+                                ? themeStyles.rentalBadgeWarning
+                                : themeStyles.rentalBadgeActive,
                         ]}
                       >
                         <Ionicons
@@ -827,9 +996,23 @@ export default function TuSach({ initialTab = 'dangdoc' }: { initialTab?: Booksh
                         <Text style={themeStyles.rentalBadgeText} numberOfLines={1}>
                           {item.isForever
                             ? (lang === 'en' ? 'Forever' : 'Vĩnh viễn')
-                            : (lang === 'en'
-                                ? `${Math.max(1, item.remainingDays || 1)}d`
-                                : `${Math.max(1, item.remainingDays || 1)} ngày`)}
+                            : isExpiredNow
+                              ? (lang === 'en' ? 'Expired' : 'Hết hạn')
+                              : countdownText
+                                ? countdownText
+                                : (lang === 'en'
+                                    ? `${Math.max(1, item.remainingDays || 1)}d`
+                                    : `${Math.max(1, item.remainingDays || 1)} ngày`)}
+                        </Text>
+                      </View>
+                    )}
+
+                    {/* Huy hiệu Hết hạn trên tab Sách đã thuê */}
+                    {activeTab === 'dathue' && (
+                      <View style={[themeStyles.rentalBadge, themeStyles.rentalBadgeExpired]}>
+                        <Ionicons name="time-outline" size={10} color="#ffffff" />
+                        <Text style={themeStyles.rentalBadgeText} numberOfLines={1}>
+                          {lang === 'en' ? 'Expired' : 'Hết hạn'}
                         </Text>
                       </View>
                     )}
@@ -856,106 +1039,31 @@ export default function TuSach({ initialTab = 'dangdoc' }: { initialTab?: Booksh
                   </View>
 
                   {/* Dưới là tên sách & thông tin phụ thanh lịch */}
-                  <Text style={themeStyles.bookTitle} numberOfLines={2}>
+                  <Text style={themeStyles.bookTitle} numberOfLines={2} ellipsizeMode="tail">
                     {item.title}
                   </Text>
-                  {activeTab === 'dangthue' && item.chapter ? (
+                  {activeTab === 'dathue' ? (
+                    <Text style={themeStyles.rentalDurationSubWarn} numberOfLines={1}>
+                      {lang === 'en' ? 'Tap to renew' : 'Chạm để gia hạn'}
+                    </Text>
+                  ) : activeTab === 'dangthue' ? (
                     <Text
                       style={[
                         themeStyles.rentalDurationSub,
-                        isExpiringSoon && themeStyles.rentalDurationSubWarn,
+                        (countdownText || isExpiringSoon || isExpiredNow) && themeStyles.rentalDurationSubWarn,
                       ]}
                       numberOfLines={1}
                     >
-                      {item.chapter}
-                    </Text>
-                  ) : item.author ? (
-                    <Text style={themeStyles.bookAuthor} numberOfLines={1}>
-                      {item.author}
+                      {isExpiredNow
+                        ? (lang === 'en' ? 'Expired rental' : 'Hết hạn thuê')
+                        : countdownText
+                          ? (lang === 'en' ? `${countdownText} left` : `Còn ${countdownText}`)
+                          : item.chapter || (lang === 'en' ? `${Math.max(1, item.remainingDays || 1)}d left` : `Còn ${Math.max(1, item.remainingDays || 1)} ngày`)}
                     </Text>
                   ) : null}
                 </TouchableOpacity>
               );
             })}
-          </View>
-        )}
-
-        {activeTab === 'dangthue' && expiredRentedList.length > 0 && (
-          <View style={themeStyles.expiredSection}>
-            <Text style={themeStyles.expiredSectionTitle}>
-              {lang === 'en'
-                ? `Expired Rentals (${expiredRentedList.length})`
-                : `Sách đã hết hạn thuê (${expiredRentedList.length})`}
-            </Text>
-            <View style={themeStyles.gridContainer}>
-              {expiredRentedList.map((item) => {
-                const rawCover = item.coverUri || item.coverImage || item.img_url;
-                const isDirectUri =
-                  typeof rawCover === 'string' &&
-                  /^(?:http:\/\/|https:\/\/|file:\/\/|data:)/i.test(rawCover);
-                const coverSource = isDirectUri
-                  ? { uri: rawCover }
-                  : getBookCoverSource(item.id, rawCover || undefined);
-                const placeholderStyle = getPlaceholderColors(item.title);
-                return (
-                  <TouchableOpacity
-                    key={`exp-${item.id}`}
-                    style={[themeStyles.bookCard, { opacity: 0.72 }]}
-                    activeOpacity={0.85}
-                    onPress={() => handleBookPress(item)}
-                  >
-                    <View style={themeStyles.bookCover}>
-                      <View
-                        style={[
-                          themeStyles.fallbackCover,
-                          {
-                            backgroundColor: placeholderStyle.bg,
-                            borderColor: placeholderStyle.border,
-                          },
-                        ]}
-                      >
-                        <View
-                          style={[
-                            themeStyles.fallbackSpine,
-                            { backgroundColor: placeholderStyle.spine },
-                          ]}
-                        />
-                        <Ionicons
-                          name="book-outline"
-                          size={20}
-                          color={placeholderStyle.text}
-                          style={{ opacity: 0.72 }}
-                        />
-                        <Text
-                          style={[themeStyles.fallbackCoverText, { color: placeholderStyle.text }]}
-                          numberOfLines={3}
-                        >
-                          {item.title}
-                        </Text>
-                      </View>
-                      {coverSource ? (
-                        <Image
-                          source={coverSource}
-                          style={StyleSheet.absoluteFill}
-                          resizeMode="cover"
-                        />
-                      ) : null}
-                      <View style={[themeStyles.rentalBadge, themeStyles.rentalBadgeExpired]}>
-                        <Text style={themeStyles.rentalBadgeText}>
-                          {lang === 'en' ? 'Expired' : 'Hết hạn'}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text style={themeStyles.bookTitle} numberOfLines={2}>
-                      {item.title}
-                    </Text>
-                    <Text style={themeStyles.rentalDurationSubWarn} numberOfLines={1}>
-                      {lang === 'en' ? 'Tap to renew' : 'Chạm để gia hạn'}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
           </View>
         )}
 
@@ -1155,6 +1263,60 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontWeight: '600',
   },
+  expiredNoticeBanner: {
+    marginHorizontal: HORIZONTAL_PADDING,
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  expiredNoticeIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  expiredNoticeText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#991B1B',
+  },
+  expiredNoticeLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  expiredNoticeLinkText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#2F6B5F',
+  },
+  dathueHeaderBanner: {
+    marginHorizontal: HORIZONTAL_PADDING,
+    marginBottom: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dathueHeaderBannerText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#4B5563',
+    lineHeight: 16,
+  },
   expiredSection: {
     marginTop: 14,
     paddingTop: 16,
@@ -1247,11 +1409,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     paddingHorizontal: HORIZONTAL_PADDING,
-    gap: GAP,
+    columnGap: GAP,
+    rowGap: 8,
   },
   bookCard: {
     width: ITEM_WIDTH,
-    marginBottom: 18,
+    marginBottom: 4,
   },
   bookCover: {
     width: ITEM_WIDTH,
@@ -1296,6 +1459,7 @@ const styles = StyleSheet.create({
     marginTop: 7,
     textAlign: 'left',
     lineHeight: 17,
+    minHeight: 34,
   },
   bookAuthor: {
     fontSize: 11,

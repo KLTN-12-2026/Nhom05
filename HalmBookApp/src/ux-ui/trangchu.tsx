@@ -1,12 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
-<<<<<<< HEAD
-import { ComponentRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ComponentRef, useCallback,Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import Constants from 'expo-constants';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
-=======
-import { ComponentRef, Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
->>>>>>> 37cbdae (redesign the homepage, update search functionality, and update expanded categories)
 import {
   ActivityIndicator,
   Animated,
@@ -34,7 +30,8 @@ import { formatHomeBookDate, getRankedHomeBooks, getRecentHomeBooks, HomeBookIte
 export type { HomeBookItem } from './home/homeData';
 import { getBookCoverSource } from './bookCovers';
 import { getBookChapterLabel } from './bookContentService';
-import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
+import { getBookCoverSource } from './bookCovers';
+import { BookData, useAppNavigation } from './navigation';
 import { useUnreadNotificationCount } from './useUnreadNotificationCount';
 
 const { width, height } = Dimensions.get('window');
@@ -45,9 +42,66 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-// MÀU SẮC THƯƠNG HIỆU (copy từ uudai.tsx)
-const DARK_MODE_PRIMARY = '#9A8BC2';
-const DARK_MODE_SECONDARY = '#D8B36A';
+// Cấu hình kết nối Backend - Tái sử dụng cấu hình từ loginlogout.tsx và hỗ trợ fallback môi trường
+
+const debuggerHost = Constants.expoConfig?.hostUri;
+const localhost = debuggerHost ? debuggerHost.split(':')[0] : 'localhost';
+const API_BASE_URL = `http://${localhost}:8082`;
+
+const CANDIDATE_API_URLS = [
+  API_BASE_URL,
+  'http://172.26.41.174:8082',
+  'http://192.168.1.7:8082',
+  'http://192.168.1.165:8082',
+  'http://localhost:8082',
+  'http://127.0.0.1:8082',
+  'http://10.0.2.2:8082',
+];
+
+export interface HomeBookItem extends BookData {
+  id: string;
+  book_id?: string;
+  bookName?: string;
+  img_url?: string;
+  description?: string;
+  price?: number;
+  category_id?: number;
+  category_name?: string;
+}
+
+const mapBookDtoToItem = (item: any, index: number): HomeBookItem => {
+  const id = String(item.book_id || item.id || `book-${index}`);
+  const title = String(item.bookName || item.title || 'Chưa có tiêu đề');
+  const author = item.author || 'HALM BOOK';
+  let img_url = item.img_url || item.img || undefined;
+  if (img_url && typeof img_url === 'string' && img_url.startsWith('/')) {
+    img_url = API_BASE_URL + img_url;
+  }
+  const tag = item.category_name || item.tag || 'Sách hay';
+  const description = item.description || item.desc || '';
+  const price = item.rent_price !== undefined ? item.rent_price : item.price;
+  const rating = item.rating ? String(item.rating) : '5.0';
+  const reads = item.read_count ? `${item.read_count}` : '1.2K';
+  const chapter = getBookChapterLabel({ ...item, id, book_id: item.book_id || id, title, author });
+
+  return {
+    id,
+    title,
+    author,
+    chapter,
+    tag,
+    rating,
+    reads,
+    img_url,
+    description,
+    price,
+    category_id: item.category_id,
+    category_name: item.category_name,
+  };
+};
+
+// Fallback Banner khi chưa có dữ liệu từ backend
+const CAROUSEL: any[] = [];
 
 // --- COMPONENT HIỆU ỨNG SAO VÀ VŨ TRỤ (copy từ uudai.tsx, đổi prefix Offers → Home) ---
 
@@ -627,7 +681,6 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
     );
   };
 
-<<<<<<< HEAD
   const toolbarData = [
     {
       icon: 'trophy',
@@ -676,8 +729,6 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
     },
   ];
 
-=======
->>>>>>> 37cbdae (redesign the homepage, update search functionality, and update expanded categories)
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={[styles.container, styles.safeAreaHeader, { backgroundColor: isDarkMode ? '#181716' : '#EAE6DF' }]}>
       <Animated.View

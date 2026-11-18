@@ -47,6 +47,9 @@ totalChapters?: number;
 
 export type AppLanguage = 'vi' | 'en';
 
+export interface NavigationOptions {
+  initialBookshelfTab?: 'dangdoc' | 'dangthue' | 'dathue' | 'yeuthich' | 'tailen' | 'duoctang';
+}
 export interface GenreBooksParams {
   categoryId: number;
   categoryName: string;

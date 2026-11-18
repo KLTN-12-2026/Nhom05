@@ -15,6 +15,7 @@ import {
 export type RentalDurationDays = 7 | 14 | 30 | 90;
 
 export const KEY_RENTED_BOOKS_CACHE = '@halm_rented_books_v1';
+export const KEY_EXPIRED_RENTED_BOOKS_CACHE = '@halm_expired_rented_books_v1';
 
 export const RENTAL_DURATION_OPTIONS: Array<{
   days: RentalDurationDays;
@@ -175,6 +176,8 @@ export interface RentedBookItem {
   currentPage: number;
   readingPercentage: number;
   lastReadAt?: string;
+  startDate?: unknown;
+  endDate?: unknown;
   durationLabel: string;
 }
 
@@ -310,6 +313,8 @@ export const fetchBookshelfFromApi = async (): Promise<BookshelfFetchResult> => 
         currentPage: Number(item.currentPage || 1),
         readingPercentage: Number(item.readingPercentage || 0),
         lastReadAt: item.lastReadAt,
+        startDate: item.startDate,
+        endDate: item.endDate,
         durationLabel,
       };
     });
@@ -317,7 +322,10 @@ export const fetchBookshelfFromApi = async (): Promise<BookshelfFetchResult> => 
     const activeBooks = mappedAll.filter((b) => !b.expired);
     const expiredBooks = mappedAll.filter((b) => b.expired);
 
-    await setUserItem(KEY_RENTED_BOOKS_CACHE, JSON.stringify(activeBooks)).catch(() => {});
+    await Promise.all([
+      setUserItem(KEY_RENTED_BOOKS_CACHE, JSON.stringify(activeBooks)).catch(() => {}),
+      setUserItem(KEY_EXPIRED_RENTED_BOOKS_CACHE, JSON.stringify(expiredBooks)).catch(() => {}),
+    ]);
 
     return {
       success: true,
@@ -337,18 +345,20 @@ export const fetchBookshelfFromApi = async (): Promise<BookshelfFetchResult> => 
 
     // Fallback đọc cache gần nhất của user khi mạng chập chờn
     try {
-      const cachedRaw = await getUserItem(KEY_RENTED_BOOKS_CACHE);
-      if (cachedRaw) {
-        const cached = JSON.parse(cachedRaw);
-        if (Array.isArray(cached)) {
-          return {
-            success: false,
-            books: cached,
-            expiredBooks: [],
-            networkError: true,
-            errorMessage: 'Không thể kết nối máy chủ, đang hiển thị dữ liệu đã lưu.',
-          };
-        }
+      const [cachedRaw, cachedExpiredRaw] = await Promise.all([
+        getUserItem(KEY_RENTED_BOOKS_CACHE),
+        getUserItem(KEY_EXPIRED_RENTED_BOOKS_CACHE),
+      ]);
+      const cached = cachedRaw ? JSON.parse(cachedRaw) : [];
+      const cachedExpired = cachedExpiredRaw ? JSON.parse(cachedExpiredRaw) : [];
+      if (Array.isArray(cached) || Array.isArray(cachedExpired)) {
+        return {
+          success: false,
+          books: Array.isArray(cached) ? cached : [],
+          expiredBooks: Array.isArray(cachedExpired) ? cachedExpired : [],
+          networkError: true,
+          errorMessage: 'Không thể kết nối máy chủ, đang hiển thị dữ liệu đã lưu.',
+        };
       }
     } catch {}
 
