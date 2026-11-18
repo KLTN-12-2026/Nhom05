@@ -14,7 +14,7 @@ import GenreBooksScreen from './src/ux-ui/genreBooks';
 import LoginLogout from './src/ux-ui/loginlogout';
 import HalmBookHistory from './src/ux-ui/lsgiaodich';
 import ManHinhDoc from './src/ux-ui/manhinhdoc';
-import { AppLanguage, AppNavigate, AppScreen, BookData, GenreBooksParams, NavigationContext } from './src/ux-ui/navigation';
+import { AppLanguage, AppNavigate, AppScreen, BookData, GenreBooksParams, NavigationContext, NavigationOptions } from './src/ux-ui/navigation';
 import ThanhToan from './src/ux-ui/PTThanhtoan';
 import SharedHeader from './src/ux-ui/sharedheader';
 import TheLoai from './src/ux-ui/theloai';
