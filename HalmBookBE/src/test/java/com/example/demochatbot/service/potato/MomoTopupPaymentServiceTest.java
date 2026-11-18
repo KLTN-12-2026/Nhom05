@@ -22,6 +22,7 @@ class MomoTopupPaymentServiceTest {
     private MomoGatewayClient momoGatewayClient;
     private MomoTopupOrderRepository orderRepository;
     private PotatoService potatoService;
+    private com.example.demochatbot.repository.OrdersRepository receipts;
     private MomoTopupPaymentService paymentService;
     private MomoTopupOrder order;
 
@@ -32,12 +33,14 @@ class MomoTopupPaymentServiceTest {
         CustomerRepository customerRepository = mock(CustomerRepository.class);
         PotatoPackageRepository packageRepository = mock(PotatoPackageRepository.class);
         potatoService = mock(PotatoService.class);
+        receipts = mock(com.example.demochatbot.repository.OrdersRepository.class);
         paymentService = new MomoTopupPaymentService(
                 momoGatewayClient,
                 orderRepository,
                 packageRepository,
                 customerRepository,
-                potatoService
+                potatoService,
+                receipts
         );
 
         Account account = new Account();
@@ -71,6 +74,13 @@ class MomoTopupPaymentServiceTest {
                 220,
                 "Nạp Gói Tiêu Chuẩn thành công qua MoMo (transaction-12)"
         );
+        verify(receipts, times(1)).saveAndFlush(argThat(receipt ->
+                "MOMO-HLM-order".equals(receipt.getTransaction_no())
+                && "APPROVED".equals(receipt.getPayment_status())
+                && "VND".equals(receipt.getPaymentCurrency())
+                && "TOPUP_POTATO".equals(receipt.getOrderType())
+                && receipt.getTotal_amount() == 200000
+                && receipt.getTopupPotatoAmount() == 220));
         assertEquals(MomoTopupOrder.Status.PAID, order.getStatus());
     }
 

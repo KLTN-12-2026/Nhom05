@@ -29,11 +29,9 @@ import { fetchApiWithFallback } from './apiService';
 import HomeCover from './home/HomeBookCover';
 import ContinueReading from './home/ContinueReading';
 import { formatHomeBookDate, getRankedHomeBooks, getRecentHomeBooks, HomeBookItem, readHomePage } from './home/homeData';
-export type { HomeBookItem } from './home/homeData';
+export type { HomeBookItem };
 import { getBookCoverSource } from './bookCovers';
 import { getBookChapterLabel } from './bookContentService';
-import { getBookCoverSource } from './bookCovers';
-import { BookData, useAppNavigation } from './navigation';
 import { useUnreadNotificationCount } from './useUnreadNotificationCount';
 
 const { width, height } = Dimensions.get('window');
@@ -62,17 +60,6 @@ const CANDIDATE_API_URLS_OLD = [
   'http://10.0.2.2:8082',
 ];
 */
-
-export interface HomeBookItem extends BookData {
-  id: string;
-  book_id?: string;
-  bookName?: string;
-  img_url?: string;
-  description?: string;
-  price?: number;
-  category_id?: number;
-  category_name?: string;
-}
 
 const mapBookDtoToItem = (item: any, index: number): HomeBookItem => {
   const id = String(item.book_id || item.id || `book-${index}`);
@@ -109,6 +96,8 @@ const mapBookDtoToItem = (item: any, index: number): HomeBookItem => {
 const CAROUSEL: any[] = [];
 
 // --- COMPONENT HIỆU ỨNG SAO VÀ VŨ TRỤ (copy từ uudai.tsx, đổi prefix Offers → Home) ---
+const DARK_MODE_PRIMARY = '#9A8BC2';
+const DARK_MODE_SECONDARY = '#D8B36A';
 
 function HomeNebula() {
   const animation = useRef(new Animated.Value(0)).current;
@@ -368,7 +357,8 @@ interface TrangChuProps {
 }
 
 export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps) {
-  const { navigate, setFooterVisible } = useAppNavigation();
+  const { navigate, setFooterVisible, isLoggedIn } = useAppNavigation();
+  const unreadNotifications = useUnreadNotificationCount(isLoggedIn);
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const width = Math.min(1040, window.width - insets.left - insets.right);
@@ -541,6 +531,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Start cancellable HTTP catalogue hydration on mount.
     void fetchBooks();
     return () => catalogRequest.current?.abort();
   }, [fetchBooks]);
@@ -564,8 +555,6 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
     inputRange: [0, 1],
     outputRange: [0, 0.55],
   });
-
-  const bgAnim = useRef(new Animated.Value(isDarkMode ? 1 : 0)).current;
 
   useEffect(() => {
     Animated.timing(bgAnim, {
@@ -608,6 +597,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
   const rankedBooks = useMemo(() => getRankedHomeBooks(books), [books]);
   useEffect(() => {
     featuredRef.current?.scrollTo({ x: 0, animated: false });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Synchronize the carousel indicator with its imperative scroll reset.
     setFeaturedIndex(0);
   }, [featuredWidth, books]);
   useEffect(() => {

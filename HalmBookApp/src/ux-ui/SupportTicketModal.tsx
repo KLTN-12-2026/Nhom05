@@ -286,65 +286,11 @@ interface TicketCreateOutcome {
   viaDirectFallback: boolean;
 }
 
-/**
- * Gửi yêu cầu hỗ trợ qua RabbitMQ (/api/user/support-tickets).
- * Nếu RabbitMQ Broker chưa chạy (500 / Connection refused), tự động fallback sang
- * endpoint công khai /api/admin/support-tickets/create lưu trực tiếp MySQL (không sửa BE).
- */
-async function submitTicketWithFallback(
-  payload: TicketCreatePayload,
-  headers: Record<string, string>
-): Promise<TicketCreateOutcome> {
-  try {
-    const res = await fetchApiWithFallback<{
-      success?: boolean;
-      message?: string;
-      ticketCode?: string;
-    }>('/api/user/support-tickets', {
-      method: 'POST',
-      headers,
-      data: payload,
-      timeout: 12000,
-    });
-    return { ...res.data, viaDirectFallback: false };
-  } catch (primaryErr: any) {
-    const status = primaryErr?.response?.status;
-    const serverMsg = String(primaryErr?.response?.data?.message || '');
-    const isQueueUnavailable =
-      Boolean(primaryErr?.response) &&
-      ((typeof status === 'number' && status >= 500) ||
-        /rabbitmq|connection refused|amqp|connectexception/i.test(serverMsg));
-
-    if (!isQueueUnavailable) {
-      throw primaryErr;
-    }
-
-    const directPayload: Record<string, string> = {
-      senderName: payload.senderName,
-      senderEmail: payload.senderEmail,
-      senderPhone: payload.senderPhone,
-      category: payload.category,
-      priority: payload.priority,
-      subject: payload.subject,
-      message: payload.message,
-    };
-    if (payload.customerId) {
-      directPayload.customerId = payload.customerId;
-    }
-
-    const fallbackRes = await fetchApiWithFallback<{
-      success?: boolean;
-      message?: string;
-      ticketId?: number;
-      code?: string;
-    }>('/api/admin/support-tickets/create', {
-      method: 'POST',
-      headers,
-      data: directPayload,
-      timeout: 12000,
-    });
-    return { ...fallbackRes.data, viaDirectFallback: true };
-  }
+/** Queue fallback is handled by BE under the reader's validated identity. */
+async function submitTicketWithFallback(payload: TicketCreatePayload, headers: Record<string, string>): Promise<TicketCreateOutcome> {
+  const response = await fetchApiWithFallback<{ success?: boolean; message?: string; ticketCode?: string; queued?: boolean }>(
+    '/api/user/support-tickets', { method: 'POST', headers, data: payload, timeout: 12000 });
+  return { ...response.data, viaDirectFallback: response.data.queued === false };
 }
 
 /**
@@ -387,6 +333,9 @@ export default function SupportTicketModal({
   const [sendingReply, setSendingReply] = useState(false);
   const threadListRef = useRef<FlatList<SupportChatEntry>>(null);
   const isMountedRef = useRef(true);
+  const replyBusyRef = useRef(false);
+  const replyIdentityRef = useRef<{ identity: string; id: string } | null>(null);
+  const fetchVersionRef = useRef(0);
   const senderEmailRef = useRef(customerEmail);
   const syncedAccountKeyRef = useRef('');
   const queueReloadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -406,6 +355,7 @@ export default function SupportTicketModal({
     if (syncedAccountKeyRef.current && syncedAccountKeyRef.current !== accountKey) {
       const [prevId, prevEmail] = syncedAccountKeyRef.current.split('::');
       if (prevId !== customerId || prevEmail !== customerEmail) {
+        ++fetchVersionRef.current;
         setTickets([]);
         setSelectedTicket(null);
       }
@@ -424,6 +374,7 @@ export default function SupportTicketModal({
       if (mode === 'initial') setLoading(true);
       if (mode === 'refresh') setRefreshing(true);
 
+      const version = ++fetchVersionRef.current;
       try {
         const [savedCodes, headers] = await Promise.all([loadSavedCodes(), buildAuthHeaders()]);
         const emailVal = (senderEmailRef.current || customerEmail || '').trim();
@@ -440,7 +391,7 @@ export default function SupportTicketModal({
         });
 
         const serverList = Array.isArray(res.data) ? res.data : [];
-        if (!isMountedRef.current) return serverList;
+        if (!isMountedRef.current || version !== fetchVersionRef.current) return [];
 
         const serverCodes = new Set(serverList.map((item) => item.code));
         setTickets((prev) => {
@@ -606,7 +557,9 @@ export default function SupportTicketModal({
 
   const handleSendThreadReply = async () => {
     const content = replyInput.trim();
-    if (!selectedTicket || !content || sendingReply) return;
+    if (!selectedTicket || !content || sendingReply || replyBusyRef.current) return;
+    replyBusyRef.current = true;
+    const owner = syncedAccountKeyRef.current;
 
     setSendingReply(true);
     try {
@@ -622,6 +575,10 @@ export default function SupportTicketModal({
         targetTicket = matched;
       }
 
+      const identity = customerId + ':' + targetTicket.id + ':' + content;
+      if (replyIdentityRef.current?.identity !== identity) replyIdentityRef.current = { identity, id: Date.now().toString(36) + '-' + Math.random().toString(36).slice(2) };
+      const requestId = replyIdentityRef.current.id;
+      ++fetchVersionRef.current;
       const senderDisplay = (senderName || customerName || t.readerDisplayName).trim();
       const headers = await buildAuthHeaders();
       const res = await fetchApiWithFallback<{
@@ -630,10 +587,11 @@ export default function SupportTicketModal({
       }>(`/api/user/support-tickets/${targetTicket.id}/message`, {
         method: 'POST',
         headers,
-        data: { message: content, senderName: senderDisplay },
+        data: { message: content, senderName: senderDisplay, requestId, code: targetTicket.code },
         timeout: 10000,
       });
 
+      if (!isMountedRef.current || owner !== syncedAccountKeyRef.current) return;
       const updatedHistory: SupportChatEntry[] = Array.isArray(res.data?.chatHistory)
         ? res.data.chatHistory
         : [
@@ -648,6 +606,8 @@ export default function SupportTicketModal({
         _optimistic: false,
       };
 
+      ++fetchVersionRef.current;
+      replyIdentityRef.current = null;
       setReplyInput('');
       setSelectedTicket(updatedTicket);
       setTickets((prev) =>
@@ -662,6 +622,7 @@ export default function SupportTicketModal({
         typeof serverMsg === 'string' && serverMsg.trim() ? serverMsg.trim() : t.errSendReplyFailed
       );
     } finally {
+      replyBusyRef.current = false;
       setSendingReply(false);
     }
   };

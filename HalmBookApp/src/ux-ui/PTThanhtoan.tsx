@@ -337,38 +337,6 @@ export default function ThanhToan() {
             {walletBalance === null ? '--' : new Intl.NumberFormat('vi-VN').format(walletBalance)}
           </Text>
         </View>
-
-        <View style={{ height: 110 }} />
-      </ScrollView>
-
-      {/* ============================================================================ */}
-      {/* THANH THAO TÁC DÍNH DƯỚI ĐÁY (HỘP QUÀ & NẠP NGAY) */}
-      {/* "ở phía dưới là nút nạp ngay, bên trái nút nạp ngay là icon hộp quà" */}
-      {/* ============================================================================ */}
-      <View style={themeStyles.bottomBar}>
-        {/* Nút icon hộp quà (Bên trái nút Nạp ngay) */}
-        <TouchableOpacity
-          style={themeStyles.giftBtn}
-          onPress={() => setShowGiftModal(true)}
-          activeOpacity={0.8}
-          accessibilityLabel="Hộp quà & Tặng khoai"
-        >
-          <Ionicons name="gift-outline" size={24} color={isDarkMode ? '#FBBF24' : '#D97706'} />
-        </TouchableOpacity>
-
-        {/* Nút NẠP NGAY (Bên phải icon hộp quà) - Nhấn vào sẽ hiển thị mã VietQR */}
-        <TouchableOpacity
-          style={themeStyles.payBtn}
-          onPress={handleOpenQrModal}
-          activeOpacity={0.85}
-        >
-          <View style={themeStyles.payBtnContentRow}>
-            <Ionicons name="flash" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
-            <Text style={themeStyles.payBtnText}>
-              {lang === 'en' ? 'Recharge Now' : 'Nạp Ngay'}
-            </Text>
-          </View>
-        </TouchableOpacity>
       </View>
 
       <View style={styles.methodSelector}>

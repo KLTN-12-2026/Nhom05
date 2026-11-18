@@ -76,6 +76,17 @@ export const getBookRealChapters = (book: any): Chapter[] => {
     ];
   }
 
+  // 3. Nếu sách có mảng chapters sẵn
+  if (Array.isArray(book.chapters) && book.chapters.length > 0) {
+    return book.chapters.map((c: any, idx: number) => ({
+      id: c.id || idx + 1,
+      title: c.title || `Chương ${idx + 1}`,
+      subtitle: c.subtitle || book.author || 'Tác phẩm văn học',
+      content: Array.isArray(c.content) ? c.content : [String(c.content || '')],
+    }));
+  }
+
+
   const rawData = getRawBooksData();
   const bookId = String(book.book_id || book.id || '').toUpperCase();
 
@@ -94,16 +105,6 @@ export const getBookRealChapters = (book: any): Chapter[] => {
         if (chapters && chapters.length > 0) return chapters;
       }
     }
-  }
-
-  // 3. Nếu sách có mảng chapters sẵn
-  if (Array.isArray(book.chapters) && book.chapters.length > 0) {
-    return book.chapters.map((c: any, idx: number) => ({
-      id: c.id || idx + 1,
-      title: c.title || `Chương ${idx + 1}`,
-      subtitle: c.subtitle || book.author || 'Tác phẩm văn học',
-      content: Array.isArray(c.content) ? c.content : [String(c.content || '')],
-    }));
   }
 
   // 4. Nếu sách thật từ database nhưng chưa được tách chương chi tiết

@@ -289,40 +289,34 @@ public class FinanceAdminController {
                 return ResponseEntity.status(HttpStatus.CONFLICT)
                         .body(Map.of("message", "Giao dịch đã được xử lý trước đó (Trạng thái: " + order.getPayment_status() + ")."));
             }
-            order.setPayment_status("APPROVED");
-            ordersRepository.saveAndFlush(order);
-
-            // Tính số củ khoai tây cộng vào ví (ưu tiên gói nạp có bonus)
-            int potatoesToAdd = 0;
-            try {
-                List<PotatoPackage> activePkgs = potatoPackageRepository.findByIsActiveTrueOrderByPriceVndAsc();
-                for (PotatoPackage pkg : activePkgs) {
+            if (customer == null || !"TOPUP_POTATO".equalsIgnoreCase(order.getOrderType()) || !"VND".equalsIgnoreCase(order.getPaymentCurrency())) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Đây không phải yêu cầu nạp ví hợp lệ."));
+            }
+            int potatoesToAdd = order.getTopupPotatoAmount() == null ? 0 : order.getTopupPotatoAmount();
+            if (order.getTopupPotatoAmount() == null) {
+                // Compatibility for requests created before snapshots existed.
+                for (PotatoPackage pkg : potatoPackageRepository.findByIsActiveTrueOrderByPriceVndAsc()) {
                     if (pkg.getPriceVnd() != null && Math.abs(pkg.getPriceVnd() - order.getTotal_amount()) < 1.0) {
-                        potatoesToAdd = pkg.getPotatoAmount() + (pkg.getBonusPotato() != null ? pkg.getBonusPotato() : 0);
+                        potatoesToAdd = Math.addExact(pkg.getPotatoAmount(), pkg.getBonusPotato() == null ? 0 : pkg.getBonusPotato());
                         break;
                     }
                 }
-            } catch (Exception ignored) {}
-
-            if (potatoesToAdd <= 0) {
-                potatoesToAdd = (int) Math.round(order.getTotal_amount() / 1000.0);
+                if (potatoesToAdd <= 0) potatoesToAdd = (int) Math.round(order.getTotal_amount() / 1000.0);
             }
+            if (potatoesToAdd <= 0) return ResponseEntity.badRequest().body(Map.of("message", "Số Khoai nạp không hợp lệ."));
+            order.setPayment_status("APPROVED");
+            ordersRepository.saveAndFlush(order);
 
             if (customer != null && potatoesToAdd > 0) {
                 int curBalance = customer.getPotatoBalance() != null ? customer.getPotatoBalance() : 0;
-                int newBalance = curBalance + potatoesToAdd;
+                int newBalance = Math.addExact(curBalance, potatoesToAdd);
                 customer.setPotatoBalance(newBalance);
 
                 int totalEarned = customer.getTotalPotatoEarned() != null ? customer.getTotalPotatoEarned() : 0;
-                customer.setTotalPotatoEarned(totalEarned + potatoesToAdd);
+                customer.setTotalPotatoEarned(Math.addExact(totalEarned, potatoesToAdd));
                 customerRepository.save(customer);
 
-                // Cập nhật hạng thành viên độc giả nếu đủ điều kiện
-                try {
-                    tierService.calculateAndUpdateCustomerTier(customer);
-                } catch (Exception e) {
-                    System.err.println("Lỗi cập nhật hạng thành viên: " + e.getMessage());
-                }
+                tierService.calculateAndUpdateCustomerTier(customer);
 
                 // Ghi nhận biến động số dư khoai
                 PotatoTransaction pt = new PotatoTransaction();
@@ -357,6 +351,9 @@ public class FinanceAdminController {
             res.put("userName", customer != null ? customer.getCustomerName() : "Khách hàng");
             return ResponseEntity.ok(res);
         } catch (Exception e) {
+            if (org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
+                org.springframework.transaction.interceptor.TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+            }
             String msg = e.getMessage() != null ? e.getMessage() : "";
             if (msg.contains("Deadlock") || msg.contains("lock") || msg.contains("Lock")) {
                 return ResponseEntity.status(HttpStatus.CONFLICT)

@@ -1,4 +1,4 @@
-import { API_BASE_URL } from './apiService';
+import { API_BASE_URL, normalizeAssetUrl } from './apiService';
 
 export { API_BASE_URL };
 
@@ -10,7 +10,7 @@ export const getBookCoverSource = (bookId?: string, remoteUrl?: string): any => 
       remoteUrl.startsWith('data:') ||
       remoteUrl.startsWith('file://')
     ) {
-      return { uri: remoteUrl };
+      return { uri: normalizeAssetUrl(remoteUrl) };
     }
     const cleanPath = remoteUrl.startsWith('/') ? remoteUrl : `/${remoteUrl}`;
     return { uri: `${API_BASE_URL}${cleanPath}` };

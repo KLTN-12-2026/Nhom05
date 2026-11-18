@@ -83,3 +83,36 @@ test('expired login requests reauthentication', async () => {
   assert.equal(alerts.length, 1);
   assert.equal(context.chatRequest.current, null);
 });
+
+function clearHarness(fail = false) {
+  let expression;
+  function find(node) { if (ts.isVariableDeclaration(node) && node.name.getText(tree) === 'clearChatMessages') expression = node.initializer.getText(tree); ts.forEachChild(node, find); }
+  find(tree);
+  const messages = [{ id: 'welcome' }, { id: 'saved-question' }], requests = [], alerts = [];
+  const context = { AbortController, chatRequest: { current: null }, API_BASE_URL: 'https://api.invalid',
+    AsyncStorage: { getItem: async () => 'token' }, setIsChatLoading() {}, showLoginAlert() {}, Alert: { alert: (...args) => alerts.push(args) },
+    axios: { delete: async (...args) => { requests.push(args); if (fail) throw Error('offline'); } },
+    setChatMessages: fn => { const next = fn(messages); messages.splice(0, messages.length, ...next); },
+  };
+  vm.createContext(context);
+  vm.runInContext(ts.transpileModule('globalThis.clear = ' + expression, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, context);
+  return { context, messages, requests, alerts };
+}
+test('clear chat deletes authenticated server history before resetting the screen', async () => {
+  const { context, messages, requests } = clearHarness();
+  await context.clear();
+  assert.equal(requests[0][0], 'https://api.invalid/api/chat/history');
+  assert.equal(requests[0][1].headers.Authorization, 'Bearer token');
+  assert.equal(messages.length, 1); assert.equal(messages[0].id, 'welcome');
+});
+test('failed history deletion preserves messages so UI does not pretend server history was cleared', async () => {
+  const { context, messages, alerts } = clearHarness(true);
+  await context.clear(); assert.equal(messages.length, 2); assert.equal(alerts.length, 1);
+});
+
+test('provider overload displays the server explanation without asking the reader to log in again', async () => {
+  const { context, messages, alerts } = setup();
+  context.axios.post = async () => { throw { response: { status: 503, data: { reply: 'Gemini đang quá tải.' } } }; };
+  await context.send('Hello');
+  assert.equal(messages.at(-1).text, 'Gemini đang quá tải.'); assert.equal(alerts.length, 0);
+});

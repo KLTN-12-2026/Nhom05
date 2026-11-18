@@ -1,11 +1,8 @@
-import UserHeader from './UserHeader';
-import UserFooter from './UserFooter';
 import PotatoChatbot from '@/components/common/PotatoChatbot';
-import AuthModal from '@/components/common/AuthModal';
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import logo from "@/assets/images/logo.png";
-import { clearAuthSession, isTokenValid } from "@/services/authToken";
+import { clearAuthSession, isTokenValid, logoutUser } from "@/services/authToken";
 import axiosInstance from "@/services/axiosClient";
 import { getCurrentCustomer } from "@/services/customerService";
 import { triggerAirplaneBannerAnimation } from "./helicopterAnimation";
@@ -317,8 +314,8 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
     setUnreadNotiCount(0);
   };
 
-  const handleLogout = () => {
-    clearAuthSession();
+  const handleLogout = async () => {
+    await logoutUser();
     setIsLoggedIn(false);
     setCustomer(null);
     setCartCount(0);
@@ -1529,6 +1526,7 @@ export default function UserLayout({ children, className = "", onOpenChatbot, on
       <UserHeader onOpenChatbot={handleOpenChat} onThemeChange={onThemeChange} />
       {children}
       <UserFooter onOpenChatbot={handleOpenChat} />
+      <PotatoChatbot />
       <AuthModal />
     </div>
   );

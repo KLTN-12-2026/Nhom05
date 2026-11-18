@@ -25,8 +25,6 @@ public class CloudinaryService {
     @Autowired
     private Cloudinary cloudinary;
 
-    @Value("${server.port:8082}")
-    private String serverPort;
 
     // Giới hạn cứng của gói Cloudinary Free cho file Raw/PDF là 10MB (10,485,760 bytes)
     private static final long CLOUDINARY_MAX_RAW_SIZE = 10L * 1024 * 1024;
@@ -95,7 +93,7 @@ public class CloudinaryService {
         Path targetPath = uploadDirPath.resolve(safeFileName);
         Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
 
-        String localUrl = "http://localhost:" + serverPort + "/uploads/" + subDir + "/" + safeFileName;
+        String localUrl = "/uploads/" + subDir + "/" + safeFileName;
         String publicId = "local:" + subDir + "/" + safeFileName;
         String resourceType = "pdfs".equals(subDir) ? "raw" : "image";
 
@@ -137,7 +135,7 @@ public class CloudinaryService {
         // Nếu là file lưu cục bộ, trả về URL truy cập trực tiếp
         if (publicId.startsWith("local:")) {
             String relativePath = publicId.substring("local:".length());
-            return "http://localhost:" + serverPort + "/uploads/" + relativePath;
+            return "/uploads/" + relativePath;
         }
 
         try {
@@ -175,7 +173,7 @@ public class CloudinaryService {
 
         if (publicId.startsWith("local:")) {
             String relativePath = publicId.substring("local:".length());
-            return "http://localhost:" + serverPort + "/uploads/" + relativePath;
+            return "/uploads/" + relativePath;
         }
 
         return cloudinary.url()

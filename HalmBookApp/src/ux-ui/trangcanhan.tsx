@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios, { AxiosRequestConfig } from 'axios';
-import { API_BASE_URL, CANDIDATE_API_URLS } from '../config/api';
 import Constants from 'expo-constants';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { ComponentRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -907,6 +906,7 @@ export default function Toi() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Hydrate the account from AsyncStorage and HTTP, including the loading indicator.
     fetchUserData(true);
   }, [fetchUserData]);
 

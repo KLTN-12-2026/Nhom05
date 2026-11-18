@@ -92,7 +92,7 @@ public class OrderServiceImpl implements OrderService {
             entityManager.refresh(customer, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
         }
 
-        if (request == null || request.getItems() == null || request.getItems().isEmpty()) {
+        if (request == null || ((request.getItems() == null || request.getItems().isEmpty()) && (request.getCartItemIds() == null || request.getCartItemIds().isEmpty()))) {
             throw new RuntimeException("Giỏ hàng thanh toán trống! Vui lòng chọn ít nhất 1 tác phẩm.");
         }
 
@@ -125,7 +125,7 @@ public class OrderServiceImpl implements OrderService {
                     }
 
                     // IDEM-DIFFERENT-PAYLOAD: Kiểm tra nếu cùng khóa nhưng payload đơn hàng khác nhau thì từ chối
-                    if (existingOrder.getOrder_items() != null && !existingOrder.getOrder_items().isEmpty()) {
+                    if (request.getCartItemIds() == null && existingOrder.getOrder_items() != null && !existingOrder.getOrder_items().isEmpty()) {
                         if (request.getItems() != null && request.getItems().size() != existingOrder.getOrder_items().size()) {
                             throw new IllegalStateException("Khóa giao dịch đã được sử dụng cho một đơn hàng khác với nội dung khác!");
                         }
@@ -188,6 +188,22 @@ public class OrderServiceImpl implements OrderService {
                             .build();
                 }
             }
+        }
+
+        if (request.getCartItemIds() != null && !request.getCartItemIds().isEmpty()) {
+            List<Integer> ids = request.getCartItemIds();
+            if (ids.stream().anyMatch(id -> id == null || id <= 0) || new HashSet<>(ids).size() != ids.size()) {
+                throw new IllegalArgumentException("Danh sách mục giỏ hàng không hợp lệ.");
+            }
+            List<Cart_Item> rows = cartItemRepository.findByIdsAndUserId(ids, accountId);
+            if (rows.size() != ids.size()) throw new org.springframework.security.access.AccessDeniedException("Mục giỏ hàng không thuộc tài khoản hiện tại hoặc đã bị xóa.");
+            request.setItems(rows.stream().map(row -> {
+                CheckoutItemRequest item = new CheckoutItemRequest();
+                item.setBookId(row.getBook().getBook_id());
+                item.setCartItemId(row.getCart_item_id());
+                item.setPlanKey(row.getPlanKey() != null ? row.getPlanKey() : String.valueOf(row.getRentalDays()));
+                return item;
+            }).toList());
         }
 
         // 1. Kiểm tra toàn bộ đơn hàng (Validation & Deduplication) TRƯỚC KHI TRỪ KHOAI (IMP-02)
@@ -559,28 +575,15 @@ public class OrderServiceImpl implements OrderService {
      * Xác định giá chuẩn của từng gói thuê sách từ cấu hình Server, tuyệt đối không cho client ghi đè
      */
     private double resolveItemPrice(String planKey, Book book) {
-        validatePlanKey(planKey);
-        String key = planKey.trim().toLowerCase();
-        if ("forever".equals(key)) {
-            return (book != null && book.getRent_price() != null && book.getRent_price() > 0)
-                    ? book.getRent_price() : 39.0;
-        }
-        switch (key) {
-            case "1": return 2.0;
-            case "3": return 5.0;
-            case "7": return 9.0;
-            case "14": return 15.0;
-            case "15": return 18.0;
-            case "30": return 25.0;
-            case "90": return 50.0;
-            default:
-                throw new RuntimeException("Gói thuê sách '" + planKey + "' không hợp lệ!");
-        }
+        return RentalPricing.price(planKey, book);
     }
 
     private String checkoutFingerprint(CheckoutRequest request) {
-        if (request == null || request.getItems() == null || request.getItems().isEmpty()) {
+        if (request == null || ((request.getItems() == null || request.getItems().isEmpty()) && (request.getCartItemIds() == null || request.getCartItemIds().isEmpty()))) {
             throw new IllegalArgumentException("Giỏ hàng thanh toán trống!");
+        }
+        if (request.getCartItemIds() != null && !request.getCartItemIds().isEmpty()) {
+            return RentalPricing.digest("cart:" + request.getCartItemIds().stream().sorted().map(String::valueOf).collect(java.util.stream.Collectors.joining(",")));
         }
         List<String> items = new ArrayList<>();
         Set<String> seen = new HashSet<>();

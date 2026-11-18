@@ -17,15 +17,20 @@ spring:
     openai:
       api-key: ${GEMINI_KEY:default-gemini-key}
       base-url: https://generativelanguage.googleapis.com/v1beta/openai
+      # AiChatConfig also copies these limits to per-request options for Spring AI 2.0.1.
+      timeout: ${AI_REQUEST_TIMEOUT:20s}
+      max-retries: ${AI_MAX_RETRIES:1}
       chat:
         completions-path: /chat/completions
+        timeout: ${AI_REQUEST_TIMEOUT:20s}
+        max-retries: ${AI_MAX_RETRIES:1}
         options:
           model: ${GEMINI_MODEL:gemini-3.6-flash}
           max-tokens: 2048
 
-  # Cấu hình database nguyên vẹn của bạn
+  # MySQL local uses 3306. Override with DB_URL or Spring's SPRING_DATASOURCE_URL.
   datasource:
-    url: jdbc:mysql://localhost:3107/halmbook
+    url: ${DB_URL:jdbc:mysql://127.0.0.1:3306/halmbook?connectTimeout=5000&socketTimeout=30000}
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:123456}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -42,6 +47,10 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME:guest}
     password: ${RABBITMQ_PASSWORD:guest}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
     listener:
       simple:
         default-requeue-rejected: false

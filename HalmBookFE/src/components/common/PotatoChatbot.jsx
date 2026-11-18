@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import useFloatingBubble from '@/hooks/useFloatingBubble';
 import { useLocation } from 'react-router-dom';
-import { sendChatMessage, getChatHistory, clearChatHistory, getChatOwner, formatChatTime } from '@/services/chatService';
+import { getChatErrorMessage, sendChatMessage, getChatHistory, clearChatHistory, getChatOwner, formatChatTime } from '@/services/chatService';
 
 // =========================================================================
 // GỢI Ý CÂU HỎI THÔNG MINH THEO TỪNG MÀN HÌNH (CONTEXT-AWARE CHIPS)

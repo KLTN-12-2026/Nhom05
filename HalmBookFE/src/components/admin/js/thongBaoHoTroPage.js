@@ -1,3 +1,4 @@
+function escapeHtmlText(value) { return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]); }
 let allTickets = [];
 let pollingInterval = null;
 let activeOpenTicketId = null;
@@ -35,8 +36,8 @@ function showAdminToast(title, message, type = 'success') {
     toastEl.innerHTML = `
         <div class="shrink-0 mt-0.5">${iconHtml}</div>
         <div class="flex-1 text-xs">
-            <div class="font-bold text-slate-900 dark:text-white mb-0.5">${title}</div>
-            <div class="text-slate-600 dark:text-slate-300 leading-relaxed">${message}</div>
+            <div class="font-bold text-slate-900 dark:text-white mb-0.5">${escapeHtmlText(title)}</div>
+            <div class="text-slate-600 dark:text-slate-300 leading-relaxed">${escapeHtmlText(message)}</div>
         </div>
         <button onclick="document.getElementById('${toastId}')?.remove()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 -mr-1 -mt-1 cursor-pointer">
             <i class="fa-solid fa-xmark text-xs"></i>
@@ -196,7 +197,7 @@ function renderTicketsTable(isSilent = false) {
             statusBadge = '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300 dark:border-amber-800"><i class="fa-solid fa-clock text-[10px]"></i>Chờ xử lý</span>';
         }
 
-        const initial = (ticket.userName || 'U').charAt(0).toUpperCase();
+        const initial = /[\p{L}\p{N}]/u.test((ticket.userName || 'U').charAt(0)) ? (ticket.userName || 'U').charAt(0).toUpperCase() : 'U';
         const avatarHtml = ticket.userAvatar
             ? `<img src="${escapeHTML(ticket.userAvatar)}" alt="${escapeHTML(ticket.userName)}" class="w-8 h-8 rounded-full object-cover border border-slate-200 dark:border-slate-700 shadow-xs shrink-0" onerror="this.onerror=null;this.parentElement.innerHTML='<div class=\\'w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold flex items-center justify-center text-xs shrink-0\\'>${initial}</div>';" />`
             : `<div class="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-black flex items-center justify-center text-xs shrink-0 shadow-xs">${initial}</div>`;
@@ -253,11 +254,22 @@ function openReplyModal(ticketId) {
     // Load Avatar User trong Header modal
     const avatarContainer = document.getElementById('replyTicketAvatar');
     if (avatarContainer) {
-        const uInitial = (ticket.userName || 'U').charAt(0).toUpperCase();
+        const fallback = document.createElement('div');
+        fallback.className = 'w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-xs';
+        fallback.textContent = (ticket.userName || 'U').charAt(0).toUpperCase();
+        avatarContainer.replaceChildren(fallback);
         if (ticket.userAvatar) {
-            avatarContainer.innerHTML = `<img src="${ticket.userAvatar}" alt="${ticket.userName}" class="w-10 h-10 rounded-full object-cover border border-slate-300 dark:border-slate-600 shadow-xs" onerror="this.onerror=null;this.parentElement.innerHTML='<div class=\\'w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-xs\\'>${uInitial}</div>';" />`;
-        } else {
-            avatarContainer.innerHTML = `<div class="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-xs">${uInitial}</div>`;
+            try {
+                const url = new URL(ticket.userAvatar, window.location.origin);
+                if (url.protocol === 'https:' || url.protocol === 'http:') {
+                    const image = document.createElement('img');
+                    image.src = url.href;
+                    image.alt = ticket.userName || 'Độc giả';
+                    image.className = 'w-10 h-10 rounded-full object-cover border border-slate-300 dark:border-slate-600 shadow-xs';
+                    image.onerror = () => avatarContainer.replaceChildren(fallback);
+                    avatarContainer.replaceChildren(image);
+                }
+            } catch { /* Invalid avatar URLs keep the text fallback. */ }
         }
     }
 
@@ -367,7 +379,7 @@ function renderChatHistoryThread(ticket, preserveScroll = false) {
         const isAdmin = msg.sender === 'ADMIN';
         const senderName = msg.senderName || (isAdmin ? 'Ban Quản Trị HALMBOOK' : (ticket.userName || 'Độc giả'));
         const avatar = msg.avatar || (isAdmin ? '' : (ticket.userAvatar || ''));
-        const initial = (senderName || 'U').charAt(0).toUpperCase();
+        const initial = /[\p{L}\p{N}]/u.test((senderName || 'U').charAt(0)) ? (senderName || 'U').charAt(0).toUpperCase() : 'U';
         const rawContent = (msg.content || '')
             .split('\n')
             .map(line => line.trim())

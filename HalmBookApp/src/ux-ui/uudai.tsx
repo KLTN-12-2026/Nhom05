@@ -1,7 +1,7 @@
+import { API_BASE_URL, CANDIDATE_API_URLS as CANDIDATE_URLS } from './apiService';
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
-import Constants from "expo-constants";
 import * as Font from "expo-font";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -41,18 +41,10 @@ const FONTS = {
 // ==============================================================
 // API CONFIG — Fallback đa IP mạng LAN & localhost
 // ==============================================================
-const debuggerHost = Constants.expoConfig?.hostUri;
-const localhost = debuggerHost ? debuggerHost.split(":")[0] : "localhost";
-const API_BASE_URL = `http://${localhost}:8082`;
-const CANDIDATE_URLS = [
-  API_BASE_URL,
-  "http://172.26.41.174:8082",
-  "http://192.168.1.7:8082",
-  "http://192.168.1.165:8082",
-  "http://localhost:8082",
-  "http://127.0.0.1:8082",
-  "http://10.0.2.2:8082",
-];
+
+
+
+
 
 // ==============================================================
 // 1. TYPE DEFINITIONS CHO CSDL THẬT
