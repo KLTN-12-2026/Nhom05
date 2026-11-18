@@ -1,6 +1,8 @@
 package com.example.demochatbot.controller;
 
-import com.example.demochatbot.dto.TopupRequest;
+import com.example.demochatbot.dto.CreateMomoTopupRequest;
+import com.example.demochatbot.dto.MomoTopupResponse;
+import com.example.demochatbot.dto.MomoTopupStatusResponse;
 import com.example.demochatbot.dto.TransferRequest;
 import com.example.demochatbot.dto.WalletResponseDto;
 import com.example.demochatbot.model.PotatoPackage;
@@ -8,10 +10,13 @@ import com.example.demochatbot.model.PotatoTransaction;
 import com.example.demochatbot.repository.PotatoPackageRepository;
 import com.example.demochatbot.service.customer.CustomerService;
 import com.example.demochatbot.service.potato.PotatoService;
+import com.example.demochatbot.service.potato.MomoTopupPaymentService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.HashMap;
 import java.util.List;
@@ -26,8 +31,9 @@ import java.util.Optional;
  *        1. GET  /api/home/potato/wallet       - Lấy số dư Khoai thực tế và thống kê ví
  *        2. GET  /api/home/potato/packages     - Lấy danh sách các gói nạp Khoai đang khả dụng
  *        3. GET  /api/home/potato/transactions - Lấy lịch sử biến động số dư Khoai
- *        4. POST /api/home/potato/topup        - Nạp Khoai siêu tốc qua VietQR 24/7
- *        5. POST /api/home/potato/transfer     - Chuyển/tặng Khoai cho bạn bè
+ *        4. POST /api/home/potato/momo/create  - Tạo giao dịch nạp MoMo
+ *        5. POST /api/home/potato/momo/ipn     - Xác nhận giao dịch từ MoMo
+ *        6. POST /api/home/potato/transfer     - Chuyển/tặng Khoai cho bạn bè
  * ============================================================================
  */
 @RestController
@@ -43,6 +49,9 @@ public class PotatoController {
 
     @Autowired
     private PotatoPackageRepository potatoPackageRepository;
+
+    @Autowired
+    private MomoTopupPaymentService momoTopupPaymentService;
 
     /**
      * API 1: Lấy số dư Khoai thực tế và thông tin Ví Khoai Tây của người dùng đăng nhập
@@ -74,7 +83,7 @@ public class PotatoController {
     @GetMapping("/packages")
     public ResponseEntity<?> getPackages() {
         try {
-            List<PotatoPackage> packages = potatoPackageRepository.findByIsActiveTrueOrderByPriceVndAsc();
+            List<PotatoPackage> packages = potatoService.getActivePackages();
             return ResponseEntity.ok(packages);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -213,36 +222,94 @@ public class PotatoController {
     }
 
     /**
-     * API 4: Nạp Khoai siêu tốc (VietQR 24/7)
+     * Legacy direct-credit endpoint is disabled; verified MoMo callbacks are required.
      */
     @PostMapping("/topup")
-    public ResponseEntity<?> topupPotato(@RequestBody TopupRequest request) {
-        try {
-            int accountId = customerService.getCurrentAccountId();
-            if (accountId <= 0) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(createErrorMap("Vui lòng đăng nhập để thực hiện nạp Khoai!"));
-            }
+    public ResponseEntity<?> topupPotato() {
+        return ResponseEntity.status(HttpStatus.GONE)
+                .body(createErrorMap("API nạp trực tiếp đã tắt. Hãy tạo giao dịch qua MoMo."));
+    }
 
-            com.example.demochatbot.model.Orders order = potatoService.createTopupRequest(accountId, request);
-            WalletResponseDto updatedWallet = potatoService.getWalletInfo(accountId);
+/**
+ * Tạo yêu cầu nạp Khoai để Admin xác nhận thanh toán.
+ */
+@PostMapping("/topup")
+public ResponseEntity<?> topupPotato(@RequestBody TopupRequest request) {
+    try {
+        int accountId = customerService.getCurrentAccountId();
 
-            Map<String, Object> response = new HashMap<>();
-            response.put("message", "Yêu cầu nạp Khoai đã được gửi đến Admin để xác nhận thanh toán.");
-            response.put("order", Map.of(
-                    "id", order.getOrders_id(),
-                    "transactionNo", order.getTransaction_no(),
-                    "amountMoney", order.getTotal_amount(),
-                    "paymentStatus", order.getPayment_status(),
-                    "paymentMethod", order.getPayment_method()
-            ));
-            response.put("wallet", updatedWallet);
-
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(createErrorMap("Lỗi nạp Khoai: " + e.getMessage()));
+        if (accountId <= 0) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(createErrorMap(
+                            "Vui lòng đăng nhập để thực hiện nạp Khoai!"
+                    ));
         }
+
+        com.example.demochatbot.model.Orders order =
+                potatoService.createTopupRequest(accountId, request);
+
+        WalletResponseDto updatedWallet =
+                potatoService.getWalletInfo(accountId);
+
+        Map<String, Object> orderData = new HashMap<>();
+        orderData.put("id", order.getOrders_id());
+        orderData.put("transactionNo", order.getTransaction_no());
+        orderData.put("amountMoney", order.getTotal_amount());
+        orderData.put("paymentStatus", order.getPayment_status());
+        orderData.put("paymentMethod", order.getPayment_method());
+
+        Map<String, Object> response = new HashMap<>();
+        response.put(
+                "message",
+                "Yêu cầu nạp Khoai đã được gửi đến Admin để xác nhận thanh toán."
+        );
+        response.put("order", orderData);
+        response.put("wallet", updatedWallet);
+
+        return ResponseEntity.ok(response);
+
+    } catch (Exception e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(createErrorMap(
+                        "Lỗi nạp Khoai: " + e.getMessage()
+                ));
+    }
+}
+
+/**
+ * Tạo giao dịch thanh toán nạp Khoai qua MoMo.
+ */
+    @PostMapping("/momo/create")
+    public ResponseEntity<MomoTopupResponse> createMomoTopup(
+            @Valid @RequestBody CreateMomoTopupRequest request
+    ) {
+        MomoTopupResponse response = momoTopupPaymentService.createPayment(
+                getAuthenticatedAccountId(),
+                request.packageId()
+        );
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+/**
+ * Lấy trạng thái giao dịch MoMo của tài khoản đang đăng nhập.
+ */
+    @GetMapping("/momo/status/{orderId}")
+    public ResponseEntity<MomoTopupStatusResponse> getMomoTopupStatus(
+            @PathVariable String orderId
+    ) {
+        MomoTopupStatusResponse response = momoTopupPaymentService.getStatus(
+                getAuthenticatedAccountId(),
+                orderId
+        );
+
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/momo/ipn")
+    public ResponseEntity<Map<String, String>> momoIpn(@RequestBody Map<String, Object> payload) {
+        momoTopupPaymentService.processIpn(payload);
+        return ResponseEntity.ok(Map.of("message", "OK"));
     }
 
     /**
@@ -276,5 +343,24 @@ public class PotatoController {
         Map<String, String> err = new HashMap<>();
         err.put("error", message);
         return err;
+    }
+
+    private int getAuthenticatedAccountId() {
+        try {
+            int accountId = customerService.getCurrentAccountId();
+            if (accountId > 0) {
+                return accountId;
+            }
+        } catch (RuntimeException exception) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "Vui lòng đăng nhập để thực hiện giao dịch.",
+                    exception
+            );
+        }
+        throw new ResponseStatusException(
+                HttpStatus.UNAUTHORIZED,
+                "Vui lòng đăng nhập để thực hiện giao dịch."
+        );
     }
 }

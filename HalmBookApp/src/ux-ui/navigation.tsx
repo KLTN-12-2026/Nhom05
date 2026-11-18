@@ -1,22 +1,25 @@
-import { createContext, useContext, useMemo } from 'react';
-import { StyleSheet, TextStyle, ViewStyle } from 'react-native';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
+import { NativeScrollEvent, NativeSyntheticEvent, StyleSheet, TextStyle, ViewStyle } from 'react-native';
 
 export type AppScreen =
   | 'auth'
   | 'home'
+  | 'leaderboard'
   | 'dmHome'
   | 'offers'
   | 'upload'
   | 'bookshelf'
   | 'profile'
   | 'categories'
+  | 'genreBooks'
   | 'search'
   | 'cart'
   | 'transactions'
   | 'reader'
   | 'payment'
   | 'chatbot'
-  | 'bookDetail';
+  | 'bookDetail'
+  | 'notifications';
 
 export interface BookData {
   id: string;
@@ -24,19 +27,71 @@ export interface BookData {
   author?: string;
   chapter?: string;
   tag?: string;
+  img_url?: string;
+  coverImage?: string | null;
+  coverUri?: string | null;
   pages?: number;
   reads?: string;
   rating?: string;
+  price?: number;
+  rent_price?: number;
+  description?: string;
+  category_name?: string;
+  isPersonal?: boolean;
+  fileUri?: string;
+  fileName?: string;
+  chapters?: any[];
+  initialChapterIndex?: number;
+totalChapters?: number;
 }
 
-interface NavigationContextValue {
-  navigate: (screen: AppScreen, book?: BookData) => void;
+export type AppLanguage = 'vi' | 'en';
+
+export interface NavigationOptions {
+  initialBookshelfTab?: 'dangdoc' | 'dangthue' | 'dathue' | 'yeuthich' | 'tailen' | 'duoctang';
+}
+export interface GenreBooksParams {
+  categoryId: number;
+  categoryName: string;
+}
+
+export interface AppNavigate {
+  (screen: 'genreBooks', params: GenreBooksParams): void;
+  (screen: Exclude<AppScreen, 'genreBooks'>, book?: BookData): void;
+}
+
+export interface NavigationContextValue {
+  navigate: AppNavigate;
   navigateTab: (screen: AppScreen) => void;
   goBack: () => void;
   logout: () => void;
   isDarkMode: boolean;
+  toggleDarkMode?: () => void;
   isFooterVisible?: boolean;
   setFooterVisible?: (visible: boolean) => void;
+
+  // ============================================================================
+  // [GIẢI THÍCH CODE]: Quản lý ngôn ngữ toàn cục ứng dụng (vi / en)
+  // ============================================================================
+  lang: AppLanguage;
+  setLang: (lang: AppLanguage) => void;
+
+  // ============================================================================
+  // [GIẢI THÍCH CODE]: Trạng thái đăng nhập và bản thông báo dành cho khách vãng lai
+  // ============================================================================
+  // isLoggedIn: Biến cờ boolean cho biết người dùng đã đăng nhập (true) hay là khách vãng lai (false)
+  isLoggedIn: boolean;
+  setIsLoggedIn?: (val: boolean) => void;
+  // showLoginAlert: Hàm hiển thị popup thông báo với dòng nút 'Đăng nhập ngay'
+  showLoginAlert: (message: string, onAuthenticated?: () => void) => void;
+
+  // ============================================================================
+  // [GIẢI THÍCH CODE]: Ảnh đại diện và chữ cái đầu đồng bộ cho các màn được chỉ định
+  // ============================================================================
+  userAvatarUrl?: string;
+  setUserAvatarUrl?: (url: string) => void;
+  userInitial?: string;
+  setUserInitial?: (initial: string) => void;
 }
 
 export const NavigationContext = createContext<NavigationContextValue | null>(null);
@@ -47,6 +102,46 @@ export function useAppNavigation() {
     throw new Error('useAppNavigation must be used inside the app navigation provider.');
   }
   return navigation;
+}
+
+/**
+ * Đồng bộ ẩn/hiện thanh điều hướng dưới cùng theo thao tác cuộn giống Trang Chủ.
+ */
+export function useAutoHideFooter() {
+  const { setFooterVisible } = useAppNavigation();
+  const scrollOffset = useRef(0);
+
+  useEffect(() => {
+    setFooterVisible?.(true);
+    return () => {
+      setFooterVisible?.(true);
+    };
+  }, [setFooterVisible]);
+
+  const onScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const currentY = event.nativeEvent.contentOffset.y;
+      const diff = currentY - scrollOffset.current;
+      if (currentY <= 10) {
+        setFooterVisible?.(true);
+      } else if (Math.abs(diff) > 8) {
+        if (diff > 0 && currentY > 60) {
+          setFooterVisible?.(false);
+        } else if (diff < 0) {
+          setFooterVisible?.(true);
+        }
+      }
+      scrollOffset.current = Math.max(0, currentY);
+    },
+    [setFooterVisible],
+  );
+
+  const showFooter = useCallback(() => {
+    scrollOffset.current = 0;
+    setFooterVisible?.(true);
+  }, [setFooterVisible]);
+
+  return { onScroll, showFooter };
 }
 
 type AppStyleSheet = Record<string, ViewStyle | TextStyle>;
@@ -97,9 +192,8 @@ export function useAppThemeStyles<T extends AppStyleSheet>(styles: T): T {
   return useMemo(
     () => isDarkMode
       ? Object.fromEntries(
-          Object.entries(styles).map(([name, style]) => [name, darkenStyle((StyleSheet.flatten(style) || {}) as ViewStyle | TextStyle)]),
-
-        ) as T
+        Object.entries(styles).map(([name, style]) => [name, darkenStyle((StyleSheet.flatten(style) || {}) as ViewStyle | TextStyle)]),
+      ) as T
       : styles,
     [isDarkMode, styles],
   );

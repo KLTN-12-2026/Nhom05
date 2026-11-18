@@ -25,7 +25,7 @@ spring:
 
   # Cấu hình database nguyên vẹn của bạn
   datasource:
-    url: jdbc:mysql://localhost:3306/halmbook
+    url: jdbc:mysql://localhost:3107/halmbook
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:123456}
     driver-class-name: com.mysql.cj.jdbc.Driver

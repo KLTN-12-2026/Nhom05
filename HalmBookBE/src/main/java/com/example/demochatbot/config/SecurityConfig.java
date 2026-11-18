@@ -95,6 +95,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // 2. Các endpoint công khai không cần token
                         .requestMatchers("/api/auth/**", "/api/password/**").permitAll()
+
                         .requestMatchers("/api/chat/**").permitAll()
                         .requestMatchers("/uploads/**").permitAll()
                         .requestMatchers("/api/user/support-tickets", "/api/user/support-tickets/**").permitAll()
@@ -123,6 +124,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/**", "/admin/**").hasAnyAuthority("ROLE_ADMIN", "ADMIN")
 
                         // 6. Phân quyền Người dùng (Độc giả)
+
                         .requestMatchers("/user/**", "/api/user/**").hasAnyAuthority("ROLE_USER", "USER", "ROLE_ADMIN", "ADMIN")
 
                         .anyRequest().authenticated()

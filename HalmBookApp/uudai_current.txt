@@ -1,0 +1,1515 @@
+﻿import React, { useState, useEffect, useRef } from "react";
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  Image,
+  Modal,
+  Dimensions,
+  FlatList,
+  ActivityIndicator,
+} from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAppNavigation } from "./navigation";
+import { StatusBar as ExpoStatusBar } from "expo-status-bar";
+import axios from "axios";
+import Constants from "expo-constants";
+
+const { width: screenWidth } = Dimensions.get("window");
+
+// ==============================================================
+// API CONFIG â€” tÃ¡i sá»­ dá»¥ng pattern tá»« trangchu.tsx
+// ==============================================================
+const debuggerHost = Constants.expoConfig?.hostUri;
+const localhost = debuggerHost ? debuggerHost.split(":")[0] : "localhost";
+const API_BASE_URL = `http://${localhost}:8082`;
+const CANDIDATE_URLS = [
+  API_BASE_URL,
+  "http://localhost:8082",
+  "http://127.0.0.1:8082",
+  "http://192.168.1.165:8082",
+  "http://10.0.2.2:8082",
+];
+
+// ==============================================================
+// CAROUSEL: 3 card visible, peek tiáº¿p theo ~12px
+// 2 gaps á»Ÿ giá»¯a 3 cards, padding ngoÃ i 12px má»—i bÃªn
+// ==============================================================
+const CAROUSEL_H_PAD = 12;
+const CAROUSEL_GAP = 8;
+const CAROUSEL_PEEK = 12; // hÃ© lá»™ card tiáº¿p theo
+const CARD_W = Math.floor(
+  (screenWidth - CAROUSEL_H_PAD * 2 - CAROUSEL_GAP * 2 - CAROUSEL_PEEK) / 3
+);
+
+// Upload section: breaker cÃ³ margin 10px má»—i bÃªn â†’ width = screenWidth - 20
+// paddingHorizontal 12 bÃªn trong breaker â†’ available = screenWidth - 20 - 24 = screenWidth - 44
+// 3 cards, 2 gaps (8px each)
+const UPLOAD_AVAILABLE = screenWidth - 20 - 24;
+const UPLOAD_CARD_W = Math.floor((UPLOAD_AVAILABLE - CAROUSEL_GAP * 2) / 3);
+
+// ==============================================================
+// 1. TYPE DEFINITIONS
+// ==============================================================
+type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
+
+interface MemberOffer {
+  id: string;
+  title: string;
+  tierTag: string;
+  tierColor: string;
+  periodText: string;
+  highlightBenefit: string;
+  description: string;
+  price: string;
+  priceNumeric: number;
+  oldPrice?: string;
+  icon: IconName;
+  iconColor: string;
+  actionText: string;
+  successMsg: string;
+}
+
+interface UploadOffer {
+  id: string;
+  title: string;
+  badge: string;
+  badgeColor: string;
+  fileSpecs: string;
+  aiFeature: string;
+  description: string;
+  price: string;
+  priceNumeric: number;
+  oldPrice?: string;
+  icon: IconName;
+  iconColor: string;
+  actionText: string;
+  successMsg: string;
+  isUploadLink?: boolean;
+}
+
+interface ComboOffer {
+  id: string;
+  title: string;
+  discountTag: string;
+  discountColor: string;
+  volumeText: string;
+  genreTag: string;
+  description: string;
+  price: string;
+  priceNumeric: number;
+  oldPrice?: string;
+  icon: IconName;
+  iconColor: string;
+  actionText: string;
+  successMsg: string;
+}
+
+interface ChallengeOffer {
+  id: string;
+  title: string;
+  streakTag: string;
+  streakColor: string;
+  targetTask: string;
+  rewardHighlight: string;
+  description: string;
+  priceDisplay: string;
+  icon: IconName;
+  iconColor: string;
+  actionText: string;
+  successMsg: string;
+}
+
+// Real book from API
+interface RealBook {
+  book_id: string;
+  bookName: string;
+  author: string;
+  img_url: string | null;
+  rent_price: number | null;
+  description: string | null;
+  category_name: string | null;
+  readCount: number;
+}
+
+// ==============================================================
+// 2. STATIC DATA
+// ==============================================================
+
+const MEMBER_DATA: MemberOffer[] = [
+  {
+    id: "sv",
+    title: "GÃ³i Sinh ViÃªn",
+    tierTag: "CAMPUS PASS",
+    tierColor: "#2563EB",
+    periodText: "30 NgÃ y",
+    highlightBenefit: "Má»Ÿ kho giÃ¡o trÃ¬nh AI",
+    description:
+      "DÃ nh riÃªng cho há»c sinh, sinh viÃªn cÃ³ tháº» HSSV há»£p lá»‡. Táº·ng 5 lÆ°á»£t tÃ³m táº¯t AI má»—i thÃ¡ng vÃ  giáº£m 10% khi thuÃª sÃ¡ch giáº¥y.",
+    price: "50 ðŸ¥” /thÃ¡ng",
+    priceNumeric: 50,
+    icon: "school-outline",
+    iconColor: "#2563EB",
+    actionText: "XÃ¡c Thá»±c",
+    successMsg:
+      "XÃ¡c thá»±c tháº» HSSV thÃ nh cÃ´ng! GÃ³i sinh viÃªn Ä‘Ã£ Ä‘Æ°á»£c kÃ­ch hoáº¡t.",
+  },
+  {
+    id: "p1",
+    title: "Premium 1 ThÃ¡ng",
+    tierTag: "-30% HOT",
+    tierColor: "#8E3038",
+    periodText: "30 NgÃ y",
+    highlightBenefit: "Audiobook AI + 10k sÃ¡ch",
+    description:
+      "Äá»c sÃ¡ch khÃ´ng giá»›i háº¡n, nghe audiobook AI khÃ´ng quáº£ng cÃ¡o vÃ  táº£i sÃ¡ch Ä‘á»c Offline cháº¥t lÆ°á»£ng cao trÃªn má»i thiáº¿t bá»‹.",
+    oldPrice: "150",
+    price: "105 ðŸ¥”",
+    priceNumeric: 105,
+    icon: "diamond-stone",
+    iconColor: "#8E3038",
+    actionText: "Äá»•i GÃ³i",
+    successMsg: "KÃ­ch hoáº¡t GÃ³i Premium 1 ThÃ¡ng thÃ nh cÃ´ng!",
+  },
+  {
+    id: "p3",
+    title: "Premium 3 ThÃ¡ng",
+    tierTag: "-35% VIP",
+    tierColor: "#B8860B",
+    periodText: "90 NgÃ y",
+    highlightBenefit: "Tiáº¿t kiá»‡m 25% so vá»›i láº»",
+    description:
+      "Bao gá»“m toÃ n bá»™ quyá»n lá»£i Premium. GÃ³i 3 thÃ¡ng giÃºp tiáº¿t kiá»‡m hÆ¡n so vá»›i mua tá»«ng thÃ¡ng riÃªng láº».",
+    oldPrice: "315",
+    price: "240 ðŸ¥”",
+    priceNumeric: 240,
+    icon: "crown-outline",
+    iconColor: "#B8860B",
+    actionText: "Äá»•i GÃ³i",
+    successMsg: "KÃ­ch hoáº¡t GÃ³i Premium 3 ThÃ¡ng thÃ nh cÃ´ng!",
+  },
+];
+
+const COMBO_DATA: ComboOffer[] = [
+  {
+    id: "c1",
+    title: "Ká»¹ NÄƒng Sá»‘ng",
+    discountTag: "-40%",
+    discountColor: "#D97706",
+    volumeText: "Bá»™ 3 cuá»‘n thá»±c chiáº¿n",
+    genreTag: "TÆ° duy & Äá»™t phÃ¡",
+    description:
+      "Bá»™ 3 cuá»‘n sÃ¡ch ká»¹ nÄƒng thá»±c chiáº¿n kinh Ä‘iá»ƒn giÃºp rÃ¨n luyá»‡n tÆ° duy pháº£n biá»‡n, lÃ£nh Ä‘áº¡o vÃ  giao tiáº¿p hiá»‡u quáº£.",
+    oldPrice: "200",
+    price: "120 ðŸ¥”",
+    priceNumeric: 120,
+    icon: "brain",
+    iconColor: "#D97706",
+    actionText: "Mua Combo",
+    successMsg:
+      "Mua Combo Ká»¹ NÄƒng Sá»‘ng thÃ nh cÃ´ng! SÃ¡ch Ä‘Ã£ vÃ o Tá»§ SÃ¡ch cÃ¡ nhÃ¢n.",
+  },
+  {
+    id: "c2",
+    title: "Trinh ThÃ¡m",
+    discountTag: "HOT DEAL",
+    discountColor: "#8E3038",
+    volumeText: "Bá»™ 5 tiá»ƒu thuyáº¿t ly ká»³",
+    genreTag: "Ãn máº¡ng & PhÃ¡ Ã¡n",
+    description:
+      "Bá»™ 5 tiá»ƒu thuyáº¿t trinh thÃ¡m bÃ¡n cháº¡y nháº¥t má»i thá»i Ä‘áº¡i vá»›i nhá»¯ng vá»¥ Ã¡n bÃ­ áº©n, ngháº¹t thá»Ÿ tá»« nhá»¯ng báº­c tháº§y vÄƒn chÆ°Æ¡ng.",
+    oldPrice: "350",
+    price: "200 ðŸ¥”",
+    priceNumeric: 200,
+    icon: "magnify-scan",
+    iconColor: "#8E3038",
+    actionText: "Mua Combo",
+    successMsg:
+      "Mua Combo Trinh ThÃ¡m thÃ nh cÃ´ng! SÃ¡ch Ä‘Ã£ vÃ o Tá»§ SÃ¡ch cÃ¡ nhÃ¢n.",
+  },
+  {
+    id: "c3",
+    title: "NgÃ´n TÃ¬nh",
+    discountTag: "-45%",
+    discountColor: "#E11D48",
+    volumeText: "Tuyá»ƒn táº­p 10 truyá»‡n hot",
+    genreTag: "Thanh xuÃ¢n lÃ£ng máº¡n",
+    description:
+      "Tuyá»ƒn táº­p 10 truyá»‡n ngÃ´n tÃ¬nh hiá»‡n Ä‘áº¡i ngá»t ngÃ o, sÃ¢u láº¯ng vá» tÃ¬nh yÃªu tuá»•i tráº» vÃ  nhá»¯ng báº£n tÃ¬nh ca chá»¯a lÃ nh tÃ¢m há»“n.",
+    oldPrice: "450",
+    price: "247 ðŸ¥”",
+    priceNumeric: 247,
+    icon: "heart-multiple-outline",
+    iconColor: "#E11D48",
+    actionText: "Mua Combo",
+    successMsg:
+      "Mua Combo NgÃ´n TÃ¬nh thÃ nh cÃ´ng! SÃ¡ch Ä‘Ã£ vÃ o Tá»§ SÃ¡ch cÃ¡ nhÃ¢n.",
+  },
+];
+
+const UPLOAD_DATA: UploadOffer[] = [
+  {
+    id: "u1",
+    title: "Free 3 Láº§n Upload",
+    badge: "FREE",
+    badgeColor: "#059669",
+    fileSpecs: "Max 25MB Â· PDF/EPUB",
+    aiFeature: "TÃ³m táº¯t AI tá»± Ä‘á»™ng",
+    description:
+      "DÃ nh cho tÃ i khoáº£n má»›i. Táº£i tÃ i liá»‡u cÃ¡ nhÃ¢n PDF/EPUB Ä‘á»ƒ Ä‘á»c trá»±c tuyáº¿n vÃ  trÃ­ch xuáº¥t Ã½ chÃ­nh thÃ´ng minh báº±ng AI.",
+    oldPrice: "15",
+    price: "0 ðŸ¥” (Free)",
+    priceNumeric: 0,
+    icon: "file-document-outline",
+    iconColor: "#059669",
+    actionText: "Sá»­ Dá»¥ng",
+    isUploadLink: true,
+    successMsg: "ÄÃ£ kÃ­ch hoáº¡t 3 lÆ°á»£t upload tÃ i liá»‡u miá»…n phÃ­!",
+  },
+  {
+    id: "u2",
+    title: "Upload 2 Láº§n/NgÃ y",
+    badge: "GÃ“I NGÃ€Y",
+    badgeColor: "#8E3038",
+    fileSpecs: "2 lÆ°á»£t/ngÃ y Â· 30 ngÃ y",
+    aiFeature: "TrÃ­ch xuáº¥t biá»ƒu Ä‘á»“",
+    description:
+      "Táº£i tÃ i liá»‡u lÃªn há»‡ thá»‘ng 2 láº§n má»—i ngÃ y vá»›i chi phÃ­ tiáº¿t kiá»‡m, lÆ°u trá»¯ tra cá»©u bÃ i vá»Ÿ vÃ  Ä‘á»“ thá»‹ linh hoáº¡t.",
+    price: "10 ðŸ¥” /láº§n",
+    priceNumeric: 10,
+    icon: "cloud-sync-outline",
+    iconColor: "#8E3038",
+    actionText: "ÄÄƒng KÃ½",
+    successMsg: "ÄÃ£ Ä‘Äƒng kÃ½ quyá»n lá»£i upload Æ°u Ä‘Ã£i theo ngÃ y!",
+  },
+  {
+    id: "u3",
+    title: "KhÃ´ng Giá»›i Háº¡n",
+    badge: "UNLIMITED",
+    badgeColor: "#B8860B",
+    fileSpecs: "Max 100MB Â· DÃ i háº¡n",
+    aiFeature: "Há»i Ä‘Ã¡p AI ngá»¯ cáº£nh",
+    description:
+      "Tá»± do lÆ°u trá»¯ thÆ° viá»‡n cÃ¡ nhÃ¢n khÃ´ng giá»›i háº¡n dung lÆ°á»£ng lÃªn Ä‘áº¿n 100MB/file, phÃ¢n tÃ­ch tÃ i liá»‡u chuyÃªn sÃ¢u.",
+    price: "30 ðŸ¥” /thÃ¡ng",
+    priceNumeric: 30,
+    icon: "database-arrow-up-outline",
+    iconColor: "#B8860B",
+    actionText: "NÃ¢ng Cáº¥p",
+    successMsg: "KÃ­ch hoáº¡t GÃ³i Upload KhÃ´ng Giá»›i Háº¡n thÃ nh cÃ´ng!",
+  },
+];
+
+const CHALLENGE_DATA: ChallengeOffer[] = [
+  {
+    id: "ch1",
+    title: "Chiáº¿n Tháº§n Tá»‘c Äá»™",
+    streakTag: "3 NGÃ€Y",
+    streakColor: "#8E3038",
+    targetTask: "Äá»c xong 1 cuá»‘n trong 3 ngÃ y",
+    rewardHighlight: "Voucher giáº£m 5% mua sÃ¡ch",
+    description:
+      "Chinh phá»¥c thá»­ thÃ¡ch Ä‘á»c nhanh 1 cuá»‘n sÃ¡ch trong 3 ngÃ y Ä‘á»ƒ nháº­n voucher giáº£m 5% vÃ  huy hiá»‡u Tia Chá»›p Nhanh.",
+    priceDisplay: "-5% Voucher",
+    icon: "lightning-bolt",
+    iconColor: "#8E3038",
+    actionText: "Tham Gia",
+    successMsg:
+      "ÄÃ£ ghi danh thá»­ thÃ¡ch Chiáº¿n Tháº§n Tá»‘c Äá»™! HoÃ n thÃ nh sÃ¡ch trong 3 ngÃ y nhÃ©.",
+  },
+  {
+    id: "ch2",
+    title: "Má»™t SÃ¡ch ChÄƒm Chá»‰",
+    streakTag: "7 NGÃ€Y",
+    streakColor: "#D97706",
+    targetTask: "Chuá»—i Ä‘á»c 7 ngÃ y liÃªn tiáº¿p",
+    rewardHighlight: "ThÆ°á»Ÿng nÃ³ng +10 Khoai tÆ°Æ¡i",
+    description:
+      "Duy trÃ¬ thÃ³i quen má»Ÿ sÃ¡ch Ä‘á»c má»—i ngÃ y trong 7 ngÃ y liÃªn tiáº¿p Ä‘á»ƒ nháº­n thÆ°á»Ÿng nÃ³ng 10 Khoai vÃ  má»Ÿ khÃ³a Ngá»n Lá»­a Bá»n Bá»‰.",
+    priceDisplay: "+10 ðŸ¥”",
+    icon: "fire",
+    iconColor: "#D97706",
+    actionText: "Tham Gia",
+    successMsg: "ÄÃ£ kÃ­ch hoáº¡t chuá»—i Ä‘á»c 7 ngÃ y! ChÃºc báº¡n giá»¯ vá»¯ng thÃ³i quen.",
+  },
+  {
+    id: "ch3",
+    title: "Thá»£ SÄƒn Tri Thá»©c",
+    streakTag: "1 THÃNG",
+    streakColor: "#2563EB",
+    targetTask: "HoÃ n thÃ nh 10 cuá»‘n sÃ¡ch",
+    rewardHighlight: "ThÆ°á»Ÿng +25 Khoai & Báº£ng VÃ ng",
+    description:
+      "Äá»c hoÃ n thÃ nh 10 cuá»‘n sÃ¡ch trong thÃ¡ng Ä‘á»ƒ nháº­n 25 Khoai vÃ o vÃ­ vÃ  Ä‘Æ°á»£c vinh danh trÃªn Báº£ng VÃ ng Äá»™c Giáº£ xuáº¥t sáº¯c.",
+    priceDisplay: "+25 ðŸ¥”",
+    icon: "trophy-outline",
+    iconColor: "#2563EB",
+    actionText: "Tham Gia",
+    successMsg:
+      "ÄÃ£ ghi danh thá»­ thÃ¡ch Thá»£ SÄƒn Tri Thá»©c! Chinh phá»¥c 10 cuá»‘n sÃ¡ch thÃ¡ng nÃ y nhÃ©.",
+  },
+];
+
+// ==============================================================
+// SECTION HEADER â€” icon + tÃªn, khÃ´ng cÃ³ count badge
+// ==============================================================
+function SectionHeader({
+  icon,
+  iconColor,
+  label,
+}: {
+  icon: IconName;
+  iconColor: string;
+  label: string;
+}) {
+  return (
+    <View style={sectionHeaderStyles.row}>
+      <MaterialCommunityIcons name={icon} size={16} color={iconColor} />
+      <Text style={[sectionHeaderStyles.label, { color: "#1E1F1D" }]}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+// Wrapper component Ä‘á»ƒ inject theme vÃ o SectionHeader
+function ThemedSectionHeader({
+  icon,
+  iconColor,
+  label,
+  textColor,
+}: {
+  icon: IconName;
+  iconColor: string;
+  label: string;
+  textColor: string;
+}) {
+  return (
+    <View style={sectionHeaderStyles.row}>
+      <MaterialCommunityIcons name={icon} size={16} color={iconColor} />
+      <Text style={[sectionHeaderStyles.label, { color: textColor }]}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+const sectionHeaderStyles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+  },
+  label: {
+    fontSize: 13.5,
+    fontWeight: "800",
+    letterSpacing: -0.2,
+  },
+});
+
+// ==============================================================
+// HORIZONTAL CAROUSEL â€” 3 cards visible, swipe for more
+// ==============================================================
+function HorizontalCarousel<T>({
+  data,
+  renderItem,
+  cardWidth,
+  gap,
+  paddingH,
+}: {
+  data: T[];
+  renderItem: (item: T, index: number) => React.ReactNode;
+  cardWidth: number;
+  gap: number;
+  paddingH: number;
+}) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      decelerationRate="fast"
+      snapToInterval={cardWidth + gap}
+      snapToAlignment="start"
+      contentContainerStyle={{
+        paddingHorizontal: paddingH,
+        gap,
+      }}
+    >
+      {data.map((item, index) => (
+        <View key={index} style={{ width: cardWidth }}>
+          {renderItem(item, index)}
+        </View>
+      ))}
+    </ScrollView>
+  );
+}
+
+// ==============================================================
+// MAIN COMPONENT
+// ==============================================================
+export default function OffersScreen() {
+  const { navigate, isDarkMode, toggleDarkMode, isLoggedIn, showLoginAlert } =
+    useAppNavigation();
+  const insets = useSafeAreaInsets();
+  const [khoaiBalance, setKhoaiBalance] = useState<number | null>(null);
+
+  // Real books from API
+  const [realBooks, setRealBooks] = useState<RealBook[]>([]);
+  const [booksLoading, setBooksLoading] = useState(true);
+  const [booksError, setBooksError] = useState<string | null>(null);
+
+  // Modal State
+  const [modalItem, setModalItem] = useState<{
+    title: string;
+    description: string;
+    price: string;
+    priceNumeric: number;
+    actionText: string;
+    successMsg: string;
+    isUploadLink?: boolean;
+    isChallenge?: boolean;
+    badgeText?: string;
+    badgeColor?: string;
+  } | null>(null);
+
+  // Toast State
+  const [toast, setToast] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+  }>({ visible: false, title: "", message: "" });
+
+  // Load khoai balance from AsyncStorage
+  useEffect(() => {
+    const loadBalance = async () => {
+      try {
+        const raw = await AsyncStorage.getItem("cachedUserProfile");
+        if (raw) {
+          const profile = JSON.parse(raw);
+          if (typeof profile?.potatoBalance === "number") {
+            setKhoaiBalance(profile.potatoBalance);
+          }
+        }
+      } catch {
+        // silent fail â€” UI shows "â€”"
+      }
+    };
+    loadBalance();
+  }, []);
+
+  // Fetch real books from API GET /api/home/books (tÃ¡i sá»­ dá»¥ng pattern trangchu.tsx)
+  useEffect(() => {
+    const controller = new AbortController();
+    const fetchBooks = async () => {
+      setBooksLoading(true);
+      setBooksError(null);
+      let data: any = null;
+      for (const baseUrl of CANDIDATE_URLS) {
+        try {
+          const res = await axios.get(`${baseUrl}/api/home/books`, {
+            params: { page: 0, size: 20 },
+            timeout: 8000,
+            signal: controller.signal,
+          });
+          data = res.data;
+          if (data) break;
+        } catch (err: any) {
+          if (axios.isCancel(err) || err?.name === "CanceledError") return;
+        }
+      }
+      if (data) {
+        const rawList: any[] = Array.isArray(data)
+          ? data
+          : Array.isArray(data.content)
+          ? data.content
+          : [];
+        const mapped: RealBook[] = rawList
+          .filter((b) => b.status !== "DELETED" && b.rent_price !== null && b.rent_price !== undefined)
+          .slice(0, 10)
+          .map((b) => {
+            let imgUrl = b.img_url || null;
+            if (imgUrl && imgUrl.startsWith("/")) {
+              imgUrl = API_BASE_URL + imgUrl;
+            }
+            return {
+              book_id: String(b.book_id || ""),
+              bookName: b.bookName || "ChÆ°a cÃ³ tiÃªu Ä‘á»",
+              author: b.author || "HALM BOOK",
+              img_url: imgUrl,
+              rent_price: b.rent_price ?? null,
+              description: b.description || null,
+              category_name: b.category_name || null,
+              readCount: b.readCount || 0,
+            };
+          });
+        setRealBooks(mapped);
+        setBooksLoading(false);
+      } else {
+        setBooksError("KhÃ´ng thá»ƒ káº¿t ná»‘i backend Ä‘á»ƒ láº¥y danh sÃ¡ch sÃ¡ch.");
+        setBooksLoading(false);
+      }
+    };
+    fetchBooks();
+    return () => controller.abort();
+  }, []);
+
+  // Theme Palette
+  const theme = {
+    bg: isDarkMode ? "#121310" : "#F7F4EE",
+    cardBg: isDarkMode ? "#1B1C18" : "#FFFFFF",
+    cardInnerBg: isDarkMode ? "#23251F" : "#F8F6F0",
+    breakerBg: isDarkMode ? "#181A14" : "#F0EBE0",
+    border: isDarkMode ? "#2C2E27" : "#E5DFD4",
+    textPrimary: isDarkMode ? "#EDE9DE" : "#1E1F1D",
+    textMuted: isDarkMode ? "#95928A" : "#65635D",
+    wine: isDarkMode ? "#A83B46" : "#8E3038",
+    gold: isDarkMode ? "#D4AF37" : "#B8860B",
+    emerald: isDarkMode ? "#10B981" : "#059669",
+    khoaiBg: isDarkMode ? "rgba(212,175,55,0.14)" : "rgba(184,134,11,0.10)",
+    khoaiBorder: isDarkMode ? "rgba(212,175,55,0.3)" : "rgba(184,134,11,0.22)",
+    utilityBg: isDarkMode ? "#1B1C18" : "#FFFFFF",
+    utilityBorder: isDarkMode ? "#2C2E27" : "#E5DFD4",
+  };
+
+  const showToast = (title: string, message: string) => {
+    setToast({ visible: true, title, message });
+    setTimeout(() => setToast((p) => ({ ...p, visible: false })), 3000);
+  };
+
+  const handleConfirmAction = () => {
+    if (!modalItem) return;
+    const balance = khoaiBalance ?? 0;
+    if (balance >= modalItem.priceNumeric) {
+      if (modalItem.priceNumeric > 0) {
+        setKhoaiBalance((prev) => (prev ?? 0) - modalItem.priceNumeric);
+      }
+      const { successMsg, isUploadLink, isChallenge } = modalItem;
+      setModalItem(null);
+      showToast("Thao TÃ¡c ThÃ nh CÃ´ng!", successMsg);
+      if (isUploadLink) setTimeout(() => navigate("upload"), 600);
+      else if (isChallenge) setTimeout(() => navigate("bookshelf"), 600);
+    }
+  };
+
+  const handleCartPress = () => {
+    if (!isLoggedIn) {
+      showLoginAlert("Báº¡n cáº§n Ä‘Äƒng nháº­p Ä‘á»ƒ xem giá» hÃ ng.");
+      return;
+    }
+    navigate("cart");
+  };
+
+  // ==============================================================
+  // CARD RENDERERS â€” badge dÃ¹ng alignSelf (khÃ´ng absolute top:-6)
+  // ==============================================================
+
+  const renderMemberCard = (item: MemberOffer, _i: number) => (
+    <TouchableOpacity
+      style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.border }]}
+      onPress={() =>
+        setModalItem({
+          title: item.title,
+          description: item.description,
+          price: item.price,
+          priceNumeric: item.priceNumeric,
+          actionText: item.actionText,
+          successMsg: item.successMsg,
+          badgeText: item.tierTag,
+          badgeColor: item.tierColor,
+        })
+      }
+      activeOpacity={0.82}
+    >
+      <View style={[styles.inlineBadge, { backgroundColor: item.tierColor }]}>
+        <Text style={styles.inlineBadgeText}>{item.tierTag}</Text>
+      </View>
+      <View style={[styles.iconBox, { backgroundColor: isDarkMode ? "#252721" : "#F4F0E8" }]}>
+        <MaterialCommunityIcons name={item.icon} size={22} color={item.iconColor} />
+      </View>
+      <Text numberOfLines={2} style={[styles.cardTitle, { color: theme.textPrimary }]}>
+        {item.title}
+      </Text>
+      <View style={[styles.pill, { backgroundColor: isDarkMode ? "#2A2C25" : "#EEE9DF" }]}>
+        <Text numberOfLines={1} style={[styles.pillText, { color: theme.textMuted }]}>
+          {item.periodText}
+        </Text>
+      </View>
+      <Text numberOfLines={1} style={[styles.snippetText, { color: theme.wine }]}>
+        {item.highlightBenefit}
+      </Text>
+      <View style={styles.priceRow}>
+        {item.oldPrice && (
+          <Text style={[styles.oldPrice, { color: theme.textMuted }]}>{item.oldPrice}</Text>
+        )}
+        <Text style={[styles.priceText, { color: theme.wine }]}>{item.price}</Text>
+      </View>
+      <View style={[styles.ctaBtn, { backgroundColor: theme.wine }]}>
+        <Text style={styles.ctaBtnText}>{item.actionText}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+
+  const renderComboCard = (item: ComboOffer, _i: number) => (
+    <TouchableOpacity
+      style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.border }]}
+      onPress={() =>
+        setModalItem({
+          title: `Combo ${item.title}`,
+          description: item.description,
+          price: item.price,
+          priceNumeric: item.priceNumeric,
+          actionText: item.actionText,
+          successMsg: item.successMsg,
+          badgeText: item.discountTag,
+          badgeColor: item.discountColor,
+        })
+      }
+      activeOpacity={0.82}
+    >
+      <View style={[styles.inlineBadge, { backgroundColor: item.discountColor }]}>
+        <Text style={styles.inlineBadgeText}>{item.discountTag}</Text>
+      </View>
+      <View style={[styles.iconBox, { backgroundColor: isDarkMode ? "#2C251F" : "#FBF2E8" }]}>
+        <MaterialCommunityIcons name={item.icon} size={22} color={item.iconColor} />
+      </View>
+      <Text numberOfLines={2} style={[styles.cardTitle, { color: theme.textPrimary }]}>
+        Combo {item.title}
+      </Text>
+      <View style={[styles.pill, { backgroundColor: isDarkMode ? "#2A241F" : "#F7EFE4" }]}>
+        <Text numberOfLines={1} style={[styles.pillText, { color: theme.gold }]}>
+          {item.volumeText}
+        </Text>
+      </View>
+      <Text numberOfLines={1} style={[styles.snippetText, { color: theme.textMuted }]}>
+        {item.genreTag}
+      </Text>
+      <View style={styles.priceRow}>
+        {item.oldPrice && (
+          <Text style={[styles.oldPrice, { color: theme.textMuted }]}>{item.oldPrice}</Text>
+        )}
+        <Text style={[styles.priceText, { color: theme.wine }]}>{item.price}</Text>
+      </View>
+      <View style={[styles.ctaBtn, { backgroundColor: theme.wine }]}>
+        <Text style={styles.ctaBtnText}>{item.actionText}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+
+  const renderUploadCard = (item: UploadOffer, _i: number) => (
+    <TouchableOpacity
+      key={item.id}
+      style={[styles.uploadCard, { backgroundColor: theme.cardBg, borderColor: theme.border }]}
+      onPress={() =>
+        setModalItem({
+          title: item.title,
+          description: item.description,
+          price: item.price,
+          priceNumeric: item.priceNumeric,
+          actionText: item.actionText,
+          successMsg: item.successMsg,
+          isUploadLink: item.isUploadLink,
+          badgeText: item.badge,
+          badgeColor: item.badgeColor,
+        })
+      }
+      activeOpacity={0.82}
+    >
+      <View style={[styles.inlineBadgeSmall, { backgroundColor: item.badgeColor }]}>
+        <Text style={styles.inlineBadgeSmallText}>{item.badge}</Text>
+      </View>
+      <View style={[styles.iconBoxSm, { backgroundColor: isDarkMode ? "#212822" : "#EDF6F0" }]}>
+        <MaterialCommunityIcons name={item.icon} size={18} color={item.iconColor} />
+      </View>
+      <Text numberOfLines={2} style={[styles.cardTitleSm, { color: theme.textPrimary }]}>
+        {item.title}
+      </Text>
+      <Text numberOfLines={1} style={[styles.snippetTextSm, { color: theme.emerald }]}>
+        {item.fileSpecs}
+      </Text>
+      <Text numberOfLines={1} style={[styles.snippetTextSm, { color: theme.textMuted }]}>
+        {item.aiFeature}
+      </Text>
+      <View style={styles.priceRowSm}>
+        {item.oldPrice && (
+          <Text style={[styles.oldPriceSm, { color: theme.textMuted }]}>{item.oldPrice}</Text>
+        )}
+        <Text style={[styles.priceTextSm, { color: item.priceNumeric === 0 ? theme.emerald : theme.wine }]}>
+          {item.price}
+        </Text>
+      </View>
+      <View style={[styles.ctaBtnSm, { backgroundColor: item.priceNumeric === 0 ? theme.emerald : theme.wine }]}>
+        <Text style={styles.ctaBtnSmText}>{item.actionText}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+
+  const renderChallengeCard = (item: ChallengeOffer, _i: number) => (
+    <TouchableOpacity
+      style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.border }]}
+      onPress={() =>
+        setModalItem({
+          title: item.title,
+          description: `${item.description}\n\nMá»¥c tiÃªu: ${item.targetTask}\nPháº§n thÆ°á»Ÿng: ${item.rewardHighlight}`,
+          price: item.priceDisplay,
+          priceNumeric: 0,
+          actionText: item.actionText,
+          successMsg: item.successMsg,
+          isChallenge: true,
+          badgeText: item.streakTag,
+          badgeColor: item.streakColor,
+        })
+      }
+      activeOpacity={0.82}
+    >
+      <View style={[styles.inlineBadge, { backgroundColor: item.streakColor }]}>
+        <Text style={styles.inlineBadgeText}>{item.streakTag}</Text>
+      </View>
+      <View style={[styles.iconBox, { backgroundColor: isDarkMode ? "#2A241F" : "#F9EFE7" }]}>
+        <MaterialCommunityIcons name={item.icon} size={22} color={item.iconColor} />
+      </View>
+      <Text numberOfLines={2} style={[styles.cardTitle, { color: theme.textPrimary }]}>
+        {item.title}
+      </Text>
+      <View style={[styles.pill, { backgroundColor: isDarkMode ? "#252721" : "#F4F0E8" }]}>
+        <Text numberOfLines={2} style={[styles.pillText, { color: theme.textMuted }]}>
+          {item.targetTask}
+        </Text>
+      </View>
+      <Text numberOfLines={1} style={[styles.snippetText, { color: theme.emerald }]}>
+        {item.rewardHighlight}
+      </Text>
+      <View style={styles.priceRow}>
+        <Text style={[styles.priceText, { color: theme.emerald }]}>{item.priceDisplay}</Text>
+      </View>
+      <View style={[styles.ctaBtn, { backgroundColor: theme.wine }]}>
+        <Text style={styles.ctaBtnText}>{item.actionText}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+
+  // Real book card â€” dá»¯ liá»‡u tháº­t tá»« API, khÃ´ng giáº£ Ä‘á»‹nh giáº£m giÃ¡
+  const renderRealBookCard = (book: RealBook, _i: number) => {
+    const price = book.rent_price !== null ? `${book.rent_price} ðŸ¥”` : "â€”";
+    const priceNum = book.rent_price ?? 0;
+    const hasImage = !!book.img_url;
+
+    return (
+      <TouchableOpacity
+        style={[styles.card, { backgroundColor: theme.cardBg, borderColor: theme.border }]}
+        onPress={() =>
+          setModalItem({
+            title: book.bookName,
+            description: `${book.description || "ChÆ°a cÃ³ mÃ´ táº£."}\n\nTÃ¡c giáº£: ${book.author}${
+              book.category_name ? `\nThá»ƒ loáº¡i: ${book.category_name}` : ""
+            }`,
+            price: price,
+            priceNumeric: priceNum,
+            actionText: "ThuÃª SÃ¡ch",
+            successMsg: `ThuÃª sÃ¡ch "${book.bookName}" thÃ nh cÃ´ng!`,
+            badgeText: book.category_name || undefined,
+            badgeColor: theme.wine,
+          })
+        }
+        activeOpacity={0.82}
+      >
+        {/* Category badge â€” chá»‰ show náº¿u cÃ³, khÃ´ng tá»± thÃªm giáº£m giÃ¡ */}
+        {book.category_name ? (
+          <View style={[styles.inlineBadge, { backgroundColor: theme.wine }]}>
+            <Text style={styles.inlineBadgeText} numberOfLines={1}>
+              {book.category_name.length > 10
+                ? book.category_name.slice(0, 10) + "â€¦"
+                : book.category_name}
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.inlineBadgePlaceholder} />
+        )}
+
+        {/* Book cover */}
+        <View style={styles.bookCoverFrame}>
+          {hasImage ? (
+            <Image
+              source={{ uri: book.img_url! }}
+              style={styles.bookCoverImg}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={[styles.bookCoverPlaceholder, { backgroundColor: isDarkMode ? "#2C2E27" : "#E5DFD4" }]}>
+              <MaterialCommunityIcons name="book-open-variant" size={22} color={theme.textMuted} />
+            </View>
+          )}
+        </View>
+
+        <Text numberOfLines={2} style={[styles.cardTitle, { color: theme.textPrimary }]}>
+          {book.bookName}
+        </Text>
+        <Text numberOfLines={1} style={[styles.snippetText, { color: theme.textMuted }]}>
+          {book.author}
+        </Text>
+
+        <View style={styles.priceRow}>
+          <Text style={[styles.priceText, { color: theme.wine }]}>{price}</Text>
+        </View>
+        <View style={[styles.ctaBtn, { backgroundColor: theme.wine }]}>
+          <Text style={styles.ctaBtnText}>ThuÃª SÃ¡ch</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  // ==============================================================
+  // RENDER
+  // ==============================================================
+  const balanceDisplay = khoaiBalance !== null ? `${khoaiBalance} ðŸ¥”` : "â€” ðŸ¥”";
+  // paddingTop = insets.top Ä‘á»ƒ trÃ¡nh StatusBar/Dynamic Island
+  const utilityPaddingTop = insets.top > 0 ? insets.top : 20;
+
+  return (
+    <View style={[styles.container, { backgroundColor: theme.bg }]}>
+      <ExpoStatusBar style={isDarkMode ? "light" : "dark"} />
+
+      {/* ============================================================
+          UTILITY BAR â€” dÃ¹ng insets.top Ä‘á»ƒ trÃ¡nh status bar iOS
+          ============================================================ */}
+      <View
+        style={[
+          styles.utilityBar,
+          {
+            backgroundColor: theme.utilityBg,
+            borderBottomColor: theme.utilityBorder,
+            paddingTop: utilityPaddingTop,
+          },
+        ]}
+      >
+        {/* Khoai balance â€” 44pt touch target */}
+        <TouchableOpacity
+          style={[
+            styles.khoaiPill,
+            { backgroundColor: theme.khoaiBg, borderColor: theme.khoaiBorder },
+          ]}
+          onPress={() => navigate("payment")}
+          activeOpacity={0.8}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <MaterialCommunityIcons name="circle-multiple" size={18} color={theme.gold} />
+          <Text style={[styles.khoaiText, { color: theme.gold }]}>{balanceDisplay}</Text>
+        </TouchableOpacity>
+
+        {/* Right actions */}
+        <View style={styles.utilityRight}>
+          {/* Dark Mode toggle */}
+          <TouchableOpacity
+            style={[styles.iconBtn, { backgroundColor: theme.cardInnerBg, borderColor: theme.border }]}
+            onPress={() => toggleDarkMode && toggleDarkMode()}
+            activeOpacity={0.75}
+            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+          >
+            <Ionicons
+              name={isDarkMode ? "sunny-outline" : "moon-outline"}
+              size={19}
+              color={isDarkMode ? theme.gold : theme.textMuted}
+            />
+          </TouchableOpacity>
+
+          {/* Cart */}
+          <TouchableOpacity
+            style={[styles.iconBtn, { backgroundColor: theme.cardInnerBg, borderColor: theme.border }]}
+            onPress={handleCartPress}
+            activeOpacity={0.75}
+            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+          >
+            <Ionicons name="cart-outline" size={19} color={theme.textMuted} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Toast */}
+      {toast.visible && (
+        <View
+          style={[
+            styles.toastPill,
+            { backgroundColor: theme.cardBg, borderColor: theme.gold, top: utilityPaddingTop + 58 },
+          ]}
+        >
+          <View style={[styles.toastIcon, { backgroundColor: theme.gold }]}>
+            <Ionicons name="checkmark" size={12} color="#FFF" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.toastTitle, { color: theme.textPrimary }]}>{toast.title}</Text>
+            <Text style={[styles.toastMsg, { color: theme.textMuted }]}>{toast.message}</Text>
+          </View>
+        </View>
+      )}
+
+      {/* ============================================================
+          MAIN SCROLL
+          ============================================================ */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingTop: 10, paddingBottom: 100 }}
+      >
+        {/* SECTION 1: GÃ“I CÆ¯á»šC Äáº¶C QUYá»€N */}
+        <View style={styles.sectionWrap}>
+          <ThemedSectionHeader icon="crown" iconColor={theme.wine} label="GÃ³i CÆ°á»›c Äáº·c Quyá»n" textColor={theme.textPrimary} />
+          <HorizontalCarousel
+            data={MEMBER_DATA}
+            renderItem={renderMemberCard}
+            cardWidth={CARD_W}
+            gap={CAROUSEL_GAP}
+            paddingH={CAROUSEL_H_PAD}
+          />
+        </View>
+
+        {/* SECTION 2: COMBO SÃCH TIáº¾T KIá»†M */}
+        <View style={styles.sectionWrap}>
+          <ThemedSectionHeader icon="layers" iconColor={theme.wine} label="Combo SÃ¡ch Tiáº¿t Kiá»‡m" textColor={theme.textPrimary} />
+          <HorizontalCarousel
+            data={COMBO_DATA}
+            renderItem={renderComboCard}
+            cardWidth={CARD_W}
+            gap={CAROUSEL_GAP}
+            paddingH={CAROUSEL_H_PAD}
+          />
+        </View>
+
+        {/* BREAKER: UPLOAD â€” fixed 3 cards, khÃ´ng carousel */}
+        <View
+          style={[
+            styles.breakerSection,
+            { backgroundColor: theme.breakerBg, borderColor: theme.border },
+          ]}
+        >
+          <View style={styles.breakerHeader}>
+            <View style={styles.breakerTagRow}>
+              <MaterialCommunityIcons name="cloud-upload" size={13} color={theme.emerald} />
+              <Text style={[styles.breakerTag, { color: theme.emerald }]}>TIá»†N ÃCH Äá»ŒC Sá»</Text>
+            </View>
+            <Text style={[styles.breakerTitle, { color: theme.textPrimary }]}>
+              Upload file cá»§a báº¡n vÃ  sá»­ dá»¥ng há»‡ sinh thÃ¡i cá»§a chÃºng tÃ´i
+            </Text>
+          </View>
+          {/* Upload: 3 items luÃ´n, dÃ¹ng row thay carousel */}
+          <View style={styles.uploadRow}>
+            {UPLOAD_DATA.map((item) => (
+              <View key={item.id} style={{ width: UPLOAD_CARD_W }}>
+                {renderUploadCard(item, 0)}
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* SECTION 4: SÃCH Láºº â€” Dá»® LIá»†U THáº¬T Tá»ª API */}
+        <View style={styles.sectionWrap}>
+          <ThemedSectionHeader icon="book-open" iconColor={theme.wine} label="SÃ¡ch Láº» Giáº£m SÃ¢u" textColor={theme.textPrimary} />
+
+          {booksLoading ? (
+            <View style={styles.booksLoadingBox}>
+              <ActivityIndicator size="small" color={theme.wine} />
+              <Text style={[styles.booksLoadingText, { color: theme.textMuted }]}>
+                Äang táº£i sÃ¡ch tá»« há»‡ thá»‘ng...
+              </Text>
+            </View>
+          ) : booksError ? (
+            <View style={styles.booksErrorBox}>
+              <Ionicons name="wifi-outline" size={22} color={theme.textMuted} />
+              <Text style={[styles.booksErrorText, { color: theme.textMuted }]}>
+                {booksError}
+              </Text>
+              <Text style={[styles.booksErrorHint, { color: theme.wine }]}>
+                Khá»Ÿi Ä‘á»™ng backend Ä‘á»ƒ xem sÃ¡ch thá»±c táº¿
+              </Text>
+            </View>
+          ) : realBooks.length === 0 ? (
+            <View style={styles.booksErrorBox}>
+              <Text style={[styles.booksErrorText, { color: theme.textMuted }]}>
+                ChÆ°a cÃ³ sÃ¡ch trong há»‡ thá»‘ng.
+              </Text>
+            </View>
+          ) : (
+            <HorizontalCarousel
+              data={realBooks}
+              renderItem={renderRealBookCard}
+              cardWidth={CARD_W}
+              gap={CAROUSEL_GAP}
+              paddingH={CAROUSEL_H_PAD}
+            />
+          )}
+        </View>
+
+        {/* SECTION 5: THá»¬ THÃCH Äá»ŒC */}
+        <View style={styles.sectionWrap}>
+          <ThemedSectionHeader icon="medal" iconColor={theme.gold} label="Æ¯u ÄÃ£i Thá»­ ThÃ¡ch Äá»c" textColor={theme.textPrimary} />
+          <HorizontalCarousel
+            data={CHALLENGE_DATA}
+            renderItem={renderChallengeCard}
+            cardWidth={CARD_W}
+            gap={CAROUSEL_GAP}
+            paddingH={CAROUSEL_H_PAD}
+          />
+        </View>
+      </ScrollView>
+
+      {/* ============================================================
+          DETAIL & CONFIRMATION MODAL
+          ============================================================ */}
+      <Modal
+        visible={!!modalItem}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalItem(null)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalBox, { backgroundColor: theme.cardBg, borderColor: theme.border }]}>
+            {modalItem && (
+              <>
+                <View style={[styles.modalHeaderRow, { borderBottomColor: theme.border }]}>
+                  <View style={{ flex: 1 }}>
+                    {modalItem.badgeText && (
+                      <Text style={[styles.modalBadge, { color: modalItem.badgeColor || theme.wine }]}>
+                        {modalItem.badgeText}
+                      </Text>
+                    )}
+                    <Text style={[styles.modalHeading, { color: theme.textPrimary }]}>
+                      {modalItem.title}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setModalItem(null)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Ionicons name="close" size={20} color={theme.textMuted} />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={[styles.modalDescBox, { backgroundColor: theme.cardInnerBg, borderColor: theme.border }]}>
+                  <Text style={[styles.modalDescLabel, { color: theme.textMuted }]}>Ná»™i dung quyá»n lá»£i:</Text>
+                  <Text style={[styles.modalDescContent, { color: theme.textPrimary }]}>
+                    {modalItem.description}
+                  </Text>
+                </View>
+
+                <View style={styles.modalMetaRow}>
+                  <View style={[styles.modalMetaCol, { backgroundColor: theme.cardInnerBg, borderColor: theme.border }]}>
+                    <Text style={[styles.modalMetaLabel, { color: theme.textMuted }]}>Chi phÃ­:</Text>
+                    <Text style={[styles.modalMetaVal, { color: modalItem.priceNumeric === 0 ? theme.emerald : theme.wine }]}>
+                      {modalItem.price}
+                    </Text>
+                  </View>
+                  <View style={[styles.modalMetaCol, { backgroundColor: theme.cardInnerBg, borderColor: theme.border }]}>
+                    <Text style={[styles.modalMetaLabel, { color: theme.textMuted }]}>Sá»‘ dÆ° vÃ­:</Text>
+                    <Text style={[styles.modalMetaVal, { color: theme.textPrimary }]}>
+                      {khoaiBalance !== null ? khoaiBalance : "â€”"} ðŸ¥”
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.modalBtnRow}>
+                  <TouchableOpacity
+                    style={[styles.modalCancelBtn, { borderColor: theme.border }]}
+                    onPress={() => setModalItem(null)}
+                  >
+                    <Text style={[styles.modalCancelText, { color: theme.textPrimary }]}>Há»§y</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.modalConfirmBtn,
+                      { backgroundColor: (khoaiBalance ?? 0) >= modalItem.priceNumeric ? theme.wine : theme.border },
+                    ]}
+                    disabled={(khoaiBalance ?? 0) < modalItem.priceNumeric}
+                    onPress={handleConfirmAction}
+                  >
+                    <Text style={styles.modalConfirmText}>
+                      {(khoaiBalance ?? 0) < modalItem.priceNumeric
+                        ? "Sá»‘ DÆ° KhÃ´ng Äá»§"
+                        : modalItem.priceNumeric > 0
+                        ? `XÃ¡c Nháº­n (${modalItem.price})`
+                        : "XÃ¡c Nháº­n Ngay"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+// ==============================================================
+// STYLES
+// ==============================================================
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+
+  // ---- Utility Bar (khoai + dark mode + cart) ----
+  // paddingTop Ä‘Æ°á»£c set dynamically tá»« insets.top
+  utilityBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+  },
+  khoaiPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 22,
+    borderWidth: 1,
+    gap: 6,
+    minHeight: 44,
+  },
+  khoaiText: {
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  utilityRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  iconBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // ---- Toast ----
+  toastPill: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    zIndex: 999,
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 6,
+    gap: 8,
+  },
+  toastIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  toastTitle: { fontSize: 11.5, fontWeight: "800" },
+  toastMsg: { fontSize: 10, marginTop: 1 },
+
+  // ---- Section ----
+  sectionWrap: { marginBottom: 16 },
+
+  // ---- Breaker (Upload) ----
+  breakerSection: {
+    marginHorizontal: 10,
+    marginBottom: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+  },
+  breakerHeader: {
+    paddingHorizontal: 12,
+    marginBottom: 10,
+  },
+  breakerTagRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginBottom: 3,
+  },
+  breakerTag: {
+    fontSize: 9,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+  breakerTitle: {
+    fontSize: 12.5,
+    fontWeight: "900",
+    letterSpacing: -0.1,
+    lineHeight: 17,
+  },
+  // Upload row: 3 cá»‘ Ä‘á»‹nh, khÃ´ng carousel
+  uploadRow: {
+    flexDirection: "row",
+    paddingHorizontal: 12,
+    gap: CAROUSEL_GAP,
+  },
+
+  // ---- Standard Card (carousel) ----
+  card: {
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingTop: 8,
+    paddingHorizontal: 7,
+    paddingBottom: 8,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+    minHeight: 200,
+    justifyContent: "space-between",
+  },
+  // Badge INSIDE card â€” no position absolute, no top:-6
+  inlineBadge: {
+    alignSelf: "flex-end",
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 5,
+    marginBottom: 4,
+    maxWidth: "100%",
+  },
+  inlineBadgeText: {
+    color: "#FFF",
+    fontSize: 7.5,
+    fontWeight: "900",
+    letterSpacing: 0.2,
+  },
+  inlineBadgePlaceholder: {
+    height: 18,
+    marginBottom: 4,
+  },
+  iconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
+  cardTitle: {
+    fontSize: 10.5,
+    fontWeight: "800",
+    textAlign: "center",
+    lineHeight: 14,
+    marginBottom: 3,
+  },
+  pill: {
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 5,
+    marginBottom: 2,
+    maxWidth: "100%",
+  },
+  pillText: { fontSize: 8, fontWeight: "700", textAlign: "center" },
+  snippetText: {
+    fontSize: 8.5,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 2,
+  },
+  priceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
+    marginVertical: 2,
+  },
+  oldPrice: { fontSize: 8, textDecorationLine: "line-through" },
+  priceText: { fontSize: 10.5, fontWeight: "900" },
+  ctaBtn: {
+    width: "100%",
+    height: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 3,
+  },
+  ctaBtnText: { color: "#FFF", fontSize: 9, fontWeight: "800" },
+
+  // Book cover
+  bookCoverFrame: {
+    width: 42,
+    height: 58,
+    borderRadius: 5,
+    overflow: "hidden",
+    marginBottom: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.14,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  bookCoverImg: { width: "100%", height: "100%" },
+  bookCoverPlaceholder: {
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // ---- Upload Card (compact, fixed grid) ----
+  uploadCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingTop: 7,
+    paddingHorizontal: 6,
+    paddingBottom: 7,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+    minHeight: 180,
+    justifyContent: "space-between",
+  },
+  inlineBadgeSmall: {
+    alignSelf: "flex-end",
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginBottom: 3,
+  },
+  inlineBadgeSmallText: {
+    color: "#FFF",
+    fontSize: 6.5,
+    fontWeight: "900",
+    letterSpacing: 0.1,
+  },
+  iconBoxSm: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 3,
+  },
+  cardTitleSm: {
+    fontSize: 9.5,
+    fontWeight: "800",
+    textAlign: "center",
+    lineHeight: 13,
+    marginBottom: 2,
+  },
+  snippetTextSm: {
+    fontSize: 7.5,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 1,
+  },
+  priceRowSm: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+    marginVertical: 2,
+  },
+  oldPriceSm: { fontSize: 7, textDecorationLine: "line-through" },
+  priceTextSm: { fontSize: 9, fontWeight: "900" },
+  ctaBtnSm: {
+    width: "100%",
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 2,
+  },
+  ctaBtnSmText: { color: "#FFF", fontSize: 8, fontWeight: "800" },
+
+  // ---- Books loading/error states ----
+  booksLoadingBox: {
+    paddingVertical: 24,
+    alignItems: "center",
+    gap: 8,
+  },
+  booksLoadingText: { fontSize: 11, fontWeight: "600" },
+  booksErrorBox: {
+    paddingVertical: 20,
+    paddingHorizontal: 24,
+    alignItems: "center",
+    gap: 6,
+  },
+  booksErrorText: { fontSize: 11, textAlign: "center" },
+  booksErrorHint: { fontSize: 10, fontWeight: "700", textAlign: "center" },
+
+  // ---- Modal ----
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 16,
+  },
+  modalBox: {
+    width: "100%",
+    maxWidth: 330,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  modalHeaderRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    marginBottom: 10,
+  },
+  modalBadge: {
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    marginBottom: 2,
+  },
+  modalHeading: { fontSize: 15, fontWeight: "900" },
+  modalDescBox: {
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 12,
+  },
+  modalDescLabel: { fontSize: 9.5, fontWeight: "600", marginBottom: 2 },
+  modalDescContent: { fontSize: 11.5, lineHeight: 16 },
+  modalMetaRow: { flexDirection: "row", gap: 8, marginBottom: 14 },
+  modalMetaCol: { flex: 1, padding: 8, borderRadius: 10, borderWidth: 1 },
+  modalMetaLabel: { fontSize: 9.5 },
+  modalMetaVal: { fontSize: 12, fontWeight: "800", marginTop: 2 },
+  modalBtnRow: { flexDirection: "row", gap: 8 },
+  modalCancelBtn: {
+    flex: 1,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalCancelText: { fontSize: 11.5, fontWeight: "700" },
+  modalConfirmBtn: {
+    flex: 1.6,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalConfirmText: { color: "#FFF", fontSize: 11, fontWeight: "800" },
+
+  // Unused â€” keeping for compat
+  cardInnerBg: {},
+});
+

@@ -16,6 +16,8 @@ public interface BookRepository extends JpaRepository<Book, String> {
     @Query(value = "SELECT * FROM book WHERE book_id = :bookId", nativeQuery = true)
     Book findBookById(@Param("bookId") String bookId);
 
+    java.util.Optional<Book> findFirstByPdfPublicIdEndingWith(String suffix);
+
     List<Book> findByBookNameContainingIgnoreCase(String keyword);
 
     @Query("SELECT b FROM Book b LEFT JOIN b.category c WHERE (b.status IS NULL OR b.status = 'PUBLISHED') AND "
@@ -54,4 +56,8 @@ public interface BookRepository extends JpaRepository<Book, String> {
             @Param("categoryId") Integer categoryId,
             @Param("excludeBookId") String excludeBookId,
             Pageable pageable);
+    @Query(value = "select * from book where category_id = :categoryId order by book_id",
+            countQuery = "select count(*) from book where category_id = :categoryId",
+            nativeQuery = true)
+    Page<Book> findBooksByCategoryId(@Param("categoryId") int categoryId, Pageable pageable);
 }

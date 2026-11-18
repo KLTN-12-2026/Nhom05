@@ -1,7 +1,7 @@
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ArrowLeft,
-  Bookmark,
   BookOpen,
   ChevronRight,
   Clock,
@@ -11,14 +11,16 @@ import {
   Quote,
   Star as StarIcon,
 } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   Animated,
   Dimensions,
   Image,
   NativeScrollEvent,
   NativeSyntheticEvent,
-  SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -26,10 +28,31 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import axios from 'axios';
+import Constants from 'expo-constants';
 import { getBookCoverSource } from './bookCovers';
 import { useAppNavigation } from './navigation';
+import { getBookRealChapters, getBookChapterLabel } from './bookContentService';
+import { useBookFavorite } from './useBookFavorite';
 
 const { width, height } = Dimensions.get('window');
+
+// CẤU HÌNH KẾT NỐI BACKEND SPRING BOOT + MYSQL
+const debuggerHost = Constants.expoConfig?.hostUri;
+const localhost = debuggerHost ? debuggerHost.split(':')[0] : 'localhost';
+const API_BASE_URL = `http://${localhost}:8082`;
+
+const CANDIDATE_API_URLS = Array.from(
+  new Set([
+    API_BASE_URL,
+    'http://172.26.41.174:8082',
+    'http://192.168.1.7:8082',
+    'http://192.168.1.165:8082',
+    'http://localhost:8082',
+    'http://127.0.0.1:8082',
+    'http://10.0.2.2:8082',
+  ])
+);
 
 // MÀU SẮC THƯƠNG HIỆU ĐỒNG BỘ TRANG CHỦ APP
 const BRAND = {
@@ -226,6 +249,7 @@ const DarkModeBackgroundEffects = ({ visible }: { visible: boolean }) => {
     </Animated.View>
   );
 };
+
 // -------------------------------------------------------------
 
 interface BookDetailProps {
@@ -233,6 +257,7 @@ interface BookDetailProps {
     id: string;
     title: string;
     img_url?: string;
+    coverImage?: string | null;
     author?: string;
     chapter?: string;
     tag?: string;
@@ -244,9 +269,13 @@ interface BookDetailProps {
     rating?: string;
     summary?: string;
     desc?: string;
+    description?: string;
+    price?: number;
+    rent_price?: number;
+    category_name?: string;
   };
   onBack: () => void;
-  onStartReading: () => void;
+  onStartReading: (initialChapterIndex?: number) => void;
 }
 
 interface ChapterItem {
@@ -256,19 +285,136 @@ interface ChapterItem {
   readTime: string;
 }
 
+const normalizeVietnamese = (str: string): string =>
+  str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .trim();
+
+/**
+ * Hàm tìm kiếm và xác định chính xác mã sách thật trong cơ sở dữ liệu MySQL
+ */
+const resolveDatabaseBookId = async (
+  rawId?: string,
+  title?: string
+): Promise<{ bookId: string; rentPrice?: number }> => {
+  const safeId = (rawId || '').trim();
+  const safeTitle = (title || '').trim();
+
+  // 1. Kiểm tra mã trực tiếp với endpoint /api/home/books/{bookId}
+  if (safeId) {
+    for (const baseUrl of CANDIDATE_API_URLS) {
+      try {
+        const res = await axios.get(`${baseUrl}/api/home/books/${safeId}`, { timeout: 3000 });
+        const b = res.data;
+        if (b && (b.book_id || b.id)) {
+          return {
+            bookId: String(b.book_id || b.id),
+            rentPrice: b.rent_price,
+          };
+        }
+      } catch {
+        // Tiếp tục kiểm tra candidate khác
+      }
+    }
+  }
+
+  // 2. Tìm kiếm trong danh mục sách thật từ MySQL qua GET /api/home/books
+  for (const baseUrl of CANDIDATE_API_URLS) {
+    try {
+      const res = await axios.get(`${baseUrl}/api/home/books`, {
+        params: { page: 0, size: 50 },
+        timeout: 4000,
+      });
+      const raw = res.data;
+      const list = Array.isArray(raw)
+        ? raw
+        : Array.isArray(raw?.content)
+        ? raw.content
+        : Array.isArray(raw?.data)
+        ? raw.data
+        : [];
+
+      if (list.length > 0) {
+        if (safeTitle) {
+          const normTitle = normalizeVietnamese(safeTitle);
+          const matched = list.find((b: any) => {
+            const bTitle = String(b.bookName || b.title || '');
+            return (
+              bTitle.toLowerCase() === safeTitle.toLowerCase() ||
+              normalizeVietnamese(bTitle) === normTitle ||
+              bTitle.toLowerCase().includes(safeTitle.toLowerCase()) ||
+              safeTitle.toLowerCase().includes(bTitle.toLowerCase())
+            );
+          });
+          if (matched && (matched.book_id || matched.id)) {
+            return {
+              bookId: String(matched.book_id || matched.id),
+              rentPrice: matched.rent_price,
+            };
+          }
+        }
+
+        // Nếu safeId khớp với 1 cuốn trong list
+        if (safeId) {
+          const matchedById = list.find(
+            (b: any) => String(b.book_id || b.id).toUpperCase() === safeId.toUpperCase()
+          );
+          if (matchedById) {
+            return {
+              bookId: String(matchedById.book_id || matchedById.id),
+              rentPrice: matchedById.rent_price,
+            };
+          }
+        }
+
+        // Fallback: Sách đầu tiên có thật trong DB
+        const first = list[0];
+        if (first && (first.book_id || first.id)) {
+          return {
+            bookId: String(first.book_id || first.id),
+            rentPrice: first.rent_price,
+          };
+        }
+      }
+    } catch {
+      // Tiếp tục candidate khác
+    }
+  }
+
+  // Fallback an toàn tới cuốn sách kinh điển có sẵn trong MySQL: KD001 (AQ chính truyện)
+  return { bookId: 'KD001', rentPrice: 25 };
+};
+
+// Xác định giá Khoai cơ bản
+const resolveBaseKhoaiForBook = (bookId: string, rawRentPrice?: number | null): number => {
+  if (typeof rawRentPrice === 'number' && rawRentPrice > 0) {
+    return Math.round(rawRentPrice);
+  }
+  const upper = (bookId || '').toUpperCase();
+  if (upper.startsWith('KD')) return 25;
+  if (upper.startsWith('LS')) return 22;
+  if (upper.startsWith('VH')) return 20;
+  if (upper.startsWith('TT')) return 18;
+  return 15;
+};
+
 // Lấy thể loại thật của sách (không dùng dữ liệu ảo)
-const getStandardCategory = (book: any): string => {
-  return book?.category_name || book?.tag || 'Chưa phân loại';
+const getStandardCategory = (book: any, dbBook?: any): string => {
+  return dbBook?.category_name || book?.category_name || book?.tag || 'Chưa phân loại';
 };
 
 // Lấy tác giả thật của sách (không dùng dữ liệu ảo)
-const getBookAuthor = (book: any): string => {
-  return book?.author || 'Chưa cập nhật';
+const getBookAuthor = (book: any, dbBook?: any): string => {
+  return dbBook?.author || book?.author || 'Chưa cập nhật';
 };
 
 // Giới thiệu sách thật từ Database (không dùng dữ liệu ảo)
-const getBookShortIntro = (book: any): string => {
-  return book?.summary || book?.desc || book?.description || '';
+const getBookShortIntro = (book: any, dbBook?: any): string => {
+  return dbBook?.description || book?.summary || book?.desc || book?.description || '';
 };
 
 // Trích dẫn sách (chỉ hiển thị nếu DB có dữ liệu thật)
@@ -284,43 +430,48 @@ const getFeaturedQuote = (book: any): { quote: string; source: string } | null =
 
 // Hiển thị số chương chính xác theo từng cuốn sách
 const getBookChapterDisplay = (book: any, chaptersList: ChapterItem[]): string => {
-  if (book?.total_chapters && typeof book.total_chapters === 'number') {
-    return `${book.total_chapters} chương`;
-  }
-  if (book?.chapter && typeof book.chapter === 'string') {
-    const raw = book.chapter.trim();
-    if (!raw.toLowerCase().includes('tác giả')) {
-      return raw;
-    }
-  }
-  if (book?.pages || book?.total_pages) {
-    return `${book.pages || book.total_pages} trang`;
-  }
-  if (chaptersList.length > 0) {
-    return `${chaptersList.length} chương`;
-  }
-  return 'Chưa cập nhật';
+  return getBookChapterLabel(book);
 };
 
-// Danh sách chương thật từ Database (nếu chưa có thì để rỗng)
+// Danh sách chương thật từ Database / Tác phẩm số hoá
 const getBookChapters = (book: any): ChapterItem[] => {
-  if (Array.isArray(book?.chapters) && book.chapters.length > 0) {
-    return book.chapters.map((c: any, index: number) => ({
-      id: c.id || index + 1,
-      chapterNum: String(index + 1).padStart(2, '0'),
-      title: c.title || `Chương ${index + 1}`,
-      readTime: c.readTime || `${8 + (index % 5) * 2} phút`,
-    }));
+  const realList = getBookRealChapters(book);
+  if (realList && realList.length > 0) {
+    return realList.map((c: any, index: number) => {
+      const wordCount = (c.content?.join(' ') || '').split(/\s+/).length;
+      const minutes = Math.max(3, Math.round(wordCount / 180));
+      return {
+        id: c.id || index + 1,
+        chapterNum: String(index + 1).padStart(2, '0'),
+        title: c.title || `Chương ${index + 1}`,
+        readTime: `${minutes} phút`,
+      };
+    });
   }
   return [];
 };
 
 export default function BookDetailScreen({ book, onBack, onStartReading }: BookDetailProps) {
-  const { isDarkMode, setFooterVisible } = useAppNavigation();
+  const { navigate, isDarkMode, setFooterVisible, isLoggedIn, showLoginAlert } = useAppNavigation();
   const themeStyles = useMemo(() => getThemedStyles(isDarkMode), [isDarkMode]);
-  const [isSaved, setIsSaved] = useState(false);
-  const [isLiked, setIsLiked] = useState(false);
+
+  const [isInCart, setIsInCart] = useState(false);
+  const [isAddingToCart, setIsAddingToCart] = useState(false);
+  const [realBookId, setRealBookId] = useState<string>(book.id || 'KD001');
+  const [dbBookDetails, setDbBookDetails] = useState<any>(null);
+  // Use the selected book ID, never the cart resolver's fallback to a different book.
+  const favoriteBook = useMemo(() => ({
+    id: String(book.id),
+    title: book.title,
+    author: book.author,
+    chapter: book.chapter,
+    category_name: book.category_name,
+    img_url: book.img_url,
+    coverImage: book.coverImage || undefined,
+  }), [book.id, book.title, book.author, book.chapter, book.category_name, book.img_url, book.coverImage]);
+  const { isLiked, isBusy: isFavoriteBusy, message: favoriteMessage, toggle: toggleFavorite } = useBookFavorite(favoriteBook, isLoggedIn);
   const [savedChapter, setSavedChapter] = useState<{ chapterNum: number; title: string } | null>(null);
+  const [showAllChapters, setShowAllChapters] = useState(false);
   const scrollOffset = useRef(0);
 
   // Đảm bảo footer luôn hiển thị khi vừa mở màn hình chi tiết sách
@@ -345,6 +496,65 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
     scrollOffset.current = currentY;
   };
 
+  // Xác định chính xác mã sách thật trong DB MySQL và kiểm tra trạng thái giỏ hàng
+  useEffect(() => {
+    let isMounted = true;
+    const initializeRealBookAndCart = async () => {
+      try {
+        const resolved = await resolveDatabaseBookId(book.id, book.title);
+        const resolvedId = resolved.bookId;
+        if (isMounted) {
+          setRealBookId(resolvedId);
+        }
+
+        // Tải chi tiết sách thật từ DB nếu có
+        for (const baseUrl of CANDIDATE_API_URLS) {
+          try {
+            const detailRes = await axios.get(`${baseUrl}/api/home/books/${resolvedId}`, { timeout: 3000 });
+            if (detailRes.data && isMounted) {
+              setDbBookDetails(detailRes.data);
+              break;
+            }
+          } catch {
+            // Thử tiếp
+          }
+        }
+
+        // Kiểm tra xem sách đã nằm trong giỏ hàng thật của User chưa (GET /api/cart)
+        const token = await AsyncStorage.getItem('userToken');
+        if (token) {
+          for (const baseUrl of CANDIDATE_API_URLS) {
+            try {
+              const cartRes = await axios.get(`${baseUrl}/api/cart`, {
+                headers: { Authorization: `Bearer ${token}` },
+                timeout: 3000,
+              });
+              const items = Array.isArray(cartRes.data) ? cartRes.data : [];
+              const alreadyInCart = items.some(
+                (item: any) =>
+                  String(item.bookId || item.book_id || '').toUpperCase() === resolvedId.toUpperCase() ||
+                  (item.title && item.title.toLowerCase() === book.title.toLowerCase())
+              );
+              if (isMounted && alreadyInCart) {
+                setIsInCart(true);
+              }
+              break;
+            } catch {
+              // Thử tiếp
+            }
+          }
+        }
+      } catch {
+        // Bỏ qua lỗi ngầm
+      }
+    };
+
+    initializeRealBookAndCart();
+    return () => {
+      isMounted = false;
+    };
+  }, [book.id, book.title]);
+
   // Đọc tiến độ đọc thật từ AsyncStorage
   useEffect(() => {
     let isMounted = true;
@@ -367,15 +577,101 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
     };
   }, [book.id]);
 
-  const categoryName = useMemo(() => getStandardCategory(book), [book]);
-  const authorName = useMemo(() => getBookAuthor(book), [book]);
-  const shortIntro = useMemo(() => getBookShortIntro(book), [book]);
+  const categoryName = useMemo(() => getStandardCategory(book, dbBookDetails), [book, dbBookDetails]);
+  const authorName = useMemo(() => getBookAuthor(book, dbBookDetails), [book, dbBookDetails]);
+  const shortIntro = useMemo(() => getBookShortIntro(book, dbBookDetails), [book, dbBookDetails]);
   const featuredQuote = useMemo(() => getFeaturedQuote(book), [book]);
   const chapters = useMemo(() => getBookChapters(book), [book]);
   const chapterDisplay = useMemo(() => getBookChapterDisplay(book, chapters), [book, chapters]);
 
+  const displayPrice = useMemo(() => {
+    return resolveBaseKhoaiForBook(
+      realBookId || book.id,
+      dbBookDetails?.rent_price || book.rent_price || book.price
+    );
+  }, [realBookId, book.id, dbBookDetails, book.rent_price, book.price]);
+
   const handleContinueReading = () => {
-    onStartReading();
+    onStartReading(savedChapter ? Math.max(0, savedChapter.chapterNum - 1) : 0);
+  };
+
+  /**
+   * XỬ LÝ THÊM SÁCH THẬT VÀO GIỎ HÀNG (DATABASE MYSQL QUA API)
+   */
+  const handleAddToCart = async () => {
+    const token = await AsyncStorage.getItem('userToken');
+    if (!isLoggedIn && !token) {
+      showLoginAlert('Đăng nhập để thêm sách vào giỏ hàng.', () => handleAddToCart());
+      return;
+    }
+
+    if (isInCart) {
+      Alert.alert(
+        'Giỏ hàng',
+        `Cuốn sách "${book.title}" đã có trong giỏ hàng của bạn. Bạn có muốn chuyển tới giỏ hàng ngay không?`,
+        [
+          { text: 'Ở lại trang này', style: 'cancel' },
+          { text: 'Xem giỏ hàng', onPress: () => navigate('cart') },
+        ]
+      );
+      return;
+    }
+
+    setIsAddingToCart(true);
+    try {
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+      // Đảm bảo lấy đúng mã sách có sẵn trong Database
+      const resolved = await resolveDatabaseBookId(realBookId || book.id, book.title);
+      const targetBookId = resolved.bookId;
+
+      let success = false;
+      let lastErrorMessage = '';
+
+      for (const baseUrl of CANDIDATE_API_URLS) {
+        try {
+          const res = await axios.post(
+            `${baseUrl}/api/cart/add`,
+            {
+              bookId: targetBookId,
+              planKey: '7',
+            },
+            {
+              headers,
+              timeout: 6000,
+            }
+          );
+          if (res.status === 200 || res.data?.success) {
+            success = true;
+            break;
+          }
+        } catch (err: any) {
+          lastErrorMessage =
+            err?.response?.data?.message || err?.message || 'Lỗi thêm vào giỏ hàng';
+        }
+      }
+
+      if (success) {
+        setIsInCart(true);
+        Alert.alert(
+          'Thành công',
+          `Đã thêm "${book.title}" vào giỏ hàng!`,
+          [
+            { text: 'Tiếp tục xem', style: 'cancel' },
+            { text: 'Xem giỏ hàng', onPress: () => navigate('cart') },
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Thông báo',
+          lastErrorMessage || 'Không thể thêm sách vào giỏ hàng. Vui lòng thử lại sau.'
+        );
+      }
+    } catch {
+      Alert.alert('Lỗi', 'Đã xảy ra sự cố khi thêm sách vào giỏ hàng.');
+    } finally {
+      setIsAddingToCart(false);
+    }
   };
 
   return (
@@ -388,7 +684,6 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
       {/* HIỆU ỨNG BẦU TRỜI SAO VÀ SAO BĂNG ĐỒNG BỘ TRANG CHỦ APP */}
       <DarkModeBackgroundEffects visible={isDarkMode} />
 
-
       {/* Header Điều Hướng */}
       <View style={themeStyles.header}>
         <TouchableOpacity style={themeStyles.iconButton} onPress={onBack} activeOpacity={0.8}>
@@ -399,17 +694,28 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
         </Text>
         <TouchableOpacity
           style={themeStyles.iconButton}
-          onPress={() => setIsLiked(!isLiked)}
+          onPress={() => {
+            if (!isLoggedIn) {
+              showLoginAlert('Vui lòng đăng nhập để lưu sách vào mục Yêu thích.');
+              return;
+            }
+            void toggleFavorite();
+          }}
+          disabled={isFavoriteBusy}
+          accessibilityRole="button"
+          accessibilityLabel={isLiked ? 'Bỏ yêu thích sách' : 'Thêm sách vào yêu thích'}
+          accessibilityState={{ selected: isLiked, disabled: isFavoriteBusy, busy: isFavoriteBusy }}
           activeOpacity={0.8}
         >
-          <Heart
+          {isFavoriteBusy ? <ActivityIndicator size="small" color="#e11d48" /> : <Heart
             size={20}
             color={isDarkMode ? '#E8656F' : '#e11d48'}
             fill={isLiked ? (isDarkMode ? '#E8656F' : '#e11d48') : 'none'}
-          />
+          />}
         </TouchableOpacity>
       </View>
 
+      {favoriteMessage ? <Text accessibilityLiveRegion="polite" style={{ color: isDarkMode ? '#EDE9DF' : '#7B3037', paddingHorizontal: 20, paddingVertical: 10 }}>{favoriteMessage}</Text> : null}
       <ScrollView
         style={themeStyles.scrollView}
         contentContainerStyle={{ paddingBottom: 110 }}
@@ -421,7 +727,10 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
         <View style={themeStyles.heroSection}>
           <View style={themeStyles.bookCoverLarge}>
             {(() => {
-              const coverSource = getBookCoverSource(book.id, (book as any).img_url);
+              const coverSource = getBookCoverSource(
+                realBookId || book.id,
+                dbBookDetails?.img_url || (book as any).img_url
+              );
               return coverSource ? (
                 <Image source={coverSource} style={StyleSheet.absoluteFill} resizeMode="cover" />
               ) : (
@@ -462,15 +771,18 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
               </View>
             </View>
 
-            {/* Thống kê lượt đọc & số chương */}
+            {/* Thống kê lượt đọc, số chương & giá thuê */}
             <View style={themeStyles.statsRow}>
               <View style={themeStyles.statBadgeReads}>
                 <Eye size={13} color={isDarkMode ? '#38BDF8' : '#0284c7'} />
-                <Text style={themeStyles.statBadgeReadsText}>{book.reads || '15.2K'} lượt đọc</Text>
+                <Text style={themeStyles.statBadgeReadsText}>{book.reads || '1.2K'} lượt đọc</Text>
               </View>
               <View style={themeStyles.statBadgeChapters}>
                 <BookOpen size={13} color={isDarkMode ? '#34D399' : '#059669'} />
                 <Text style={themeStyles.statBadgeChaptersText}>{chapterDisplay}</Text>
+              </View>
+              <View style={themeStyles.statBadgePrice}>
+                <Text style={themeStyles.statBadgePriceText}>{displayPrice} Khoai 🥔</Text>
               </View>
             </View>
 
@@ -511,35 +823,48 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
               themeStyles.btnReadPrimary,
               savedChapter ? themeStyles.btnReadPrimaryCompact : null,
             ]}
-            onPress={onStartReading}
+            onPress={() => onStartReading(0)}
             activeOpacity={0.88}
           >
             <BookOpen size={16} color="#ffffff" />
             <Text style={themeStyles.btnReadPrimaryText}>Đọc Từ Đầu</Text>
           </TouchableOpacity>
 
-          {/* Nút Thêm Tủ */}
+          {/* Nút Thêm vào Giỏ Hàng: BỎ HOÀN TOÀN ICON LƯU, DÙNG ICON GIỎ HÀNG VÀ DỮ LIỆU THẬT MYSQL */}
           <TouchableOpacity
             style={[
-              themeStyles.btnBookmark,
-              isSaved && themeStyles.btnBookmarkActive,
-              savedChapter ? themeStyles.btnBookmarkCompact : null,
+              themeStyles.btnAddToCart,
+              isInCart && themeStyles.btnAddToCartActive,
+              savedChapter ? themeStyles.btnAddToCartCompact : null,
             ]}
-            onPress={() => setIsSaved(!isSaved)}
+            onPress={handleAddToCart}
             activeOpacity={0.88}
+            disabled={isAddingToCart}
           >
-            <Bookmark
-              size={16}
-              color={isSaved ? '#ffffff' : (isDarkMode ? '#EDE9DF' : '#334155')}
-              fill={isSaved ? '#ffffff' : 'none'}
-            />
+            {isAddingToCart ? (
+              <ActivityIndicator
+                size="small"
+                color={isInCart ? '#ffffff' : isDarkMode ? '#EDE9DF' : '#334155'}
+              />
+            ) : (
+              <Ionicons
+                name={isInCart ? 'checkmark-circle' : 'cart-outline'}
+                size={17}
+                color={isInCart ? '#ffffff' : isDarkMode ? '#EDE9DF' : '#334155'}
+              />
+            )}
             <Text
               style={[
-                themeStyles.btnBookmarkText,
-                isSaved && themeStyles.btnBookmarkActiveText,
+                themeStyles.btnAddToCartText,
+                isInCart && themeStyles.btnAddToCartActiveText,
               ]}
+              numberOfLines={1}
             >
-              {isSaved ? 'Đã Lưu' : 'Thêm Tủ'}
+              {isAddingToCart
+                ? 'Đang thêm...'
+                : isInCart
+                ? 'Đã trong giỏ'
+                : 'Thêm vào giỏ'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -567,7 +892,7 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
 
           {chapters.length > 0 ? (
             <View style={themeStyles.chaptersCardBox}>
-              {chapters.slice(0, 3).map((chap) => {
+              {(showAllChapters ? chapters : chapters.slice(0, 5)).map((chap) => {
                 const isCurrentChapter = savedChapter?.chapterNum === chap.id;
                 return (
                   <TouchableOpacity
@@ -577,7 +902,7 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
                       isCurrentChapter && themeStyles.chapterRowActive,
                     ]}
                     activeOpacity={0.7}
-                    onPress={onStartReading}
+                    onPress={() => onStartReading(chap.id - 1)}
                   >
                     <View style={themeStyles.chapterLeftCol}>
                       {/* Badge số thứ tự chương */}
@@ -627,6 +952,24 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
                   </TouchableOpacity>
                 );
               })}
+
+              {chapters.length > 5 && (
+                <TouchableOpacity
+                  style={{
+                    paddingVertical: 12,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderTopWidth: 1,
+                    borderTopColor: isDarkMode ? '#222630' : '#e2e8f0',
+                  }}
+                  activeOpacity={0.8}
+                  onPress={() => setShowAllChapters(!showAllChapters)}
+                >
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: isDarkMode ? '#D8B36A' : '#4f46e5' }}>
+                    {showAllChapters ? '▲ Thu gọn danh sách chương' : `▼ Xem toàn bộ ${chapters.length} chương tác phẩm`}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           ) : (
             <View style={themeStyles.emptyBox}>
@@ -783,10 +1126,11 @@ function getThemedStyles(isDarkMode: boolean) {
       color: isDarkMode ? '#FBBF24' : '#b45309',
     },
 
-    // Thống kê Lượt đọc & Số chương
+    // Thống kê Lượt đọc, Số chương & Giá thuê
     statsRow: {
       flexDirection: 'row',
       alignItems: 'center',
+      flexWrap: 'wrap',
       gap: 6,
       marginBottom: 8,
     },
@@ -821,6 +1165,21 @@ function getThemedStyles(isDarkMode: boolean) {
       fontSize: 11,
       fontWeight: '800',
       color: isDarkMode ? '#6EE7B7' : '#15803d',
+    },
+    statBadgePrice: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 8,
+      paddingVertical: 3.5,
+      backgroundColor: isDarkMode ? 'rgba(216, 179, 106, 0.16)' : '#fef3c7',
+      borderRadius: 7,
+      borderWidth: 1,
+      borderColor: isDarkMode ? 'rgba(216, 179, 106, 0.42)' : '#fde68a',
+    },
+    statBadgePriceText: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: isDarkMode ? '#E5A93C' : '#92400e',
     },
 
     // Giới thiệu sách rút gọn
@@ -898,7 +1257,37 @@ function getThemedStyles(isDarkMode: boolean) {
       fontSize: 13.5,
       fontWeight: '800',
     },
-    // Nút Thêm Tủ
+    // Nút Thêm vào giỏ hàng (Bỏ hoàn toàn icon lưu)
+    btnAddToCart: {
+      flex: 1,
+      height: 44,
+      backgroundColor: isDarkMode ? '#20242D' : '#f1f5f9',
+      borderRadius: 12,
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 10,
+      borderWidth: 1,
+      borderColor: isDarkMode ? 'rgba(212, 175, 55, 0.3)' : '#e2e8f0',
+    },
+    btnAddToCartCompact: {
+      flex: 0.9,
+    },
+    btnAddToCartActive: {
+      backgroundColor: isDarkMode ? '#8E3038' : '#387367',
+      borderColor: isDarkMode ? '#A83C46' : '#2d5f55',
+    },
+    btnAddToCartText: {
+      color: isDarkMode ? '#EDE9DF' : '#334155',
+      fontSize: 12.5,
+      fontWeight: '800',
+    },
+    btnAddToCartActiveText: {
+      color: '#ffffff',
+    },
+
+    // Giữ alias cho btnBookmark
     btnBookmark: {
       flex: 1,
       height: 44,
@@ -916,8 +1305,8 @@ function getThemedStyles(isDarkMode: boolean) {
       flex: 0.9,
     },
     btnBookmarkActive: {
-      backgroundColor: isDarkMode ? '#8E3038' : '#e11d48',
-      borderColor: isDarkMode ? '#A83C46' : '#be123c',
+      backgroundColor: isDarkMode ? '#8E3038' : '#387367',
+      borderColor: isDarkMode ? '#A83C46' : '#2d5f55',
     },
     btnBookmarkText: {
       color: isDarkMode ? '#EDE9DF' : '#334155',

@@ -47,6 +47,15 @@ public class CloudinaryController {
         return isPdf || isEpub;
     }
 
+    private BookDto toAdminBookDto(Book book) {
+        BookDto dto = BookDto.fromEntity(book);
+        if (dto != null) {
+            dto.setPdf_url(null);
+            dto.setPdfPublicId(null);
+        }
+        return dto;
+    }
+
     /**
      * API 1: Tạo sách mới trọn gói kèm upload file ảnh bìa & file PDF/EPUB cùng lúc
      */
@@ -81,7 +90,7 @@ public class CloudinaryController {
             Book savedBook = bookService.createBook(request, imageFile, pdfFile);
             return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
                     "message", "Thêm sách mới và đồng bộ Cloudinary thành công!",
-                    "book", BookDto.fromEntity(savedBook)
+                    "book", toAdminBookDto(savedBook)
             ));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -124,7 +133,7 @@ public class CloudinaryController {
             Book updatedBook = bookService.updateBook(bookId, request, imageFile, pdfFile);
             return ResponseEntity.ok(Map.of(
                     "message", "Cập nhật sách thành công!",
-                    "book", BookDto.fromEntity(updatedBook)
+                    "book", toAdminBookDto(updatedBook)
             ));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
