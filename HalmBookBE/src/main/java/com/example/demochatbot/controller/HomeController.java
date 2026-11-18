@@ -21,6 +21,7 @@ import com.example.demochatbot.dto.CheckoutRequest;
 import com.example.demochatbot.dto.CheckoutResponse;
 import com.example.demochatbot.dto.RentedBookDto;
 import com.example.demochatbot.model.Book;
+import com.example.demochatbot.repository.BookRepository;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.http.HttpHeaders;
@@ -33,6 +34,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -53,6 +56,9 @@ public class HomeController {
     private BookService bookService;
 
     @Autowired
+    private BookRepository bookRepository;
+
+    @Autowired
     private CartService cartService;
 
     @Autowired
@@ -67,11 +73,41 @@ public class HomeController {
     @Autowired
     private TierService tierService;
 
+    private ResponseEntity<?> requireBookAccess(String bookId) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()
+                || "anonymousUser".equals(authentication.getPrincipal())) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Vui lòng đăng nhập và thuê sách để đọc toàn văn."));
+        }
+        try {
+            int accountId = customerService.getCurrentAccountId();
+            if (accountId <= 0 || !orderService.checkBookAccess(accountId, bookId)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(Map.of("message", "Bạn cần thuê sách để đọc toàn văn tác phẩm."));
+            }
+            return null;
+        } catch (RuntimeException exception) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Vui lòng đăng nhập và thuê sách để đọc toàn văn."));
+        }
+    }
+
+    private BookDto toPublicBookDto(Book book) {
+        BookDto dto = BookDto.fromEntity(book);
+        if (dto != null) {
+            dto.setPdf_url(null);
+            dto.setPdfPublicId(null);
+        }
+        return dto;
+    }
+
     /**
      * API lấy danh sách sách (Đầy đủ)
      */
     @GetMapping("/books")
     public ResponseEntity<Page<BookDto>> getBooks(
+            @RequestParam(value = "categoryId", required = false) Integer categoryId,
             @RequestParam(value = "pageNumber", required = false) Integer pageNumber,
             @RequestParam(value = "page", required = false) Integer page,
             @RequestParam(value = "pageSize", required = false) Integer pageSize,
@@ -80,8 +116,10 @@ public class HomeController {
         int resolvedPage = pageNumber != null ? pageNumber : (page != null ? page : pageable.getPageNumber());
         int resolvedSize = pageSize != null ? pageSize : (size != null ? size : pageable.getPageSize());
         Pageable resolvedPageable = PageRequest.of(Math.max(0, resolvedPage), Math.max(1, resolvedSize), pageable.getSort());
-        Page<BookDto> books = bookService.findAllBook(resolvedPageable)
-                .map(BookDto::fromEntity);
+        Page<BookDto> books = (categoryId == null
+                ? bookService.findAllBook(resolvedPageable)
+                : bookRepository.findBooksByCategoryId(categoryId, resolvedPageable))
+                .map(this::toPublicBookDto);
         return ResponseEntity.ok(books);
     }
 
@@ -131,7 +169,7 @@ public class HomeController {
      */
     @GetMapping("/books/{bookId}")
     public ResponseEntity<?> getBookDetail(@PathVariable("bookId") String bookId) {
-        BookDto book = bookService.findBookDetailById(bookId);
+        BookDto book = toPublicBookDto(bookService.findBookById(bookId));
         if (book == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body("Không tìm thấy thông tin cuốn sách với mã: " + bookId);
@@ -157,9 +195,11 @@ public class HomeController {
      */
     @GetMapping("/books/{bookId}/read-url")
     public ResponseEntity<?> getBookReadUrl(@PathVariable("bookId") String bookId) {
+        ResponseEntity<?> accessDenied = requireBookAccess(bookId);
+        if (accessDenied != null) return accessDenied;
         try {
             String readUrl = bookService.getBookReadUrl(bookId);
-            BookDto bookDto = bookService.findBookDetailById(bookId);
+            BookDto bookDto = toPublicBookDto(bookService.findBookById(bookId));
             String format = bookDto != null && bookDto.getFileFormat() != null ? bookDto.getFileFormat() : "PDF";
             return ResponseEntity.ok(Map.of(
                     "book_id", bookId,
@@ -180,6 +220,8 @@ public class HomeController {
      */
     @GetMapping("/books/{bookId}/content")
     public ResponseEntity<?> getBookContent(@PathVariable("bookId") String bookId) {
+        ResponseEntity<?> accessDenied = requireBookAccess(bookId);
+        if (accessDenied != null) return accessDenied;
         try {
             Book book = bookService.findBookById(bookId);
             if (book == null) {

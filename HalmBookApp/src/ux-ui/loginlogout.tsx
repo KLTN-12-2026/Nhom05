@@ -27,9 +27,10 @@ type ScreenState = 'login' | 'register' | 'forgot' | 'otp' | 'reset';
 
 interface AuthProps {
   onLoginSuccess: () => void;
+  onCancel?: () => void;
 }
 
-export default function Auth({ onLoginSuccess }: AuthProps) {
+export default function Auth({ onLoginSuccess, onCancel }: AuthProps) {
   const {
     isDarkMode,
     setIsLoggedIn,
@@ -345,18 +346,29 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
 
   const renderHeader = () => (
     <View style={styles.headerContainer}>
+      {onCancel && (
+        <TouchableOpacity
+          onPress={onCancel}
+          style={{ position: 'absolute', top: 0, right: 0, zIndex: 2, padding: 10 }}
+          accessibilityRole="button"
+          accessibilityLabel="Đóng đăng nhập"
+          hitSlop={8}
+        >
+          <Ionicons name="close" size={24} color={colors.textPrimary} />
+        </TouchableOpacity>
+      )}
       <Text style={[styles.logoText, { color: colors.textPrimary }]}>
         HALM <Text style={{ color: colors.accent }}>BOOK</Text>
       </Text>
       <Text style={[styles.sloganText, { color: colors.textSecondary }]}>
-        Khám phá thế giới qua từng trang sách
+        Hãy đăng nhập để tiếp tục trải nghiệm!
       </Text>
     </View>
   );
 
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: colors.screenBg }]}
+      style={[styles.container, onCancel && styles.popupContainer, { backgroundColor: colors.screenBg }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <StatusBar
@@ -379,7 +391,9 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
       />
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
+        style={onCancel ? styles.popupScroll : undefined}
+        contentContainerStyle={[styles.scrollContent, onCancel && styles.popupScrollContent]}
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         {renderHeader()}
@@ -558,6 +572,15 @@ export default function Auth({ onLoginSuccess }: AuthProps) {
           {/* ===================== MÀN HÌNH ĐĂNG KÝ ===================== */}
           {currentScreen === 'register' && (
             <View style={styles.formContainer}>
+              <TouchableOpacity
+                onPress={() => setCurrentScreen('login')}
+                style={styles.backBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Quay lại đăng nhập"
+                hitSlop={8}
+              >
+                <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
+              </TouchableOpacity>
               <Text style={[styles.authTitle, { color: colors.textPrimary }]}>
                 Đăng ký
               </Text>
@@ -918,6 +941,21 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  popupContainer: {
+    flex: 0,
+    flexShrink: 1,
+  },
+  popupScroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+  },
+  popupScrollContent: {
+    flexGrow: 0,
+    justifyContent: 'flex-start',
+    paddingTop: 16,
+    paddingBottom: 16,
+    paddingHorizontal: 12,
+  },
   bgCircleTop: {
     position: 'absolute',
     top: -100,
@@ -989,7 +1027,7 @@ const styles = StyleSheet.create({
   },
   headerContainer: {
     alignItems: 'center',
-    marginBottom: 28,
+    marginBottom: 12,
   },
   logoText: {
     fontSize: 32,
@@ -999,6 +1037,7 @@ const styles = StyleSheet.create({
   sloganText: {
     fontSize: 13,
     marginTop: 5,
+    textAlign: 'center',
   },
   card: {
     borderRadius: 20,

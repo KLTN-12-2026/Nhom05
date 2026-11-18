@@ -11,6 +11,7 @@ export type AppScreen =
   | 'bookshelf'
   | 'profile'
   | 'categories'
+  | 'genreBooks'
   | 'search'
   | 'cart'
   | 'transactions'
@@ -49,9 +50,18 @@ export type AppLanguage = 'vi' | 'en';
 export interface NavigationOptions {
   initialBookshelfTab?: 'dangdoc' | 'dangthue' | 'dathue' | 'yeuthich' | 'tailen' | 'duoctang';
 }
+export interface GenreBooksParams {
+  categoryId: number;
+  categoryName: string;
+}
+
+export interface AppNavigate {
+  (screen: 'genreBooks', params: GenreBooksParams): void;
+  (screen: Exclude<AppScreen, 'genreBooks'>, book?: BookData): void;
+}
 
 export interface NavigationContextValue {
-  navigate: (screen: AppScreen, book?: BookData, options?: NavigationOptions) => void;
+  navigate: AppNavigate;
   navigateTab: (screen: AppScreen) => void;
   goBack: () => void;
   logout: () => void;
@@ -73,7 +83,7 @@ export interface NavigationContextValue {
   isLoggedIn: boolean;
   setIsLoggedIn?: (val: boolean) => void;
   // showLoginAlert: Hàm hiển thị popup thông báo với dòng nút 'Đăng nhập ngay'
-  showLoginAlert: (message: string) => void;
+  showLoginAlert: (message: string, onAuthenticated?: () => void) => void;
 
   // ============================================================================
   // [GIẢI THÍCH CODE]: Ảnh đại diện và chữ cái đầu đồng bộ cho các màn được chỉ định

@@ -18,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import Constants from 'expo-constants';
-import { BookData, useAppNavigation } from './navigation';
+import { BookData, useAppNavigation, useAutoHideFooter } from './navigation';
 import { getBookChapterLabel } from './bookContentService';
 import {
   RENTAL_DURATION_OPTIONS,
@@ -29,6 +29,7 @@ import {
 } from './rentalService';
 import { getUserItem, KEY_POTATO_BALANCE, setUserItem } from './userStorage';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -224,8 +225,20 @@ const resolveSummaryForBook = (
 };
 
 export default function GioHang() {
-  const { navigate, navigateTab, goBack, isDarkMode, isLoggedIn, showLoginAlert } =
-    useAppNavigation();
+  const {
+    navigate,
+    navigateTab,
+    goBack,
+    isDarkMode,
+    isLoggedIn,
+    showLoginAlert,
+    isFooterVisible,
+  } = useAppNavigation();
+  const { onScroll, showFooter } = useAutoHideFooter();
+  const insets = useSafeAreaInsets();
+  const footerVisible = isFooterVisible !== false;
+  // Footer reserves 8px top padding, a 56px tab bar, and the bottom safe-area inset.
+  const footerSlotHeight = 64 + Math.max(insets.bottom, 6);
 
   // ==============================================================
   // STATE QUẢN LÝ GIỎ HÀNG THẬT & TƯƠNG TÁC
@@ -244,6 +257,12 @@ export default function GioHang() {
 
   // State cho Popup Xem Nhanh Sách (Quick View Modal ~65% màn hình)
   const [quickViewItem, setQuickViewItem] = useState<CartItemModel | null>(null);
+
+  useEffect(() => {
+    if (cartItems.length === 0) {
+      showFooter();
+    }
+  }, [cartItems.length, showFooter]);
 
   // ==============================================================
   // BẢNG MÀU DUAL-THEME (HALMBOOK TOKEN)
@@ -709,7 +728,7 @@ export default function GioHang() {
 
     const token = await AsyncStorage.getItem('userToken');
     if (!isLoggedIn && !token) {
-      showLoginAlert('Vui lòng đăng nhập tài khoản để thực hiện thuê sách bằng Khoai.');
+      showLoginAlert('Vui lòng đăng nhập để tiếp tục thuê sách bằng Khoai.');
       return;
     }
 
@@ -1029,7 +1048,7 @@ export default function GioHang() {
                 borderColor: colors.cardBorder,
               },
             ]}
-            onPress={() => navigateTab('offers')}
+            onPress={() => navigate('payment')}
             activeOpacity={0.8}
           >
             <Text style={[styles.walletBadgeText, { color: colors.accent }]}>
@@ -1093,6 +1112,8 @@ export default function GioHang() {
           renderItem={renderCartItem}
           contentContainerStyle={styles.listContentContainer}
           showsVerticalScrollIndicator={false}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
         />
       )}
 
@@ -1106,6 +1127,7 @@ export default function GioHang() {
             {
               backgroundColor: colors.cardBg,
               borderTopColor: colors.cardBorder,
+              bottom: footerVisible ? 0 : -footerSlotHeight + Math.max(insets.bottom, 6),
             },
           ]}
         >
@@ -1759,7 +1781,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 78,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
