@@ -35,6 +35,7 @@ interface ScreenRoute extends NavigationOptions {
   name: AppScreen;
   book?: BookData;
   genre?: GenreBooksParams;
+  initialBookshelfTab?: 'dangdoc' | 'dangthue' | 'dathue' | 'yeuthich' | 'tailen' | 'duoctang';
 }
 
 const SCREENS_WITH_SHARED_HEADER: AppScreen[] = [
@@ -287,6 +288,7 @@ export default function App() {
   const navigate: AppNavigate = useCallback((name: AppScreen, params?: BookData | GenreBooksParams, options?: NavigationOptions) => {
     const book = name === 'genreBooks' ? undefined : params as BookData | undefined;
     const genre = name === 'genreBooks' ? params as GenreBooksParams : undefined;
+    const initialBookshelfTab = options?.initialBookshelfTab;
     if (name === 'auth') {
       setAuthModal({ visible: true, message: lang === 'en' ? 'Sign in or create an account to continue.' : 'Đăng nhập hoặc tạo tài khoản để tiếp tục.', showForm: true });
       pendingAuthAction.current = null;
@@ -303,34 +305,34 @@ export default function App() {
       if (name === 'bookshelf') {
         showLoginAlert(lang === 'en' ? 'Please log in to use bookshelf feature' : 'Bạn phải đăng nhập để dùng chức năng tủ sách', () => {
           setIsFooterVisible(true);
-          setRoutes((current) => [...current, { name, book, ...options }]);
+          setRoutes((current) => [...current, { name, book, initialBookshelfTab }]);
         });
         return;
       }
       if (name === 'profile') {
         showLoginAlert(lang === 'en' ? 'Please log in to use profile feature' : 'Bạn phải đăng nhập để dùng chức năng trang cá nhân', () => {
           setIsFooterVisible(true);
-          setRoutes((current) => [...current, { name, book, ...options }]);
+          setRoutes((current) => [...current, { name, book, initialBookshelfTab }]);
         });
         return;
       }
       if (name === 'cart') {
         showLoginAlert(lang === 'en' ? 'Please log in to use cart feature' : 'Bạn phải đăng nhập để dùng chức năng giỏ hàng', () => {
           setIsFooterVisible(true);
-          setRoutes((current) => [...current, { name, book, ...options }]);
+          setRoutes((current) => [...current, { name, book, initialBookshelfTab }]);
         });
         return;
       }
       if (name === 'payment') {
         showLoginAlert(lang === 'en' ? 'Please log in to proceed to payment' : 'Bạn phải đăng nhập để thanh toán', () => {
           setIsFooterVisible(true);
-          setRoutes((current) => [...current, { name, book, ...options }]);
+          setRoutes((current) => [...current, { name, book, initialBookshelfTab }]);
         });
         return;
       }
     }
     setIsFooterVisible(true);
-    setRoutes((current) => [...current, { name, book, genre, ...options }]);
+    setRoutes((current) => [...current, { name, book, genre, initialBookshelfTab }]);
   }, [isLoggedIn, lang, showLoginAlert]);
 
   const handleModalLoginPress = useCallback(() => {

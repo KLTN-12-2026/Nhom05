@@ -3,9 +3,12 @@ import { Animated, Dimensions, StyleSheet } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
+export const DARK_MODE_PRIMARY = '#9A8BC2';
+export const DARK_MODE_SECONDARY = '#D8B36A';
+
 const BRAND = {
-  primary: '#9A8BC2',
-  secondary: '#D8B36A',
+  primary: DARK_MODE_PRIMARY,
+  secondary: DARK_MODE_SECONDARY,
 };
 
 // Hào quang tinh vân (Nebula)

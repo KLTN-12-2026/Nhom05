@@ -3,6 +3,7 @@ import { getBookChapterLabel } from '../bookContentService';
 
 export interface HomeBookItem extends BookData {
   book_id?: string;
+  bookName?: string;
   category_id?: number;
   updatedAt?: string;
   createdAt?: string;

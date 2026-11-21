@@ -18,8 +18,19 @@ export const resolveApiBaseUrl = (): string => {
 
 export const API_BASE_URL = resolveApiBaseUrl();
 
-// Never probe arbitrary LAN hosts with account credentials or retry a mutation on another server.
-export const CANDIDATE_API_URLS: string[] = [API_BASE_URL];
+export const CANDIDATE_API_URLS: string[] = Array.from(
+  new Set([
+    API_BASE_URL,
+    ...(process.env.EXPO_PUBLIC_API_URL ? [process.env.EXPO_PUBLIC_API_URL.replace(/\/+$/, '')] : []),
+    'http://172.26.41.174:8082',
+    'http://192.168.1.7:8082',
+    'http://192.168.1.126:8082',
+    'http://192.168.1.165:8082',
+    'http://localhost:8082',
+    'http://127.0.0.1:8082',
+    'http://10.0.2.2:8082',
+  ])
+);
 
 export const normalizeAssetUrl = (value: string, baseUrl = API_BASE_URL): string => {
   if (!value) return '';
@@ -31,6 +42,10 @@ export const normalizeAssetUrl = (value: string, baseUrl = API_BASE_URL): string
   return url.href;
 };
 
+/**
+ * Gọi API với cơ chế Fast-Path thông minh:
+ * Thử API_BASE_URL trước với timeout nhẹ, nếu lỗi thì thử lần lượt các candidate URLs
+ */
 export async function fetchApiWithFallback<T = any>(
   endpoint: string,
   config: AxiosRequestConfig = {}

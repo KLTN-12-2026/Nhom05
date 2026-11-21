@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { API_BASE_URL, CANDIDATE_API_URLS } from '../config/api';
 
-import { useCallback,Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { ComponentRef,Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Constants from 'expo-constants';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import {
@@ -34,6 +34,7 @@ export type { HomeBookItem };
 import { getBookCoverSource } from './bookCovers';
 import { getBookChapterLabel } from './bookContentService';
 import { useUnreadNotificationCount } from './useUnreadNotificationCount';
+import { DARK_MODE_PRIMARY, DARK_MODE_SECONDARY } from './CosmicBackground';
 
 const { width, height } = Dimensions.get('window');
 const FLOATING_MENU_SIZE = 40;
@@ -62,43 +63,10 @@ const CANDIDATE_API_URLS_OLD = [
 ];
 */
 
-const mapBookDtoToItem = (item: any, index: number): HomeBookItem => {
-  const id = String(item.book_id || item.id || `book-${index}`);
-  const title = String(item.bookName || item.title || 'Chưa có tiêu đề');
-  const author = item.author || 'HALM BOOK';
-  let img_url = item.img_url || item.img || undefined;
-  if (img_url && typeof img_url === 'string' && img_url.startsWith('/')) {
-    img_url = API_BASE_URL + img_url;
-  }
-  const tag = item.category_name || item.tag || 'Sách hay';
-  const description = item.description || item.desc || '';
-  const price = item.rent_price !== undefined ? item.rent_price : item.price;
-  const rating = item.rating ? String(item.rating) : '5.0';
-  const reads = item.read_count ? `${item.read_count}` : '1.2K';
-  const chapter = getBookChapterLabel({ ...item, id, book_id: item.book_id || id, title, author });
-
-  return {
-    id,
-    title,
-    author,
-    chapter,
-    tag,
-    rating,
-    reads,
-    img_url,
-    description,
-    price,
-    category_id: item.category_id,
-    category_name: item.category_name,
-  };
-};
-
 // Fallback Banner khi chưa có dữ liệu từ backend
 const CAROUSEL: any[] = [];
 
 // --- COMPONENT HIỆU ỨNG SAO VÀ VŨ TRỤ (copy từ uudai.tsx, đổi prefix Offers → Home) ---
-const DARK_MODE_PRIMARY = '#9A8BC2';
-const DARK_MODE_SECONDARY = '#D8B36A';
 
 function HomeNebula() {
   const animation = useRef(new Animated.Value(0)).current;
@@ -363,6 +331,18 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const width = Math.min(1040, window.width - insets.left - insets.right);
+  const featuredWidth = Math.max(200, width - 32);
+  const featuredRef = useRef<ComponentRef<typeof ScrollView>>(null);
+  const featuredAutoAdvanceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const featuredDragEndRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const featuredIndexRef = useRef(0);
+  const featuredOffsetRef = useRef(0);
+  const featuredAutoTargetRef = useRef<number | null>(null);
+  const featuredDraggingRef = useRef(false);
+  const featuredMomentumRef = useRef(false);
+
+  const [featuredIndex, setFeaturedIndex] = useState(0);
+  const [showAllRecentBooks, setShowAllRecentBooks] = useState(false);
   const [selectedPreviewBook, setSelectedPreviewBook] = useState<HomeBookItem | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const scrollOffset = useRef(0);
@@ -471,7 +451,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const recommendedBooks = useMemo(() => {
     const list = books.filter(b => b.category_id === 1 || b.category_id === 4);
-    return list.length > 0 ? list : books;
+    return (list.length > 0 ? list : books).slice(0, 5);
   }, [books]);
 
   // Build shelves only from category metadata returned by the backend.
@@ -571,7 +551,94 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
   const primary = isDarkMode ? '#E5A93C' : '#4B8176';
   const textColor = isDarkMode ? '#F7F5F0' : '#242321';
   const homeCardWidth = width < 380 ? 116 : 132;
+  // Use real catalog books; there is no Featured API or synthetic fallback content.
+  const featuredItems = useMemo(() => (books.length > 0
+    ? books.slice(0, 3).map((book) => ({
+      id: `book-${book.id}`,
+      eyebrow: 'GIỚI THIỆU SÁCH',
+      title: book.title,
+      description: book.description?.replace(/<[^>]*>/g, '').trim() || `Tác phẩm của ${book.author || 'tác giả HALMBOOK'}.`,
+      book,
+    }))
+    : []), [books]);
+  const featuredTrackItems = useMemo(() => {
+    const items = featuredItems.map(item => ({ item, isClone: false }));
+    if (featuredItems.length > 1) {
+      items.push({ item: featuredItems[0], isClone: true });
+    }
+    return items;
+  }, [featuredItems]);
+  const activeFeatured = Math.min(featuredIndex, Math.max(0, featuredItems.length - 1));
+  const clearFeaturedAutoAdvance = useCallback(() => {
+    if (featuredAutoAdvanceRef.current) clearTimeout(featuredAutoAdvanceRef.current);
+    featuredAutoAdvanceRef.current = null;
+  }, []);
+  const scheduleFeaturedAutoAdvance = useCallback(() => {
+    clearFeaturedAutoAdvance();
+    if (
+      featuredItems.length < 2
+      || featuredDraggingRef.current
+      || featuredMomentumRef.current
+    ) return;
+
+    featuredAutoAdvanceRef.current = setTimeout(() => {
+      featuredAutoAdvanceRef.current = null;
+      if (featuredDraggingRef.current || featuredMomentumRef.current) return;
+
+      const step = featuredWidth + 12;
+      const nextPosition = Math.min(
+        featuredItems.length,
+        Math.floor(featuredOffsetRef.current / step + 0.000001) + 1,
+      );
+      featuredAutoTargetRef.current = nextPosition;
+      featuredRef.current?.scrollTo({ x: nextPosition * step, animated: true });
+    }, 4000);
+  }, [clearFeaturedAutoAdvance, featuredItems.length, featuredWidth]);
+  const finishFeaturedScroll = useCallback((offset: number) => {
+    const step = featuredWidth + 12;
+    const clonePosition = featuredItems.length * step;
+    const reachedEndClone = featuredItems.length > 1 && offset >= clonePosition - 1;
+    const finalOffset = reachedEndClone ? 0 : offset;
+
+    featuredAutoTargetRef.current = null;
+    featuredOffsetRef.current = finalOffset;
+    if (reachedEndClone) {
+      // The clone matches panel 1, so this non-animated reset is visually seamless.
+      featuredRef.current?.scrollTo({ x: 0, animated: false });
+    }
+
+    const nextIndex = featuredItems.length > 1
+      ? Math.round(finalOffset / step) % featuredItems.length
+      : 0;
+    featuredIndexRef.current = nextIndex;
+    setFeaturedIndex(nextIndex);
+    scheduleFeaturedAutoAdvance();
+  }, [featuredItems.length, featuredWidth, scheduleFeaturedAutoAdvance]);
+  const scheduleFeaturedInteractionEnd = useCallback(() => {
+    if (featuredDragEndRef.current) clearTimeout(featuredDragEndRef.current);
+    featuredDragEndRef.current = setTimeout(() => {
+      featuredDragEndRef.current = null;
+      if (!featuredDraggingRef.current && !featuredMomentumRef.current) {
+        finishFeaturedScroll(featuredOffsetRef.current);
+      }
+    }, 120);
+  }, [finishFeaturedScroll]);
+  useEffect(() => {
+    scheduleFeaturedAutoAdvance();
+    return () => {
+      clearFeaturedAutoAdvance();
+      if (featuredDragEndRef.current) clearTimeout(featuredDragEndRef.current);
+    };
+  }, [clearFeaturedAutoAdvance, scheduleFeaturedAutoAdvance]);
   const rankedBooks = useMemo(() => getRankedHomeBooks(books), [books]);
+  useEffect(() => {
+    featuredAutoTargetRef.current = null;
+    featuredOffsetRef.current = 0;
+    featuredIndexRef.current = 0;
+    featuredRef.current?.scrollTo({ x: 0, animated: false });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Synchronize the carousel indicator with its imperative scroll reset.
+    setFeaturedIndex(0);
+  }, [featuredWidth, featuredItems.length]);
   useEffect(() => {
     setFooterVisible?.(true);
     return () => setFooterVisible?.(true);
@@ -591,7 +658,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
   };
 
   const renderNovelCard = (novel: HomeBookItem, cardWidth: number = 115, hasMarginRight: boolean = true, subtitle?: string) => {
-    const coverHeight = Math.floor(cardWidth * 1.45);
+    const coverHeight = Math.floor(cardWidth * 1.55);
     return (
       <TouchableOpacity
         key={novel.id}
@@ -609,14 +676,14 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
           <HomeCover book={novel} />
         </View>
         <Text style={styles.novelTitle} numberOfLines={2}>{novel.title}</Text>
-        <Text style={styles.novelChapter} numberOfLines={1}>{subtitle || novel.chapter || novel.author}</Text>
+        {subtitle ? <Text style={styles.novelChapter} numberOfLines={1}>{subtitle}</Text> : null}
       </TouchableOpacity>
     );
   };
 
   const renderShelfMoreCard = (categoryName: string, categoryId: number, cardWidth: number = 115) => {
-    const coverHeight = Math.floor(cardWidth * 1.45);
-    const cardHeight = coverHeight + 6 + 42 + 4 + 17;
+    const coverHeight = Math.floor(cardWidth * 1.55);
+    const cardHeight = coverHeight + 6 + 42;
     return (
       <TouchableOpacity
         key={`more-${categoryId}`}
@@ -628,7 +695,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
       >
         <Text style={styles.moreActionCategory} numberOfLines={2}>{categoryName}</Text>
         <Text style={styles.moreActionLabel}>Xem thêm</Text>
-        <Ionicons name="arrow-down" size={20} color={isDarkMode ? '#F0D4B5' : '#6F5740'} />
+        <Ionicons name="arrow-forward" size={20} color={isDarkMode ? '#F0D4B5' : '#4A4640'} />
       </TouchableOpacity>
     );
   };
@@ -828,11 +895,106 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
               accessibilityRole="button"
               accessibilityLabel={`Thông báo${unreadNotifications ? `, ${unreadNotifications} chưa đọc` : ''}`}
             >
-              <Ionicons name="notifications-outline" size={21} color="#FFFFFF" />
+              <Ionicons name="notifications-outline" size={21} color={isDarkMode ? '#F7F5F0' : '#242321'} />
               {unreadNotifications > 0 && <View style={{ position: 'absolute', top: 3, right: 2, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 3, backgroundColor: '#D5AC56', alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 9, fontWeight: '800', color: '#382F23' }}>{unreadNotifications > 99 ? '99+' : unreadNotifications}</Text></View>}
             </TouchableOpacity>
           </View>
-          <HomeBannerCarousel width={width} refreshKey={historyRefreshKey} />
+          {featuredItems.length > 0 ? <>
+            <ScrollView ref={featuredRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselContainer}
+              scrollEventThrottle={16}
+              onTouchStart={() => {
+                featuredDraggingRef.current = true;
+                featuredMomentumRef.current = false;
+                featuredAutoTargetRef.current = null;
+                clearFeaturedAutoAdvance();
+                if (featuredDragEndRef.current) clearTimeout(featuredDragEndRef.current);
+              }}
+              onTouchEnd={() => {
+                featuredDraggingRef.current = false;
+                scheduleFeaturedInteractionEnd();
+              }}
+              onTouchCancel={() => {
+                featuredDraggingRef.current = false;
+                scheduleFeaturedInteractionEnd();
+              }}
+              onScroll={event => {
+                const offset = Math.max(0, event.nativeEvent.contentOffset.x);
+                const step = featuredWidth + 12;
+                featuredOffsetRef.current = offset;
+
+                const visibleIndex = featuredItems.length > 1
+                  ? Math.round(offset / step) % featuredItems.length
+                  : 0;
+                if (featuredIndexRef.current !== visibleIndex) {
+                  featuredIndexRef.current = visibleIndex;
+                  setFeaturedIndex(visibleIndex);
+                }
+
+                const target = featuredAutoTargetRef.current;
+                if (target !== null && Math.abs(offset - target * step) <= 1) {
+                  finishFeaturedScroll(target * step);
+                }
+              }}
+              onScrollBeginDrag={() => {
+                featuredDraggingRef.current = true;
+                featuredMomentumRef.current = false;
+                featuredAutoTargetRef.current = null;
+                clearFeaturedAutoAdvance();
+                if (featuredDragEndRef.current) clearTimeout(featuredDragEndRef.current);
+              }}
+              onScrollEndDrag={() => {
+                featuredDraggingRef.current = false;
+                scheduleFeaturedInteractionEnd();
+              }}
+              onMomentumScrollBegin={() => {
+                featuredMomentumRef.current = true;
+                clearFeaturedAutoAdvance();
+                if (featuredDragEndRef.current) {
+                  clearTimeout(featuredDragEndRef.current);
+                  featuredDragEndRef.current = null;
+                }
+              }}
+              onMomentumScrollEnd={event => {
+                featuredMomentumRef.current = false;
+                if (featuredDragEndRef.current) {
+                  clearTimeout(featuredDragEndRef.current);
+                  featuredDragEndRef.current = null;
+                }
+                finishFeaturedScroll(Math.max(0, event.nativeEvent.contentOffset.x));
+              }}>
+              {featuredTrackItems.map(({ item, isClone }) => (
+                 <View
+                   key={isClone ? item.id + '-loop-clone' : item.id}
+                   style={[styles.featuredPanel, isDarkMode && styles.featuredPanelDark, { width: featuredWidth }]}
+                 >
+                  <View style={styles.featuredEditorialCopy}>
+                    <Text style={[styles.featuredEyebrow, isDarkMode && styles.featuredEyebrowDark]}>{item.eyebrow}</Text>
+                    <Text style={[styles.featuredTitle, isDarkMode && styles.featuredTitleDark]} numberOfLines={2}>{item.title}</Text>
+                    <Text style={[styles.featuredDescription, isDarkMode && styles.featuredDescriptionDark]} numberOfLines={3}>{item.description}</Text>
+                  </View>
+                  <View style={[styles.featuredEditorialImage, isDarkMode && styles.featuredEditorialImageDark]}>
+                    {item.book ? <HomeCover book={item.book} /> : <Ionicons name="book-outline" size={40} color={isDarkMode ? '#E5A93C' : '#8B4A3C'} />}
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+            <View style={styles.paginationDots}>
+              {featuredItems.map((item, index) => <TouchableOpacity key={item.id} style={styles.dotTarget} accessibilityRole="button" accessibilityLabel={`Chuyển đến nội dung ${index + 1}`} accessibilityState={{ selected: index === activeFeatured }} onPress={() => {
+                clearFeaturedAutoAdvance();
+                const target = index * (featuredWidth + 12);
+                if (Math.abs(featuredOffsetRef.current - target) < 0.5) {
+                  featuredIndexRef.current = index;
+                  setFeaturedIndex(index);
+                  scheduleFeaturedAutoAdvance();
+                } else {
+                  featuredAutoTargetRef.current = index;
+                  featuredRef.current?.scrollTo({ x: target, animated: true });
+                }
+              }}>
+                <View style={[styles.dot, index === activeFeatured && styles.dotActive]} />
+              </TouchableOpacity>)}
+            </View>
+          </> : null}
         </View>
 
         {errorMessage && books.length > 0 && <View style={styles.refreshNotice} accessibilityLiveRegion="polite">
@@ -842,6 +1004,8 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
           </TouchableOpacity>
         </View>}
         {refreshing && <View style={styles.refreshStatus} accessibilityLiveRegion="polite"><ActivityIndicator size="small" color={primary} /><Text style={styles.statusText}>Đang làm mới thư viện…</Text></View>}
+
+        <ContinueReading books={books} refreshKey={historyRefreshKey} />
 
         <View
           style={styles.section}
@@ -872,36 +1036,6 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList}>
               {recommendedBooks.map(n => renderNovelCard(n, homeCardWidth, true))}
-            </ScrollView>
-          )}
-        </View>
-
-        <View
-          style={styles.section}
-          onLayout={(e) => {
-            sectionPositions.current['recent'] = e.nativeEvent.layout.y;
-          }}
-        >
-          <View style={styles.sectionTitleBox}>
-            <View style={styles.sectionAccent} />
-            <Text style={styles.sectionTitleText}>Mới Cập Nhật</Text>
-          </View>
-          {isLoading && books.length === 0 ? (
-            <View style={styles.statusBox}>
-              <ActivityIndicator size="small" color={isDarkMode ? '#8FC3B5' : '#5a8b82'} />
-              <Text style={styles.statusText}>Đang tải dữ liệu sách...</Text>
-            </View>
-          ) : errorMessage && books.length === 0 ? (
-            <View style={styles.statusBox}>
-              <Text style={styles.statusErrorText}>{errorMessage}</Text>
-            </View>
-          ) : recentBooks.length === 0 ? (
-            <View style={styles.statusBox}>
-              <Text style={styles.statusEmptyText}>Chưa có ngày cập nhật hoặc ngày thêm sách hợp lệ để hiển thị.</Text>
-            </View>
-          ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList}>
-              {recentBooks.map(n => renderNovelCard(n, homeCardWidth, true, formatHomeBookDate(n)))}
             </ScrollView>
           )}
         </View>
@@ -942,11 +1076,44 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
           )}
         </View>
 
+        <View
+          style={styles.section}
+          onLayout={(e) => {
+            sectionPositions.current['recent'] = e.nativeEvent.layout.y;
+          }}
+        >
+          <View style={styles.sectionTitleBox}>
+            <View style={styles.sectionAccent} />
+            <Text style={styles.sectionTitleText}>Mới Cập Nhật</Text>
+            <TouchableOpacity onPress={() => setShowAllRecentBooks(value => !value)} style={styles.sectionMoreButton} accessibilityRole="button" accessibilityLabel={showAllRecentBooks ? 'Thu gọn sách mới cập nhật' : 'Xem danh sách sách mới cập nhật'}>
+              <Text style={styles.shelfMoreText}>{showAllRecentBooks ? 'Thu gọn' : 'Xem thêm'}</Text>
+              <Ionicons name={showAllRecentBooks ? 'arrow-up' : 'arrow-forward'} size={14} color={isDarkMode ? '#E5A93C' : '#4B8176'} />
+            </TouchableOpacity>
+          </View>
+          {isLoading && books.length === 0 ? (
+            <View style={styles.statusBox}>
+              <ActivityIndicator size="small" color={isDarkMode ? '#8FC3B5' : '#5a8b82'} />
+              <Text style={styles.statusText}>Đang tải dữ liệu sách...</Text>
+            </View>
+          ) : errorMessage && books.length === 0 ? (
+            <View style={styles.statusBox}>
+              <Text style={styles.statusErrorText}>{errorMessage}</Text>
+            </View>
+          ) : recentBooks.length === 0 ? (
+            <View style={styles.statusBox}>
+              <Text style={styles.statusEmptyText}>Chưa có ngày cập nhật hoặc ngày thêm sách hợp lệ để hiển thị.</Text>
+            </View>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList}>
+              {(showAllRecentBooks ? recentBooks : recentBooks.slice(0, 5)).map(n => renderNovelCard(n, homeCardWidth, true))}
+            </ScrollView>
+          )}
+        </View>
+
         {/* DANH MỤC THỂ LOẠI: TÁCH RIÊNG TỪNG HÀNG SÁCH LƯỚT NGANG KÈM Ô MỞ RỘNG (GIỐNG WEB) */}
         {shelfCategories.map((shelf) => {
           if (!shelf.books || shelf.books.length === 0) return null;
           return (
-            <Fragment key={shelf.id}>
             <View
               key={shelf.id}
               style={styles.shelfSection}
@@ -959,6 +1126,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
                   <View style={[styles.shelfIconBadge, { backgroundColor: isDarkMode ? '#292D2A' : '#F7F5F0' }]}>
                     <Ionicons name={shelf.icon as any} size={15} color={isDarkMode ? '#8FC3B5' : '#8B4A3C'} />
                   </View>
+                  <Text style={styles.shelfName} numberOfLines={2}>{shelf.name}</Text>
                 </View>
               </View>
 
@@ -967,19 +1135,18 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
                 {renderShelfMoreCard(shelf.name, shelf.categoryId, homeCardWidth)}
               </ScrollView>
             </View>
-            {shelfCategories.indexOf(shelf) === 1 && <ContinueReading books={books} refreshKey={historyRefreshKey} />}
-            {(shelfCategories.indexOf(shelf) + 1) % 4 === 0 && shelfCategories.indexOf(shelf) < shelfCategories.length - 1 && (
-              <View style={styles.editorialPanel}>
-                <Text style={styles.featuredEyebrow}>GÓC ĐỌC CHẬM</Text>
-                <Text style={styles.editorialTitle}>Một khoảng lặng cho trang sách.</Text>
-                <Text style={styles.editorialDescription}>Chọn một chủ đề bạn quan tâm, đọc theo nhịp riêng và khám phá những góc nhìn khác nhau trong từng tác phẩm.</Text>
-                <TouchableOpacity onPress={() => navigate('categories')} accessibilityRole="button" style={styles.editorialAction}><Text style={styles.shelfMoreText}>Tìm chủ đề để bắt đầu →</Text></TouchableOpacity>
-              </View>
-            )}
-            </Fragment>
           );
         })}
 
+        <View style={styles.editorialPanel}>
+          <Text style={styles.featuredEyebrow}>GÓC ĐỌC CHẬM</Text>
+          <Text style={styles.editorialTitle}>Một khoảng lặng cho trang sách.</Text>
+          <Text style={styles.editorialDescription}>Chọn một chủ đề bạn quan tâm, đọc theo nhịp riêng và khám phá những góc nhìn khác nhau trong từng tác phẩm.</Text>
+          <TouchableOpacity onPress={() => navigate('categories')} accessibilityRole="button" style={styles.editorialAction}>
+            <Text style={styles.shelfMoreText}>Tìm chủ đề để bắt đầu</Text>
+            <Ionicons name="arrow-forward" size={14} color={isDarkMode ? '#E5A93C' : '#4B8176'} />
+          </TouchableOpacity>
+        </View>
         <View style={styles.footerBranding}>
           <Text style={styles.footerBrandTitle}>HALM <Text style={{ color: isDarkMode ? '#8FC3B5' : '#4B8176' }}>Book</Text></Text>
           <Text style={styles.footerBrandSlogan}>Sách là ánh sáng!</Text>
@@ -1085,6 +1252,15 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
                     {selectedPreviewBook?.chapter || 'Chưa có thông tin chương'}
                   </Text>
                 </View>
+
+                {(selectedPreviewBook?.updatedAt || selectedPreviewBook?.createdAt) ? (
+                  <View style={styles.popupInfoRow}>
+                    <Ionicons name="time-outline" size={13} color={isDarkMode ? '#A39F99' : '#85817A'} />
+                    <Text style={styles.popupMetaText} numberOfLines={1}>
+                      {formatHomeBookDate(selectedPreviewBook)}
+                    </Text>
+                  </View>
+                ) : null}
 
                 {(selectedPreviewBook?.rating || selectedPreviewBook?.reads) ? <View style={styles.popupRatingRow}>
                   {selectedPreviewBook.rating && <><Ionicons name="star" size={13} color="#B87968" /><Text style={styles.popupRatingText}>{selectedPreviewBook.rating}</Text></>}
@@ -1351,7 +1527,7 @@ const getStyles = (isDark: boolean, width: number) => {
     editorialPanel: { margin: 16, marginBottom: 28, padding: 20, backgroundColor: isDark ? '#242321' : '#F7F5F0', borderLeftWidth: 3, borderLeftColor: isDark ? '#E5A93C' : '#8B4A3C', borderWidth: isDark ? 1 : 0, borderColor: isDark ? '#383633' : 'transparent' },
     editorialTitle: { fontSize: 20, lineHeight: 28, color: textMain, fontWeight: '700', marginTop: 8 },
     editorialDescription: { fontSize: 14, lineHeight: 22, color: textSub, marginTop: 8 },
-    editorialAction: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start', marginTop: 4 },
+    editorialAction: { minHeight: 44, flexDirection: 'row', flexWrap: 'nowrap', alignItems: 'center', justifyContent: 'flex-start', alignSelf: 'flex-start', gap: 7, marginTop: 4, paddingRight: 8 },
     scrollView: { flex: 1, backgroundColor: 'transparent' },
     scrollContent: { paddingBottom: 120 },
     refreshNotice: { marginHorizontal: 16, padding: 16, alignItems: 'center', marginBottom: 20, backgroundColor: isDark ? '#242321' : '#FFFFFF', borderRadius: 8, borderWidth: 1, borderColor: cardBorder },
@@ -1445,6 +1621,7 @@ const getStyles = (isDark: boolean, width: number) => {
 
     section: { marginBottom: 28 },
     sectionTitleBox: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', paddingHorizontal: 15, marginBottom: 14, gap: 9 },
+    sectionMoreButton: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto', minHeight: 40, paddingLeft: 8 },
     sectionAccent: { width: 3, height: 22, borderRadius: 2, backgroundColor: isDark ? '#E5A93C' : '#8B4A3C' },
     sectionTitleText: { fontSize: 20, lineHeight: 27, fontWeight: '700', color: textMain, flexShrink: 1 },
     scrollList: { paddingLeft: 16, paddingRight: 16, paddingBottom: 4 },
@@ -1479,6 +1656,7 @@ const getStyles = (isDark: boolean, width: number) => {
       alignItems: 'center',
       backgroundColor: isDark ? '#2D2B28' : '#F7F5F0',
     },
+    shelfName: { flex: 1, minWidth: 0, color: textMain, fontSize: 16, lineHeight: 21, fontWeight: '700' },
     shelfTitleText: {
       flex: 1, fontSize: 19, lineHeight: 25, fontWeight: '700', color: textMain,
     },
@@ -1533,9 +1711,10 @@ const getStyles = (isDark: boolean, width: number) => {
     },
 
     novelCard: { marginRight: 14 },
-    moreAction: { minHeight: 44, justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 14, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: isDark ? '#6F665A' : '#CFC8BD', backgroundColor: isDark ? '#292723' : '#EAE6DF' },
+    moreAction: { justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 7, paddingTop: 10, paddingBottom: 8, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: isDark ? '#6F665A' : '#CFC8BD', backgroundColor: isDark ? '#292723' : '#EAE6DF' },
     moreActionCategory: { width: '100%', minHeight: 34, textAlign: 'center', fontSize: 12, lineHeight: 17, fontWeight: '700', color: isDark ? '#F0E8DC' : '#4A4640' },
     moreActionLabel: { textAlign: 'center', fontSize: 12, lineHeight: 17, fontWeight: '800', color: isDark ? '#F0E8DC' : '#4A4640' },
+    popupMetaText: { flex: 1, fontSize: 11, fontWeight: '500', color: textSub },
     novelCover: {
       backgroundColor: isDark ? coverBg : '#F2EFE9',
       borderRadius: 10,
