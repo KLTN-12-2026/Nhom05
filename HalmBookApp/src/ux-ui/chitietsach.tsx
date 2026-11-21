@@ -624,7 +624,6 @@ export default function BookDetailScreen({ book, onBack, onStartReading }: BookD
             `${baseUrl}/api/cart/add`,
             {
               bookId: targetBookId,
-              planKey: '7',
             },
             {
               headers,

@@ -39,6 +39,8 @@ public class Orders {
     private Double checkoutCouponDiscount;
     @Column(length = 64)
     private String checkoutFingerprint;
+    private Long checkoutPolicyRevision;
+    private Double checkoutOfferDiscount;
 
     // Immutable top-up terms captured when the payment request is created.
     private Integer topupPackageId;

@@ -32,6 +32,7 @@ public class BannerServiceImpl implements BannerService {
             if (bannerRepository.count() == 0) {
                 log.info("Kho dữ liệu Banner rỗng. Tiến hành khởi tạo 5 Banner mặc định vào CSDL...");
                 seedDefaultBanners();
+                seedDefaultAppBanners();
             }
             if (siteSettingRepository.count() == 0) {
                 log.info("Kho dữ liệu Site Settings rỗng. Tiến hành khởi tạo các thiết lập mặc định vào CSDL...");
@@ -44,8 +45,8 @@ public class BannerServiceImpl implements BannerService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<BannerDto> getActiveBanners() {
-        return bannerRepository.findByIsActiveTrueOrderByOrderIndexAsc()
+    public List<BannerDto> getActiveBanners(String platform) {
+        return bannerRepository.findByPlatformAndIsActiveTrueOrderByOrderIndexAscIdAsc(normalizePlatform(platform))
                 .stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());
@@ -53,8 +54,8 @@ public class BannerServiceImpl implements BannerService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<BannerDto> getAllBanners() {
-        return bannerRepository.findAllByOrderByOrderIndexAsc()
+    public List<BannerDto> getAllBanners(String platform) {
+        return bannerRepository.findByPlatformOrderByOrderIndexAscIdAsc(normalizePlatform(platform))
                 .stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());
@@ -62,20 +63,20 @@ public class BannerServiceImpl implements BannerService {
 
     @Override
     @Transactional(readOnly = true)
-    public BannerDto getBannerById(String id) {
-        Banner banner = bannerRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy Banner với mã: " + id));
+    public BannerDto getBannerById(String id, String platform) {
+        Banner banner = findInPlatform(id, platform);
         return toDto(banner);
     }
 
     @Override
     @Transactional
     public BannerDto createBanner(BannerDto dto) {
-        if (dto.getId() == null || dto.getId().trim().isEmpty() || bannerRepository.existsById(dto.getId())) {
-            dto.setId("banner-" + System.currentTimeMillis());
-        }
+        dto.setPlatform(normalizePlatform(dto.getPlatform()));
+        validateAppBanner(dto);
+        dto.setId("banner-" + UUID.randomUUID());
         if (dto.getOrder() == null) {
-            dto.setOrder((int) bannerRepository.count() + 1);
+            dto.setOrder(bannerRepository.findByPlatformOrderByOrderIndexAscIdAsc(dto.getPlatform()).stream()
+                    .map(Banner::getOrderIndex).filter(Objects::nonNull).max(Integer::compareTo).orElse(0) + 1);
         }
         if (dto.getIsActive() == null) {
             dto.setIsActive(true);
@@ -90,20 +91,22 @@ public class BannerServiceImpl implements BannerService {
 
     @Override
     @Transactional
-    public BannerDto updateBanner(String id, BannerDto dto) {
-        Banner existing = bannerRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy Banner với mã: " + id));
+    public BannerDto updateBanner(String id, BannerDto dto, String platform) {
+        Banner existing = findInPlatform(id, platform);
+        if (dto.getPlatform() != null && !existing.getPlatform().equals(normalizePlatform(dto.getPlatform()))) {
+            throw new IllegalArgumentException("Không thể chuyển banner sang kênh khác.");
+        }
 
         updateEntityFromDto(existing, dto);
+        validateAppBanner(toDto(existing));
         Banner saved = bannerRepository.save(existing);
         return toDto(saved);
     }
 
     @Override
     @Transactional
-    public void toggleBannerStatus(String id) {
-        Banner banner = bannerRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy Banner với mã: " + id));
+    public void toggleBannerStatus(String id, String platform) {
+        Banner banner = findInPlatform(id, platform);
         banner.setIsActive(!Boolean.TRUE.equals(banner.getIsActive()));
         banner.setUpdatedAt(LocalDateTime.now());
         bannerRepository.save(banner);
@@ -111,74 +114,84 @@ public class BannerServiceImpl implements BannerService {
 
     @Override
     @Transactional
-    public void deleteBanner(String id) {
-        if (!bannerRepository.existsById(id)) {
-            throw new RuntimeException("Không tìm thấy Banner với mã: " + id);
-        }
-        bannerRepository.deleteById(id);
+    public void deleteBanner(String id, String platform) {
+        bannerRepository.delete(findInPlatform(id, platform));
     }
 
     @Override
     @Transactional
-    public List<BannerDto> saveAllBanners(List<BannerDto> bannerDtos) {
-        if (bannerDtos == null || bannerDtos.isEmpty()) {
-            bannerRepository.deleteAllInBatch();
-            return Collections.emptyList();
+    public List<BannerDto> saveAllBanners(List<BannerDto> bannerDtos, String platform) {
+        String channel = normalizePlatform(platform);
+        List<Banner> existing = bannerRepository.findByPlatformOrderByOrderIndexAscIdAsc(channel);
+        if (bannerDtos == null || bannerDtos.size() != existing.size()) {
+            throw new IllegalArgumentException("Danh sách banner đã thay đổi. Vui lòng tải lại trước khi sắp xếp.");
         }
-
-        Set<String> incomingIds = new HashSet<>();
+        Map<String, Banner> byId = existing.stream().collect(Collectors.toMap(Banner::getId, b -> b));
+        Set<String> seen = new HashSet<>();
+        // Validate first. Reordering never deletes records or overwrites banner content.
         for (BannerDto dto : bannerDtos) {
-            if (dto.getId() != null && !dto.getId().trim().isEmpty()) {
-                incomingIds.add(dto.getId().trim());
+            if (dto == null || !byId.containsKey(dto.getId()) || !seen.add(dto.getId())
+                    || (dto.getPlatform() != null && !channel.equals(normalizePlatform(dto.getPlatform())))) {
+                throw new IllegalArgumentException("Danh sách chứa banner trùng hoặc không thuộc kênh " + channel);
             }
         }
-
-        List<Banner> existingAll = bannerRepository.findAll();
-        List<Banner> toDelete = existingAll.stream()
-                .filter(b -> !incomingIds.contains(b.getId()))
-                .collect(Collectors.toList());
-        if (!toDelete.isEmpty()) {
-            bannerRepository.deleteAllInBatch(toDelete);
-        }
-
-        Map<String, Banner> existingMap = existingAll.stream()
-                .collect(Collectors.toMap(Banner::getId, b -> b, (o1, o2) -> o1));
-
-        List<Banner> toSave = new ArrayList<>();
-        int index = 1;
+        int order = 1;
         for (BannerDto dto : bannerDtos) {
-            String id = dto.getId();
-            if (id == null || id.trim().isEmpty()) {
-                id = "banner-" + System.currentTimeMillis() + "-" + index;
-                dto.setId(id);
-            }
-            dto.setOrder(index++);
-
-            Banner banner = existingMap.get(id);
-            if (banner == null) {
-                banner = toEntity(dto);
-                banner.setCreatedAt(LocalDateTime.now());
-            } else {
-                updateEntityFromDto(banner, dto);
-            }
+            Banner banner = byId.get(dto.getId());
+            banner.setOrderIndex(order++);
             banner.setUpdatedAt(LocalDateTime.now());
-            toSave.add(banner);
         }
-
-        List<Banner> saved = bannerRepository.saveAll(toSave);
-        return saved.stream()
-                .sorted(Comparator.comparing(b -> (b.getOrderIndex() != null ? b.getOrderIndex() : 0)))
-                .map(this::toDto)
-                .collect(Collectors.toList());
+        bannerRepository.saveAll(existing);
+        return existing.stream().sorted(Comparator.comparing(Banner::getOrderIndex)).map(this::toDto).toList();
     }
 
     @Override
     @Transactional
-    public List<BannerDto> resetDefaultBanners() {
-        bannerRepository.deleteAllInBatch();
+    public List<BannerDto> resetDefaultBanners(String platform) {
+        String channel = normalizePlatform(platform);
+        bannerRepository.deleteAllInBatch(bannerRepository.findByPlatformOrderByOrderIndexAscIdAsc(channel));
         bannerRepository.flush();
-        seedDefaultBanners();
-        return getAllBanners();
+        if ("APP".equals(channel)) seedDefaultAppBanners();
+        else seedDefaultBanners();
+        return getAllBanners(channel);
+    }
+
+    private static String normalizePlatform(String value) {
+        String platform = value == null ? "WEB" : value.trim().toUpperCase(Locale.ROOT);
+        if (!Set.of("WEB", "APP").contains(platform)) {
+            throw new IllegalArgumentException("Kênh banner phải là WEB hoặc APP.");
+        }
+        return platform;
+    }
+
+    private Banner findInPlatform(String id, String platform) {
+        String channel = normalizePlatform(platform);
+        return bannerRepository.findById(id).filter(b -> channel.equals(b.getPlatform()))
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy banner trong kênh " + channel));
+    }
+
+    private void validateAppBanner(BannerDto dto) {
+        if (!"APP".equals(dto.getPlatform())) return;
+        if (!Set.of("custom_image", "showcase").contains(Objects.toString(dto.getLayoutType(), ""))) {
+            throw new IllegalArgumentException("Banner App hỗ trợ ảnh hoặc nội dung kèm ảnh.");
+        }
+        boolean pure = "custom_image".equals(dto.getLayoutType()) && "pure".equals(dto.getImageMode());
+        String image = Objects.toString(dto.getImageUrl(), "");
+        if (!image.isBlank() && !image.matches("(?is)^(https?://[^\\s]+|/(?!/)[^\\s]*|data:image/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=\\r\\n]+)$")) {
+            throw new IllegalArgumentException("Ảnh App phải là URL ảnh hoặc ảnh PNG, JPG, WebP, GIF.");
+        }
+        if (pure && (dto.getImageUrl() == null || dto.getImageUrl().isBlank())) {
+            throw new IllegalArgumentException("Vui lòng chọn ảnh cho banner.");
+        }
+        if (!pure && (dto.getTitle() == null || dto.getTitle().isBlank())) {
+            throw new IllegalArgumentException("Vui lòng nhập tiêu đề banner.");
+        }
+        String link = Objects.toString(dto.getActionLink(), "");
+        if (!link.isEmpty() && !Set.of("app:home", "app:offers", "app:categories", "app:search",
+                "app:bookshelf", "app:profile", "app:payment", "app:chatbot", "app:leaderboard", "app:upload").contains(link)
+                && !link.matches("book:[A-Za-z0-9_-]{1,64}")) {
+            throw new IllegalArgumentException("Đích mở trên App không hợp lệ.");
+        }
     }
 
     @Override
@@ -249,6 +262,7 @@ public class BannerServiceImpl implements BannerService {
         if (entity == null) return null;
         BannerDto dto = BannerDto.builder()
                 .id(entity.getId())
+                .platform(entity.getPlatform())
                 .layoutType(entity.getLayoutType())
                 .eyebrow(entity.getEyebrow())
                 .title(entity.getTitle())
@@ -292,6 +306,7 @@ public class BannerServiceImpl implements BannerService {
 
         return Banner.builder()
                 .id(dto.getId())
+                .platform(normalizePlatform(dto.getPlatform()))
                 .layoutType(dto.getLayoutType())
                 .eyebrow(dto.getEyebrow())
                 .title(dto.getTitle())
@@ -322,7 +337,7 @@ public class BannerServiceImpl implements BannerService {
                     Map.of("title", "Sáng tạo", "subtitle", "Ý TƯỞNG BẮT ĐẦU TỪ ĐÂY", "color", "linear-gradient(145deg,#783d67,#c17ca2)", "tag", "Top 1")
             );
             defaultList.add(Banner.builder()
-                    .id("banner-1")
+                    .id("web-banner-" + UUID.randomUUID())
                     .layoutType("showcase")
                     .eyebrow("TUYỂN CHỌN DÀNH CHO BẠN")
                     .title("Một cuốn sách, ngàn cảm hứng")
@@ -356,7 +371,7 @@ public class BannerServiceImpl implements BannerService {
                     )
             );
             defaultList.add(Banner.builder()
-                    .id("banner-2")
+                    .id("web-banner-" + UUID.randomUUID())
                     .layoutType("mascot_ai")
                     .eyebrow("TRỢ LÝ AI KHOAI NHỎ THÔNG MINH")
                     .title("Tìm đúng cuốn sách cho bạn")
@@ -389,7 +404,7 @@ public class BannerServiceImpl implements BannerService {
                     )
             );
             defaultList.add(Banner.builder()
-                    .id("banner-3")
+                    .id("web-banner-" + UUID.randomUUID())
                     .layoutType("vip_potato")
                     .eyebrow("HỘI VIÊN & ĐẶC QUYỀN HOÀNG GIA")
                     .title("Nâng tầm trải nghiệm đọc trọn đời")
@@ -422,7 +437,7 @@ public class BannerServiceImpl implements BannerService {
                     )
             );
             defaultList.add(Banner.builder()
-                    .id("banner-4")
+                    .id("web-banner-" + UUID.randomUUID())
                     .layoutType("hot_deal")
                     .eyebrow("ĐẠI TIỆC ƯU ĐÃI & VOUCHER KHỦNG")
                     .title("Thuê sách thả ga — Không lo về giá")
@@ -451,7 +466,7 @@ public class BannerServiceImpl implements BannerService {
                     "ambientSounds", List.of("Tiếng mưa rơi êm dịu", "Giai điệu Lofi Chill", "Deep Focus Ambient")
             );
             defaultList.add(Banner.builder()
-                    .id("banner-5")
+                    .id("web-banner-" + UUID.randomUUID())
                     .layoutType("reader_3d")
                     .eyebrow("TRẢI NGHIỆM ĐỌC ĐỈNH CAO")
                     .title("Trình đọc HALM Reader & Nhạc nền Focus")
@@ -475,6 +490,23 @@ public class BannerServiceImpl implements BannerService {
 
         bannerRepository.saveAll(defaultList);
         log.info("Đã khởi tạo thành công {} Banner mặc định vào CSDL.", defaultList.size());
+    }
+
+    private void seedDefaultAppBanners() {
+        bannerRepository.saveAll(List.of(
+                Banner.builder().id("app-banner-" + UUID.randomUUID()).platform("APP").layoutType("showcase")
+                        .eyebrow("KHÁM PHÁ THƯ VIỆN").title("Một cuốn sách, ngàn cảm hứng")
+                        .description("Chọn chủ đề bạn yêu thích và bắt đầu hành trình đọc.")
+                        .actionText("Khám phá sách").actionLink("app:categories").imageMode("overlay").orderIndex(1).build(),
+                Banner.builder().id("app-banner-" + UUID.randomUUID()).platform("APP").layoutType("showcase")
+                        .eyebrow("ƯU ĐÃI DÀNH CHO BẠN").title("Tìm cuốn sách tiếp theo")
+                        .description("Khám phá sách ưu đãi và các gói Khoai đang có trên HALM BOOK.")
+                        .actionText("Xem ưu đãi").actionLink("app:offers").imageMode("overlay").orderIndex(2).build(),
+                Banner.builder().id("app-banner-" + UUID.randomUUID()).platform("APP").layoutType("showcase")
+                        .eyebrow("TRỢ LÝ HALM.AI").title("Tìm sách cùng Khoai Nhỏ")
+                        .description("Trò chuyện với trợ lý để tìm tác phẩm phù hợp với bạn.")
+                        .actionText("Trò chuyện ngay").actionLink("app:chatbot").imageMode("overlay").orderIndex(3).build()
+        ));
     }
 
     private void seedDefaultSiteSettings() {

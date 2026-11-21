@@ -31,6 +31,9 @@ export const ROUTES = {
   ADMIN_CUSTOMERS: '/admin/quan-ly-khach-hang',
   ADMIN_OFFERS: '/admin/quan-ly-uu-dai',
   ADMIN_UI: '/admin/quan-ly-giao-dien',
+  ADMIN_MEMBERSHIP: '/admin/hang-thanh-vien',
+  ADMIN_MEMBERSHIP_PRICING: '/admin/hang-thanh-vien-bieu-gia',
+  ADMIN_MISSIONS: '/admin/quan-ly-nhiem-vu',
   ADMIN_SUPPORT: '/admin/thong-bao-ho-tro',
 };
 
@@ -69,6 +72,7 @@ export const ROUTE_ALIASES = {
     { path: "/QuanLyTaiChinh.html", to: ROUTES.ADMIN_FINANCE },
     { path: "/QuanLyKhachHang.html", to: ROUTES.ADMIN_CUSTOMERS },
     { path: "/QuanLyUuDai.html", to: ROUTES.ADMIN_OFFERS },
+    { path: "/QuanLyHangVaGia.html", to: ROUTES.ADMIN_MEMBERSHIP },
     { path: "/ThongBaoHoTro.html", to: ROUTES.ADMIN_SUPPORT },
     { path: "/QuanLyGiaoDien.html", to: ROUTES.ADMIN_UI }
   ]

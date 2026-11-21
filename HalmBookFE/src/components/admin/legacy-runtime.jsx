@@ -76,6 +76,8 @@ export function useLegacyAdminPage(pageName, pageCode, needsChart = false) {
       if (disposed) return;
 
       window.__HALM_ADMIN_PAGE__ = pageName;
+      document.documentElement.classList.remove('dark');
+      document.documentElement.classList.add('light');
 
       try {
         if (typeof window.renderAdminLayout === 'function') {

@@ -5,7 +5,7 @@ import UserLayout from './layout/UserLayout';
 import { isDarkMode, applyTheme } from '@/utils/theme';
 import { getMyTierSummary, checkinDailyStreak } from '@/services/tierService';
 import { getCurrentCustomer } from '@/services/customerService';
-import { getTierInfo, formatCustomerId, getTierBadgeClass } from '@/utils/tierUtils';
+import { getTierInfo, formatCustomerId, getTierBadgeClass, getTierLevel } from '@/utils/tierUtils';
 import AvatarWithFrame from '@/components/common/AvatarWithFrame';
 import { logoutUser } from '@/services/authToken';
 
@@ -262,7 +262,17 @@ export default function Tiers() {
         window.dispatchEvent(new CustomEvent('halm-open-chatbot', { detail: { message: initialMessage || 'Xin chào, tôi cần tư vấn về các hạng thành viên!' } }));
     };
 
-    const showToast = (title, message) => {
+    const showToast = (title, message, type = 'info') => {
+        if (window.halmToast) {
+            const lower = (title || '').toLowerCase();
+            if (type === 'success' || lower.includes('thành công') || lower.includes('sao chép')) {
+                window.halmToast.success(title, message);
+            } else if (type === 'error' || lower.includes('thất bại') || lower.includes('lỗi')) {
+                window.halmToast.error(title, message);
+            } else {
+                window.halmToast.info(title, message);
+            }
+        }
         setToast({ title, message }); setToastVisible(true);
         if (toastTimer.current) window.clearTimeout(toastTimer.current);
         toastTimer.current = window.setTimeout(() => setToastVisible(false), 3500);
@@ -284,36 +294,7 @@ export default function Tiers() {
     const potatoBalanceDisplay = customer?.potatoBalance ?? tierSummary?.potatoBalance ?? 0;
 
     // Xác định chính xác cấp bậc thành viên thực tế của người dùng (1, 2, 3, 4)
-    const userTierLevel = (() => {
-        // Tự động thăng cấp nếu số dư khoai hoặc điểm cày đạt ngưỡng
-        const potato = Math.max(potatoBalanceDisplay, tierSummary?.totalPoints ?? 0);
-        if (potato >= 10000) return 4;
-        if (potato >= 2500) return 3;
-        if (potato >= 500) return 2;
-
-        const current = tierSummary?.currentTier;
-        if (current) {
-            if (typeof current === 'object' && current.tierId) {
-                return Number(current.tierId);
-            }
-            const name = typeof current === 'object' ? (current.tierName || '') : String(current);
-            const upper = name.toUpperCase();
-            if (upper.includes('ĐẠI ĐIỀN') || upper.includes('DAI DIEN') || upper.includes('TIER4') || upper.includes('IV') || upper.includes('TOI THUONG') || upper.includes('TỐI THƯỢNG')) return 4;
-            if (upper.includes('LÃO NÔNG') || upper.includes('LAO NONG') || upper.includes('TIER3') || upper.includes('III') || upper.includes('TINH HOA')) return 3;
-            if (upper.includes('CAO THỦ') || upper.includes('CAO THU') || upper.includes('TIER2') || upper.includes('II') || upper.includes('TRI THUC') || upper.includes('TRI THỨC')) return 2;
-            if (upper.includes('THỢ CÀY') || upper.includes('THO CAY') || upper.includes('TIER1') || upper.includes('I') || upper.includes('MAM DOC') || upper.includes('MẦM ĐỌC')) return 1;
-        }
-        const custTier = customer?.membershipTier;
-        if (custTier) {
-            if (typeof custTier === 'number') return custTier;
-            const upper = String(custTier).toUpperCase();
-            if (upper.includes('DAI_DIEN') || upper.includes('ĐẠI ĐIỀN') || upper.includes('DAI DIEN') || upper.includes('4')) return 4;
-            if (upper.includes('LAO_NONG') || upper.includes('LÃO NÔNG') || upper.includes('LAO NONG') || upper.includes('3')) return 3;
-            if (upper.includes('CAO_THU') || upper.includes('CAO THỦ') || upper.includes('CAO THU') || upper.includes('2')) return 2;
-            if (upper.includes('THO_CAY') || upper.includes('THỢ CÀY') || upper.includes('THO CAY') || upper.includes('1')) return 1;
-        }
-        return 1;
-    })();
+    const userTierLevel = getTierLevel(tierSummary?.currentTier || customer?.membershipTier);
 
     return (
         <>
@@ -715,12 +696,12 @@ export default function Tiers() {
                                                     </span>
                                                 </div>
 
-                                                <h3 className="font-display font-black text-xl text-stone-900 dark:text-[#EDE9DF]">Thợ Cày</h3>
-                                                <p className="font-metadata-spec text-xs font-bold text-stone-500 dark:text-[#9CA3AF] mt-0.5">
-                                                    Yêu cầu: <span className="text-emerald-600 dark:text-emerald-400 font-black">Tạo tài khoản mới</span>
+                                                <h3 className="font-display font-black text-xl text-[#FAF7F0]">Thợ Cày</h3>
+                                                <p className="font-metadata-spec text-xs font-bold text-[#96938B] mt-0.5">
+                                                    Yêu cầu: <span className="text-emerald-400 font-black">Tạo tài khoản mới</span>
                                                 </p>
 
-                                                <div className="my-4 pt-3 border-t border-paper-border dark:border-[#2C2E29] space-y-2.5 text-xs font-editorial-body text-stone-700 dark:text-[#C5C2BA]">
+                                                <div className="my-4 pt-3 border-t border-[#2C2E29] space-y-2.5 text-xs font-editorial-body text-[#C5C2BA]">
                                                     <div className="flex items-start gap-2">
                                                         <i className="ph-bold ph-check text-emerald-600 dark:text-emerald-400 text-sm shrink-0 mt-0.5"></i>
                                                         <span>Mượn và đọc toàn bộ kho sách mở tiêu chuẩn không giới hạn</span>
@@ -796,15 +777,15 @@ export default function Tiers() {
                                                     </span>
                                                 </div>
 
-                                                <h3 className="font-display font-black text-xl text-stone-900 dark:text-[#EDE9DF]">Cao Thủ Cày</h3>
-                                                <p className="font-metadata-spec text-xs font-bold text-stone-500 dark:text-[#9CA3AF] mt-0.5">
-                                                    Yêu cầu: <span className="text-blue-600 dark:text-blue-400 font-black">Đọc 10 Cuốn</span> (hoặc 500 Khoai)
+                                                <h3 className="font-display font-black text-xl text-[#FAF7F0]">Cao Thủ Cày</h3>
+                                                <p className="font-metadata-spec text-xs font-bold text-[#96938B] mt-0.5">
+                                                    Yêu cầu: <span className="text-blue-400 font-black">Đọc 10 Cuốn</span> (hoặc 500 Khoai)
                                                 </p>
 
-                                                <div className="my-4 pt-3 border-t border-paper-border dark:border-[#2C2E29] space-y-2.5 text-xs font-editorial-body text-stone-700 dark:text-[#C5C2BA]">
+                                                <div className="my-4 pt-3 border-t border-[#2C2E29] space-y-2.5 text-xs font-editorial-body text-[#C5C2BA]">
                                                     <div className="flex items-start gap-2">
-                                                        <i className="ph-bold ph-check text-blue-600 dark:text-blue-400 text-sm shrink-0 mt-0.5"></i>
-                                                        <span><strong className="text-stone-900 dark:text-[#EDE9DF] font-bold">Giảm trực tiếp 5%</strong> toàn bộ hóa đơn thuê & mua sách</span>
+                                                        <i className="ph-bold ph-check text-blue-400 text-sm shrink-0 mt-0.5"></i>
+                                                        <span><strong className="text-[#FAF7F0] font-bold">Giảm trực tiếp 5%</strong> toàn bộ hóa đơn thuê & mua sách</span>
                                                     </div>
                                                     <div className="flex items-start gap-2">
                                                         <i className="ph-bold ph-check text-blue-600 dark:text-blue-400 text-sm shrink-0 mt-0.5"></i>
@@ -888,15 +869,15 @@ export default function Tiers() {
                                                     </span>
                                                 </div>
 
-                                                <h3 className="font-display font-black text-xl text-stone-900 dark:text-[#EDE9DF]">Lão Nông</h3>
-                                                <p className="font-metadata-spec text-xs font-bold text-stone-500 dark:text-[#9CA3AF] mt-0.5">
-                                                    Yêu cầu: <span className="text-amber-600 dark:text-amber-400 font-black">Đọc 50 Cuốn</span> (hoặc 2.500 Khoai)
+                                                <h3 className="font-display font-black text-xl text-[#FAF7F0]">Lão Nông</h3>
+                                                <p className="font-metadata-spec text-xs font-bold text-[#96938B] mt-0.5">
+                                                    Yêu cầu: <span className="text-amber-400 font-black">Đọc 50 Cuốn</span> (hoặc 2.500 Khoai)
                                                 </p>
 
-                                                <div className="my-4 pt-3 border-t border-paper-border dark:border-[#2C2E29] space-y-2.5 text-xs font-editorial-body text-stone-700 dark:text-[#C5C2BA]">
+                                                <div className="my-4 pt-3 border-t border-[#2C2E29] space-y-2.5 text-xs font-editorial-body text-[#C5C2BA]">
                                                     <div className="flex items-start gap-2">
-                                                        <i className="ph-bold ph-check text-amber-600 dark:text-amber-400 text-sm shrink-0 mt-0.5"></i>
-                                                        <span><strong className="text-stone-900 dark:text-[#EDE9DF] font-bold">Giảm 10%</strong> toàn bộ chi phí thuê sách & dịch vụ đọc trọn đời</span>
+                                                        <i className="ph-bold ph-check text-amber-400 text-sm shrink-0 mt-0.5"></i>
+                                                        <span><strong className="text-[#FAF7F0] font-bold">Giảm 10%</strong> toàn bộ chi phí thuê sách & dịch vụ đọc trọn đời</span>
                                                     </div>
                                                     <div className="flex items-start gap-2">
                                                         <i className="ph-bold ph-check text-amber-600 dark:text-amber-400 text-sm shrink-0 mt-0.5"></i>
@@ -971,19 +952,19 @@ export default function Tiers() {
                                                     </span>
                                                 </div>
 
-                                                <h3 className="font-display font-black text-xl text-stone-900 dark:text-[#EDE9DF]">Đại Điền Chủ</h3>
-                                                <p className="font-metadata-spec text-xs font-bold text-stone-500 dark:text-[#9CA3AF] mt-0.5">
-                                                    Yêu cầu: <span className="text-amber-600 dark:text-amber-400 font-black">Đọc 150 Cuốn</span> (hoặc 10.000 Khoai)
+                                                <h3 className="font-display font-black text-xl text-[#FAF7F0]">Đại Điền Chủ</h3>
+                                                <p className="font-metadata-spec text-xs font-bold text-[#96938B] mt-0.5">
+                                                    Yêu cầu: <span className="text-amber-400 font-black">Đọc 150 Cuốn</span> (hoặc 10.000 Khoai)
                                                 </p>
 
-                                                <div className="my-4 pt-3 border-t border-paper-border dark:border-[#2C2E29] space-y-2.5 text-xs font-editorial-body text-stone-700 dark:text-[#C5C2BA]">
+                                                <div className="my-4 pt-3 border-t border-[#2C2E29] space-y-2.5 text-xs font-editorial-body text-[#C5C2BA]">
                                                     <div className="flex items-start gap-2">
-                                                        <i className="ph-bold ph-crown text-amber-500 dark:text-amber-400 text-sm shrink-0 mt-0.5"></i>
-                                                        <span><strong className="text-stone-900 dark:text-[#EDE9DF] font-bold">Giảm 20%</strong> toàn bộ dịch vụ và thuê sách trọn đời</span>
+                                                        <i className="ph-bold ph-crown text-amber-400 text-sm shrink-0 mt-0.5"></i>
+                                                        <span><strong className="text-[#FAF7F0] font-bold">Giảm 20%</strong> toàn bộ dịch vụ và thuê sách trọn đời</span>
                                                     </div>
                                                     <div className="flex items-start gap-2">
-                                                        <i className="ph-bold ph-crown text-amber-500 dark:text-amber-400 text-sm shrink-0 mt-0.5"></i>
-                                                        <span><strong className="text-stone-900 dark:text-[#EDE9DF] font-bold">Thuê KHÔNG GIỚI HẠN</strong> toàn bộ kho sách VIP không cần tiền cọc</span>
+                                                        <i className="ph-bold ph-crown text-amber-400 text-sm shrink-0 mt-0.5"></i>
+                                                        <span><strong className="text-[#FAF7F0] font-bold">Thuê KHÔNG GIỚI HẠN</strong> toàn bộ kho sách VIP không cần tiền cọc</span>
                                                     </div>
                                                     <div className="flex items-start gap-2">
                                                         <i className="ph-bold ph-crown text-amber-500 dark:text-amber-400 text-sm shrink-0 mt-0.5"></i>
@@ -1076,23 +1057,23 @@ export default function Tiers() {
                                             <tr className="border-b border-paper-border dark:border-night-border text-ink-muted dark:text-night-muted font-bold">
                                                 <th className="py-3 px-4 w-1/4">Đặc Quyền Cốt Lõi</th>
                                                 <th className="py-3 px-4 text-center text-emerald-600 dark:text-emerald-400">🌱 Thợ Cày</th>
-                                                <th className="py-3 px-4 text-center text-slate-700 dark:text-slate-300">🚜 Cao Thủ Cày</th>
+                                                <th className="py-3 px-4 text-center text-blue-400">🚜 Cao Thủ Cày</th>
                                                 <th className="py-3 px-4 text-center text-gold">🌾 Lão Nông</th>
-                                                <th className="py-3 px-4 text-center text-amber-500 dark:text-amber-400 bg-gold/5 dark:bg-gold/10 rounded-t-lg">🏰 Đại Điền Chủ</th>
+                                                <th className="py-3 px-4 text-center text-amber-400 bg-gold/5 dark:bg-gold/10 rounded-t-lg">🏰 Đại Điền Chủ</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-paper-border dark:divide-night-border text-ink dark:text-night-text">
                                             <tr className="hover:bg-paper dark:hover:bg-night-surface/50 transition-colors">
                                                 <td className="py-3 px-4 font-bold">Mức chiết khấu thuê & mua sách</td>
                                                 <td className="py-3 px-4 text-center text-ink-muted">0%</td>
-                                                <td className="py-3 px-4 text-center font-bold text-slate-700 dark:text-slate-300">Giảm 5%</td>
+                                                <td className="py-3 px-4 text-center font-bold text-blue-400">Giảm 5%</td>
                                                 <td className="py-3 px-4 text-center font-bold text-gold">Giảm 10%</td>
-                                                <td className="py-3 px-4 text-center font-black text-amber-600 dark:text-amber-400 bg-gold/5 dark:bg-gold/10">Giảm 20% trọn đời</td>
+                                                <td className="py-3 px-4 text-center font-black text-amber-400 bg-gold/5 dark:bg-gold/10">Giảm 20% trọn đời</td>
                                             </tr>
                                             <tr className="hover:bg-paper dark:hover:bg-night-surface/50 transition-colors">
                                                 <td className="py-3 px-4 font-bold">Lượt tải lên (Upload) tài liệu cá nhân</td>
                                                 <td className="py-3 px-4 text-center">3 lượt khởi điểm</td>
-                                                <td className="py-3 px-4 text-center font-bold text-slate-700 dark:text-slate-300">10 tài liệu/tháng</td>
+                                                <td className="py-3 px-4 text-center font-bold text-blue-400">10 tài liệu/tháng</td>
                                                 <td className="py-3 px-4 text-center font-bold text-gold">30 tài liệu/tháng</td>
                                                 <td className="py-3 px-4 text-center font-black text-amber-600 dark:text-amber-400 bg-gold/5 dark:bg-gold/10">Không giới hạn</td>
                                             </tr>
@@ -1357,7 +1338,7 @@ export default function Tiers() {
                                         <tr className="border-b border-paper-border dark:border-night-border text-ink-muted dark:text-night-muted font-bold text-xs">
                                             <th className="py-3 px-4 w-1/4">Đặc Quyền Cốt Lõi</th>
                                             <th className="py-3 px-4 text-center text-emerald-600 dark:text-emerald-400">🌱 Thợ Cày (Cấp I)</th>
-                                            <th className="py-3 px-4 text-center text-slate-700 dark:text-slate-300">🚜 Cao Thủ Cày (Cấp II)</th>
+                                            <th className="py-3 px-4 text-center text-blue-400">🚜 Cao Thủ Cày (Cấp II)</th>
                                             <th className="py-3 px-4 text-center text-gold">🌾 Lão Nông (Cấp III)</th>
                                             <th className="py-3 px-4 text-center text-amber-500 dark:text-amber-400 bg-gold/5 dark:bg-gold/10 rounded-t-lg">🏰 Đại Điền Chủ (VIP)</th>
                                         </tr>

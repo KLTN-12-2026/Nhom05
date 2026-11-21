@@ -1,3 +1,4 @@
+import { useMissionVisit } from '@/hooks/useMissionTracking';
 import { myBooksTailwindConfig, inlinePageStyle1 } from './styles/TuSachCn.styles.js';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
@@ -35,6 +36,7 @@ function getBotReply(input, bookshelf = [], potatoBalance = 0) {
     return "Tôi có thể hỗ trợ bạn tóm tắt nội dung sách đang đọc, kiểm tra thời hạn mượn hoặc gợi ý tác phẩm mới phù hợp!";
 }
 export default function MyBooks() {
+    useMissionVisit('BOOKSHELF');
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const initialCategory = searchParams.get('tab') === 'personal' ? 'personal' : 'reading';
@@ -208,7 +210,22 @@ export default function MyBooks() {
     useEffect(() => { document.title = "HALM BOOK — Tủ Sách Của Tôi & Không Gian Đọc Cá Nhân"; let d = document.querySelector('meta[name="description"]'); if (!d) { d = document.createElement('meta'); d.name = 'description'; document.head.appendChild(d); } d.content = "Quản lý tủ sách cá nhân HALM BOOK: Sách đang thuê, tiến trình đọc số, gia hạn bằng Khoai và lịch sử đọc sách bản quyền."; }, []);
     useEffect(() => () => { if (toastTimer.current) window.clearTimeout(toastTimer.current); }, []);
     useEffect(() => { if (!document.querySelector('link[data-my-books-fonts]')) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = ASSETS.fonts; l.dataset.myBooksFonts = 'true'; document.head.appendChild(l); } Object.entries({ bold: ASSETS.bold, regular: ASSETS.regular, fill: ASSETS.fill, duotone: ASSETS.duotone }).forEach(([k, href]) => { if (document.querySelector(`link[data-my-books-icons="${k}"]`)) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = href; l.dataset.myBooksIcons = k; document.head.appendChild(l); }); window.tailwind = window.tailwind || {}; window.tailwind.config = myBooksTailwindConfig; if (!document.querySelector('script[src*="cdn.tailwindcss.com"]')) { const s = document.createElement('script'); s.src = ASSETS.tailwind; s.async = true; document.head.appendChild(s); } }, []);
-    const showToast = (title, message) => { setToast({ title, message }); setToastVisible(true); if (toastTimer.current) window.clearTimeout(toastTimer.current); toastTimer.current = window.setTimeout(() => setToastVisible(false), 3500); };
+    const showToast = (title, message, type = 'info') => {
+        if (window.halmToast) {
+            const lower = (title || '').toLowerCase();
+            if (type === 'success' || lower.includes('thành công') || lower.includes('đã xóa') || lower.includes('sao chép')) {
+                window.halmToast.success(title, message);
+            } else if (type === 'error' || lower.includes('thất bại') || lower.includes('lỗi')) {
+                window.halmToast.error(title, message);
+            } else {
+                window.halmToast.info(title, message);
+            }
+        }
+        setToast({ title, message });
+        setToastVisible(true);
+        if (toastTimer.current) window.clearTimeout(toastTimer.current);
+        toastTimer.current = window.setTimeout(() => setToastVisible(false), 3500);
+    };
     const filterBooks = category => {
         setActiveCategory(category);
         setCurrentPage(1);
@@ -371,10 +388,10 @@ export default function MyBooks() {
                             />
 
                             {/* Name & Handle */}
-                            <h2 className="font-display font-black text-2xl text-stone-900 dark:!text-[#EDE9DF] leading-tight">
+                            <h2 className="font-display font-black text-2xl text-[#FAF7F0] leading-tight">
                                 {customerName}
                             </h2>
-                            <p className="font-metadata-spec text-xs text-stone-500 dark:!text-[#9CA3AF] mt-1">
+                            <p className="font-metadata-spec text-xs text-[#96938B] mt-1">
                                 {customerIdDisplay}
                             </p>
 
@@ -390,12 +407,12 @@ export default function MyBooks() {
                             {/* Quick Reader Stats */}
                             <div className="grid grid-cols-2 gap-3 w-full text-center">
                                 <Link to="/canhan?tab=wallet" className="py-4 px-3 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-gold transition-colors flex flex-col justify-center">
-                                    <span className="block font-metadata-spec text-2xl font-black text-stone-900 dark:!text-[#EDE9DF]" style={{ color: isDark ? '#EDE9DF' : undefined }}>{potatoBalance.toLocaleString()}</span>
-                                    <span className="font-metadata-spec text-xs text-stone-500 dark:!text-[#9CA3AF] mt-1" style={{ color: isDark ? '#9CA3AF' : undefined }}>Khoai Tích Lũy</span>
+                                    <span className="block font-metadata-spec text-2xl font-black text-[#EDE9DF]">{potatoBalance.toLocaleString()}</span>
+                                    <span className="font-metadata-spec text-xs text-[#96938B] mt-1">Khoai Tích Lũy</span>
                                 </Link>
                                 <div className="py-4 px-3 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border flex flex-col justify-center">
-                                    <span className="block font-metadata-spec text-2xl font-black text-stone-900 dark:!text-[#EDE9DF]" style={{ color: isDark ? '#EDE9DF' : undefined }}>{activeBooks.length}</span>
-                                    <span className="font-metadata-spec text-xs text-stone-500 dark:!text-[#9CA3AF] mt-1" style={{ color: isDark ? '#9CA3AF' : undefined }}>Sách Trong Tủ</span>
+                                    <span className="block font-metadata-spec text-2xl font-black text-[#EDE9DF]">{activeBooks.length}</span>
+                                    <span className="font-metadata-spec text-xs text-[#96938B] mt-1">Sách Trong Tủ</span>
                                 </div>
                             </div>
                         </div>

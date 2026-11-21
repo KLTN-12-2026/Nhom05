@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { API_BASE_URL, CANDIDATE_API_URLS } from '../config/api';
 
-import { ComponentRef, useCallback,Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback,Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import Constants from 'expo-constants';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import {
@@ -28,6 +28,7 @@ import { BookData, useAppNavigation } from './navigation';
 import { fetchApiWithFallback } from './apiService';
 import HomeCover from './home/HomeBookCover';
 import ContinueReading from './home/ContinueReading';
+import HomeBannerCarousel from './home/HomeBannerCarousel';
 import { formatHomeBookDate, getRankedHomeBooks, getRecentHomeBooks, HomeBookItem, readHomePage } from './home/homeData';
 export type { HomeBookItem };
 import { getBookCoverSource } from './bookCovers';
@@ -362,9 +363,6 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const width = Math.min(1040, window.width - insets.left - insets.right);
-  const featuredWidth = Math.max(200, width - 32);
-  const featuredRef = useRef<ComponentRef<typeof ScrollView>>(null);
-  const [featuredIndex, setFeaturedIndex] = useState(0);
   const [selectedPreviewBook, setSelectedPreviewBook] = useState<HomeBookItem | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const scrollOffset = useRef(0);
@@ -573,33 +571,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
   const primary = isDarkMode ? '#E5A93C' : '#4B8176';
   const textColor = isDarkMode ? '#F7F5F0' : '#242321';
   const homeCardWidth = width < 380 ? 116 : 132;
-  // Use real Home books for editorial slides; fallback content stays isolated until a Featured API exists.
-  const featuredItems = books.length > 0
-    ? books.slice(0, 2).map((book) => ({
-      id: `book-${book.id}`,
-      eyebrow: 'GIỚI THIỆU SÁCH',
-      title: book.title,
-      description: book.description?.replace(/<[^>]*>/g, '').trim() || `Tác phẩm của ${book.author || 'tác giả HALMBOOK'}.`,
-      book,
-    }))
-    : [
-      { id: 'mock-release', eyebrow: 'GÓC VĂN HỌC', title: 'Không gian đọc mới mỗi ngày', description: 'Một khoảng lặng để khám phá những câu chuyện và góc nhìn đáng nhớ.', book: undefined },
-      { id: 'mock-reading-event', eyebrow: 'DẤU ẤN VĂN HỌC', title: 'Đọc theo nhịp riêng', description: 'Những trang sách mở ra thêm nhiều cách nhìn về con người và cuộc sống.', book: undefined },
-    ];
-  const activeFeatured = Math.min(featuredIndex, Math.max(0, featuredItems.length - 1));
-  useEffect(() => {
-    if (featuredItems.length < 2) return;
-    const timer = setInterval(() => {
-      setFeaturedIndex((current) => (current + 1) % featuredItems.length);
-    }, 3000);
-    return () => clearInterval(timer);
-  }, [featuredItems.length]);
   const rankedBooks = useMemo(() => getRankedHomeBooks(books), [books]);
-  useEffect(() => {
-    featuredRef.current?.scrollTo({ x: 0, animated: false });
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Synchronize the carousel indicator with its imperative scroll reset.
-    setFeaturedIndex(0);
-  }, [featuredWidth, books]);
   useEffect(() => {
     setFooterVisible?.(true);
     return () => setFooterVisible?.(true);
@@ -860,32 +832,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
               {unreadNotifications > 0 && <View style={{ position: 'absolute', top: 3, right: 2, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 3, backgroundColor: '#D5AC56', alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 9, fontWeight: '800', color: '#382F23' }}>{unreadNotifications > 99 ? '99+' : unreadNotifications}</Text></View>}
             </TouchableOpacity>
           </View>
-          {featuredItems.length > 0 ? <>
-            <ScrollView ref={featuredRef} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carouselContainer}
-              snapToInterval={featuredWidth + 12} decelerationRate="fast" scrollEventThrottle={16}
-              onScroll={event => setFeaturedIndex(Math.max(0, Math.min(featuredItems.length - 1, Math.round(event.nativeEvent.contentOffset.x / (featuredWidth + 12)))))}>
-              {featuredItems.map((item) => (
-                 <View
-                   key={item.id}
-                   style={[styles.featuredPanel, isDarkMode && styles.featuredPanelDark, { width: featuredWidth }]}
-                 >
-                  <View style={styles.featuredEditorialCopy}>
-                    <Text style={[styles.featuredEyebrow, isDarkMode && styles.featuredEyebrowDark]}>{item.eyebrow}</Text>
-                    <Text style={[styles.featuredTitle, isDarkMode && styles.featuredTitleDark]} numberOfLines={2}>{item.title}</Text>
-                    <Text style={[styles.featuredDescription, isDarkMode && styles.featuredDescriptionDark]} numberOfLines={3}>{item.description}</Text>
-                  </View>
-                  <View style={[styles.featuredEditorialImage, isDarkMode && styles.featuredEditorialImageDark]}>
-                    {item.book ? <HomeCover book={item.book} /> : <Ionicons name="book-outline" size={40} color={isDarkMode ? '#E5A93C' : '#8B4A3C'} />}
-                  </View>
-                </View>
-              ))}
-            </ScrollView>
-            <View style={styles.paginationDots}>
-              {featuredItems.map((item, index) => <TouchableOpacity key={item.id} style={styles.dotTarget} accessibilityRole="button" accessibilityLabel={`Chuyển đến nội dung ${index + 1}`} accessibilityState={{ selected: index === activeFeatured }} onPress={() => featuredRef.current?.scrollTo({ x: index * (featuredWidth + 12), animated: true })}>
-                <View style={[styles.dot, index === activeFeatured && styles.dotActive]} />
-              </TouchableOpacity>)}
-            </View>
-          </> : null}
+          <HomeBannerCarousel width={width} refreshKey={historyRefreshKey} />
         </View>
 
         {errorMessage && books.length > 0 && <View style={styles.refreshNotice} accessibilityLiveRegion="polite">

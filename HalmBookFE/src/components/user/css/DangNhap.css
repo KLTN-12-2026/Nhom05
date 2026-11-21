@@ -2,19 +2,20 @@
 @import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css');
 
 :root {
-    --primary: #90caf9;
-    --secondary: #fce4ec;
-    --text-main: #2d3436;
-    --text-muted: #636e72;
+    --primary: #D4AF37;
+    --secondary: #8E3038;
+    --text-main: #FAF7F0;
+    --text-muted: #96938B;
 }
 
-
 .auth-page-container {
-    background: linear-gradient(135deg, #fce4ec 0%, #e0f2fe 50%, #f3e5f5 100%);
+    background-color: #111210;
+    background-image: 
+        radial-gradient(circle at 10% 10%, rgba(142, 48, 56, 0.2) 0%, transparent 45%),
+        radial-gradient(circle at 90% 90%, rgba(212, 175, 55, 0.15) 0%, transparent 50%),
+        radial-gradient(circle at 50% 50%, #181916 0%, #111210 100%);
     min-height: 100vh;
     display: flex;
-    /* Chỉnh vị trí cả cụm QR + form: justify-content (ngang), align-items (dọc),
-       padding (khoảng cách với mép màn hình). */
     justify-content: center;
     align-items: center;
     padding: 20px;
@@ -22,6 +23,7 @@
     overflow: hidden;
     font-family: 'Outfit', sans-serif;
     box-sizing: border-box;
+    color: var(--text-main);
 }
 
 .auth-page-container * {
@@ -36,7 +38,7 @@
     top: -10%;
     width: 800px;
     height: 800px;
-    background: radial-gradient(circle, rgba(255, 182, 193, 0.4) 0%, rgba(255, 255, 255, 0) 70%);
+    background: radial-gradient(circle, rgba(142, 48, 56, 0.18) 0%, rgba(17, 18, 16, 0) 70%);
     z-index: 0;
     animation: pulse 8s infinite alternate;
 }
@@ -47,7 +49,7 @@
     bottom: -20%;
     width: 700px;
     height: 700px;
-    background: radial-gradient(circle, rgba(144, 202, 249, 0.4) 0%, rgba(255, 255, 255, 0) 70%);
+    background: radial-gradient(circle, rgba(212, 175, 55, 0.15) 0%, rgba(17, 18, 16, 0) 70%);
     z-index: 0;
     animation: pulse 10s infinite alternate-reverse;
 }
@@ -60,19 +62,19 @@
     z-index: 1;
     width: 35vw;
     max-width: 500px;
-    opacity: 0.85;
+    opacity: 0.35;
     pointer-events: none;
+    filter: drop-shadow(0 10px 20px rgba(0,0,0,0.6));
 }
 
 @keyframes pulse {
     0% {
         transform: scale(1);
-        opacity: 0.6;
+        opacity: 0.5;
     }
-
     100% {
         transform: scale(1.1);
-        opacity: 1;
+        opacity: 0.8;
     }
 }
 
@@ -81,12 +83,10 @@
     width: 100%;
     max-width: 1100px;
     min-height: 650px;
-    background: rgba(255, 255, 255, 0.5);
-    backdrop-filter: blur(25px);
-    -webkit-backdrop-filter: blur(25px);
-    border: 1px solid rgba(255, 255, 255, 0.6);
-    border-radius: 40px;
-    box-shadow: 0 40px 80px rgba(0, 0, 0, 0.08), inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+    background: #181916;
+    border: 1px solid #2C2E29;
+    border-radius: 36px;
+    box-shadow: 0 35px 80px rgba(0, 0, 0, 0.85);
     display: flex;
     position: relative;
     z-index: 10;
@@ -96,7 +96,8 @@
 /* --- Left Side (QR Code & Decoration) --- */
 .auth-left {
     flex: 1.2;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.7) 0%, rgba(246, 250, 255, 0.5) 100%);
+    background: #141512;
+    border-right: 1px solid #2C2E29;
     position: relative;
     display: flex;
     flex-direction: column;
@@ -110,6 +111,7 @@
     font-size: 2.5rem;
     animation: float 4s ease-in-out infinite;
     z-index: 1;
+    opacity: 0.85;
 }
 
 .flower {
@@ -142,10 +144,11 @@
     display: flex;
     align-items: center;
     gap: 10px;
+    color: #FAF7F0;
 }
 
 .brand-logo span {
-    background: linear-gradient(45deg, #1e3c72, #2a5298);
+    background: linear-gradient(135deg, #FAF7F0 0%, #D4AF37 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
@@ -154,11 +157,11 @@
 .qr-container {
     z-index: 2;
     text-align: center;
-    background: #ffffff;
+    background: #181916;
     padding: 30px;
     border-radius: 24px;
-    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.06);
-    border: 1px solid rgba(144, 202, 249, 0.2);
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+    border: 1px solid #2C2E29;
     margin-top: 40px;
 }
 
@@ -166,6 +169,7 @@
     font-size: 1.4rem;
     color: var(--text-main);
     margin-bottom: 8px;
+    font-weight: 800;
 }
 
 .qr-container p {
@@ -175,12 +179,14 @@
 }
 
 .qr-box {
-    background: #f8f9fa;
+    background: #F5F2EB;
     padding: 15px;
     border-radius: 16px;
     display: inline-block;
     margin-bottom: 20px;
     position: relative;
+    border: 1px solid rgba(212, 175, 55, 0.5);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
 .qr-box img {
@@ -195,21 +201,22 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background: white;
+    background: #181916;
     padding: 8px;
     border-radius: 50%;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
     font-size: 1.2rem;
-    color: #1e3c72;
+    color: #D4AF37;
     display: flex;
     justify-content: center;
     align-items: center;
     width: 40px;
     height: 40px;
+    border: 1px solid #2C2E29;
 }
 
 .qr-link {
-    color: #1976d2;
+    color: #D4AF37;
     font-weight: 600;
     text-decoration: none;
     font-size: 0.9rem;
@@ -218,18 +225,17 @@
 }
 
 .qr-link:hover {
-    color: #ff7eb3;
+    color: #F5D061;
+    text-decoration: underline;
 }
 
 @keyframes float {
     0% {
         transform: translateY(0px) rotate(0deg);
     }
-
     50% {
         transform: translateY(-15px) rotate(5deg);
     }
-
     100% {
         transform: translateY(0px) rotate(0deg);
     }
@@ -238,17 +244,14 @@
 /* --- Right Side (Auth Forms) --- */
 .auth-right {
     flex: 0.9;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(245, 249, 255, 0.9) 100%);
-    box-shadow: -15px 0 30px rgba(0, 0, 0, 0.03);
+    background: #181916;
     padding: 40px 60px;
     display: flex;
     flex-direction: column;
     justify-content: center;
     position: relative;
     z-index: 5;
-    border-left: 1px solid rgba(255, 255, 255, 0.8);
-    background-image: radial-gradient(circle at 100% 0%, rgba(144, 202, 249, 0.15) 0%, transparent 40%),
-        radial-gradient(circle at 0% 100%, rgba(255, 182, 193, 0.15) 0%, transparent 40%);
+    border-left: 1px solid #2C2E29;
 }
 
 .form-container {
@@ -274,7 +277,6 @@
         opacity: 0;
         transform: translateX(30px);
     }
-
     to {
         opacity: 1;
         transform: translateX(0);
@@ -283,7 +285,7 @@
 
 .auth-title {
     font-size: 2.2rem;
-    font-weight: 700;
+    font-weight: 800;
     color: var(--text-main);
     margin-bottom: 25px;
     text-align: center;
@@ -298,16 +300,17 @@
 .input-group select {
     width: 100%;
     padding: 14px 20px;
-    /* Tùy chỉnh ô nhập tại đây: width (chiều rộng), padding (khoảng đệm),
-       border (độ dày/màu viền), border-radius (bo góc), background (màu nền). */
-    border: 2px solid rgba(99, 110, 114, 0.45);
+    border: 1px solid #2C2E29;
     border-radius: 12px;
     font-size: 0.95rem;
-    background: rgba(241, 244, 248, 0.7);
-    color: var(--text-main);
+    background: #20221E;
+    color: #FAF7F0;
     transition: all 0.3s ease;
     outline: none;
-    backdrop-filter: blur(5px);
+}
+
+.input-group input::placeholder {
+    color: #807D75;
 }
 
 .input-group select {
@@ -315,8 +318,8 @@
     padding-right: 46px;
     cursor: pointer;
     background-image:
-        linear-gradient(45deg, transparent 50%, #636e72 50%),
-        linear-gradient(135deg, #636e72 50%, transparent 50%);
+        linear-gradient(45deg, transparent 50%, #96938B 50%),
+        linear-gradient(135deg, #96938B 50%, transparent 50%);
     background-position:
         calc(100% - 20px) 50%,
         calc(100% - 15px) 50%;
@@ -325,18 +328,19 @@
 }
 
 .input-group select:invalid {
-    color: #757575;
+    color: #807D75;
 }
 
 .input-group select option {
-    color: var(--text-main);
+    background: #20221E;
+    color: #FAF7F0;
 }
 
 .input-group input:focus,
 .input-group select:focus {
-    border-color: #90caf9;
-    background: #ffffff;
-    box-shadow: 0 0 0 4px rgba(144, 202, 249, 0.15);
+    border-color: #D4AF37;
+    background: #242721;
+    box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.25);
 }
 
 .form-actions {
@@ -347,40 +351,41 @@
 }
 
 .link-text {
-    color: var(--text-muted);
+    color: #D4AF37;
     text-decoration: none;
     font-size: 0.9rem;
-    font-weight: 500;
+    font-weight: 600;
     transition: color 0.3s ease;
     cursor: pointer;
 }
 
 .link-text:hover {
-    color: #64b5f6;
+    color: #F5D061;
+    text-decoration: underline;
 }
 
 .btn-submit {
     width: 100%;
     padding: 16px;
-    background: linear-gradient(135deg, #64b5f6 0%, #bbdefb 50%, #fce4ec 100%);
-    color: #1e3c72;
-    border: none;
+    background: linear-gradient(135deg, #D4AF37 0%, #E6C65C 50%, #C59B27 100%);
+    color: #141412;
+    border: 1px solid rgba(212, 175, 55, 0.45);
     border-radius: 14px;
     font-size: 1.15rem;
-    font-weight: 700;
+    font-weight: 800;
     cursor: pointer;
-    box-shadow: 0 10px 20px rgba(100, 181, 246, 0.3);
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition: all 0.3s ease;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(212, 175, 55, 0.25);
 }
 
 .btn-submit:hover {
+    filter: brightness(1.1);
     transform: translateY(-2px);
-    box-shadow: 0 15px 25px rgba(100, 181, 246, 0.4);
-    background: linear-gradient(135deg, #42a5f5 0%, #90caf9 50%, #f8bbd0 100%);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(212, 175, 55, 0.35);
 }
 
 .btn-submit:active {
-    transform: translateY(0);
+    transform: translateY(1px);
 }
 
 /* Divider */
@@ -388,24 +393,27 @@
     display: flex;
     align-items: center;
     text-align: center;
-    color: var(--text-muted);
+    color: #96938B;
     font-size: 0.85rem;
-    margin: 20px 0 15px;
+    font-weight: 600;
+    margin: 20px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .divider::before,
 .divider::after {
     content: '';
     flex: 1;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    border-bottom: 1px solid #2C2E29;
 }
 
 .divider:not(:empty)::before {
-    margin-right: .5em;
+    margin-right: .75em;
 }
 
 .divider:not(:empty)::after {
-    margin-left: .5em;
+    margin-left: .75em;
 }
 
 /* Social Login Buttons */
@@ -417,44 +425,49 @@
 }
 
 .social-btn {
-    width: 45px;
-    height: 45px;
+    width: 48px;
+    height: 48px;
     border-radius: 50%;
-    border: none;
-    background: #ffffff;
+    border: 1px solid #2C2E29;
+    background: #20221E;
     display: flex;
     justify-content: center;
     align-items: center;
     font-size: 1.3rem;
     cursor: pointer;
     transition: all 0.3s ease;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+    color: #FAF7F0;
 }
 
 .social-btn.google {
-    color: #DB4437;
+    color: #EA4335;
 }
 
 .social-btn.facebook {
-    color: #1877F2;
+    color: #5B9DF8;
 }
 
 .social-btn.apple {
-    color: #000000;
+    color: #EDE9DF;
 }
 
 .social-btn:hover {
+    background: #282A24;
+    border-color: #D4AF37;
     transform: translateY(-3px) scale(1.05);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
 }
 
 .switch-form-text {
     text-align: center;
     margin-top: 20px;
+    font-size: 0.9rem;
+    color: #96938B;
 }
 
 .switch-form-text .link-text {
-    color: #1976d2;
+    color: #D4AF37;
     font-weight: 700;
 }
 
@@ -489,7 +502,7 @@
 
     .auth-right {
         border-left: none;
-        border-top: 1px solid rgba(255, 255, 255, 0.6);
+        border-top: 1px solid #2C2E29;
     }
 
     .brand-logo {
@@ -498,7 +511,6 @@
         left: 0;
     }
 }
-
 
 /* Đảm bảo FontAwesome luôn hiển thị chuẩn 100% không bị font chữ Outfit đè mất icon */
 .auth-page-container i[class*="fa-"],

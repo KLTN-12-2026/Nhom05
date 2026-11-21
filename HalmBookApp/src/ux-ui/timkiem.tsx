@@ -1,3 +1,4 @@
+import { recordMissionVisit } from './missionService';
 import { CANDIDATE_API_URLS } from './apiService';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -361,6 +362,7 @@ export default function SearchScreen() {
         await saveKeywordToRecent(trimmed);
       }
       await searchBooksFromApi(trimmed);
+      if (trimmed.length >= 2) void recordMissionVisit('SEARCH', trimmed).catch(() => {});
     },
     [keyword, saveKeywordToRecent, searchBooksFromApi]
   );

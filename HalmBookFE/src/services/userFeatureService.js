@@ -75,12 +75,9 @@ export const getClaimedMissions = async () => {
   }
 };
 
-export const claimMissionReward = async ({ missionId, isMilestone, rewardPotato, rewardXp }) => {
+export const claimMissionReward = async ({ missionId }) => {
   const res = await axiosInstance.post('/api/home/missions/claim', {
-    missionId,
-    isMilestone,
-    rewardPotato,
-    rewardXp
+    missionId
   });
   return res.data;
 };

@@ -1,9 +1,11 @@
+import { useMissionVisit } from './useMissionTracking';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   Alert,
   Dimensions,
   Image,
@@ -86,6 +88,7 @@ export interface BookshelfItem {
   expired?: boolean;
   categoryName?: string;
   accessRecordId?: number;
+  status?: string;
   startDate?: unknown;
   endDate?: unknown;
 }
@@ -168,6 +171,7 @@ export default function TuSach({ initialTab = 'dangdoc' }: { initialTab?: Booksh
 
   const foreground = isDarkMode ? '#F5F1E8' : '#11131A';
 
+  useMissionVisit('BOOKSHELF', isLoggedIn);
   const [activeTab, setActiveTab] = useState<BookshelfTab>(initialTab);
 
   // Chế độ chỉnh sửa xoá sách đang đọc
@@ -208,7 +212,10 @@ export default function TuSach({ initialTab = 'dangdoc' }: { initialTab?: Booksh
   // [GIẢI THÍCH CODE]: Nạp dữ liệu sách thực tế từ AsyncStorage theo tài khoản
   // Tối ưu hóa: Chạy song song Promise.all để giảm thời gian chờ gấp 4 lần
   // ============================================================================
-  const loadBookshelfData = useCallback(async () => {
+  const shelfRequest = useRef<Promise<void> | null>(null);
+  const loadBookshelfData = useCallback(() => {
+    if (shelfRequest.current) return shelfRequest.current;
+    const operation = (async () => {
     try {
       const [rawReading, currentReading, storedUploaded, storedFav, storedGifted, token] = await Promise.all([
         getUserItem(KEY_READING_BOOKS),
@@ -290,9 +297,14 @@ export default function TuSach({ initialTab = 'dangdoc' }: { initialTab?: Booksh
           const mapRentedDto = (item: RentedBookItem): BookshelfItem => ({
             id: item.bookId,
             accessRecordId: item.accessRecordId,
+            status: item.status,
             title: item.title,
             author: item.author,
-            chapter: item.expired
+            chapter: item.status === 'REVOKED'
+              ? (lang === 'en' ? 'Reading access revoked' : 'Đã thu hồi quyền đọc')
+              : item.status === 'REJECTED'
+              ? (lang === 'en' ? 'Rental rejected' : 'Đã từ chối thuê')
+              : item.expired
               ? (lang === 'en' ? 'Expired' : 'Hết hạn thuê')
               : item.isForever
                 ? (lang === 'en' ? 'Owned forever' : 'Sở hữu vĩnh viễn')
@@ -400,6 +412,10 @@ export default function TuSach({ initialTab = 'dangdoc' }: { initialTab?: Booksh
       setGiftedList([]);
       setIsLoadingRented(false);
     }
+    })();
+    shelfRequest.current = operation;
+    void operation.finally(() => { if (shelfRequest.current === operation) shelfRequest.current = null; });
+    return operation;
   }, [lang]);
 
   const handleRefreshBookshelf = useCallback(async () => {
@@ -409,8 +425,10 @@ export default function TuSach({ initialTab = 'dangdoc' }: { initialTab?: Booksh
   }, [loadBookshelfData]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- Hydrate account-scoped AsyncStorage and rental API data on mount.
-    loadBookshelfData();
+    void loadBookshelfData();
+    const timer = setInterval(() => { if (AppState.currentState === 'active') void loadBookshelfData(); }, 15000);
+    const subscription = AppState.addEventListener('change', state => { if (state === 'active') void loadBookshelfData(); });
+    return () => { clearInterval(timer); subscription.remove(); };
   }, [loadBookshelfData]);
 
   // Đổi Tab: Hủy trạng thái chỉnh sửa nếu đang bật & nạp lại dữ liệu mới nhất

@@ -1,3 +1,4 @@
+import { getCommercePolicy, rentalPlanPrice } from '@/services/commercePolicyService';
 import axiosInstance from '@/services/axiosClient';
 import { isTokenValid } from '@/services/authToken';
 import { openAuthModal } from '@/components/common/AuthModal';
@@ -27,34 +28,13 @@ const themeToggleBtn = document.getElementById('themeToggleBtn');
                 }
             }
 
-            const savedTheme = localStorage.getItem('color-theme') || localStorage.getItem('halm-theme');
-            if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-                document.documentElement.classList.add('dark');
-                if (themeIcon) {
-                    themeIcon.classList.remove('ph-moon');
-                    themeIcon.classList.add('ph-sun');
-                }
-                createStars();
-            } else {
-                document.documentElement.classList.remove('dark');
-                if (themeIcon) {
-                    themeIcon.classList.remove('ph-sun');
-                    themeIcon.classList.add('ph-moon');
-                }
+            document.documentElement.classList.add('dark');
+            document.documentElement.classList.remove('light');
+            if (themeIcon) {
+                themeIcon.classList.remove('ph-moon');
+                themeIcon.classList.add('ph-sun');
             }
-
-            if (themeToggleBtn) {
-                scope.listen(themeToggleBtn, 'click', () => {
-                    const isDark = document.documentElement.classList.toggle('dark');
-                    localStorage.setItem('color-theme', isDark ? 'dark' : 'light');
-                    localStorage.setItem('halm-theme', isDark ? 'dark' : 'light');
-                    if (themeIcon) {
-                        themeIcon.classList.toggle('ph-moon', !isDark);
-                        themeIcon.classList.toggle('ph-sun', isDark);
-                    }
-                    if (isDark) createStars();
-                });
-            }
+            createStars();
 
             // ----------------------------------------------------
             // 2. 3D INTERACTIVE BOOK TILT ON MOUSEMOVE
@@ -287,35 +267,14 @@ const themeToggleBtn = document.getElementById('themeToggleBtn');
         // ----------------------------------------------------
         // 5. RENTAL SELECTION MODAL & CART SYSTEM
         // ----------------------------------------------------
-        const rentalPlans = {
-            '1': { name: 'Thuê 1 Ngày (24h)', days: 1, price: 2, label: 'Thuê 1 Ngày - 2 Khoai', isBuy: false },
-            '3': { name: 'Thuê 3 Ngày (Cuối tuần)', days: 3, price: 5, label: 'Thuê 3 Ngày - 5 Khoai', isBuy: false },
-            '7': { name: 'Thuê 7 Ngày (1 Tuần)', days: 7, price: 9, label: 'Thuê 7 Ngày - 9 Khoai', isBuy: false },
-            '15': { name: 'Thuê 15 Ngày', days: 15, price: 18, label: 'Thuê 15 Ngày - 18 Khoai', isBuy: false },
-            '30': { name: 'Thuê 30 Ngày', days: 30, price: 30, label: 'Thuê 30 Ngày - 30 Khoai', isBuy: false },
-            'forever': { name: 'Mua Đứt (Sở Hữu Trọn Đời)', days: 99999, price: 39, label: 'Mua Đứt - 39 Khoai', isBuy: true }
-        };
+        let rentalPlans = {};
 
         let currentRentalPlanKey = '7';
         let cartItems = [];
 
         function resolvePlanDisplay(planKey, rentalDays) {
-            if (planKey === 'forever' || rentalDays >= 9999) {
-                return { type: 'Mua Đứt', plan: 'Sở Hữu Trọn Đời', days: 99999, price: 39 };
-            }
-            if (String(planKey) === '1' || rentalDays === 1) {
-                return { type: 'Thuê Đọc', plan: 'Thuê 1 Ngày (24h)', days: 1, price: 2 };
-            }
-            if (String(planKey) === '3' || rentalDays === 3) {
-                return { type: 'Thuê Đọc', plan: 'Thuê 3 Ngày', days: 3, price: 5 };
-            }
-            if (String(planKey) === '15' || rentalDays === 15) {
-                return { type: 'Thuê Đọc', plan: 'Thuê 15 Ngày', days: 15, price: 18 };
-            }
-            if (String(planKey) === '30' || rentalDays === 30) {
-                return { type: 'Thuê Đọc', plan: 'Thuê 30 Ngày', days: 30, price: 30 };
-            }
-            return { type: 'Thuê Đọc', plan: 'Thuê 7 Ngày (1 Tuần)', days: 7, price: 9 };
+            const p = rentalPlans[planKey];
+            return { type: planKey === 'forever' ? 'Mua đứt' : 'Thuê đọc', plan: p?.name || (planKey === 'forever' ? 'Mua đứt' : rentalDays + ' ngày'), days: rentalDays, price: p?.price || 0 };
         }
 
         async function fetchServerCart() {
@@ -358,11 +317,30 @@ const themeToggleBtn = document.getElementById('themeToggleBtn');
             }, 450);
         }
 
-        function openRentalModal() {
+        async function openRentalModal() {
             if (!isTokenValid()) {
                 openAuthModal({ mode: 'login', message: 'Vui lòng đăng nhập để thuê hoặc mua ấn phẩm này!' });
                 return;
             }
+
+            try {
+                const policy = await getCommercePolicy();
+                rentalPlans = Object.fromEntries(policy.plans.filter(p => p.active).map(p => { const price = rentalPlanPrice(p, book?.rent_price); return [p.key, { name: p.label, days: p.durationDays, price, label: p.label + ' - ' + price + ' Khoai', isBuy: p.key === 'forever' }]; }));
+                const list = document.getElementById('rentalPlansContainer');
+                if (list) {
+                    for (const card of list.querySelectorAll('.rental-modal-card')) {
+                        const key = card.id.replace('planCard_', '');
+                        const plan = rentalPlans[key];
+                        card.setAttribute('aria-disabled', String(!plan));
+                        const amount = card.querySelector('span.font-outfit.font-black.text-base');
+                        if (plan && amount?.firstChild?.nodeType === 3) amount.firstChild.textContent = plan.price + ' ';
+                    }
+                }
+                if (!rentalPlans[currentRentalPlanKey] || !document.getElementById('planCard_' + currentRentalPlanKey)) {
+                    currentRentalPlanKey = Object.keys(rentalPlans).find(key => document.getElementById('planCard_' + key));
+                }
+                if (!currentRentalPlanKey) throw Error('Hiện chưa có gói thuê đang mở.');
+            } catch (error) { showToast(error?.response?.data?.message || 'Không tải được biểu giá. Vui lòng thử lại.', 'error'); return; }
 
             const modal = document.getElementById('rentalModal');
             const backdrop = document.getElementById('rentalModalBackdrop');
@@ -402,11 +380,11 @@ const themeToggleBtn = document.getElementById('themeToggleBtn');
         }
 
         function selectRentalModalPlan(planKey) {
-            currentRentalPlanKey = planKey;
             const plan = rentalPlans[planKey];
             if (!plan) return;
+            currentRentalPlanKey = planKey;
 
-            ['1', '3', '7', 'forever'].forEach(key => {
+            Object.keys(rentalPlans).forEach(key => {
                 const card = document.getElementById('planCard_' + key);
                 const check = document.getElementById('checkIcon_' + key);
                 if (card && check) {
@@ -468,8 +446,8 @@ const themeToggleBtn = document.getElementById('themeToggleBtn');
 
         // Thêm gói Mua Đứt vào Giỏ Hàng (alias)
         function addBuyForeverToCart() {
-            selectRentalModalPlan('forever');
-            confirmRentalModalAddToCart();
+            currentRentalPlanKey = 'forever';
+            void openRentalModal();
         }
 
         // Lướt sách cùng tác giả trái / phải
@@ -579,68 +557,8 @@ const themeToggleBtn = document.getElementById('themeToggleBtn');
         }
 
         // Thanh toán toàn bộ Giỏ Hàng bằng Khoai Tây thực tế
-        async function handleCheckoutCart() {
-            if (!isTokenValid()) {
-                openAuthModal({ mode: 'login', message: 'Vui lòng đăng nhập để thực hiện thanh toán giỏ hàng!' });
-                return;
-            }
-
-            if (cartItems.length === 0) {
-                showToast('Giỏ hàng đang trống!', 'error');
-                return;
-            }
-
-            const totalPrice = cartItems.reduce((sum, item) => sum + item.price, 0);
-            const khoaiEl = document.getElementById('user-khoai-val');
-            let currentKhoai = khoaiEl ? (parseInt(khoaiEl.textContent.replace(/,/g, '')) || 0) : 0;
-
-            if (currentKhoai < totalPrice) {
-                showToast('Số dư Khoai không đủ (' + totalPrice + ' Khoai cần có, bạn đang có ' + currentKhoai + ' Khoai). Vui lòng nạp thêm Khoai!', 'error');
-                return;
-            }
-
-            const checkoutBtn = document.getElementById('btnCheckoutCart');
-            if (checkoutBtn) checkoutBtn.disabled = true;
-
-            try {
-                const checkoutItems = cartItems.map(item => ({
-                    bookId: item.bookId || item.id,
-                    cartItemId: item.cartItemId,
-                    planKey: String(item.planKey || '7'),
-                    durationDays: item.durationDays || item.days || (item.planKey === 'forever' ? 36500 : Number(item.planKey) || 7),
-                    price: item.price
-                }));
-
-                const res = await axiosInstance.post('/api/home/checkout', {
-                    items: checkoutItems,
-                    paymentMethod: 'POTATO_WALLET'
-                });
-
-                currentKhoai = res.data.remainingPotatoBalance;
-                if (khoaiEl) khoaiEl.textContent = currentKhoai.toLocaleString();
-                const rentalModalKhoai = document.getElementById('rentalModalUserKhoai');
-                if (rentalModalKhoai) rentalModalKhoai.textContent = currentKhoai.toLocaleString();
-                const cartDrawerKhoai = document.getElementById('cartDrawerUserKhoai');
-                if (cartDrawerKhoai) cartDrawerKhoai.textContent = currentKhoai.toLocaleString();
-
-                const boughtCount = cartItems.length;
-                cartItems = [];
-                updateCartUI();
-                toggleCartDrawer(false);
-
-                window.dispatchEvent(new CustomEvent('halm-cart-updated'));
-                window.dispatchEvent(new CustomEvent('halm-potato-updated', {
-                    detail: { potatoBalance: currentKhoai }
-                }));
-                window.dispatchEvent(new CustomEvent('halm-bookshelf-updated'));
-
-                showToast('🎉 Thanh toán thành công ' + boughtCount + ' ấn phẩm (-' + totalPrice + ' Khoai)! Sách đã chuyển vào Tủ Sách Cá Nhân.', 'success');
-            } catch (err) {
-                const errMsg = err?.response?.data?.message || err.message || 'Lỗi khi thanh toán đơn thuê sách.';
-                showToast(errMsg, 'error');
-            } finally {
-                if (checkoutBtn) checkoutBtn.disabled = false;
-            }
+        function handleCheckoutCart() {
+            window.location.assign('/giohang');
         }
 
         // 7. WISHLIST & SHARE HELPERS
@@ -1067,6 +985,22 @@ const themeToggleBtn = document.getElementById('themeToggleBtn');
         // 12. TOAST SYSTEM
         // ----------------------------------------------------
         function showToast(message, type = 'info') {
+            if (window.halmToast) {
+                if (type === 'success') {
+                    window.halmToast.success('Giỏ Hàng', message, {
+                        action: {
+                            label: 'Xem giỏ hàng',
+                            onClick: () => { window.location.assign('/giohang'); }
+                        }
+                    });
+                } else if (type === 'error') {
+                    window.halmToast.error('Thông Báo', message);
+                } else {
+                    window.halmToast.info('Thông Báo', message);
+                }
+                return;
+            }
+
             const container = document.getElementById('toastContainer');
             if (!container) return;
 

@@ -13,8 +13,9 @@ window.renderAdminLayout = renderAdminLayout;
 window.initAdminModals = initAdminModals;
 
 function renderAdminLayout() {
-    // Admin luôn dùng giao diện sáng và không dùng chung trạng thái dark mode của User.
+    // Khôi phục giao diện Light Mode chuẩn chuyên nghiệp của Admin
     document.documentElement.classList.remove('dark');
+    document.documentElement.classList.add('light');
     const sidebarContainer = document.getElementById('admin-sidebar-container');
     const headerContainer = document.getElementById('admin-header-container');
 
@@ -27,6 +28,8 @@ function renderAdminLayout() {
         QuanLyTaiChinh: '/admin/quan-ly-tai-chinh',
         QuanLyKhachHang: '/admin/quan-ly-khach-hang',
         QuanLyUuDai: '/admin/quan-ly-uu-dai',
+        QuanLyHangVaGia: '/admin/hang-thanh-vien',
+        QuanLyNhiemVu: '/admin/quan-ly-nhiem-vu',
         ThongBaoHoTro: '/admin/thong-bao-ho-tro',
         QuanLyGiaoDien: '/admin/quan-ly-giao-dien'
     };
@@ -41,6 +44,8 @@ function renderAdminLayout() {
         { href: 'QuanLyTaiChinh', icon: 'fa-sack-dollar', text: 'Quản Lý Tài Chính', badge: 'pendingTxs' },
         { href: 'QuanLyKhachHang', icon: 'fa-users-gear', text: 'Quản Lý Khách Hàng' },
         { href: 'QuanLyUuDai', icon: 'fa-tags', text: 'Ưu Đãi & Gói Khoai Tây' },
+        { href: 'QuanLyHangVaGia', icon: 'fa-ranking-star', text: 'Hạng Thành Viên' },
+        { href: 'QuanLyNhiemVu', icon: 'fa-list-check', text: 'Quản Lý Nhiệm Vụ' },
         { href: 'ThongBaoHoTro', icon: 'fa-headset', text: 'Hỗ Trợ & Khiếu Nại', badge: 'pendingTickets' },
         { href: 'QuanLyGiaoDien', icon: 'fa-paintbrush', text: 'Quản Lý Giao Diện' }
     ];
@@ -100,12 +105,8 @@ function renderAdminLayout() {
                 </div>
 
                 <!-- Bottom system status -->
-                <div class="p-3 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-gray-950/40 space-y-2">
-                    <div class="flex items-center justify-between px-2 py-1 text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                        <div class="flex items-center space-x-1.5">
-                            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse border border-slate-300 dark:border-slate-600"></span>
-                            <span>Hệ thống online</span>
-                        </div>
+                <div class="p-3 border-t border-slate-200 dark:border-slate-700 bg-white dark:bg-gray-950/40">
+                    <div class="flex items-center justify-end px-2 py-1 text-[11px] font-bold text-slate-500 dark:text-slate-400">
                         <span class="font-mono">v2.5.0</span>
                     </div>
                 </div>
@@ -217,6 +218,24 @@ function injectAdminSharedStyles() {
             min-height: 0; 
         }
         .admin-page-root main { background: #f8fafc !important; color: #0f172a; }
+        .admin-page-root *, #admin-sidebar * {
+            scrollbar-width: thin !important;
+            scrollbar-color: #cbd5e1 #f8fafc !important;
+        }
+        .admin-page-root *::-webkit-scrollbar, #admin-sidebar *::-webkit-scrollbar {
+            width: 6px !important;
+            height: 6px !important;
+        }
+        .admin-page-root *::-webkit-scrollbar-track, #admin-sidebar *::-webkit-scrollbar-track {
+            background: #f8fafc !important;
+        }
+        .admin-page-root *::-webkit-scrollbar-thumb, #admin-sidebar *::-webkit-scrollbar-thumb {
+            background-color: #cbd5e1 !important;
+            border-radius: 9999px !important;
+        }
+        .admin-page-root *::-webkit-scrollbar-thumb:hover, #admin-sidebar *::-webkit-scrollbar-thumb:hover {
+            background-color: #94a3b8 !important;
+        }
         .admin-book-content {
             scrollbar-width: none;
             -ms-overflow-style: none;
@@ -1053,7 +1072,11 @@ function submitRecoverPassword() {
 async function executeLogout() {
     closeAdminModal('logoutModal');
     await logoutAdmin();
-    window.DB?.notify?.('Đã đăng xuất phiên làm việc của Quản trị viên.', 'info');
+    if (window.halmToast) {
+        window.halmToast.info('Đăng Xuất Quản Trị', 'Đã đăng xuất phiên làm việc của Quản trị viên.');
+    } else {
+        window.DB?.notify?.('Đã đăng xuất phiên làm việc của Quản trị viên.', 'info');
+    }
     setTimeout(() => { window.location.href = '/dangnhap'; }, 500);
 }
 

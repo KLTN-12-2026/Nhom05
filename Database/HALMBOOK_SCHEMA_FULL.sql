@@ -24,6 +24,9 @@ CREATE TABLE category (
 DROP TABLE IF EXISTS membership_tier;
 CREATE TABLE membership_tier (
     tier_id INT AUTO_INCREMENT PRIMARY KEY,
+    rank_order INT NULL,
+    upgrade_reward INT NULL,
+    benefits_json TEXT NULL,
     tier_name VARCHAR(100) NOT NULL,               -- 'Thợ Cày', 'Cao Thủ Cày', 'Lão Nông', 'Đại Điền Chủ'
     min_books_required INT DEFAULT 0,              -- 0, 10, 50, 150 cuốn
     min_potato_required INT DEFAULT 0,             -- Số khoai tích lũy yêu cầu
@@ -58,6 +61,7 @@ CREATE TABLE promotion (
     end_date DATETIME,
     status VARCHAR(50) DEFAULT 'ACTIVE',
     category_id INT NULL,
+    book_id VARCHAR(50) NULL,
     CONSTRAINT fk_promotion_category FOREIGN KEY (category_id) REFERENCES category(category_id) ON DELETE SET NULL
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -87,6 +91,9 @@ CREATE TABLE book (
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_book_category FOREIGN KEY (category_id) REFERENCES category(category_id) ON DELETE SET NULL
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+ALTER TABLE promotion ADD CONSTRAINT fk_promotion_book
+    FOREIGN KEY (book_id) REFERENCES book(book_id) ON DELETE RESTRICT ON UPDATE RESTRICT;
 
 -- =============================================================================
 -- 2. TÀI KHOẢN, KHÁCH HÀNG & PHÂN HỆ NGƯỜI DÙNG
@@ -162,6 +169,7 @@ CREATE TABLE reading_note_bookmark (
 -- 3.1 Bảng Giỏ hàng (Cart)
 DROP TABLE IF EXISTS cart;
 CREATE TABLE cart (
+    coupon_code VARCHAR(100) NULL,
     cart_id INT AUTO_INCREMENT PRIMARY KEY,
     customer_id VARCHAR(255) NOT NULL UNIQUE,
     CONSTRAINT fk_cart_customer FOREIGN KEY (customer_id) REFERENCES customer(customer_id) ON DELETE CASCADE
@@ -170,6 +178,7 @@ CREATE TABLE cart (
 -- 3.2 Bảng Chi tiết Giỏ hàng (Cart Item)
 DROP TABLE IF EXISTS cart_item;
 CREATE TABLE cart_item (
+    offer_id VARCHAR(64) NULL,
     cart_item_id INT AUTO_INCREMENT PRIMARY KEY,
     cart_id INT NOT NULL,
     book_id VARCHAR(50) NOT NULL,
@@ -185,6 +194,7 @@ CREATE TABLE cart_item (
 -- 3.3 Bảng Đơn hàng (Orders)
 DROP TABLE IF EXISTS orders;
 CREATE TABLE orders (
+    checkout_offer_discount DOUBLE NULL,
     orders_id INT AUTO_INCREMENT PRIMARY KEY,
     customer_id VARCHAR(255) NOT NULL,
     total_amount DOUBLE NOT NULL,
@@ -197,6 +207,7 @@ CREATE TABLE orders (
     checkout_subtotal DOUBLE NULL,
     checkout_tier_discount DOUBLE NULL,
     checkout_coupon_discount DOUBLE NULL,
+    checkout_policy_revision BIGINT NULL,
     checkout_fingerprint VARCHAR(64) NULL,
     topup_package_id INT NULL,
     topup_package_name VARCHAR(255) NULL,
@@ -230,6 +241,7 @@ CREATE TABLE momo_topup_order (
 -- 3.4 Bảng Chi tiết Đơn hàng (Order Item)
 DROP TABLE IF EXISTS order_item;
 CREATE TABLE order_item (
+    offer_id VARCHAR(64) NULL,
     order_item_id INT AUTO_INCREMENT PRIMARY KEY,
     orders_id INT NOT NULL,
     book_id VARCHAR(50) NOT NULL,
@@ -325,13 +337,15 @@ DROP TABLE IF EXISTS notification;
 CREATE TABLE notification (
     notification_id BIGINT AUTO_INCREMENT PRIMARY KEY,
     customer_id VARCHAR(255) NOT NULL,
+    broadcast_id VARCHAR(36) NULL,
     title VARCHAR(255),
     message TEXT,
     type VARCHAR(50) DEFAULT 'SYSTEM',             -- 'TOPUP', 'RENT', 'EXPIRING', 'REWARD', 'SYSTEM'
     link VARCHAR(255) NULL,
     is_read BOOLEAN DEFAULT FALSE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_notification_customer FOREIGN KEY (customer_id) REFERENCES customer(customer_id) ON DELETE CASCADE
+    CONSTRAINT fk_notification_customer FOREIGN KEY (customer_id) REFERENCES customer(customer_id) ON DELETE CASCADE,
+    UNIQUE KEY uk_notification_broadcast_customer (broadcast_id, customer_id)
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- 4.6 Bảng Sách Yêu Thích (Favorite Book / Wishlist) - Đồng bộ FavoriteBook.java
@@ -354,6 +368,12 @@ CREATE TABLE user_mission_claim (
     mission_id VARCHAR(100) NOT NULL,
     claim_date DATE NOT NULL,
     reward_potato INT DEFAULT 5,
+    claim_key VARCHAR(64) NULL,
+    reward_xp INT NULL,
+    mission_title VARCHAR(150) NULL,
+    mission_period VARCHAR(20) NULL,
+    balance_after INT NULL,
+    UNIQUE KEY uk_mission_claim_key (claim_key),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_mission_customer FOREIGN KEY (customer_id) REFERENCES customer(customer_id) ON DELETE CASCADE,
     KEY idx_mission_claim (customer_id, mission_id, claim_date)
@@ -371,3 +391,99 @@ CREATE INDEX idx_ticket_status_created ON support_ticket(status, created_at);
 
 -- Bật lại kiểm tra khóa ngoại sau khi khởi tạo xong cấu trúc
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- Banner channels: existing website banners default to WEB.
+-- Run against the application's MySQL database before deploying platform-aware banners.
+-- Existing records remain WEB. This script can be run repeatedly without deleting banners.
+CREATE TABLE IF NOT EXISTS banners (
+    banner_id VARCHAR(64) NOT NULL PRIMARY KEY,
+    platform VARCHAR(8) NOT NULL DEFAULT 'WEB',
+    layout_type VARCHAR(50),
+    eyebrow VARCHAR(255),
+    title VARCHAR(255),
+    title_highlight VARCHAR(255),
+    description LONGTEXT,
+    action_text VARCHAR(100),
+    action_link TEXT,
+    icon VARCHAR(100),
+    gradient TEXT,
+    image_url LONGTEXT,
+    image_mode VARCHAR(50),
+    is_active BIT DEFAULT 1,
+    order_index INT DEFAULT 0,
+    extra_data_json LONGTEXT,
+    created_at DATETIME(6),
+    updated_at DATETIME(6),
+    INDEX idx_banners_platform_active_order (platform, is_active, order_index)
+) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- Apply to the existing application database before deploying broadcast notifications.
+-- Existing notifications remain unchanged. Re-running this migration is safe.
+CREATE TABLE IF NOT EXISTS notification_broadcast (
+    request_id VARCHAR(36) NOT NULL PRIMARY KEY,
+    admin_username VARCHAR(255) NOT NULL,
+    fingerprint VARCHAR(64) NOT NULL,
+    title VARCHAR(150) NOT NULL,
+    message TEXT NOT NULL,
+    target VARCHAR(16) NOT NULL,
+    link VARCHAR(255) NOT NULL,
+    sent_count INT NOT NULL DEFAULT 0,
+    created_at DATETIME(6) NOT NULL
+) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- Missions shared by App / Web and managed from Admin.
+CREATE TABLE IF NOT EXISTS mission (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    title VARCHAR(150) NOT NULL,
+    description VARCHAR(500) NOT NULL,
+    condition_type VARCHAR(40) NOT NULL,
+    period VARCHAR(20) NOT NULL,
+    target_value INT NOT NULL,
+    reward_potato INT NOT NULL,
+    reward_xp INT NOT NULL,
+    active BIT(1) NOT NULL DEFAULT b'1',
+    order_index INT NOT NULL DEFAULT 0
+) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS mission_activity (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    customer_id VARCHAR(255) NOT NULL,
+    activity_date DATE,
+    kind VARCHAR(40),
+    progress_value INT NOT NULL DEFAULT 0,
+    last_event_at TIMESTAMP(6) NULL,
+    session_id VARCHAR(64),
+    book_id VARCHAR(255)
+) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- Shared membership and rental pricing configuration.
+CREATE TABLE IF NOT EXISTS commerce_policy (
+    id INT NOT NULL PRIMARY KEY,
+    revision BIGINT NOT NULL,
+    rental_plans_json TEXT NOT NULL,
+    updated_at DATETIME(6)
+) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- Admin-managed book offers.
+CREATE TABLE IF NOT EXISTS book_offer (
+    id VARCHAR(64) NOT NULL PRIMARY KEY,
+    version BIGINT NOT NULL DEFAULT 0,
+    kind VARCHAR(16) NOT NULL,
+    name VARCHAR(150) NOT NULL,
+    description VARCHAR(500),
+    image_url VARCHAR(2048),
+    plan_key VARCHAR(16) NOT NULL,
+    price_khoai INT NOT NULL,
+    status VARCHAR(16) NOT NULL,
+    start_date DATETIME(6),
+    end_date DATETIME(6),
+    order_index INT NOT NULL DEFAULT 0
+) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS book_offer_book (
+    offer_id VARCHAR(64) NOT NULL,
+    position_index INT NOT NULL,
+    book_id VARCHAR(255) NOT NULL,
+    PRIMARY KEY (offer_id, position_index),
+    UNIQUE KEY uk_offer_book (offer_id, book_id),
+    CONSTRAINT fk_offer_book_offer FOREIGN KEY (offer_id) REFERENCES book_offer(id) ON DELETE CASCADE
+) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

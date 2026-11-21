@@ -30,6 +30,8 @@ const QLTaiChinh = lazy(() => import('@/components/admin/QLTaiChinh'));
 const QLKhachHang = lazy(() => import('@/components/admin/QLKhachHang'));
 const QLUuDaiVsGoi = lazy(() => import('@/components/admin/QLUuDaiVsGoi'));
 const QLGiaoDien = lazy(() => import('@/components/admin/QLGiaoDien'));
+const QLHangVaGia = lazy(() => import('@/components/admin/QLHangVaGia'));
+const QLNhiemVu = lazy(() => import('@/components/admin/QLNhiemVu'));
 const HoTroThongBao = lazy(() => import('@/components/admin/HoTroThongBao'));
 
 const PageLoader = () => (
@@ -102,6 +104,9 @@ export default function AppRoutes() {
           <Route path={ROUTES.ADMIN_CUSTOMERS} element={<QLKhachHang />} />
           <Route path={ROUTES.ADMIN_OFFERS} element={<QLUuDaiVsGoi />} />
           <Route path={ROUTES.ADMIN_UI} element={<QLGiaoDien />} />
+          <Route path={ROUTES.ADMIN_MEMBERSHIP} element={<QLHangVaGia />} />
+          <Route path={ROUTES.ADMIN_MEMBERSHIP_PRICING} element={<QLHangVaGia />} />
+          <Route path={ROUTES.ADMIN_MISSIONS} element={<QLNhiemVu />} />
           <Route path={ROUTES.ADMIN_SUPPORT} element={<HoTroThongBao />} />
 
           {/* Đường dẫn alias/legacy từ các file HTML của Admin - tránh rơi vào 404 về User */}

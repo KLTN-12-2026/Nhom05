@@ -78,7 +78,7 @@ public class AuthController {
         userInfo.put("username", username);
         userInfo.put("role", role);
         userInfo.put("account_id", account != null ? account.getAccount_id() : null);
-        return ResponseEntity.ok(userInfo);
+        return ResponseEntity.ok().header("Cache-Control", "private, no-store").body(userInfo);
     }
 
     /**

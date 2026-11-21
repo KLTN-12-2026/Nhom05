@@ -19,7 +19,8 @@ export function useUnreadNotificationCount(isLoggedIn: boolean) {
     const subscription = AppState.addEventListener('change', state => {
       if (state === 'active') void refresh();
     });
-    return () => { active = false; unsubscribe(); subscription.remove(); };
+    const timer = setInterval(() => { if (AppState.currentState === 'active') void refresh(); }, 15000);
+    return () => { active = false; clearInterval(timer); unsubscribe(); subscription.remove(); };
   }, [isLoggedIn]);
   return isLoggedIn ? count : 0;
 }

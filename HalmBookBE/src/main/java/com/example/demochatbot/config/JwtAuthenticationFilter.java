@@ -46,6 +46,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 // 2b. Kiểm tra xem Token có bị thu hồi (đã đăng xuất) hay không
                 if (tokenBlacklistService != null && tokenBlacklistService.isBlacklisted(jwt)) {
+                    SecurityContextHolder.clearContext();
                     String origin = request.getHeader("Origin");
                     if (origin != null && !origin.isEmpty()) {
                         response.setHeader("Access-Control-Allow-Origin", origin);
@@ -69,6 +70,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     // Nếu tài khoản đã bị khóa bởi Quản trị viên (status = LOCKED):
                     // Chặn ngay lập tức với HTTP 423 Locked để Frontend phát hiện và kích hoạt logout đếm ngược.
                     if (!userDetails.isAccountNonLocked()) {
+                        SecurityContextHolder.clearContext();
                         String origin = request.getHeader("Origin");
                         if (origin != null && !origin.isEmpty()) {
                             response.setHeader("Access-Control-Allow-Origin", origin);

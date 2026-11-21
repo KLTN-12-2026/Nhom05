@@ -47,6 +47,30 @@ class LiveDemoTests {
     @Autowired ConnectionFactory connections;
     @Autowired MessageConverter converter;
     @Autowired SimpleRabbitListenerContainerFactory rabbitListenerContainerFactory;
+    @Autowired BookRepository books;
+    @Autowired PromotionRepository promotions;
+    @jakarta.persistence.PersistenceContext jakarta.persistence.EntityManager entityManager;
+
+    @Test @Transactional void oneBookCanOwnMultiplePromotionsInRealMysql() {
+        Book book = new Book();
+        book.setBook_id("TEST-BOOK-" + UUID.randomUUID());
+        book.setBookName("Promotion relation fixture"); book.setAuthor("Fixture");
+        book.setRent_price(0.0); book.setImg_url("/fixture-cover"); book.setPdf_url("/fixture.pdf");
+        books.saveAndFlush(book);
+        for (int i = 0; i < 2; i++) {
+            Promotion promotion = new Promotion();
+            promotion.setPromotion_id("TEST-PROMO-" + UUID.randomUUID());
+            promotion.setPromotion_name("Relation fixture"); promotion.setStatus("INACTIVE");
+            promotion.setBook(book);
+            promotions.save(promotion);
+        }
+        entityManager.flush();
+        entityManager.clear();
+        Book reloaded = books.findById(book.getBook_id()).orElseThrow();
+        assertEquals(2, reloaded.getPromotions().size());
+        assertTrue(reloaded.getPromotions().stream().allMatch(promotion -> reloaded.getBook_id().equals(promotion.getBook_id())));
+        // The test transaction rolls back both the book and its promotions.
+    }
 
     @Test void applicationStartsWithRealDatabaseAndServesChatEndpoints() throws Exception {
         HttpClient client = HttpClient.newHttpClient();

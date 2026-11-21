@@ -234,31 +234,23 @@ public class HomeController {
     }
 
     /**
-     * API lấy đường dẫn xem/đọc nội dung sách từ Cloudinary (Signed URL có thời hạn bảo mật)
+     * Return the authenticated content route so each download rechecks current entitlement.
      */
     @GetMapping("/books/{bookId}/read-url")
     public ResponseEntity<?> getBookReadUrl(@PathVariable("bookId") String bookId) {
         ResponseEntity<?> accessDenied = requireBookAccess(bookId);
         if (accessDenied != null) return accessDenied;
         try {
-            String readUrl = null;
-            try {
-                readUrl = bookService.getBookReadUrl(bookId);
-            } catch (Exception ignored) {}
-
             BookDto bookDto = bookService.findBookDetailById(bookId);
             String format = bookDto != null && bookDto.getFileFormat() != null ? bookDto.getFileFormat() : "PDF";
 
-            // Tự động fallback sang endpoint /content nếu sách chưa có link Cloudinary
-            if (readUrl == null || readUrl.trim().isEmpty()) {
-                readUrl = "/api/home/books/" + bookId + "/content";
-            }
+            String readUrl = "/api/home/books/" + bookId + "/content";
 
-            return ResponseEntity.ok(Map.of(
+            return ResponseEntity.ok().header(HttpHeaders.CACHE_CONTROL, "private, no-store").body(Map.of(
                     "book_id", bookId,
                     "readUrl", readUrl,
                     "fileFormat", format,
-                    "expiresInSeconds", 3600,
+                    "expiresInSeconds", 0,
                     "message", "Lấy URL đọc sách thành công!"
             ));
         } catch (Exception e) {
@@ -303,6 +295,7 @@ public class HomeController {
                     Resource resource = new UrlResource(filePath.toUri());
                     return ResponseEntity.ok()
                             .contentType(MediaType.parseMediaType(mediaType))
+                            .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
                             .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
                             .body(resource);
                 }
@@ -331,7 +324,7 @@ public class HomeController {
                     return ResponseEntity.ok()
                             .contentType(MediaType.parseMediaType(mediaType))
                             .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
-                            .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
+                            .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
                             .body(data);
                 }
                 conn.disconnect();
@@ -342,6 +335,7 @@ public class HomeController {
             if (sampleResource.exists()) {
                 return ResponseEntity.ok()
                         .contentType(MediaType.APPLICATION_PDF)
+                        .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
                         .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
                         .body(sampleResource);
             }
@@ -363,7 +357,7 @@ public class HomeController {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Không tìm thấy thông tin khách hàng!");
             }
             try {
-                tierService.calculateAndUpdateCustomerTier(customer);
+                tierService.getCustomerTierSummary(customer.getCustomer_id());
                 // Tải lại đối tượng khách hàng mới nhất kèm liên kết hạng hội viên đã lưu
                 Customer updated = customerService.findCustomerById(accountId);
                 if (updated != null) {
@@ -532,6 +526,8 @@ public class HomeController {
 
             CheckoutResponse response = orderService.checkoutWithPotato(accountId, request);
             return ResponseEntity.ok(response);
+        } catch (org.springframework.web.server.ResponseStatusException e) {
+            throw e;
         } catch (IllegalStateException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", e.getMessage()));
         } catch (RuntimeException e) {
@@ -556,7 +552,7 @@ public class HomeController {
             }
 
             List<RentedBookDto> bookshelf = orderService.getCustomerBookshelf(accountId);
-            return ResponseEntity.ok(bookshelf);
+            return ResponseEntity.ok().header("Cache-Control", "private, no-store").body(bookshelf);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("message", "Lỗi khi tải tủ sách: " + e.getMessage()));
@@ -571,12 +567,12 @@ public class HomeController {
         try {
             int accountId = customerService.getCurrentAccountId();
             if (accountId <= 0) {
-                return ResponseEntity.ok(Map.of("hasAccess", false));
+                return ResponseEntity.ok().header("Cache-Control", "private, no-store").body(Map.of("hasAccess", false));
             }
             boolean hasAccess = orderService.checkBookAccess(accountId, bookId);
-            return ResponseEntity.ok(Map.of("hasAccess", hasAccess));
+            return ResponseEntity.ok().header("Cache-Control", "private, no-store").body(Map.of("hasAccess", hasAccess));
         } catch (Exception e) {
-            return ResponseEntity.ok(Map.of("hasAccess", false));
+            return ResponseEntity.ok().header("Cache-Control", "private, no-store").body(Map.of("hasAccess", false));
         }
     }
 

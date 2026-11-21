@@ -59,6 +59,16 @@ const LAYOUT_TYPES = [
   }
 ];
 
+const APP_LAYOUT_TYPES = [
+  { type: 'custom_image', name: 'Banner hình ảnh', icon: 'fa-image', desc: 'Ảnh ngang, chỉ ảnh hoặc phủ nội dung lên ảnh' },
+  { type: 'showcase', name: 'Nội dung kèm ảnh', icon: 'fa-book-open', desc: 'Tiêu đề, mô tả và nút mở màn hình trong App' },
+];
+const APP_DESTINATIONS = [
+  ['app:categories', 'Thể loại sách'], ['app:offers', 'Ưu đãi'], ['app:search', 'Tìm kiếm'],
+  ['app:bookshelf', 'Tủ sách'], ['app:payment', 'Nạp Khoai'], ['app:profile', 'Trang cá nhân'],
+  ['app:chatbot', 'Trợ lý AI'], ['app:leaderboard', 'Bảng xếp hạng'], ['app:upload', 'Tải tài liệu'], ['app:home', 'Trang chủ'],
+];
+
 const EMPTY_BANNER_FORM = {
   title: '',
   titleHighlight: '',
@@ -80,8 +90,14 @@ export default function QuanLyGiaoDien() {
   useLegacyAdminPage("QuanLyGiaoDien.html", null, false);
 
   const [activeTab, setActiveTab] = useState('banners'); // 'banners' | 'footer'
-  const [banners, setBanners] = useState(() => getBanners());
-  const [siteSettings, setSiteSettings] = useState(() => getSiteSettings());
+  const [platform, setPlatform] = useState('WEB');
+  const [banners, setBanners] = useState([]);
+  const [bannerLoading, setBannerLoading] = useState(true);
+  const [bannerError, setBannerError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const platformLabel = platform === 'APP' ? 'App' : 'Web';
+  const layoutTypes = platform === 'APP' ? APP_LAYOUT_TYPES : LAYOUT_TYPES;
 
   // Form states
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -107,40 +123,39 @@ export default function QuanLyGiaoDien() {
     }, 3200);
   };
 
-  // Sync data on events & initial fetch from backend
   useEffect(() => {
-    // Tải dữ liệu mới nhất từ CSDL Backend
-    fetchBanners(true);
-    fetchSiteSettings();
-
+    const controller = new AbortController();
+    // eslint-disable-next-line react/set-state-in-effect -- Start a new server query when the selected banner channel changes.
+    setBannerLoading(true);
+    setBannerError('');
+    setBanners([]);
     const handleBannersUpdated = (e) => {
-      if (Array.isArray(e.detail?.banners)) {
-        setBanners([...e.detail.banners]);
-      } else {
-        setBanners(getBanners());
-      }
+      if (e.detail?.platform === platform && e.detail?.isAdmin) setBanners(e.detail.banners);
     };
-    const handleSettingsUpdated = (e) => {
-      if (e.detail?.settings) {
-        setSiteSettings(e.detail.settings);
-        setFooterForm(e.detail.settings);
-      }
-    };
-
     window.addEventListener('halm-banners-updated', handleBannersUpdated);
-    window.addEventListener('halm-site-settings-updated', handleSettingsUpdated);
-
+    fetchBanners(true, platform, { signal: controller.signal }).catch(error => {
+      if (!controller.signal.aborted) setBannerError(error.response?.data?.error || 'Không tải được banner. Vui lòng thử lại.');
+    }).finally(() => { if (!controller.signal.aborted) setBannerLoading(false); });
     return () => {
+      controller.abort();
       window.removeEventListener('halm-banners-updated', handleBannersUpdated);
-      window.removeEventListener('halm-site-settings-updated', handleSettingsUpdated);
     };
+  }, [platform, reloadKey]);
+
+  useEffect(() => {
+    const handleSettingsUpdated = e => {
+      if (e.detail?.settings) setFooterForm(e.detail.settings);
+    };
+    window.addEventListener('halm-site-settings-updated', handleSettingsUpdated);
+    fetchSiteSettings();
+    return () => window.removeEventListener('halm-site-settings-updated', handleSettingsUpdated);
   }, []);
 
   // Handlers for Banners
   const handleOpenCreate = () => {
     setModalMode('create');
     setEditingId(null);
-    setFormData(EMPTY_BANNER_FORM);
+    setFormData({ ...EMPTY_BANNER_FORM, platform, actionLink: platform === 'APP' ? 'app:categories' : '#trending-section' });
     setIsModalOpen(true);
   };
 
@@ -155,7 +170,7 @@ export default function QuanLyGiaoDien() {
       layoutType: banner.layoutType || (banner.imageUrl ? 'custom_image' : 'showcase'),
       description: banner.description || '',
       actionText: banner.actionText || 'Khám Phá Ngay',
-      actionLink: banner.actionLink || '#trending-section',
+      actionLink: banner.actionLink || '',
       icon: banner.icon || 'ph-sparkle',
       gradient: banner.gradient || 'linear-gradient(135deg, #1C1D1A 0%, #2B161B 100%)',
       isActive: banner.isActive !== undefined ? banner.isActive : true,
@@ -168,24 +183,29 @@ export default function QuanLyGiaoDien() {
   };
 
   const handleToggleActive = async (id) => {
+    if (busy) return;
+    setBusy(true);
     try {
-      const updated = await toggleBannerStatus(id);
+      const updated = await toggleBannerStatus(id, platform);
       if (Array.isArray(updated)) {
         setBanners([...updated]);
       } else {
-        setBanners(getBanners());
+        setBanners(getBanners(platform, true));
       }
       showToast('Đã cập nhật trạng thái hiển thị banner trên trang chủ!');
     } catch (err) {
       showToast('Lỗi cập nhật trạng thái: ' + (err.response?.data?.error || err.message), 'error');
     }
+    finally { setBusy(false); }
   };
 
   const handleMoveBanner = async (index, direction) => {
+    if (busy) return;
     const targetIndex = index + direction;
     if (targetIndex < 0 || targetIndex >= banners.length) return;
 
-    const reordered = [...banners];
+    const previous = banners;
+    const reordered = banners.map(b => ({ ...b }));
     const temp = reordered[index];
     reordered[index] = reordered[targetIndex];
     reordered[targetIndex] = temp;
@@ -195,15 +215,18 @@ export default function QuanLyGiaoDien() {
     });
 
     setBanners([...reordered]);
+    setBusy(true);
     try {
-      const saved = await saveBanners(reordered);
+      const saved = await saveBanners(reordered, platform);
       if (Array.isArray(saved)) {
         setBanners([...saved]);
       }
       showToast('Đã cập nhật thứ tự hiển thị banner vào CSDL!');
     } catch (err) {
+      setBanners(previous);
       showToast('Lỗi cập nhật thứ tự banner: ' + (err.response?.data?.error || err.message), 'error');
     }
+    finally { setBusy(false); }
   };
 
   const handleDeleteClick = (banner) => {
@@ -212,29 +235,35 @@ export default function QuanLyGiaoDien() {
 
   const confirmDelete = async () => {
     if (!deleteModal.banner) return;
+    if (busy) return;
+    setBusy(true);
     try {
-      const updated = await deleteBanner(deleteModal.banner.id);
+      const updated = await deleteBanner(deleteModal.banner.id, platform);
       if (Array.isArray(updated)) {
         setBanners([...updated]);
       } else {
-        setBanners(getBanners());
+        setBanners(getBanners(platform, true));
       }
       setDeleteModal({ isOpen: false, banner: null });
       showToast(`Đã xóa banner "${deleteModal.banner.title}" khỏi CSDL thành công!`, 'warning');
     } catch (err) {
       showToast('Lỗi khi xóa banner: ' + (err.response?.data?.error || err.message), 'error');
     }
+    finally { setBusy(false); }
   };
 
   const confirmResetDefaults = async () => {
+    if (busy) return;
+    setBusy(true);
     try {
-      const reset = await resetDefaultBanners();
+      const reset = await resetDefaultBanners(platform);
       setBanners([...reset]);
       setResetModalOpen(false);
-      showToast('Đã khôi phục 5 banner chuẩn của HALM BOOK thành công!');
+      showToast('Đã khôi phục banner mặc định cho ' + platformLabel + '!');
     } catch (err) {
       showToast('Lỗi khi khôi phục banner: ' + (err.response?.data?.error || err.message), 'error');
     }
+    finally { setBusy(false); }
   };
 
   // Image Upload handler (File -> Base64 Data URL)
@@ -244,6 +273,10 @@ export default function QuanLyGiaoDien() {
 
     if (!file.type.startsWith('image/')) {
       showToast('Vui lòng chọn tệp hình ảnh hợp lệ (PNG, JPG, WebP, SVG)!', 'error');
+      return;
+    }
+    if (platform === 'APP' && !['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(file.type)) {
+      showToast('Banner App hỗ trợ ảnh PNG, JPG, WebP hoặc GIF.', 'error');
       return;
     }
 
@@ -284,21 +317,24 @@ export default function QuanLyGiaoDien() {
       return;
     }
 
+    if (busy) return;
+    setBusy(true);
     try {
       let updatedList;
       if (modalMode === 'create') {
-        updatedList = await addBanner(formData);
+        updatedList = await addBanner(formData, platform);
         showToast('Đã thêm banner mới vào CSDL thành công!');
       } else {
-        updatedList = await updateBanner(editingId, formData);
+        updatedList = await updateBanner(editingId, formData, platform);
         showToast('Đã cập nhật banner vào CSDL thành công!');
       }
 
-      setBanners(Array.isArray(updatedList) ? [...updatedList] : getBanners());
+      setBanners(Array.isArray(updatedList) ? [...updatedList] : getBanners(platform, true));
       setIsModalOpen(false);
     } catch (err) {
       showToast('Lỗi lưu banner vào CSDL: ' + (err.response?.data?.error || err.message), 'error');
     }
+    finally { setBusy(false); }
   };
 
   // Handlers for Footer Settings
@@ -306,7 +342,6 @@ export default function QuanLyGiaoDien() {
     e.preventDefault();
     try {
       await saveSiteSettings(footerForm);
-      setSiteSettings(footerForm);
       showToast('Đã lưu và đồng bộ toàn bộ cấu hình Chân Trang (Footer) tới người dùng!');
     } catch (err) {
       showToast('Lỗi lưu cấu hình Chân Trang: ' + (err.response?.data?.error || err.message), 'error');
@@ -326,7 +361,7 @@ export default function QuanLyGiaoDien() {
         <div
           id="admin-header-container"
           data-title="Quản Lý Giao Diện & Banners"
-          data-subtitle="Tùy biến toàn diện banners trang chủ đa bố cục, tải ảnh tự do và đồng bộ chân trang"
+          data-subtitle="Quản lý riêng banner App, banner Web và cấu hình chân trang Web"
         ></div>
 
         {/* Scrollable Content */}
@@ -359,32 +394,20 @@ export default function QuanLyGiaoDien() {
 
           {/* Navigation Tabs & Actions */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setActiveTab('banners')}
-                className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-bold transition ${
-                  activeTab === 'banners'
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                    : 'bg-slate-100 dark:bg-slate-700/60 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                }`}
-              >
-                <i className="fa-solid fa-images"></i>
-                <span>Banners Trang Chủ</span>
-                <span
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                    activeTab === 'banners'
-                      ? 'bg-white/20 text-white'
-                      : 'bg-slate-200 dark:bg-slate-600 text-slate-600 dark:text-slate-200'
-                  }`}
-                >
-                  {banners.length}
-                </span>
-              </button>
+            <div className="flex flex-wrap items-center gap-2">
+              {['WEB', 'APP'].map(channel => (
+                <button key={channel} type="button" disabled={busy}
+                  onClick={() => { setPlatform(channel); setActiveTab('banners'); setIsModalOpen(false); setResetModalOpen(false); setDeleteModal({ isOpen: false, banner: null }); }}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition disabled:opacity-50 ${activeTab === 'banners' && platform === channel ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200'}`}
+                  aria-pressed={activeTab === 'banners' && platform === channel}>
+                  <i className={channel === 'APP' ? 'fa-solid fa-mobile-screen-button' : 'fa-solid fa-desktop'}></i>
+                  Banner {channel === 'APP' ? 'App' : 'Web'}
+                </button>
+              ))}
 
               <button
                 type="button"
-                onClick={() => setActiveTab('footer')}
+                disabled={busy} onClick={() => setActiveTab('footer')}
                 className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-bold transition ${
                   activeTab === 'footer'
                     ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
@@ -398,11 +421,13 @@ export default function QuanLyGiaoDien() {
 
             {activeTab === 'banners' && (
               <div className="flex items-center gap-2">
+                <button type="button" disabled={busy || bannerLoading} onClick={() => setReloadKey(k => k + 1)}
+                  className="px-3 py-2 text-xs font-bold text-blue-700 dark:text-blue-300 rounded-xl bg-blue-50 dark:bg-blue-950 disabled:opacity-50">Làm mới</button>
                 <button
                   type="button"
-                  onClick={() => setResetModalOpen(true)}
+                  disabled={busy || bannerLoading || !!bannerError} onClick={() => setResetModalOpen(true)}
                   className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 rounded-xl transition"
-                  title="Khôi phục 5 banner chuẩn mặc định"
+                  title={"Khôi phục banner mặc định cho " + platformLabel}
                 >
                   <i className="fa-solid fa-rotate-left"></i>
                   <span>Khôi Phục Chuẩn</span>
@@ -410,7 +435,7 @@ export default function QuanLyGiaoDien() {
 
                 <button
                   type="button"
-                  onClick={handleOpenCreate}
+                  disabled={busy || bannerLoading || !!bannerError} onClick={handleOpenCreate}
                   className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md shadow-blue-500/20 transition hover:-translate-y-0.5"
                 >
                   <i className="fa-solid fa-cloud-arrow-up"></i>
@@ -423,6 +448,13 @@ export default function QuanLyGiaoDien() {
           {/* TAB 1: QUẢN LÝ BANNERS TRANG CHỦ */}
           {activeTab === 'banners' && (
             <div className="space-y-6">
+              <div className="rounded-2xl border border-blue-200 bg-blue-50 dark:bg-blue-950/30 p-4 text-sm text-blue-900 dark:text-blue-200">
+                <strong>Banner {platformLabel}</strong>
+                <p className="mt-1 text-xs">{platform === 'APP' ? 'Hiển thị trên trang chủ ứng dụng. Ảnh ngang đề xuất 1200 × 600 px; nút bấm mở màn hình trong App.' : 'Hiển thị trên website. Giữ các bố cục và đường dẫn dành riêng cho Web.'}</p>
+              </div>
+              {bannerLoading && <p role="status" className="text-sm text-slate-500">Đang tải banner {platformLabel}…</p>}
+              {bannerError && <div role="alert" className="rounded-xl bg-rose-50 p-4 text-sm text-rose-700">{bannerError} <button type="button" onClick={() => setReloadKey(k => k + 1)} className="ml-2 underline">Thử lại</button></div>}
+              {!bannerLoading && !bannerError && banners.length === 0 && <p className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">Chưa có banner {platformLabel}. Thêm banner mới hoặc khôi phục bộ mặc định cho kênh này.</p>}
               {/* Stats Ribbon */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div className="p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center gap-3">
@@ -472,8 +504,8 @@ export default function QuanLyGiaoDien() {
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
                 {banners.map((banner, index) => {
                   const layoutMeta =
-                    LAYOUT_TYPES.find((l) => l.type === banner.layoutType) ||
-                    (banner.imageUrl ? LAYOUT_TYPES[0] : LAYOUT_TYPES[1]);
+                    layoutTypes.find((l) => l.type === banner.layoutType) ||
+                    (banner.imageUrl ? layoutTypes[0] : layoutTypes[1]);
 
                   return (
                     <div
@@ -550,7 +582,7 @@ export default function QuanLyGiaoDien() {
                           {/* Switch active toggle */}
                           <button
                             type="button"
-                            onClick={() => handleToggleActive(banner.id)}
+                            disabled={busy || bannerLoading || !!bannerError} onClick={() => handleToggleActive(banner.id)}
                             className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition ${
                               banner.isActive
                                 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 hover:bg-emerald-100'
@@ -566,9 +598,17 @@ export default function QuanLyGiaoDien() {
                           </button>
 
                           <div className="flex items-center gap-1.5">
+                            <button type="button" aria-label="Đưa banner lên" disabled={busy || index === 0}
+                              onClick={() => handleMoveBanner(index, -1)} className="p-2 rounded-lg bg-slate-100 dark:bg-slate-700 disabled:opacity-30">
+                              <i className="fa-solid fa-arrow-up"></i>
+                            </button>
+                            <button type="button" aria-label="Đưa banner xuống" disabled={busy || index === banners.length - 1}
+                              onClick={() => handleMoveBanner(index, 1)} className="p-2 rounded-lg bg-slate-100 dark:bg-slate-700 disabled:opacity-30">
+                              <i className="fa-solid fa-arrow-down"></i>
+                            </button>
                             <button
                               type="button"
-                              onClick={() => handleOpenEdit(banner)}
+                              disabled={busy || bannerLoading || !!bannerError} onClick={() => handleOpenEdit(banner)}
                               className="px-3 py-1.5 bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-600 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
                             >
                               <i className="fa-solid fa-pen-to-square"></i>
@@ -577,7 +617,7 @@ export default function QuanLyGiaoDien() {
 
                             <button
                               type="button"
-                              onClick={() => handleDeleteClick(banner)}
+                              disabled={busy || bannerLoading || !!bannerError} onClick={() => handleDeleteClick(banner)}
                               className="px-3 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-700 hover:text-rose-600 dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
                               title="Xóa banner"
                             >
@@ -679,7 +719,7 @@ export default function QuanLyGiaoDien() {
 
                   <div className="pt-3 flex justify-end">
                     <button
-                      type="submit"
+                      type="submit" disabled={busy}
                       className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shadow-lg shadow-blue-500/20 transition hover:-translate-y-0.5"
                     >
                       <i className="fa-solid fa-floppy-disk mr-2"></i>Lưu Cấu Hình Footer
@@ -760,9 +800,9 @@ export default function QuanLyGiaoDien() {
                 </span>
                 <div>
                   <h3 className="font-black text-sm text-slate-800 dark:text-white">
-                    {modalMode === 'create' ? 'Tạo / Tải Lên Banner Trang Chủ' : 'Chỉnh Sửa Thông Tin Banner'}
+                    {(modalMode === 'create' ? 'Thêm Banner ' : 'Chỉnh Sửa Banner ') + platformLabel}
                   </h3>
-                  <p className="text-[11px] text-slate-400">Tùy biến bố cục hoặc tải ảnh banner tự thiết kế</p>
+                  <p className="text-[11px] text-slate-400">Banner thuộc kênh {platformLabel}. Có thể tải ảnh hoặc nhập nội dung.</p>
                 </div>
               </div>
               <button
@@ -782,7 +822,7 @@ export default function QuanLyGiaoDien() {
                   <i className="fa-solid fa-layer-group mr-1.5 text-blue-500"></i>Hình Thức Hiển Thị (Layout Type)
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {LAYOUT_TYPES.map((layout) => (
+                  {layoutTypes.map((layout) => (
                     <button
                       key={layout.type}
                       type="button"
@@ -880,7 +920,7 @@ export default function QuanLyGiaoDien() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept={platform === 'APP' ? 'image/png,image/jpeg,image/webp,image/gif' : 'image/*'}
                   onChange={handleImageFileChange}
                   className="hidden"
                 />
@@ -888,7 +928,7 @@ export default function QuanLyGiaoDien() {
                 {/* Hoặc nhập URL ảnh trực tiếp */}
                 <div>
                   <input
-                    type="url"
+                    type="text"
                     value={formData.imageUrl}
                     onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
                     placeholder="Hoặc dán link ảnh trực tiếp: https://example.com/banner.jpg"
@@ -941,7 +981,7 @@ export default function QuanLyGiaoDien() {
                   />
                 </div>
 
-                <div>
+                {platform === 'WEB' && <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1.5">
                     Mã Phosphor Icon
                   </label>
@@ -952,7 +992,7 @@ export default function QuanLyGiaoDien() {
                     placeholder="VD: ph-sparkle, ph-robot, ph-crown..."
                     className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                </div>
+                </div>}
               </div>
 
               {/* Mô tả chi tiết */}
@@ -988,13 +1028,23 @@ export default function QuanLyGiaoDien() {
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300 mb-1.5">
                     Đường dẫn chuyển trang (Action Link)
                   </label>
-                  <input
-                    type="text"
-                    value={formData.actionLink}
-                    onChange={(e) => setFormData({ ...formData, actionLink: e.target.value })}
+                  {platform === 'APP' ? <>
+                    <select aria-label="Màn hình mở trên App" value={formData.actionLink.startsWith('book:') ? 'book:' : formData.actionLink}
+                      onChange={e => setFormData({ ...formData, actionLink: e.target.value })}
+                      className="w-full px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs dark:text-white">
+                      <option value="">Không chuyển trang</option>
+                      {APP_DESTINATIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                      <option value="book:">Chi tiết một cuốn sách</option>
+                    </select>
+                    {formData.actionLink.startsWith('book:') && <input aria-label="Mã sách" value={formData.actionLink.slice(5)}
+                      onChange={e => setFormData({ ...formData, actionLink: 'book:' + e.target.value.trim() })}
+                      placeholder="Nhập mã sách trong kho" required pattern="[A-Za-z0-9_-]{1,64}"
+                      className="mt-2 w-full px-3 py-2.5 rounded-xl border border-slate-300 bg-slate-50 dark:bg-slate-900 dark:text-white text-xs" />}
+                  </> : <input type="text" value={formData.actionLink}
+                    onChange={e => setFormData({ ...formData, actionLink: e.target.value })}
                     placeholder="VD: #trending-section, /hang, /uudai..."
-                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-white" />}
+
                 </div>
               </div>
 
@@ -1052,6 +1102,7 @@ export default function QuanLyGiaoDien() {
                 </button>
                 <button
                   type="submit"
+                  disabled={busy}
                   className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black shadow-lg shadow-blue-500/20 transition hover:-translate-y-0.5"
                 >
                   {modalMode === 'create' ? 'Tạo Banner' : 'Lưu Thay Đổi'}
@@ -1094,7 +1145,7 @@ export default function QuanLyGiaoDien() {
               </button>
               <button
                 type="button"
-                onClick={confirmDelete}
+                disabled={busy} onClick={confirmDelete}
                 className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black shadow-md shadow-rose-600/20 transition"
               >
                 Xác Nhận Xóa
@@ -1114,12 +1165,12 @@ export default function QuanLyGiaoDien() {
               </span>
               <div>
                 <h3 className="font-black text-sm text-slate-800 dark:text-white">Khôi Phục Banner Mặc Định</h3>
-                <p className="text-[11px] text-slate-400">Trở về 5 bố cục ban đầu của HALM BOOK</p>
+                <p className="text-[11px] text-slate-400">Khôi phục bộ mặc định cho {platformLabel}</p>
               </div>
             </div>
 
             <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-              Thao tác này sẽ thiết lập lại toàn bộ các banner chuẩn mặc định của HALM BOOK.
+              Thao tác này sẽ thay thế danh sách banner {platformLabel} bằng bộ mặc định. Banner {platform === 'APP' ? 'Web' : 'App'} được giữ nguyên.
             </p>
 
             <div className="flex justify-end gap-2.5 pt-2">
@@ -1132,7 +1183,7 @@ export default function QuanLyGiaoDien() {
               </button>
               <button
                 type="button"
-                onClick={confirmResetDefaults}
+                disabled={busy} onClick={confirmResetDefaults}
                 className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black shadow-md shadow-amber-600/20 transition"
               >
                 Khôi Phục Ngay

@@ -25,6 +25,8 @@ import {
  * ============================================================================
  */
 export interface TierDto {
+  rankOrder?: number;
+  upgradeReward?: number;
   tierId: number;
   tierName: string;
   badgeSubtitle: string;
@@ -79,89 +81,14 @@ interface MembershipModalProps {
  * [GIẢI THÍCH CODE]: 4 CẤP BẬC VỚI ĐẶC QUYỀN CHUẨN 100% NHƯ TRONG ẢNH THIẾT KẾ
  * ============================================================================
  */
-export const PHOTO_EXACT_TIERS: TierDto[] = [
-  {
-    tierId: 1,
-    tierName: 'Thợ Cày',
-    badgeSubtitle: 'Cấp I • Mầm Đọc',
-    requirementsText: 'Yêu cầu: Tạo tài khoản mới',
-    minBooksRequired: 0,
-    minPotatoRequired: 0,
-    discountPercent: 0,
-    badgeIcon: '🌱',
-    description: 'Cấp bậc khởi đầu của độc giả HALM BOOK. Trải nghiệm hệ sinh thái đọc thử và mượn sách linh hoạt.',
-    benefits: [
-      'Thuê và đọc toàn bộ kho sách mở tiêu chuẩn',
-      'Mở khóa Ví Khoai Tây tích lũy điểm thưởng',
-      'Có thể khám phá và trải nghiệm toàn bộ hệ sinh thái của HALM BOOK',
-      '3 lượt Upload file PDF miễn phí (hết lượt: 50 Khoai/lượt)',
-    ],
-  },
-  {
-    tierId: 2,
-    tierName: 'Cao Thủ Cày',
-    badgeSubtitle: 'Cấp II • Tri Thức',
-    requirementsText: 'Yêu cầu: Đọc 10 Cuốn (hoặc 500 Khoai)',
-    minBooksRequired: 10,
-    minPotatoRequired: 500,
-    discountPercent: 5,
-    badgeIcon: '🚜',
-    description: 'Hạng Bạc Tri Thức. Giảm 5% phí thuê sách trọn đời, mở khóa huy hiệu Bạc danh dự.',
-    benefits: [
-      'Giảm 5% phí thuê & mua mọi đầu sách',
-      '10 lượt Upload file PDF miễn phí (hết lượt: 50 Khoai/lượt)',
-      'Huy hiệu Cao Thủ Bạc danh vị nổi bật bên cạnh tên',
-      'Đọc trước các tác phẩm mới xuất bản trước 3 ngày',
-      'Ưu tiên hàng đợi hỗ trợ CSKH trong vòng 2 giờ',
-    ],
-  },
-  {
-    tierId: 3,
-    tierName: 'Lão Nông',
-    badgeSubtitle: 'Cấp III • Tinh Hoa',
-    requirementsText: 'Yêu cầu: Đọc 50 Cuốn (hoặc 2.500 Khoai)',
-    minBooksRequired: 50,
-    minPotatoRequired: 2500,
-    discountPercent: 10,
-    badgeIcon: '🌾',
-    description: 'Hạng Vàng Tinh Hoa. Giảm 10% phí thuê sách trọn đời, miễn phí 1 cuốn mỗi tháng và hỗ trợ VIP 24/7.',
-    benefits: [
-      'Giảm 10% toàn bộ chi phí thuê sách',
-      '15 lượt Upload file PDF miễn phí (hết lượt: 50 Khoai/lượt)',
-      'Miễn phí 1 cuốn sách mỗi tháng (1 trong 5 sách do web cho phép)',
-      'Khung Avatar Tinh Hoa hào quang vàng kim',
-      'Đọc trước các tác phẩm mới xuất bản trước 7 ngày',
-    ],
-  },
-  {
-    tierId: 4,
-    tierName: 'Đại Điền Chủ',
-    badgeSubtitle: 'Cấp IV • Tối Thượng',
-    requirementsText: 'Yêu cầu: Đọc 150 Cuốn (hoặc 10.000 Khoai)',
-    minBooksRequired: 150,
-    minPotatoRequired: 10000,
-    discountPercent: 20,
-    badgeIcon: '👑',
-    description: 'Hạng Hoàng Gia VIP Tối Thượng. Giảm 20% phí thuê sách trọn đời, miễn cọc trọn đời và đặc quyền chăm sóc 1-1.',
-    benefits: [
-      'Giảm 20% toàn bộ dịch vụ và thuê sách trọn đời',
-      'Upload file PDF KHÔNG GIỚI HẠN (Vĩnh viễn)',
-      'Thuê KHÔNG GIỚI HẠN toàn bộ kho sách VIP',
-      'Tặng ấn phẩm sách bìa cứng độc quyền tận nhà hàng năm',
-      'Chuyên viên chăm sóc khách hàng VIP riêng biệt (1-on-1)',
-    ],
-  },
-];
-
-// Alias để tương thích ngược với trangcanhan.tsx
-export const DEFAULT_TIERS_LIST: TierDto[] = PHOTO_EXACT_TIERS;
+export const DEFAULT_TIERS_LIST: TierDto[] = [];
+const EMPTY_TIER: TierDto = { tierId: 0, tierName: 'Đang tải hạng', badgeSubtitle: '', requirementsText: '', minBooksRequired: 0, minPotatoRequired: 0, discountPercent: 0, badgeIcon: '🌱', description: '', benefits: [] };
 
 export default function MembershipModal({
   visible,
   onClose,
   summary,
-  potatoBalance,
-  onTopUp,
+  allTiers,
   lang = 'vi',
 }: MembershipModalProps) {
   // Modal hiển thị chính sách bảo lưu
@@ -169,14 +96,12 @@ export default function MembershipModal({
   // [GIẢI THÍCH CODE]: Trạng thái xem chi tiết đặc quyền của một mức cấp bậc
   const [selectedDetailTier, setSelectedDetailTier] = useState<TierDto | null>(null);
 
-  // [GIẢI THÍCH CODE]: Luôn đảm bảo 4 thẻ cấp bậc hiển thị chính xác quyền lợi như trong ảnh
-  const tiersToRender = PHOTO_EXACT_TIERS;
-
-  const currentTierId = summary?.currentTier?.tierId || 1;
-  const currentTier = tiersToRender.find((t) => t.tierId === currentTierId) || tiersToRender[0];
-  const nextTierId = currentTierId + 1;
-  const nextTier = tiersToRender.find((t) => t.tierId === nextTierId) || null;
-  const isMaxTier = summary?.isMaxTier ?? (currentTierId >= 4);
+  const tiersToRender = [...(allTiers?.length ? allTiers : summary?.allTiers || [])].sort((a, b) => (a.rankOrder ?? a.tierId) - (b.rankOrder ?? b.tierId));
+  const currentTierId = summary?.currentTier?.tierId ?? 0;
+  const currentTier = tiersToRender.find(t => t.tierId === currentTierId) || summary?.currentTier || EMPTY_TIER;
+  const currentRank = currentTier.rankOrder ?? currentTier.tierId;
+  const nextTier = tiersToRender.find(t => (t.rankOrder ?? t.tierId) > currentRank) || null;
+  const isMaxTier = summary?.isMaxTier ?? !nextTier;
 
   // [GIẢI THÍCH CODE]: Tự động chúc mừng CHỈ khi thăng cấp lên hạng mới
   useEffect(() => {
@@ -207,7 +132,6 @@ export default function MembershipModal({
   }, [visible, currentTierId, currentTier.tierName, lang]);
 
   // [GIẢI THÍCH CODE]: Số khoai hiện có của người dùng
-  const userPotatoes = potatoBalance ?? summary?.potatoBalance ?? 0;
 
   // [GIẢI THÍCH CODE]: Tính toán tiến trình theo điểm XP dạng (25/500 XP) theo yêu cầu người dùng
   const currentXP = summary?.totalPoints ?? 0;
@@ -215,6 +139,8 @@ export default function MembershipModal({
   const xpPercent = isMaxTier
     ? 100
     : Math.min(100, Math.max(0, Math.round((currentXP / (targetXP || 1)) * 100)));
+
+  if (!tiersToRender.length) return <Modal visible={visible} onRequestClose={onClose}><View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 16 }}><Text>Chưa tải được hạng thành viên. Hãy đóng và mở lại để thử lại.</Text><TouchableOpacity onPress={onClose}><Text>Đóng</Text></TouchableOpacity></View></Modal>;
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
@@ -282,11 +208,11 @@ export default function MembershipModal({
                     {currentTier.tierName.toUpperCase()}
                   </Text>
                   <View style={styles.vipTierNumberPill}>
-                    <Text style={styles.vipTierNumberText}>TIER {currentTier.tierId}</Text>
+                    <Text style={styles.vipTierNumberText}>TIER {currentRank}</Text>
                   </View>
                 </View>
                 <Text style={styles.vipDiscountText}>
-                  {lang === 'en' ? `${summary?.discountPercent ?? currentTier.discountPercent ?? 0}% lifetime discount on all services` : `Chiết khấu ${summary?.discountPercent ?? currentTier.discountPercent ?? 0}% toàn bộ dịch vụ trọn đời`}
+                  {lang === 'en' ? `${summary?.discountPercent ?? currentTier.discountPercent ?? 0}% discount on book rentals` : `Chiết khấu ${summary?.discountPercent ?? currentTier.discountPercent ?? 0}% phí thuê sách`}
                 </Text>
               </View>
             </View>
@@ -392,13 +318,13 @@ export default function MembershipModal({
           >
             {tiersToRender.map((tier) => {
               const isCurrent = tier.tierId === currentTier.tierId;
-              const isUnlocked = tier.tierId <= currentTier.tierId;
+              const isUnlocked = (tier.rankOrder ?? tier.tierId) <= currentRank;
               const isLocked = !isUnlocked;
 
-              const isTier1 = tier.tierId === 1;
-              const isTier2 = tier.tierId === 2;
-              const isTier3 = tier.tierId === 3;
-              const isTier4 = tier.tierId === 4;
+              const isTier1 = (tier.rankOrder ?? tier.tierId) === 1;
+              const isTier2 = (tier.rankOrder ?? tier.tierId) === 2;
+              const isTier3 = (tier.rankOrder ?? tier.tierId) === 3;
+              const isTier4 = (tier.rankOrder ?? tier.tierId) === 4;
 
               return (
                 <TouchableOpacity
@@ -597,7 +523,7 @@ export default function MembershipModal({
         {/* 5. [GIẢI THÍCH CODE]: POPUP THÔNG BÁO CHI TIẾT ĐẶC QUYỀN TỪNG HẠNG */}
         {/* ================================================================ */}
         {selectedDetailTier && (() => {
-          const neededPotatoes = Math.max(0, selectedDetailTier.minPotatoRequired - userPotatoes);
+          const neededPotatoes = Math.max(0, selectedDetailTier.minPotatoRequired - currentXP);
           const isSelectedCurrent = selectedDetailTier.tierId === currentTierId;
 
           return (
@@ -617,10 +543,10 @@ export default function MembershipModal({
                     <View
                       style={[
                         styles.popupIconCircle,
-                        selectedDetailTier.tierId === 1 && { backgroundColor: '#dcfce7' },
-                        selectedDetailTier.tierId === 2 && { backgroundColor: '#e2e8f0' },
-                        selectedDetailTier.tierId === 3 && { backgroundColor: '#fef3c7' },
-                        selectedDetailTier.tierId === 4 && { backgroundColor: '#fef08a' },
+                        (selectedDetailTier.rankOrder ?? selectedDetailTier.tierId) === 1 && { backgroundColor: '#dcfce7' },
+                        (selectedDetailTier.rankOrder ?? selectedDetailTier.tierId) === 2 && { backgroundColor: '#e2e8f0' },
+                        (selectedDetailTier.rankOrder ?? selectedDetailTier.tierId) === 3 && { backgroundColor: '#fef3c7' },
+                        (selectedDetailTier.rankOrder ?? selectedDetailTier.tierId) === 4 && { backgroundColor: '#fef08a' },
                       ]}
                     >
                       <Text style={{ fontSize: 24 }}>{selectedDetailTier.badgeIcon}</Text>
@@ -652,8 +578,8 @@ export default function MembershipModal({
                     <Ionicons name="pricetag" size={14} color="#b45309" />
                     <Text style={styles.popupDiscountBannerText}>
                       {lang === 'en'
-                        ? `${selectedDetailTier.discountPercent}% Lifetime Discount on All Services`
-                        : `Chiết khấu ${selectedDetailTier.discountPercent}% toàn bộ dịch vụ trọn đời`}
+                        ? `${selectedDetailTier.discountPercent}% Discount on Book Rentals`
+                        : `Chiết khấu ${selectedDetailTier.discountPercent}% phí thuê sách`}
                     </Text>
                   </View>
 
@@ -672,8 +598,8 @@ export default function MembershipModal({
                       <Text style={{ fontSize: 13 }}>🥔</Text>
                       <Text style={styles.popupReqText}>
                         {selectedDetailTier.minPotatoRequired > 0
-                          ? `${selectedDetailTier.minPotatoRequired.toLocaleString(lang === 'en' ? 'en-US' : 'vi-VN')} Khoai`
-                          : (lang === 'en' ? '0 Potatoes' : '0 Khoai')}
+                          ? `${selectedDetailTier.minPotatoRequired.toLocaleString(lang === 'en' ? 'en-US' : 'vi-VN')} XP`
+                          : '0 XP'}
                       </Text>
                     </View>
                   </View>
@@ -699,27 +625,10 @@ export default function MembershipModal({
 
                 {/* Nút dưới cùng của khung thông báo */}
                 <View style={{ marginTop: 14 }}>
-                  {neededPotatoes > 0 && selectedDetailTier.tierId > currentTierId ? (
-                    <TouchableOpacity
-                      style={styles.popupUpgradeBtn}
-                      activeOpacity={0.85}
-                      onPress={() => {
-                        setSelectedDetailTier(null);
-                        if (onTopUp) {
-                          onTopUp();
-                        } else {
-                          onClose();
-                        }
-                      }}
-                    >
-                      <Text style={styles.popupUpgradeBtnText}>
-                        {lang === 'en' ? 'Need to top up ' : 'Cần nạp '}
-                        <Text style={styles.popupUpgradeXRed}>
-                          {neededPotatoes.toLocaleString(lang === 'en' ? 'en-US' : 'vi-VN')}
-                        </Text>
-                        {lang === 'en' ? ' potatoes to upgrade ➔' : ' khoai để thăng hạng ➔'}
-                      </Text>
-                    </TouchableOpacity>
+                  {neededPotatoes > 0 && (selectedDetailTier.rankOrder ?? selectedDetailTier.tierId) > currentRank ? (
+                    <View style={styles.popupUpgradeBtn}>
+                      <Text style={styles.popupUpgradeBtnText}>{lang === 'en' ? 'Need ' : 'Cần thêm '}{neededPotatoes.toLocaleString(lang === 'en' ? 'en-US' : 'vi-VN')}{lang === 'en' ? ' XP or meet the book threshold.' : ' XP hoặc đạt ngưỡng sách để thăng hạng.'}</Text>
+                    </View>
                   ) : (
                     <View style={styles.popupAchievedBox}>
                       <Ionicons name="checkmark-circle" size={18} color="#15803d" />

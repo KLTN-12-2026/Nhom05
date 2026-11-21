@@ -25,10 +25,13 @@ public class CheckoutResponse {
     private int orderId;
     private String transactionNo;
     private String idempotencyKey;
+    private Long policyRevision;
     private double subtotal;
     private double discountAmount;
     private double tierDiscountAmount;
     private double couponDiscountAmount;
+    private double offerDiscountAmount;
+    private String couponCode;
     private int totalKhoaiPaid;
     private int remainingPotatoBalance;
     private LocalDateTime orderDate;

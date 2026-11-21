@@ -1,3 +1,5 @@
+import { getCartQuote, applyCartCoupon, clearCartCoupon } from '@/services/offerService';
+import { getCommercePolicy, rentalPlanPrice } from '@/services/commercePolicyService';
 import { cartThemeStyles, cartStyles, inlinePageStyle1 } from './styles/GioHang.styles.js';
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
@@ -48,14 +50,46 @@ export default function CartEnd() {
         loadScript('phosphor-icons-cdn', 'https://unpkg.com/@phosphor-icons/web');
 
         // --- 1. CART STATE MANAGEMENT ---
+        let policy = null;
+        let userCustomerId = '';
+        let pendingCheckout = null;
+        const escapeHtml = value => String(value).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[ch]));
         let userWalletBalance = 0; // Lấy số dư Khoai thực tế từ tài khoản đăng nhập
         let userTierDiscountPercent = 0; // Chiết khấu theo hạng hội viên (5%, 10%, 20%)
         let userTierName = 'Thợ Cày';
-        let appliedCouponDiscount = 0; // Mặc định không áp mã giảm giá
         let appliedCouponName = '';
 
         // Cart items data state
         let cartItems = [];
+        let serverQuote = null, quoteKey = '', quoteSerial = 0, quoteTimer = null;
+        const selectionKey = () => cartItems.filter(i => i.selected).map(i => i.cartItemId + ':' + i.planKey + ':' + i.offerId).sort().join('|');
+        async function refreshQuote(force = false) {
+            const selected = cartItems.filter(i => i.selected), key = selectionKey();
+            if (!selected.length || selected.some(i => !i.cartItemId)) { serverQuote = null; return null; }
+            if (!force && quoteKey === key && serverQuote) return serverQuote;
+            const serial = ++quoteSerial; quoteKey = key; serverQuote = null;
+            try {
+                const result = await getCartQuote(selected.map(i => i.cartItemId));
+                if (serial !== quoteSerial || selectionKey() !== key) return null;
+                serverQuote = result; userWalletBalance = result.potatoBalance; appliedCouponName = result.couponCode || '';
+                for (const line of result.items) { const item = cartItems.find(i => i.cartItemId === line.cartItemId); if (item) { item.price = line.priceKhoai; const price = document.getElementById('price-' + item.id); if (price) price.textContent = line.priceKhoai; } }
+                const badge = document.getElementById('coupon-active-badge'); if (badge) badge.classList.toggle('hidden', !result.couponCode);
+                const code = document.getElementById('coupon-name-text'); if (code) code.textContent = result.couponCode || '';
+                recalculateCart(); return result;
+            } catch (error) {
+                if (serial === quoteSerial) {
+                    serverQuote = null; recalculateCart();
+                    // Keep the existing remove-code control reachable when a persisted voucher has expired.
+                    if (error?.response?.status === 400) {
+                        const badge = document.getElementById('coupon-active-badge'); if (badge) badge.classList.remove('hidden');
+                        const code = document.getElementById('coupon-name-text'); if (code) code.textContent = 'Kiểm tra mã đã chọn';
+                    }
+                    showToast('Chưa có báo giá', error?.response?.data?.message || 'Vui lòng tải lại giỏ hàng.');
+                }
+                return null;
+            }
+        }
+
 
         // --- 2. CALCULATE & RE-RENDER TOTALS ---
         function recalculateCart() {
@@ -63,22 +97,16 @@ export default function CartEnd() {
             const totalItemsCount = cartItems.length;
             const selectedItemsCount = selectedItems.length;
 
-            // Subtotal
-            const subtotal = selectedItems.reduce((sum, item) => sum + item.price, 0);
-
-            // Tier Discount (Chiết khấu hạng thành viên độc quyền)
-            const tierDiscount = (subtotal > 0 && userTierDiscountPercent > 0)
-                ? Math.round(subtotal * userTierDiscountPercent / 100)
-                : 0;
-
-            // Coupon Discount
-            const couponDiscount = (subtotal > 0 && appliedCouponDiscount > 0) ? Math.min(appliedCouponDiscount, subtotal) : 0;
-
-            // Combined Discount
-            const discount = Math.min(tierDiscount + couponDiscount, subtotal);
-
-            // Final Total
-            const total = Math.max(0, subtotal - discount);
+            const currentQuote = quoteKey === selectionKey() ? serverQuote : null;
+            const subtotal = currentQuote?.subtotal ?? selectedItems.reduce((sum, item) => sum + item.price, 0);
+            const tierDiscount = currentQuote?.tierDiscountAmount ?? 0;
+            const couponDiscount = (currentQuote?.couponDiscountAmount ?? 0) + (currentQuote?.offerDiscountAmount ?? 0);
+            const discount = tierDiscount + couponDiscount;
+            const total = currentQuote?.totalKhoaiPaid ?? 0;
+            const key = selectionKey();
+            if (selectedItems.length && selectedItems.every(i => i.cartItemId) && quoteKey !== key) {
+                quoteKey = key; serverQuote = null; clearTimeout(quoteTimer); quoteTimer = setTimeout(() => { void refreshQuote(true); }, 100);
+            }
 
             // Remaining balance
             const remainingBalance = Math.max(0, userWalletBalance - total);
@@ -113,7 +141,7 @@ export default function CartEnd() {
             if (discountEl) discountEl.textContent = discount > 0 ? `-${discount}` : '0';
 
             const totalEl = document.getElementById('summary-total');
-            if (totalEl) totalEl.textContent = total;
+            if (totalEl) totalEl.textContent = currentQuote ? total : '—';
 
             const remainingBalanceEl = document.getElementById('remaining-balance-display');
             if (remainingBalanceEl) remainingBalanceEl.textContent = remainingBalance.toLocaleString();
@@ -156,7 +184,7 @@ export default function CartEnd() {
                     hasItemsWrapperEl.classList.remove('hidden');
                 }
                 if (checkoutBtnEl) {
-                    checkoutBtnEl.disabled = selectedItemsCount === 0;
+                    checkoutBtnEl.disabled = selectedItemsCount === 0 || !currentQuote;
                     checkoutBtnEl.classList.toggle('opacity-50', selectedItemsCount === 0);
                     checkoutBtnEl.classList.toggle('cursor-not-allowed', selectedItemsCount === 0);
                 }
@@ -179,7 +207,10 @@ export default function CartEnd() {
             const item = cartItems.find(i => i.id === itemId);
             if (item) {
                 const cb = document.querySelector(`.item-checkbox[data-target="${itemId}"]`);
-                if (cb) item.selected = cb.checked;
+                if (cb) {
+                    const group = item.offerId ? cartItems.filter(row => row.offerId === item.offerId) : [item];
+                    group.forEach(row => { row.selected = cb.checked; const checkbox = document.querySelector(`.item-checkbox[data-target="${row.id}"]`); if (checkbox) checkbox.checked = cb.checked; });
+                }
             }
             recalculateCart();
         }
@@ -192,18 +223,6 @@ export default function CartEnd() {
             const planKey = parts[2] || (days >= 9999 ? 'forever' : String(days));
             const item = cartItems.find(i => i.id === itemId);
             if (item) {
-                item.days = days;
-                item.price = price;
-                item.planKey = planKey;
-                const priceEl = document.getElementById(`price-${itemId}`);
-                if (priceEl) priceEl.textContent = price;
-                const cardEl = document.querySelector(`[data-item-id="${itemId}"]`);
-                if (cardEl) {
-                    cardEl.dataset.price = price;
-                    cardEl.dataset.duration = days;
-                }
-                recalculateCart();
-
                 // Đồng bộ lựa chọn số ngày thuê lên server
                 const targetBookId = item.bookId || (String(itemId).startsWith('rec-') ? String(itemId).replace('rec-', '') : String(itemId));
                 if (targetBookId) {
@@ -215,9 +234,25 @@ export default function CartEnd() {
                         });
                         window.dispatchEvent(new Event('halm-cart-updated'));
                     } catch (e) {
-                        console.warn('Lỗi đồng bộ gói thuê lên server:', e);
+                        showToast('Không cập nhật được kỳ hạn', e?.response?.data?.message || 'Vui lòng thử lại.');
+                        const select = document.querySelector(`[data-item-id="${itemId}"] select`);
+                        if (select) select.value = `${item.days}|${item.price}|${item.planKey}`;
+                        return;
                     }
                 }
+
+
+                item.days = days;
+                item.price = price;
+                item.planKey = planKey;
+                const priceEl = document.getElementById(`price-${itemId}`);
+                if (priceEl) priceEl.textContent = price;
+                const cardEl = document.querySelector(`[data-item-id="${itemId}"]`);
+                if (cardEl) {
+                    cardEl.dataset.price = price;
+                    cardEl.dataset.duration = days;
+                }
+                recalculateCart();
 
                 const durationLabel = planKey === 'forever' ? 'Mua đứt (Trọn đời)' : `${days} ngày`;
                 showToast('Thời hạn thuê', `Đã cập nhật ${item.title}: ${durationLabel} (${price} Khoai).`);
@@ -344,6 +379,7 @@ export default function CartEnd() {
             }
 
             closeDeleteConfirmModal();
+            void loadCartFromServer();
         }
 
         function deleteSingleItem(itemId) {
@@ -364,11 +400,12 @@ export default function CartEnd() {
         }
 
         // --- 6. ADD RECOMMENDED BOOK TO CART ---
-        function addRecommendedBook(recId, title, author, cover, price, category, rentalDays = 7, planKey = '7', originalBookId = null) {
+        function addRecommendedBook(recId, title, author, cover, price, category, rentalDays = 7, planKey = '7', originalBookId = null, bookPrice = null, metadata = {}) {
+            if (metadata.offerName) title = metadata.offerName + ' · ' + title;
             // Check if already in cart
             const existing = cartItems.find(i => i.title === title);
             if (existing) {
-                showToast('Thông báo', `"${title}" đã có sẵn trong giỏ hàng của bạn.`);
+                showToast('Thông báo', `"${escapeHtml(title)}" đã có sẵn trong giỏ hàng của bạn.`);
                 return;
             }
 
@@ -379,6 +416,7 @@ export default function CartEnd() {
                 id: newId,
                 bookId: targetBookId,
                 cartItemId: serverCartItemId,
+                offerId: metadata.offerId || null,
                 title: title,
                 author: author,
                 category: category,
@@ -390,12 +428,16 @@ export default function CartEnd() {
             };
             cartItems.push(newItem);
 
-            if (!serverCartItemId && String(recId).startsWith('rec-')) {
+            if (!serverCartItemId) {
                 axiosInstance.post('/api/home/cart/add', {
-                    bookId: recId,
+                    bookId: targetBookId,
                     planKey: String(planKey || '7'),
                     price: price
-                }).then((res) => {
+                }).then(async (res) => {
+                    const stored = await axiosInstance.get('/api/home/cart/items');
+                    const row = stored.data.find(i => i.bookId === targetBookId);
+                    if (row) { newItem.cartItemId = row.cartItemId; newItem.offerId = row.offerId || null; newItem.price = row.priceKhoai; }
+                    recalculateCart();
                     if (res.data?.cartItemId) {
                         newItem.cartItemId = res.data.cartItemId;
                     }
@@ -413,7 +455,7 @@ export default function CartEnd() {
                                 <input type="checkbox" checked onchange="handleItemCheckboxChange('${newId}')" class="luxury-checkbox item-checkbox" data-target="${newId}">
                             </div>
                             <div class="relative w-20 sm:w-24 aspect-[2/3] rounded-xl overflow-hidden border border-paper-border dark:border-night-border shrink-0 shadow-md bg-night-card cart-book-cover">
-                                <img src="${cover || '/logo.png'}" alt="${title}" class="w-full h-full object-cover rounded-xl group-hover:scale-105 transition-transform duration-500" onerror="this.onerror=null;this.src='/logo.png'">
+                                <img src="${cover || '/logo.png'}" alt="${escapeHtml(title)}" class="w-full h-full object-cover rounded-xl group-hover:scale-105 transition-transform duration-500" onerror="this.onerror=null;this.src='/logo.png'">
                                 <span class="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur text-white text-[9px] font-metadata font-bold uppercase">
                                     ${category}
                                 </span>
@@ -426,10 +468,10 @@ export default function CartEnd() {
                                         <span class="text-[11px] font-metadata text-ink-muted dark:text-night-muted">Bản quyền số</span>
                                     </div>
                                     <h3 class="font-display font-black text-base sm:text-lg text-ink dark:text-night-text group-hover:text-wine dark:group-hover:text-gold transition-colors truncate">
-                                        ${title}
+                                        ${escapeHtml(title)}
                                     </h3>
                                     <p class="font-editorial text-xs text-ink-muted dark:text-night-muted">
-                                        Tác giả: <span class="font-semibold text-ink dark:text-night-text">${author}</span>
+                                        Tác giả: <span class="font-semibold text-ink dark:text-night-text">${escapeHtml(author)}</span>
                                     </p>
                                 </div>
                                 <div class="flex flex-wrap items-center gap-2.5 pt-1">
@@ -437,13 +479,8 @@ export default function CartEnd() {
                                         <i class="ph-bold ph-calendar text-sm text-wine dark:text-gold"></i> Thời hạn thuê:
                                     </span>
                                     <div class="relative">
-                                        <select onchange="updateItemDuration('${newId}', this.value)" class="appearance-none pl-3 pr-8 py-1.5 rounded-lg text-xs font-metadata font-bold bg-paper-200/80 dark:bg-night-surface border border-paper-border dark:border-night-border text-ink dark:text-night-text focus:outline-none focus:border-wine dark:focus:border-gold cursor-pointer transition-colors shadow-sm">
-                                            <option value="1|2|1" ${(rentalDays === 1 || String(planKey) === '1') ? 'selected' : ''} class="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">1 ngày (2 Khoai)</option>
-                                            <option value="3|5|3" ${(rentalDays === 3 || String(planKey) === '3') ? 'selected' : ''} class="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">3 ngày (5 Khoai)</option>
-                                            <option value="7|9|7" {((rentalDays === 7 || String(planKey) === '7') && rentalDays < 9999 && String(planKey) !== 'forever') ? 'selected' : ''} class="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">7 ngày (9 Khoai - Tiêu chuẩn)</option>
-                                            <option value="15|18|15" ${(rentalDays === 15 || String(planKey) === '15') ? 'selected' : ''} class="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">15 ngày (18 Khoai)</option>
-                                            <option value="30|30|30" ${(rentalDays === 30 || String(planKey) === '30') ? 'selected' : ''} class="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">30 ngày (30 Khoai)</option>
-                                            <option value="99999|39|forever" ${(rentalDays >= 9999 || String(planKey) === 'forever') ? 'selected' : ''} class="bg-paper-surface dark:bg-night-card text-ink dark:text-night-text">Mua đứt (39 Khoai - Trọn đời)</option>
+                                        <select ${newItem.offerId ? 'disabled' : ''} onchange="updateItemDuration('${newId}', this.value)" class="appearance-none pl-3 pr-8 py-1.5 rounded-lg text-xs font-metadata font-bold bg-paper-200/80 dark:bg-night-surface border border-paper-border dark:border-night-border text-ink dark:text-night-text focus:outline-none focus:border-wine dark:focus:border-gold cursor-pointer transition-colors shadow-sm">
+                                            ${policy.plans.filter(p => p.active || p.key === String(planKey)).map(p => `<option value="${p.durationDays}|${rentalPlanPrice(p, bookPrice)}|${p.key}" ${p.key === String(planKey) ? 'selected' : ''} ${p.active ? '' : 'disabled'}>${escapeHtml(p.label)} (${rentalPlanPrice(p, bookPrice)} Khoai)${p.active ? '' : ' · Tạm ngừng'}</option>`).join('')}
                                         </select>
                                         <i class="ph-bold ph-caret-down text-xs text-ink-muted dark:text-night-muted absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"></i>
                                     </div>
@@ -477,51 +514,19 @@ export default function CartEnd() {
             }
 
             recalculateCart();
-            showToast('Đã thêm thành công', `Đã thêm "${title}" vào giỏ hàng.`);
+            showToast('Đã thêm thành công', `Đã thêm "${escapeHtml(title)}" vào giỏ hàng.`);
         }
 
         // --- 7. COUPON SYSTEM ---
-        function applyCoupon() {
-            const input = document.getElementById('coupon-input');
-            const code = input ? input.value.trim().toUpperCase() : '';
-
-            if (!code) {
-                showToast('Lỗi mã ưu đãi', 'Vui lòng nhập mã giảm giá.');
-                return;
-            }
-
-            if (code === 'HALM2026' || code === 'VIPBOOK' || code === 'KHOAI5') {
-                appliedCouponDiscount = 5;
-                appliedCouponName = code;
-                const badge = document.getElementById('coupon-active-badge');
-                const nameText = document.getElementById('coupon-name-text');
-                if (badge) badge.classList.remove('hidden');
-                if (nameText) nameText.textContent = code;
-                if (input) input.value = '';
-                recalculateCart();
-                showToast('Áp dụng thành công', `Mã ${code} đã được áp dụng (-5 Khoai).`);
-            } else if (code === 'HALMVIP10') {
-                appliedCouponDiscount = 10;
-                appliedCouponName = code;
-                const badge = document.getElementById('coupon-active-badge');
-                const nameText = document.getElementById('coupon-name-text');
-                if (badge) badge.classList.remove('hidden');
-                if (nameText) nameText.textContent = code;
-                if (input) input.value = '';
-                recalculateCart();
-                showToast('Áp dụng thành công', `Mã siêu đặc quyền ${code} đã được áp dụng (-10 Khoai).`);
-            } else {
-                showToast('Mã không hợp lệ', 'Mã ưu đãi không chính xác hoặc đã hết hạn.');
-            }
+        async function applyCoupon() {
+            const input = document.getElementById('coupon-input'); const code = input?.value.trim().toUpperCase();
+            if (!code) { showToast('Mã ưu đãi', 'Vui lòng nhập mã.'); return; }
+            try { await applyCartCoupon(code); if (input) input.value = ''; const quote = await refreshQuote(true); if (quote) showToast('Ưu đãi', 'Đã kiểm tra mã và cập nhật báo giá từ server.'); }
+            catch (error) { showToast('Mã không áp dụng được', error?.response?.data?.message || 'Vui lòng thử lại.'); }
         }
-
-        function removeCoupon() {
-            appliedCouponDiscount = 0;
-            appliedCouponName = '';
-            const badge = document.getElementById('coupon-active-badge');
-            if (badge) badge.classList.add('hidden');
-            recalculateCart();
-            showToast('Đã hủy ưu đãi', 'Đã gỡ bỏ mã giảm giá.');
+        async function removeCoupon() {
+            try { await clearCartCoupon(); await refreshQuote(true); showToast('Ưu đãi', 'Đã gỡ mã giảm giá.'); }
+            catch (error) { showToast('Mã ưu đãi', error?.response?.data?.message || 'Không gỡ được mã.'); }
         }
 
         // --- 8. CHECKOUT PROCESS (THANH TOÁN THUÊ SÁCH BẰNG KHOAI TÂY THỰC TẾ) ---
@@ -532,13 +537,10 @@ export default function CartEnd() {
                 return;
             }
 
-            const subtotal = selectedItems.reduce((sum, item) => sum + item.price, 0);
-            const tierDiscount = (subtotal > 0 && userTierDiscountPercent > 0)
-                ? Math.round(subtotal * userTierDiscountPercent / 100)
-                : 0;
-            const couponDiscount = (subtotal > 0 && appliedCouponDiscount > 0) ? Math.min(appliedCouponDiscount, subtotal) : 0;
-            const discount = Math.min(tierDiscount + couponDiscount, subtotal);
-            const total = Math.max(0, subtotal - discount);
+            const confirmed = quoteKey === selectionKey() ? serverQuote : null;
+            if (!confirmed) { await refreshQuote(true); showToast('Báo giá', 'Hãy xem giá mới và bấm xác nhận lại.'); return; }
+            const total = confirmed.totalKhoaiPaid;
+            const discount = confirmed.offerDiscountAmount + confirmed.tierDiscountAmount + confirmed.couponDiscountAmount;
 
             if (userWalletBalance < total) {
                 showToast('Số dư không đủ', `Số dư Ví Khoai không đủ (${userWalletBalance.toLocaleString()} < ${total.toLocaleString()} Khoai). Vui lòng nạp thêm Khoai!`);
@@ -552,6 +554,7 @@ export default function CartEnd() {
             }
 
             try {
+                if (!policy) throw new Error('Chưa tải được chính sách giá. Vui lòng tải lại giỏ hàng.');
                 // Đóng gói danh sách sách gửi lên backend API
                 const checkoutItems = selectedItems.map(item => ({
                     bookId: item.bookId || item.id,
@@ -561,14 +564,27 @@ export default function CartEnd() {
                     price: item.price
                 }));
 
+                const cartIds = selectedItems.map(item => item.cartItemId).filter(Boolean);
+                const allCartRows = cartIds.length === selectedItems.length;
+                const identity = JSON.stringify({ items: checkoutItems.map(i => ({ bookId: i.bookId, planKey: i.planKey })), coupon: appliedCouponName });
+                const storageKey = 'rental_checkout_pending_' + userCustomerId;
+                if (!allCartRows) {
+                    if (!pendingCheckout) { try { pendingCheckout = JSON.parse(sessionStorage.getItem(storageKey) || 'null'); } catch { pendingCheckout = null; } }
+                    if (pendingCheckout?.identity !== identity) pendingCheckout = { identity, key: 'WEB-' + crypto.randomUUID() };
+                    sessionStorage.setItem(storageKey, JSON.stringify(pendingCheckout));
+                }
                 const response = await axiosInstance.post('/api/home/checkout', {
                     items: checkoutItems,
                     paymentMethod: 'POTATO_WALLET',
-                    couponCode: appliedCouponName || null,
-                    discountAmount: discount
+                    couponCode: confirmed.couponCode,
+                    discountAmount: discount,
+                    policyRevision: confirmed.policyRevision, expectedTotal: total, quoteFingerprint: confirmed.quoteFingerprint,
+                    cartItemIds: allCartRows ? cartIds : null,
+                    idempotencyKey: allCartRows ? null : pendingCheckout.key
                 });
 
                 const result = response.data;
+                pendingCheckout = null; sessionStorage.removeItem(storageKey);
                 userWalletBalance = result.remainingPotatoBalance;
 
                 // Cập nhật DOM biên lai
@@ -613,6 +629,7 @@ export default function CartEnd() {
 
                 showToast('Thành công', 'Đã thuê sách thành công! Sách đã được chuyển vào Tủ Sách Cá Nhân.');
             } catch (err) {
+                if (err?.response?.status === 409) await refreshQuote(true);
                 const errMsg = err?.response?.data?.message || err.message || 'Lỗi khi thực hiện thanh toán.';
                 showToast('Thất bại', errMsg);
             } finally {
@@ -696,7 +713,20 @@ export default function CartEnd() {
         }
 
         // --- 10. TOAST NOTIFICATION UTILITY ---
-        function showToast(title, message) {
+        function showToast(title, message, type = 'info') {
+            if (window.halmToast) {
+                const lowerTitle = (title || '').toLowerCase();
+                if (type === 'success' || lowerTitle.includes('thành công') || lowerTitle.includes('đã thêm')) {
+                    window.halmToast.success(title, message);
+                } else if (type === 'error' || lowerTitle.includes('lỗi') || lowerTitle.includes('không đủ') || lowerTitle.includes('thất bại')) {
+                    window.halmToast.error(title, message);
+                } else if (type === 'warning' || lowerTitle.includes('cảnh báo') || lowerTitle.includes('chú ý')) {
+                    window.halmToast.warning(title, message);
+                } else {
+                    window.halmToast.info(title, message);
+                }
+            }
+
             const toast = document.getElementById('toast-notification');
             const toastTitle = document.getElementById('toast-title');
             const toastMsg = document.getElementById('toast-message');
@@ -890,65 +920,18 @@ export default function CartEnd() {
             }
         }
 
-        // Theme Toggle with LocalStorage & Starry background
-        const themeToggleBtn = document.getElementById('theme-toggle');
-        const themeIcon = document.getElementById('theme-icon');
-
+        // The web interface always uses its existing dark theme.
         function initTheme() {
-            const savedTheme = localStorage.getItem('color-theme') || localStorage.getItem('halm-theme') || localStorage.getItem('halm_theme') || localStorage.getItem('theme');
-            const isDark = savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches);
-            if (isDark) {
-                document.documentElement.classList.add('dark');
-                if (themeIcon) {
-                    themeIcon.classList.remove('ph-moon');
-                    themeIcon.classList.add('ph-sun');
-                }
-            } else {
-                document.documentElement.classList.remove('dark');
-                if (themeIcon) {
-                    themeIcon.classList.remove('ph-sun');
-                    themeIcon.classList.add('ph-moon');
-                }
-            }
+            document.documentElement.classList.add('dark');
+            document.documentElement.classList.remove('light');
             createStarrySky();
         }
-
-        const handleThemeChange = (e) => {
-            const isDark = e.detail?.isDark;
-            if (typeof isDark === 'boolean') {
-                document.documentElement.classList.toggle('dark', isDark);
-                if (themeIcon) {
-                    if (isDark) {
-                        themeIcon.classList.remove('ph-moon');
-                        themeIcon.classList.add('ph-sun');
-                    } else {
-                        themeIcon.classList.remove('ph-sun');
-                        themeIcon.classList.add('ph-moon');
-                    }
-                }
-                createStarrySky();
-            }
+        const handleThemeChange = () => {
+            document.documentElement.classList.add('dark');
+            document.documentElement.classList.remove('light');
+            createStarrySky();
         };
         window.addEventListener('halm-theme-change', handleThemeChange);
-
-        if (themeToggleBtn) {
-            themeToggleBtn.addEventListener('click', () => {
-                const isDark = document.documentElement.classList.toggle('dark');
-                const tVal = isDark ? 'dark' : 'light';
-                ['color-theme', 'halm-theme', 'halm_theme', 'theme'].forEach(k => { try { localStorage.setItem(k, tVal); } catch {} });
-                window.dispatchEvent(new CustomEvent('halm-theme-change', { detail: { isDark } }));
-                if (themeIcon) {
-                    if (isDark) {
-                        themeIcon.classList.remove('ph-moon');
-                        themeIcon.classList.add('ph-sun');
-                    } else {
-                        themeIcon.classList.remove('ph-sun');
-                        themeIcon.classList.add('ph-moon');
-                    }
-                }
-                showToast('Chế độ hiển thị', isDark ? 'Đã kích hoạt Giao diện Tối (Night Sky).' : 'Đã chuyển về Giao diện Sáng (Paper Modern).');
-            });
-        }
 
         function createStarrySky() {
             const container = document.getElementById('starry-background');
@@ -981,6 +964,7 @@ export default function CartEnd() {
             try {
                 const res = await axiosInstance.get('/api/home/customer/info');
                 if (res.data) {
+                    userCustomerId = res.data.customer_id || res.data.customerId || '';
                     userWalletBalance = Number(res.data.potatoBalance ?? res.data.khoai ?? res.data.walletBalance ?? 0);
                     const tierInfo = getTierInfo(res.data.membershipTier, userWalletBalance);
                     userTierDiscountPercent = tierInfo.discount;
@@ -1001,6 +985,7 @@ export default function CartEnd() {
 
         async function loadCartFromServer() {
             try {
+                policy = await getCommercePolicy();
                 const response = await axiosInstance.get('/api/home/cart/items');
                 const items = Array.isArray(response.data) ? response.data : [];
                 cartItems = [];
@@ -1017,7 +1002,7 @@ export default function CartEnd() {
                         item.category || 'Sách',
                         item.rentalDays ?? (item.planKey === 'forever' ? 99999 : Number(item.planKey) || 7),
                         item.planKey || '7',
-                        item.bookId
+                        item.bookId, item.rentPrice, { offerId: item.offerId, offerName: item.offerName }
                     );
                 });
                 recalculateCart();
@@ -1320,6 +1305,7 @@ export default function CartEnd() {
 
                 window.dispatchEvent(new Event('halm-cart-updated'));
                 updateRecommendationShelfStatus();
+                showToast('Đã thêm vào giỏ hàng', `Đã thêm cuốn "${title}" vào giỏ hàng của bạn thành công!`, 'success');
             } catch (err) {
                 console.error('Lỗi khi thêm sách gợi ý vào giỏ:', err);
                 updateRecommendationShelfStatus();
@@ -1590,7 +1576,7 @@ export default function CartEnd() {
                                         <div className="flex items-center gap-2">
                                             <div className="relative flex-1">
                                                 <i className="ph-bold ph-tag absolute left-3 top-1/2 -translate-y-1/2 text-ink-muted text-xs"></i>
-                                                <input type="text" id="coupon-input" placeholder="VD: VIPBOOK, KHOAI5" 
+                                                <input type="text" id="coupon-input" placeholder="VD: VIPBOOK, KHOAI5"
                                                        className="w-full pl-8 pr-3 py-2 rounded-xl text-xs font-metadata font-bold uppercase bg-paper-200/70 dark:bg-night-surface border border-paper-border dark:border-night-border focus:outline-none focus:border-wine dark:focus:border-gold text-ink dark:text-night-text placeholder-ink-muted/60 transition-colors" />
                                             </div>
                                             <button type="button" onClick={() => { window.applyCoupon() }} className="px-4 py-2 rounded-xl bg-paper-200 dark:bg-night-surface hover:bg-wine hover:text-white dark:hover:bg-gold dark:hover:text-night-bg border border-paper-border dark:border-night-border text-xs font-metadata font-bold text-ink dark:text-night-text transition-all">

@@ -27,6 +27,7 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class BannerDto {
     private String id;
+    private String platform;
     private String layoutType;
     private String eyebrow;
     private String title;

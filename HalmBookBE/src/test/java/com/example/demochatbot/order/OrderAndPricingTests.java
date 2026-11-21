@@ -67,8 +67,13 @@ class OrderAndPricingTests {
     private Customer sampleCustomer;
     private Book sampleBook;
 
+    private com.example.demochatbot.service.policy.CommercePolicyService commercePolicy;
+
     @BeforeEach
     void setUp() {
+        commercePolicy = com.example.demochatbot.support.TestCommercePolicies.defaults(tierService);
+        ReflectionTestUtils.setField(orderService, "commercePolicy", commercePolicy);
+        ReflectionTestUtils.setField(orderService, "offerPricing", com.example.demochatbot.support.TestCommercePolicies.pricing(bookRepository, promotionRepository, commercePolicy));
         lenient().when(checkoutCoordinator.execute(any(), any())).thenAnswer(invocation -> ((Supplier<?>) invocation.getArgument(1)).get());
         sampleCustomer = new Customer();
         sampleCustomer.setCustomer_id("CUST-001");
@@ -86,22 +91,22 @@ class OrderAndPricingTests {
     @Test
     @DisplayName("1. Tính giá thuê sách theo các gói thời hạn (1, 3, 7, 14, 15, 30 ngày & vĩnh viễn)")
     void testResolveItemPriceByDurationPlans() {
-        double price1 = ReflectionTestUtils.invokeMethod(orderService, "resolveItemPrice", "1", sampleBook);
+        double price1 = commercePolicy.price(commercePolicy.current(), "1", sampleBook, true);
         assertEquals(2.0, price1, "Gói 1 ngày phải có giá 2 Khoai");
 
-        double price3 = ReflectionTestUtils.invokeMethod(orderService, "resolveItemPrice", "3", sampleBook);
+        double price3 = commercePolicy.price(commercePolicy.current(), "3", sampleBook, true);
         assertEquals(5.0, price3, "Gói 3 ngày phải có giá 5 Khoai");
 
-        double price7 = ReflectionTestUtils.invokeMethod(orderService, "resolveItemPrice", "7", sampleBook);
+        double price7 = commercePolicy.price(commercePolicy.current(), "7", sampleBook, true);
         assertEquals(9.0, price7, "Gói 7 ngày phải có giá 9 Khoai");
 
-        double price15 = ReflectionTestUtils.invokeMethod(orderService, "resolveItemPrice", "15", sampleBook);
+        double price15 = commercePolicy.price(commercePolicy.current(), "15", sampleBook, true);
         assertEquals(18.0, price15, "Gói 15 ngày phải có giá 18 Khoai");
 
-        double price30 = ReflectionTestUtils.invokeMethod(orderService, "resolveItemPrice", "30", sampleBook);
+        double price30 = commercePolicy.price(commercePolicy.current(), "30", sampleBook, true);
         assertEquals(25.0, price30, "Gói 30 ngày phải có giá 25 Khoai");
 
-        double priceForever = ReflectionTestUtils.invokeMethod(orderService, "resolveItemPrice", "forever", sampleBook);
+        double priceForever = commercePolicy.price(commercePolicy.current(), "forever", sampleBook, true);
         assertEquals(10.0, priceForever, "Mua vĩnh viễn phải lấy theo giá sách (10 Khoai)");
     }
 
@@ -149,7 +154,8 @@ class OrderAndPricingTests {
             return o;
         });
 
-        when(promotionRepository.findById("KHOAI5")).thenReturn(Optional.empty());
+        Promotion voucher = new Promotion(); voucher.setPromotion_id("KHOAI5"); voucher.setStatus("ACTIVE"); voucher.setDiscount_amount(5);
+        when(promotionRepository.findById("KHOAI5")).thenReturn(Optional.of(voucher));
 
         CheckoutItemRequest item = new CheckoutItemRequest();
         item.setBookId("BOOK-001");

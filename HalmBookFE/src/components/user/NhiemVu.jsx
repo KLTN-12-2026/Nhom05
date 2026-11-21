@@ -1,15 +1,16 @@
 import { halmTailwindConfig, inlinePageStyle1 } from './styles/NhiemVu.styles.js';
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import UserLayout from './layout/UserLayout';
 import StreakDiemDanh from './StreakDiemDanh';
 import { getCurrentCustomer } from '@/services/customerService';
 import { getCustomerBookshelf } from '@/services/orderService';
-import { checkinDailyStreak, getMyTierSummary } from '@/services/tierService';
+import { checkinDailyStreak } from '@/services/tierService';
 import { isDarkMode } from '@/utils/theme';
 import { formatCustomerId, getTierInfo, getTierBadgeClass } from '@/utils/tierUtils';
 import AvatarWithFrame from '@/components/common/AvatarWithFrame';
-import { getClaimedMissions, claimMissionReward } from '@/services/userFeatureService';
+import { getMissions, claimMission } from '@/services/missionService';
+import { missionCards } from './missionPresentation';
 import { logoutUser } from '@/services/authToken';
 
 
@@ -93,8 +94,7 @@ export default function NhiemVu() {
     useEffect(() => {
         window.scrollTo(0, 0);
         document.title = "HALM BOOK — Nhiệm Vụ Hằng Ngày & Điểm Danh Độc Giả";
-        fetchCustomer();
-        fetchBookshelfCount();
+        void Promise.resolve().then(() => { void fetchCustomer(); void fetchBookshelfCount(); });
 
         const handlePotatoUpdated = (e) => {
             const newBal = e.detail?.potatoBalance;
@@ -125,362 +125,84 @@ export default function NhiemVu() {
     const customerIdDisplay = formatCustomerId(customer?.customerId || customer?.customer_id);
 
     const navigate = useNavigate();
-    const todayKey = useMemo(() => new Date().toISOString().slice(0, 10), []);
-
-    const getInitialDailyTasks = useCallback(() => {
+    const [missionData, setMissionData] = useState(null);
+    const missionPending = useRef(false);
+    const missionAlive = useRef(true);
+    const missionSequence = useRef(0);
+    const lastMissionError = useRef('');
+    const refreshMissions = useCallback(async (force = false) => {
+        if (missionPending.current && !force) return;
+        const request = ++missionSequence.current;
         try {
-            return {
-                checkin: localStorage.getItem(`halm_daily_action_checkin_${todayKey}`) === 'true',
-                read: localStorage.getItem(`halm_daily_action_read_${todayKey}`) === 'true',
-                chat: localStorage.getItem(`halm_daily_action_chat_${todayKey}`) === 'true',
-                search: localStorage.getItem(`halm_daily_action_search_${todayKey}`) === 'true',
-                offers: localStorage.getItem(`halm_daily_action_offers_${todayKey}`) === 'true',
-                bookshelf: localStorage.getItem(`halm_daily_action_bookshelf_${todayKey}`) === 'true'
-            };
-        } catch {
-            return { checkin: false, read: false, chat: false, search: false, offers: false, bookshelf: false };
+            const result = await getMissions();
+            if (!missionAlive.current || request !== missionSequence.current) return;
+            setMissionData(result); lastMissionError.current = '';
+            setCustomer(previous => ({ ...previous, potatoBalance: result.potatoBalance }));
+        } catch (error) {
+            if (!missionAlive.current || request !== missionSequence.current) return;
+            const message = error?.response?.data?.message || 'Không tải được nhiệm vụ. Vui lòng mở lại trang.';
+            if (lastMissionError.current !== message) {
+                lastMissionError.current = message;
+                setToast({ title: 'Nhiệm Vụ', message }); setToastVisible(true);
+                if (toastTimer.current) clearTimeout(toastTimer.current);
+                toastTimer.current = setTimeout(() => setToastVisible(false), 3500);
+            }
         }
-    }, [todayKey]);
-
-    const [dailyTasks, setDailyTasks] = useState(getInitialDailyTasks);
-
-    useEffect(() => {
-        const handleTaskCompleted = (e) => {
-            const task = e.detail?.task;
-            if (task) {
-                setDailyTasks(prev => ({ ...prev, [task]: true }));
-            } else {
-                setDailyTasks(getInitialDailyTasks());
-            }
-        };
-
-        const checkStreakOnMount = async () => {
-            try {
-                const summary = await getMyTierSummary();
-                if (summary?.hasCheckedInToday) {
-                    try {
-                        localStorage.setItem(`halm_daily_action_checkin_${todayKey}`, 'true');
-                    } catch {}
-                    setDailyTasks(prev => ({ ...prev, checkin: true }));
-                }
-            } catch {
-                // ignore
-            }
-        };
-        checkStreakOnMount();
-
-        window.addEventListener('halm-daily-task-completed', handleTaskCompleted);
-        return () => window.removeEventListener('halm-daily-task-completed', handleTaskCompleted);
-    }, [todayKey, getInitialDailyTasks]);
-
-    const markTaskDone = (key) => {
-        try {
-            localStorage.setItem(`halm_daily_action_${key}_${todayKey}`, 'true');
-        } catch {}
-        setDailyTasks(prev => ({ ...prev, [key]: true }));
-        window.dispatchEvent(new CustomEvent('halm-daily-task-completed', { detail: { task: key } }));
-    };
-
-    const handleExecuteMission = async (m) => {
-        if (m.taskKey === 'checkin') {
-            try {
-                const res = await checkinDailyStreak();
-                markTaskDone('checkin');
-                if (res && res.success) {
-                    setCustomer(prev => prev ? {
-                        ...prev,
-                        streakDays: res.streakDays || ((prev.streakDays || 0) + 1),
-                        potatoBalance: res.potatoBalance || prev.potatoBalance
-                    } : prev);
-                    showToast("Điểm Danh Thành Công!", res.message || "Bạn đã điểm danh thắp lửa hôm nay! Hãy nhận thưởng nhé 🔥");
-                } else {
-                    showToast("Điểm Danh Hằng Ngày", res?.message || "Đã ghi nhận điểm danh hôm nay! Nhận thưởng nhé 🔥");
-                }
-            } catch {
-                markTaskDone('checkin');
-                showToast("Điểm Danh Hằng Ngày", "Đã ghi nhận điểm danh thành công! Nhận thưởng nhé 🔥");
-            }
-        } else if (m.taskKey === 'chat') {
-            markTaskDone('chat');
-            window.dispatchEvent(new CustomEvent('halm-open-chatbot', {
-                detail: "Chào Khoai Nhỏ! Giới thiệu sách hay cho tôi nhé 🥔"
-            }));
-            showToast("Trợ Lý AI Đã Sẵn Sàng", "Đã kết nối cùng AI Khoai Nhỏ! Bạn có thể nhận thưởng ngay.");
-        } else if (m.taskKey === 'search') {
-            markTaskDone('search');
-            showToast("Đã Ghi Nhận Tìm Kiếm!", "Đã ghi nhận nhiệm vụ tìm kiếm. Nhận thưởng ngay!");
-            const input = document.getElementById('header-search-input');
-            if (input) {
-                input.focus();
-                input.scrollIntoView({ behavior: 'smooth' });
-            } else {
-                navigate('/');
-            }
-        } else if (m.taskKey === 'read') {
-            markTaskDone('read');
-            showToast("Đã Ghi Nhận Đọc Sách!", "Đã ghi nhận nhiệm vụ đọc sách. Nhận thưởng ngay!");
-            navigate('/tusachcn');
-        } else if (m.taskKey === 'offers') {
-            markTaskDone('offers');
-            showToast("Đã Ghi Nhận Khám Phá!", "Đã ghi nhận khám phá ưu đãi. Nhận thưởng ngay!");
-            navigate('/uudai');
-        } else if (m.taskKey === 'bookshelf') {
-            markTaskDone('bookshelf');
-            showToast("Đã Ghi Nhận Tủ Sách!", "Đã ghi nhận kiểm tra tủ sách. Nhận thưởng ngay!");
-            navigate('/tusachcn');
-        }
-    };
-
-    const [claimedMissions, setClaimedMissions] = useState(() => {
-        try {
-            const saved = localStorage.getItem(`halm_claimed_missions_${todayKey}`);
-            return saved ? JSON.parse(saved) : {};
-        } catch {
-            return {};
-        }
-    });
-
-    const [claimedMilestones, setClaimedMilestones] = useState(() => {
-        try {
-            const saved = localStorage.getItem('halm_claimed_milestones');
-            return saved ? JSON.parse(saved) : {};
-        } catch {
-            return {};
-        }
-    });
-
-    // Đồng bộ các nhiệm vụ đã nhận thưởng từ Database
-    useEffect(() => {
-        getClaimedMissions().then(data => {
-            if (data) {
-                if (Array.isArray(data.dailyClaimed)) {
-                    const dailyMap = {};
-                    data.dailyClaimed.forEach(id => { dailyMap[id] = true; });
-                    setClaimedMissions(prev => ({ ...prev, ...dailyMap }));
-                }
-                if (Array.isArray(data.milestoneClaimed)) {
-                    const msMap = {};
-                    data.milestoneClaimed.forEach(id => { msMap[id] = true; });
-                    setClaimedMilestones(prev => ({ ...prev, ...msMap }));
-                }
-                if (data.potatoBalance !== undefined) {
-                    setCustomer(prev => prev ? { ...prev, potatoBalance: data.potatoBalance } : prev);
-                }
-            }
-        }).catch(() => {});
     }, []);
+    useEffect(() => {
+        missionAlive.current = true;
+        void Promise.resolve().then(() => refreshMissions());
+        const visible = () => { if (!document.hidden) void refreshMissions(); };
+        const timer = setInterval(visible, 30000);
+        document.addEventListener('visibilitychange', visible);
+        window.addEventListener('halm-potato-updated', visible);
+        window.addEventListener('halm-daily-task-completed', visible);
+        return () => {
+            missionAlive.current = false; missionSequence.current++; clearInterval(timer);
+            if (toastTimer.current) clearTimeout(toastTimer.current);
+            document.removeEventListener('visibilitychange', visible);
+            window.removeEventListener('halm-potato-updated', visible);
+            window.removeEventListener('halm-daily-task-completed', visible);
+        };
+    }, [refreshMissions]);
 
-    const handleClaimMission = async (mission) => {
-        if (claimedMissions[mission.id]) return;
-        try {
-            const res = await claimMissionReward({
-                missionId: mission.id,
-                isMilestone: false,
-                rewardPotato: mission.rewardPotato,
-                rewardXp: mission.rewardXp
-            });
-            const newBalance = res.newBalance ?? (potatoBalance + mission.rewardPotato);
-            setCustomer(prev => prev ? { ...prev, potatoBalance: newBalance } : prev);
-
-            const updated = { ...claimedMissions, [mission.id]: true };
-            setClaimedMissions(updated);
+    const handleExecuteMission = async mission => {
+        if (missionPending.current) return;
+        if (mission.taskKey === 'checkin') {
+            missionPending.current = true; missionSequence.current++;
             try {
-                localStorage.setItem(`halm_claimed_missions_${todayKey}`, JSON.stringify(updated));
-            } catch {}
-
-            window.dispatchEvent(new CustomEvent('halm-potato-updated', {
-                detail: { potatoBalance: newBalance }
-            }));
-
-            showToast("Nhận Thưởng Thành Công!", `+${mission.rewardPotato} Khoai Tây đã được cộng vào tài khoản của bạn! 🎉`);
-        } catch (err) {
-            const msg = err.response?.data?.message || 'Không thể nhận thưởng lúc này!';
-            showToast("Thông Báo", msg);
+                const result = await checkinDailyStreak();
+                showToast('Điểm Danh Hằng Ngày', result.message);
+                window.dispatchEvent(new CustomEvent('halm-potato-updated', { detail: { potatoBalance: result.potatoBalance } }));
+                await Promise.all([refreshMissions(true), fetchCustomer()]);
+            } catch (error) { showToast('Điểm Danh Thất Bại', error?.response?.data?.message || 'Vui lòng thử lại.'); }
+            finally { missionPending.current = false; }
+            return;
         }
+        if (mission.taskKey === 'chat') {
+            window.dispatchEvent(new CustomEvent('halm-open-chatbot', { detail: { message: 'Gợi ý giúp tôi một cuốn sách hay nhé!' } }));
+            return;
+        }
+        const destinations = { read: '/tusachcn', search: '/danhmuc', offers: '/uudai', bookshelf: '/tusachcn' };
+        if (destinations[mission.taskKey]) navigate(destinations[mission.taskKey]);
     };
-
-    const handleClaimMilestone = async (ms) => {
-        if (claimedMilestones[ms.id]) return;
+    const handleClaimMission = async mission => {
+        if (missionPending.current || mission.isCompleted || !mission.canClaim) return;
+        missionPending.current = true; missionSequence.current++;
         try {
-            const res = await claimMissionReward({
-                missionId: ms.id,
-                isMilestone: true,
-                rewardPotato: ms.rewardPotato,
-                rewardXp: ms.rewardXp
-            });
-            const newBalance = res.newBalance ?? (potatoBalance + ms.rewardPotato);
-            setCustomer(prev => prev ? { ...prev, potatoBalance: newBalance } : prev);
-
-            const updated = { ...claimedMilestones, [ms.id]: true };
-            setClaimedMilestones(updated);
-            try {
-                localStorage.setItem('halm_claimed_milestones', JSON.stringify(updated));
-            } catch {}
-
-            window.dispatchEvent(new CustomEvent('halm-potato-updated', {
-                detail: { potatoBalance: newBalance }
-            }));
-
-            showToast("Mở Khóa Thành Tựu!", `Chúc mừng bạn nhận +${ms.rewardPotato} Khoai Tây! 🏆`);
-        } catch (err) {
-            const msg = err.response?.data?.message || 'Không thể nhận thưởng lúc này!';
-            showToast("Thông Báo", msg);
-        }
+            const result = await claimMission(mission.id);
+            if (missionAlive.current) showToast('Nhận Thưởng Thành Công!', result.message || 'Đã nhận thưởng.');
+            window.dispatchEvent(new CustomEvent('halm-potato-updated', { detail: { potatoBalance: result.newBalance } }));
+            window.dispatchEvent(new Event('halm-notification-refresh'));
+            await refreshMissions(true);
+        } catch (error) {
+            await refreshMissions(true);
+            if (missionAlive.current) showToast('Thông Báo', error?.response?.data?.message || 'Không thể nhận thưởng lúc này.');
+        } finally { missionPending.current = false; }
     };
-
-    const DAILY_MISSIONS = [
-        {
-            id: 'm1',
-            taskKey: 'checkin',
-            title: 'Điểm danh đọc sách hằng ngày',
-            description: 'Thắp lửa chuỗi đọc sách mỗi ngày để rèn luyện thói quen tri thức bền bỉ.',
-            rewardPotato: 5,
-            rewardXp: 20,
-            icon: 'ph-calendar-check',
-            iconColor: 'text-amber-500 bg-amber-500/10',
-            currentProgress: dailyTasks.checkin ? 1 : 0,
-            maxProgress: 1,
-            isCompleted: Boolean(claimedMissions['m1']),
-            canClaim: Boolean(dailyTasks.checkin && !claimedMissions['m1']),
-            actionLabel: 'Điểm Danh Ngay',
-            actionIcon: 'ph-check-circle',
-        },
-        {
-            id: 'm2',
-            taskKey: 'read',
-            title: 'Đọc sách hoặc khám phá chương mới',
-            description: 'Mở đọc ít nhất 1 tác phẩm sách đọc hôm nay trong kho tàng HALM BOOK.',
-            rewardPotato: 10,
-            rewardXp: 30,
-            icon: 'ph-book-open',
-            iconColor: 'text-wine bg-wine/10 dark:text-gold dark:bg-gold/15',
-            currentProgress: dailyTasks.read ? 1 : 0,
-            maxProgress: 1,
-            isCompleted: Boolean(claimedMissions['m2']),
-            canClaim: Boolean(dailyTasks.read && !claimedMissions['m2']),
-            actionLabel: 'Đọc Sách Ngay',
-            actionIcon: 'ph-book-bookmark',
-        },
-        {
-            id: 'm3',
-            taskKey: 'chat',
-            title: 'Đàm đạo cùng Trợ lý AI Khoai Nhỏ',
-            description: 'Gửi ít nhất 1 câu hỏi hoặc trò chuyện cùng AI Khoai Nhỏ để gợi ý sách hay.',
-            rewardPotato: 5,
-            rewardXp: 20,
-            icon: 'ph-sparkle',
-            iconColor: 'text-blue-500 bg-blue-500/10',
-            currentProgress: dailyTasks.chat ? 1 : 0,
-            maxProgress: 1,
-            isCompleted: Boolean(claimedMissions['m3']),
-            canClaim: Boolean(dailyTasks.chat && !claimedMissions['m3']),
-            actionLabel: 'Trò Chuyện AI',
-            actionIcon: 'ph-chat-circle-dots',
-        },
-        {
-            id: 'm4',
-            taskKey: 'search',
-            title: 'Tìm kiếm tác phẩm yêu thích',
-            description: 'Tìm kiếm ít nhất 1 cuốn sách, chủ đề hoặc tác giả trên thanh tra cứu tác phẩm.',
-            rewardPotato: 5,
-            rewardXp: 20,
-            icon: 'ph-magnifying-glass',
-            iconColor: 'text-indigo-500 bg-indigo-500/10',
-            currentProgress: dailyTasks.search ? 1 : 0,
-            maxProgress: 1,
-            isCompleted: Boolean(claimedMissions['m4']),
-            canClaim: Boolean(dailyTasks.search && !claimedMissions['m4']),
-            actionLabel: 'Tìm Kiếm Ngay',
-            actionIcon: 'ph-magnifying-glass',
-        },
-        {
-            id: 'm5',
-            taskKey: 'offers',
-            title: 'Khám phá kho Ưu Đãi & Gói Khoai',
-            description: 'Khám phá các gói combo và chiết khấu đọc sách độc quyền dành cho bạn.',
-            rewardPotato: 5,
-            rewardXp: 20,
-            icon: 'ph-gift',
-            iconColor: 'text-emerald-600 bg-emerald-500/10',
-            currentProgress: dailyTasks.offers ? 1 : 0,
-            maxProgress: 1,
-            isCompleted: Boolean(claimedMissions['m5']),
-            canClaim: Boolean(dailyTasks.offers && !claimedMissions['m5']),
-            actionLabel: 'Xem Ưu Đãi',
-            actionIcon: 'ph-tag',
-        },
-        {
-            id: 'm6',
-            taskKey: 'bookshelf',
-            title: 'Kiểm tra Tủ Sách Cá Nhân',
-            description: 'Ghé thăm không gian tủ sách cá nhân để kiểm tra các tác phẩm của bạn.',
-            rewardPotato: 5,
-            rewardXp: 20,
-            icon: 'ph-books',
-            iconColor: 'text-purple-500 bg-purple-500/10',
-            currentProgress: dailyTasks.bookshelf ? 1 : 0,
-            maxProgress: 1,
-            isCompleted: Boolean(claimedMissions['m6']),
-            canClaim: Boolean(dailyTasks.bookshelf && !claimedMissions['m6']),
-            actionLabel: 'Vào Tủ Sách',
-            actionIcon: 'ph-caret-right',
-        },
-    ];
-
-    const READER_MILESTONES = [
-        {
-            id: 'ms1',
-            title: 'Thành tựu: Độc Giả Chăm Chỉ (Chuỗi 7 Ngày)',
-            description: 'Hoàn thành chuỗi 7 ngày liên tiếp điểm danh đọc sách.',
-            rewardPotato: 50,
-            rewardXp: 150,
-            currentProgress: Math.min(streakDays, 7),
-            maxProgress: 7,
-            icon: 'ph-fire',
-            badge: 'Cột Mốc',
-            isCompleted: Boolean(claimedMilestones['ms1']),
-            canClaim: streakDays >= 7 && !claimedMilestones['ms1'],
-        },
-        {
-            id: 'ms2',
-            title: 'Thành tựu: Tủ Sách Khởi Đầu (3 Cuốn)',
-            description: 'Sở hữu ít nhất 3 tác phẩm trong Tủ Sách Cá Nhân.',
-            rewardPotato: 30,
-            rewardXp: 100,
-            currentProgress: Math.min(bookshelfCount, 3),
-            maxProgress: 3,
-            icon: 'ph-books',
-            badge: 'Tủ Sách',
-            isCompleted: Boolean(claimedMilestones['ms2']),
-            canClaim: bookshelfCount >= 3 && !claimedMilestones['ms2'],
-        },
-        {
-            id: 'ms3',
-            title: 'Thành tựu: Nhà Tích Lũy Tri Thức (100 Khoai)',
-            description: 'Tích lũy số dư đạt mốc 100 Khoai Tây trong ví.',
-            rewardPotato: 40,
-            rewardXp: 120,
-            currentProgress: Math.min(potatoBalance, 100),
-            maxProgress: 100,
-            icon: 'ph-coins',
-            badge: 'Tri Thức',
-            isCompleted: Boolean(claimedMilestones['ms3']),
-            canClaim: potatoBalance >= 100 && !claimedMilestones['ms3'],
-        },
-        {
-            id: 'ms4',
-            title: 'Thành tựu: Đại Sứ HALM BOOK (500 Khoai)',
-            description: 'Tích lũy tổng cộng 500 Khoai Tây từ nhiệm vụ và nạp.',
-            rewardPotato: 100,
-            rewardXp: 300,
-            currentProgress: Math.min(potatoBalance, 500),
-            maxProgress: 500,
-            icon: 'ph-crown',
-            badge: 'Huy Hiệu Vàng',
-            isCompleted: Boolean(claimedMilestones['ms4']),
-            canClaim: potatoBalance >= 500 && !claimedMilestones['ms4'],
-        },
-    ];
+    const handleClaimMilestone = handleClaimMission;
+    const DAILY_MISSIONS = missionCards(missionData?.missions, 'DAILY');
+    const READER_MILESTONES = missionCards(missionData?.missions, 'MILESTONE');
 
     return (
         <>
@@ -525,10 +247,10 @@ export default function NhiemVu() {
                                     size="lg"
                                 />
 
-                                <h2 className="font-display font-black text-2xl text-stone-900 dark:!text-[#EDE9DF] leading-tight">
+                                <h2 className="font-display font-black text-2xl text-[#FAF7F0] leading-tight">
                                     {customerName}
                                 </h2>
-                                <p className="font-metadata-spec text-xs text-stone-500 dark:!text-[#9CA3AF] mt-1">
+                                <p className="font-metadata-spec text-xs text-[#96938B] mt-1">
                                     {customerIdDisplay}
                                 </p>
 
@@ -544,12 +266,12 @@ export default function NhiemVu() {
                                 {/* Stat Boxes */}
                                 <div className="grid grid-cols-2 gap-3 w-full text-center">
                                     <Link to="/canhan?tab=wallet" className="py-4 px-3 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-gold transition-colors flex flex-col justify-center">
-                                        <span className="block font-metadata-spec text-2xl font-black text-stone-900 dark:!text-[#EDE9DF]" style={{ color: isDark ? '#EDE9DF' : undefined }}>{potatoBalance.toLocaleString()}</span>
-                                        <span className="font-metadata-spec text-xs text-stone-500 dark:!text-[#9CA3AF] mt-1" style={{ color: isDark ? '#9CA3AF' : undefined }}>Khoai Tích Lũy</span>
+                                        <span className="block font-metadata-spec text-2xl font-black text-[#EDE9DF]">{potatoBalance.toLocaleString()}</span>
+                                        <span className="font-metadata-spec text-xs text-[#96938B] mt-1">Khoai Tích Lũy</span>
                                     </Link>
                                     <Link to="/tusachcn" className="py-4 px-3 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-wine dark:hover:border-gold transition-colors flex flex-col justify-center">
-                                        <span className="block font-metadata-spec text-2xl font-black text-stone-900 dark:!text-[#EDE9DF]" style={{ color: isDark ? '#EDE9DF' : undefined }}>{bookshelfCount}</span>
-                                        <span className="font-metadata-spec text-xs text-stone-500 dark:!text-[#9CA3AF] mt-1" style={{ color: isDark ? '#9CA3AF' : undefined }}>Sách Trong Tủ</span>
+                                        <span className="block font-metadata-spec text-2xl font-black text-[#EDE9DF]">{bookshelfCount}</span>
+                                        <span className="font-metadata-spec text-xs text-[#96938B] mt-1">Sách Trong Tủ</span>
                                     </Link>
                                 </div>
                             </div>

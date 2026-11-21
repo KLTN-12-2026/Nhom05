@@ -38,6 +38,16 @@ public class MembershipTier {
     @Column(name = "description", length = 255)
     private String description;
 
+    private Integer rankOrder;
+    private Integer upgradeReward;
+    @Column(columnDefinition = "TEXT")
+    private String benefitsJson;
+
+    public MembershipTier(int id, String name, Integer books, Integer points, Integer discount, String icon, String description, List<Customer> customers) {
+        this.tierId = id; this.tierName = name; this.minBooksRequired = books; this.minPotatoRequired = points;
+        this.discountPercent = discount; this.badgeIcon = icon; this.description = description; this.customers = customers;
+    }
+
     @OneToMany(mappedBy = "membershipTier")
     @JsonIgnore
     private List<Customer> customers;

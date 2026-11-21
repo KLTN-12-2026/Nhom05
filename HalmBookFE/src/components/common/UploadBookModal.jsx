@@ -207,23 +207,23 @@ export default function UploadBookModal({ isOpen, onClose }) {
 
             {/* Modal Dialog Card */}
             <div
-                className="relative w-full max-w-2xl rounded-3xl bg-[#FFFEFA] dark:bg-[#181916] border border-[#E3DDD0] dark:border-[#2C2E29] shadow-2xl overflow-hidden z-10 transition-all my-auto"
+                className="relative w-full max-w-2xl rounded-3xl bg-[#181916] border border-[#2C2E29] shadow-2xl overflow-hidden z-10 transition-all my-auto text-[#EDE9DF]"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header Gradient Accent */}
                 <div className="h-1.5 w-full bg-gradient-to-r from-[#8E3038] via-[#D4AF37] to-[#8E3038]" />
 
                 {/* Modal Title Bar */}
-                <div className="px-6 py-5 sm:px-8 border-b border-[#E3DDD0] dark:border-[#2C2E29] flex items-center justify-between">
+                <div className="px-6 py-5 sm:px-8 border-b border-[#2C2E29] flex items-center justify-between bg-[#141512]">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-2xl bg-[#D4AF37]/15 dark:bg-[#D4AF37]/20 border border-[#D4AF37]/40 flex items-center justify-center text-[#D4AF37]">
+                        <div className="w-10 h-10 rounded-2xl bg-[#D4AF37]/15 border border-[#D4AF37]/40 flex items-center justify-center text-[#D4AF37]">
                             <i className="ph-bold ph-cloud-arrow-up text-xl"></i>
                         </div>
                         <div>
-                            <h3 className="font-display font-black text-xl text-[#1E1F1D] dark:text-[#EDE9DF] tracking-tight">
+                            <h3 className="font-display font-black text-xl text-[#FAF7F0] tracking-tight">
                                 Tải Lên Sách Cá Nhân
                             </h3>
-                            <p className="font-metadata text-xs text-[#66645E] dark:text-[#96938B]">
+                            <p className="font-metadata text-xs text-[#96938B]">
                                 Hỗ trợ định dạng PDF (.pdf) & EPUB (.epub) • Lưu trữ an toàn trên thiết bị của bạn
                             </p>
                         </div>
@@ -232,10 +232,10 @@ export default function UploadBookModal({ isOpen, onClose }) {
                         <button
                             type="button"
                             onClick={onClose}
-                            className="w-9 h-9 rounded-full flex items-center justify-center text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer"
+                            className="w-8 h-8 rounded-full flex items-center justify-center bg-[#20221E] border border-[#2C2E29] text-[#96938B] hover:text-[#EDE9DF] hover:bg-[#282A24] transition-colors cursor-pointer"
                             aria-label="Đóng"
                         >
-                            <i className="ph-bold ph-x text-lg"></i>
+                            <i className="ph-bold ph-x text-base"></i>
                         </button>
                     )}
                 </div>
@@ -253,11 +253,11 @@ export default function UploadBookModal({ isOpen, onClose }) {
                             <span className="inline-block px-3 py-1 rounded-full text-xs font-bold font-metadata uppercase tracking-wider bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 mb-2">
                                 Tải lên thành công!
                             </span>
-                            <h4 className="font-display font-black text-2xl text-[#1E1F1D] dark:text-[#EDE9DF]">
+                            <h4 className="font-display font-black text-2xl text-[#FAF7F0]">
                                 {uploadedBook.title}
                             </h4>
-                            <p className="font-metadata text-xs text-[#66645E] dark:text-[#96938B] mt-1">
-                                Tác giả: <strong className="text-stone-800 dark:text-stone-200">{uploadedBook.author}</strong> • Định dạng: <span className="font-bold text-amber-500">{uploadedBook.format}</span> ({uploadedBook.fileSize})
+                            <p className="font-metadata text-xs text-[#96938B] mt-1">
+                                Tác giả: <strong className="text-[#FAF7F0]">{uploadedBook.author}</strong> • Định dạng: <span className="font-bold text-[#D4AF37]">{uploadedBook.format}</span> ({uploadedBook.fileSize})
                             </p>
                         </div>
 
@@ -266,7 +266,7 @@ export default function UploadBookModal({ isOpen, onClose }) {
                             <img
                                 src={uploadedBook.coverUrl}
                                 alt="Cover preview"
-                                className="w-28 h-40 object-cover rounded-xl shadow-xl border border-stone-300 dark:border-stone-700"
+                                className="w-28 h-40 object-cover rounded-xl shadow-xl border border-[#2C2E29]"
                             />
                         </div>
 
@@ -274,7 +274,12 @@ export default function UploadBookModal({ isOpen, onClose }) {
                             <button
                                 type="button"
                                 onClick={handleReadNow}
-                                className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-600 via-[#C28807] to-amber-600 hover:brightness-110 text-[#111210] font-metadata font-black text-sm flex items-center justify-center gap-2 shadow-lg transition-transform hover:scale-105 cursor-pointer"
+                                style={{
+                                    background: 'linear-gradient(135deg, #D4AF37 0%, #E6C65C 50%, #C59B27 100%)',
+                                    color: '#141412',
+                                    boxShadow: '0 4px 14px rgba(0,0,0,0.4)',
+                                }}
+                                className="btn-gold w-full sm:w-auto px-6 py-3 rounded-2xl font-metadata font-black text-sm flex items-center justify-center gap-2 border border-[#D4AF37]/40 shadow-lg transition-transform hover:scale-105 cursor-pointer"
                             >
                                 <i className="ph-bold ph-book-open text-lg"></i>
                                 <span>Đọc Sách Ngay</span>
@@ -282,7 +287,7 @@ export default function UploadBookModal({ isOpen, onClose }) {
                             <button
                                 type="button"
                                 onClick={handleGoToBookshelf}
-                                className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-stone-100 hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 text-stone-800 dark:text-stone-200 font-metadata font-bold text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                                className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-[#20221E] hover:bg-[#282A24] text-[#FAF7F0] border border-[#2C2E29] font-metadata font-bold text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer"
                             >
                                 <i className="ph-bold ph-books text-lg"></i>
                                 <span>Vào Tủ Sách Cá Nhân</span>
@@ -296,7 +301,7 @@ export default function UploadBookModal({ isOpen, onClose }) {
                                     setAuthor('');
                                     setCustomCoverUrl(null);
                                 }}
-                                className="w-full sm:w-auto px-4 py-3 rounded-2xl text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 text-xs font-bold transition-colors cursor-pointer"
+                                className="w-full sm:w-auto px-4 py-3 rounded-2xl text-[#96938B] hover:text-[#FAF7F0] text-xs font-bold transition-colors cursor-pointer"
                             >
                                 + Tải Thêm Sách Khác
                             </button>
@@ -308,7 +313,7 @@ export default function UploadBookModal({ isOpen, onClose }) {
                        ======================================================== */
                     <form onSubmit={handleUploadSubmit} className="p-6 sm:p-8 space-y-6">
                         {errorMsg && (
-                            <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-xs font-medium flex items-center gap-2.5">
+                            <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-medium flex items-center gap-2.5">
                                 <i className="ph-bold ph-warning-circle text-lg shrink-0"></i>
                                 <span>{errorMsg}</span>
                             </div>
@@ -324,8 +329,8 @@ export default function UploadBookModal({ isOpen, onClose }) {
                                 isDragging
                                     ? 'border-[#D4AF37] bg-[#D4AF37]/10 scale-[1.01]'
                                     : file
-                                    ? 'border-emerald-500/60 bg-emerald-500/5'
-                                    : 'border-stone-300 dark:border-stone-700 hover:border-[#D4AF37] bg-stone-50 dark:bg-[#111210]'
+                                    ? 'border-emerald-500/60 bg-emerald-500/10'
+                                    : 'border-[#2C2E29] hover:border-[#D4AF37] bg-[#20221E]'
                             }`}
                         >
                             {file ? (
@@ -337,10 +342,10 @@ export default function UploadBookModal({ isOpen, onClose }) {
                                             {file.name.toLowerCase().endsWith('.epub') ? 'EPUB' : 'PDF'}
                                         </div>
                                         <div className="min-w-0">
-                                            <p className="font-display font-bold text-sm text-stone-900 dark:text-stone-100 truncate max-w-xs sm:max-w-md">
+                                            <p className="font-display font-bold text-sm text-[#FAF7F0] truncate max-w-xs sm:max-w-md">
                                                 {file.name}
                                             </p>
-                                            <p className="font-metadata text-xs text-stone-500 dark:text-stone-400 mt-0.5">
+                                            <p className="font-metadata text-xs text-[#96938B] mt-0.5">
                                                 {(file.size / (1024 * 1024)).toFixed(2)} MB • Sẵn sàng nạp vào hệ thống
                                             </p>
                                         </div>
@@ -351,21 +356,21 @@ export default function UploadBookModal({ isOpen, onClose }) {
                                             e.stopPropagation();
                                             fileInputRef.current?.click();
                                         }}
-                                        className="shrink-0 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-stone-200 dark:bg-stone-800 hover:bg-stone-300 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-300 transition-colors cursor-pointer"
+                                        className="shrink-0 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-[#141512] hover:bg-[#1C1E1A] text-[#FAF7F0] border border-[#2C2E29] transition-colors cursor-pointer"
                                     >
                                         Đổi tệp khác
                                     </button>
                                 </div>
                             ) : (
                                 <div className="space-y-2.5">
-                                    <div className="w-14 h-14 rounded-2xl bg-[#D4AF37]/15 dark:bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/40 flex items-center justify-center mx-auto text-2xl group-hover:scale-110 transition-transform">
+                                    <div className="w-14 h-14 rounded-2xl bg-[#D4AF37]/15 text-[#D4AF37] border border-[#D4AF37]/40 flex items-center justify-center mx-auto text-2xl group-hover:scale-110 transition-transform">
                                         <i className="ph-bold ph-file-arrow-up"></i>
                                     </div>
                                     <div>
-                                        <p className="font-display font-bold text-sm text-stone-900 dark:text-stone-200">
-                                            Kéo thả file sách vào đây hoặc <span className="text-[#C28807] dark:text-[#D4AF37] underline underline-offset-4">duyệt từ máy tính</span>
+                                        <p className="font-display font-bold text-sm text-[#FAF7F0]">
+                                            Kéo thả file sách vào đây hoặc <span className="text-[#D4AF37] underline underline-offset-4">duyệt từ máy tính</span>
                                         </p>
-                                        <p className="font-metadata text-xs text-stone-500 dark:text-stone-400 mt-1">
+                                        <p className="font-metadata text-xs text-[#96938B] mt-1">
                                             Hỗ trợ định dạng <strong>.PDF</strong> và <strong>.EPUB</strong> (Tối đa 100MB)
                                         </p>
                                     </div>
@@ -376,7 +381,7 @@ export default function UploadBookModal({ isOpen, onClose }) {
                         {/* 2. Metadata Inputs */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-1.5">
-                                <label className="block font-metadata text-xs font-bold text-stone-700 dark:text-stone-300">
+                                <label className="block font-metadata text-xs font-bold text-[#FAF7F0]">
                                     Tên tác phẩm / Tiêu đề <span className="text-rose-500">*</span>
                                 </label>
                                 <input
@@ -385,12 +390,12 @@ export default function UploadBookModal({ isOpen, onClose }) {
                                     value={title}
                                     onChange={(e) => setTitle(e.target.value)}
                                     placeholder="VD: Hoàng Tử Bé, Lập trình React..."
-                                    className="w-full px-4 py-2.5 rounded-xl text-xs font-medium bg-stone-50 dark:bg-[#111210] border border-stone-300 dark:border-stone-700 focus:border-[#D4AF37] focus:outline-none text-stone-900 dark:text-stone-100 transition-colors"
+                                    className="w-full px-4 py-2.5 rounded-xl text-xs font-medium bg-[#20221E] border border-[#2C2E29] focus:border-[#D4AF37] focus:outline-none text-[#FAF7F0] placeholder-[#807D75] transition-colors"
                                 />
                             </div>
 
                             <div className="space-y-1.5">
-                                <label className="block font-metadata text-xs font-bold text-stone-700 dark:text-stone-300">
+                                <label className="block font-metadata text-xs font-bold text-[#FAF7F0]">
                                     Tác giả
                                 </label>
                                 <input
@@ -398,27 +403,27 @@ export default function UploadBookModal({ isOpen, onClose }) {
                                     value={author}
                                     onChange={(e) => setAuthor(e.target.value)}
                                     placeholder="VD: Antoine de Saint-Exupéry hoặc Cá nhân"
-                                    className="w-full px-4 py-2.5 rounded-xl text-xs font-medium bg-stone-50 dark:bg-[#111210] border border-stone-300 dark:border-stone-700 focus:border-[#D4AF37] focus:outline-none text-stone-900 dark:text-stone-100 transition-colors"
+                                    className="w-full px-4 py-2.5 rounded-xl text-xs font-medium bg-[#20221E] border border-[#2C2E29] focus:border-[#D4AF37] focus:outline-none text-[#FAF7F0] placeholder-[#807D75] transition-colors"
                                 />
                             </div>
 
                             <div className="space-y-1.5">
-                                <label className="block font-metadata text-xs font-bold text-stone-700 dark:text-stone-300">
+                                <label className="block font-metadata text-xs font-bold text-[#FAF7F0]">
                                     Thể loại / Chủ đề
                                 </label>
                                 <select
                                     value={category}
                                     onChange={(e) => setCategory(e.target.value)}
-                                    className="w-full px-4 py-2.5 rounded-xl text-xs font-medium bg-stone-50 dark:bg-[#111210] border border-stone-300 dark:border-stone-700 focus:border-[#D4AF37] focus:outline-none text-stone-900 dark:text-stone-100 transition-colors"
+                                    className="w-full px-4 py-2.5 rounded-xl text-xs font-medium bg-[#20221E] border border-[#2C2E29] focus:border-[#D4AF37] focus:outline-none text-[#FAF7F0] transition-colors"
                                 >
                                     {CATEGORIES.map((cat) => (
-                                        <option key={cat} value={cat}>{cat}</option>
+                                        <option key={cat} value={cat} className="bg-[#20221E] text-[#FAF7F0]">{cat}</option>
                                     ))}
                                 </select>
                             </div>
 
                             <div className="space-y-1.5">
-                                <label className="block font-metadata text-xs font-bold text-stone-700 dark:text-stone-300">
+                                <label className="block font-metadata text-xs font-bold text-[#FAF7F0]">
                                     Màu sắc bìa tự sinh (Theme)
                                 </label>
                                 <div className="grid grid-cols-4 gap-2 pt-0.5">
@@ -432,8 +437,8 @@ export default function UploadBookModal({ isOpen, onClose }) {
                                             }}
                                             className={`py-1.5 px-2 rounded-xl text-[11px] font-bold border transition-all flex items-center justify-center gap-1 cursor-pointer ${
                                                 coverTheme === th.id && !customCoverUrl
-                                                    ? 'border-[#D4AF37] bg-[#D4AF37]/20 shadow-sm text-stone-900 dark:text-[#EDE9DF]'
-                                                    : 'border-stone-200 dark:border-stone-800 text-stone-500 hover:border-stone-400'
+                                                    ? 'border-[#D4AF37] bg-[#D4AF37]/20 shadow-sm text-[#D4AF37]'
+                                                    : 'border-[#2C2E29] bg-[#20221E] text-[#96938B] hover:border-stone-500'
                                             }`}
                                         >
                                             <span className={`w-2.5 h-2.5 rounded-full bg-gradient-to-tr ${th.color}`}></span>
@@ -445,18 +450,18 @@ export default function UploadBookModal({ isOpen, onClose }) {
                         </div>
 
                         {/* 3. Cover Preview & Custom Image Button */}
-                        <div className="rounded-2xl p-4 bg-stone-50 dark:bg-[#111210] border border-stone-200 dark:border-stone-800 flex items-center justify-between gap-4">
+                        <div className="rounded-2xl p-4 bg-[#20221E] border border-[#2C2E29] flex items-center justify-between gap-4">
                             <div className="flex items-center gap-3">
                                 <img
                                     src={previewCoverUrl}
                                     alt="Preview"
-                                    className="w-12 h-16 object-cover rounded-lg shadow-sm border border-stone-300 dark:border-stone-700"
+                                    className="w-12 h-16 object-cover rounded-lg shadow-sm border border-[#2C2E29]"
                                 />
                                 <div>
-                                    <p className="font-metadata text-xs font-bold text-stone-800 dark:text-stone-200">
+                                    <p className="font-metadata text-xs font-bold text-[#FAF7F0]">
                                         Ảnh bìa sách tự động
                                     </p>
-                                    <p className="font-metadata text-[11px] text-stone-500 dark:text-stone-400">
+                                    <p className="font-metadata text-[11px] text-[#96938B]">
                                         Tự sinh bìa sang trọng hoặc tải ảnh bìa riêng của bạn
                                     </p>
                                 </div>
@@ -464,7 +469,7 @@ export default function UploadBookModal({ isOpen, onClose }) {
                             <button
                                 type="button"
                                 onClick={() => coverInputRef.current?.click()}
-                                className="px-3 py-1.5 rounded-xl text-xs font-bold border border-stone-300 dark:border-stone-700 hover:border-[#D4AF37] text-stone-700 dark:text-stone-300 transition-colors cursor-pointer"
+                                className="px-3 py-1.5 rounded-xl text-xs font-bold border border-[#2C2E29] bg-[#141512] hover:border-[#D4AF37] text-[#FAF7F0] transition-colors cursor-pointer"
                             >
                                 {customCoverUrl ? 'Đổi ảnh bìa' : '+ Chọn ảnh riêng'}
                             </button>
@@ -477,9 +482,9 @@ export default function UploadBookModal({ isOpen, onClose }) {
                                     <span>Đang nạp file vào thư viện cá nhân...</span>
                                     <span>{uploadProgress}%</span>
                                 </div>
-                                <div className="h-2 w-full rounded-full bg-stone-200 dark:bg-stone-800 overflow-hidden">
+                                <div className="h-2 w-full rounded-full bg-[#141512] border border-[#2C2E29] overflow-hidden">
                                     <div
-                                        className="h-full bg-gradient-to-r from-amber-600 via-[#C28807] to-yellow-400 transition-all duration-200 rounded-full"
+                                        className="h-full bg-gradient-to-r from-[#8E3038] via-[#D4AF37] to-[#F5D061] transition-all duration-200 rounded-full"
                                         style={{ width: `${uploadProgress}%` }}
                                     />
                                 </div>
@@ -487,22 +492,27 @@ export default function UploadBookModal({ isOpen, onClose }) {
                         )}
 
                         {/* 5. Footer Buttons */}
-                        <div className="pt-2 flex items-center justify-end gap-3 border-t border-stone-200 dark:border-stone-800">
+                        <div className="pt-2 flex items-center justify-end gap-3 border-t border-[#2C2E29]">
                             <button
                                 type="button"
                                 disabled={isUploading}
                                 onClick={onClose}
-                                className="px-5 py-2.5 rounded-xl text-xs font-bold text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors cursor-pointer"
+                                className="px-5 py-2.5 rounded-xl text-xs font-bold text-[#96938B] hover:text-[#FAF7F0] hover:bg-[#20221E] transition-colors cursor-pointer"
                             >
                                 Hủy bỏ
                             </button>
                             <button
                                 type="submit"
                                 disabled={!file || isUploading}
-                                className={`px-6 py-2.5 rounded-xl font-metadata font-black text-xs flex items-center gap-2 shadow-md transition-all cursor-pointer ${
+                                style={{
+                                    background: !file || isUploading ? undefined : 'linear-gradient(135deg, #D4AF37 0%, #E6C65C 50%, #C59B27 100%)',
+                                    color: !file || isUploading ? undefined : '#141412',
+                                    boxShadow: !file || isUploading ? undefined : '0 4px 14px rgba(0,0,0,0.4)',
+                                }}
+                                className={`px-6 py-2.5 rounded-xl font-metadata font-black text-xs flex items-center gap-2 transition-all cursor-pointer ${
                                     !file || isUploading
-                                        ? 'bg-stone-300 dark:bg-stone-800 text-stone-500 cursor-not-allowed'
-                                        : 'bg-gradient-to-r from-amber-600 via-[#C28807] to-amber-600 hover:brightness-110 text-[#111210] hover:scale-105'
+                                        ? 'bg-stone-800 text-stone-500 cursor-not-allowed border border-[#2C2E29]'
+                                        : 'btn-gold border border-[#D4AF37]/40 hover:brightness-110 active:scale-95'
                                 }`}
                             >
                                 {isUploading ? (

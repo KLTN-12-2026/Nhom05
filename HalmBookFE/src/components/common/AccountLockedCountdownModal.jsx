@@ -157,22 +157,22 @@ export default function AccountLockedCountdownModal() {
     <>
       {/* Toast thông báo nổi thanh lịch khi về lại Trang chủ khách */}
       {lockedNoticeToast && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[999999] max-w-lg w-[92%] sm:w-auto bg-white dark:bg-[#1E201B] border border-amber-300 dark:border-amber-700/80 shadow-2xl rounded-2xl p-4 flex items-center gap-3.5 animate-in slide-in-from-top-4 duration-300 text-stone-800 dark:text-stone-100">
-          <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 flex items-center justify-center text-amber-600 dark:text-amber-400 shrink-0">
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[999999] max-w-lg w-[92%] sm:w-auto bg-[#181916] border border-[#D4AF37]/40 shadow-2xl rounded-2xl p-4 flex items-center gap-3.5 animate-in slide-in-from-top-4 duration-300 text-[#FAF7F0]">
+          <div className="w-10 h-10 rounded-xl bg-[#D4AF37]/15 border border-[#D4AF37]/35 flex items-center justify-center text-[#F5D061] shrink-0">
             <i className="fa-solid fa-user-lock text-base"></i>
           </div>
           <div className="flex-1 min-w-0 pr-1">
-            <div className="text-xs font-bold text-stone-900 dark:text-stone-100 uppercase tracking-wide">
+            <div className="text-xs font-bold text-[#FAF7F0] uppercase tracking-wide">
               Thông Báo Khóa Tài Khoản
             </div>
-            <div className="text-xs text-stone-600 dark:text-stone-300 mt-0.5 leading-relaxed">
-              Tài khoản hiện đang bị khóa, vui lòng gọi hotline <span className="font-bold text-amber-700 dark:text-amber-400">1900 6868</span> để được hỗ trợ.
+            <div className="text-xs text-[#C5C2BA] mt-0.5 leading-relaxed">
+              Tài khoản hiện đang bị khóa, vui lòng gọi hotline <span className="font-bold text-[#F5D061]">1900 6868</span> để được hỗ trợ.
             </div>
           </div>
           <button
             type="button"
             onClick={() => setLockedNoticeToast(false)}
-            className="w-7 h-7 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-400 hover:text-stone-600 flex items-center justify-center text-xs transition cursor-pointer shrink-0"
+            className="w-7 h-7 rounded-lg hover:bg-[#20221E] text-[#96938B] hover:text-[#EDE9DF] flex items-center justify-center text-xs transition cursor-pointer shrink-0 border border-transparent hover:border-[#2C2E29]"
           >
             <i className="fa-solid fa-xmark"></i>
           </button>
@@ -182,55 +182,55 @@ export default function AccountLockedCountdownModal() {
       {/* Modal Đếm ngược 10s (chỉ hiển thị phía User khi bị Admin khóa) */}
       {!isCurrentlyInAdmin() && isLocked && (
         <div
-          className="fixed inset-0 z-[999999] bg-stone-900/60 dark:bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 select-none animate-in fade-in duration-200"
+          className="fixed inset-0 z-[999999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 select-none animate-in fade-in duration-200"
           role="dialog"
           aria-modal="true"
         >
-          <div className="relative w-full max-w-md bg-white dark:bg-[#1E201B] border border-stone-200 dark:border-[#33372C] rounded-3xl p-6 sm:p-7 text-center shadow-2xl text-stone-800 dark:text-[#FAF7F0] overflow-hidden">
+          <div className="relative w-full max-w-md bg-[#181916] border border-[#2C2E29] rounded-3xl p-6 sm:p-7 text-center shadow-[0_20px_50px_rgba(0,0,0,0.85)] text-[#FAF7F0] overflow-hidden">
             
             {/* Biểu tượng ổ khóa màu hổ phách nhã nhặn */}
-            <div className="mx-auto mb-4 w-16 h-16 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 flex items-center justify-center shadow-xs">
-              <i className="fa-solid fa-user-lock text-amber-600 dark:text-amber-400 text-2xl"></i>
+            <div className="mx-auto mb-4 w-16 h-16 rounded-2xl bg-[#D4AF37]/15 border border-[#D4AF37]/35 flex items-center justify-center shadow-xs">
+              <i className="fa-solid fa-user-lock text-[#F5D061] text-2xl"></i>
             </div>
 
             {/* Tiêu đề thông báo */}
-            <h2 className="text-xl font-bold text-stone-900 dark:text-stone-100 mb-1.5">
+            <h2 className="text-xl font-bold text-[#FAF7F0] mb-1.5">
               Tài Khoản Tạm Thời Bị Khóa
             </h2>
 
             {/* Lời nhắn nhã nhặn */}
-            <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-300 leading-relaxed mb-4">
+            <p className="text-xs sm:text-sm text-[#C5C2BA] leading-relaxed mb-4">
               {lockMessage} Phiên làm việc của bạn sẽ tự động kết thúc để đảm bảo an toàn thông tin.
             </p>
 
             {/* Khung đếm ngược thanh lịch */}
-            <div className="bg-stone-50 dark:bg-[#252822] border border-stone-200/80 dark:border-stone-700/60 rounded-2xl p-4 mb-4">
-              <span className="text-[11px] font-semibold text-stone-500 dark:text-stone-400 uppercase tracking-wider block mb-1">
+            <div className="bg-[#20221E] border border-[#2C2E29] rounded-2xl p-4 mb-4">
+              <span className="text-[11px] font-semibold text-[#96938B] uppercase tracking-wider block mb-1">
                 Tự động chuyển về Trang Chủ sau
               </span>
               <div className="flex items-baseline justify-center gap-1.5">
-                <span className="text-4xl font-extrabold text-amber-600 dark:text-amber-400 tracking-tight tabular-nums">
+                <span className="text-4xl font-extrabold text-[#F5D061] tracking-tight tabular-nums">
                   {countdown}
                 </span>
-                <span className="text-sm font-semibold text-stone-500 dark:text-stone-400">giây</span>
+                <span className="text-sm font-semibold text-[#96938B]">giây</span>
               </div>
 
               {/* Thanh tiến trình màu vàng hổ phách */}
-              <div className="w-full bg-stone-200 dark:bg-stone-700 h-1.5 rounded-full mt-3 overflow-hidden">
+              <div className="w-full bg-[#181916] h-1.5 rounded-full mt-3 overflow-hidden border border-[#2C2E29]">
                 <div
-                  className="h-full bg-gradient-to-r from-amber-500 to-amber-600 rounded-full transition-all duration-1000 ease-linear"
+                  className="h-full bg-[#D4AF37] rounded-full transition-all duration-1000 ease-linear"
                   style={{ width: `${progressPercent}%` }}
                 ></div>
               </div>
             </div>
 
             {/* Khung hướng dẫn Hotline hỗ trợ */}
-            <div className="bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/70 dark:border-amber-900/40 rounded-xl p-3 mb-5 text-xs text-stone-600 dark:text-stone-300 text-left flex items-start gap-2.5">
-              <i className="fa-solid fa-headset text-amber-600 dark:text-amber-400 text-base mt-0.5 shrink-0"></i>
+            <div className="bg-[#20221E] border border-[#2C2E29] rounded-xl p-3 mb-5 text-xs text-[#C5C2BA] text-left flex items-start gap-2.5">
+              <i className="fa-solid fa-headset text-[#F5D061] text-base mt-0.5 shrink-0"></i>
               <div>
-                <div className="font-semibold text-stone-800 dark:text-stone-200">Bạn cần hỗ trợ mở lại tài khoản?</div>
-                <div className="text-[11px] text-stone-500 dark:text-stone-400 mt-0.5">
-                  Vui lòng liên hệ Hotline: <span className="font-bold text-amber-700 dark:text-amber-400">1900 6868</span> (miễn phí) để được hỗ trợ.
+                <div className="font-semibold text-[#FAF7F0]">Bạn cần hỗ trợ mở lại tài khoản?</div>
+                <div className="text-[11px] text-[#96938B] mt-0.5">
+                  Vui lòng liên hệ Hotline: <span className="font-bold text-[#F5D061]">1900 6868</span> (miễn phí) để được hỗ trợ.
                 </div>
               </div>
             </div>
@@ -239,7 +239,12 @@ export default function AccountLockedCountdownModal() {
             <button
               type="button"
               onClick={handleReturnHome}
-              className="w-full py-2.5 px-4 rounded-xl font-semibold text-sm bg-stone-900 hover:bg-stone-800 dark:bg-amber-600 dark:hover:bg-amber-500 text-white shadow-sm active:scale-95 transition-all duration-150 flex items-center justify-center gap-2 cursor-pointer"
+              style={{
+                background: 'linear-gradient(135deg, #D4AF37 0%, #E6C65C 50%, #C59B27 100%)',
+                color: '#141412',
+                boxShadow: '0 4px 14px rgba(0,0,0,0.4)',
+              }}
+              className="btn-gold w-full py-2.5 px-4 rounded-xl font-bold text-sm border border-[#D4AF37]/40 shadow-sm active:scale-95 transition-all duration-150 flex items-center justify-center gap-2 cursor-pointer"
             >
               <i className="fa-solid fa-house text-xs"></i>
               <span>Về trang chủ ngay</span>

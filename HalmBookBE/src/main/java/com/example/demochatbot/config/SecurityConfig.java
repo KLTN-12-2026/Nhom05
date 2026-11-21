@@ -112,10 +112,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/promotions", "/api/promotions/**").hasAnyAuthority("ROLE_ADMIN", "ADMIN")
 
                         // 4. Nghiệp vụ ví, giỏ hàng, thanh toán và tủ sách cá nhân yêu cầu xác thực (IMP-07)
-                        .requestMatchers("/api/home/checkout", "/api/home/bookshelf", "/api/home/bookshelf/**").authenticated()
+                        .requestMatchers("/api/home/checkout", "/api/home/checkout/**", "/api/home/bookshelf", "/api/home/bookshelf/**").authenticated()
                         .requestMatchers("/api/home/cart/**").authenticated()
                         .requestMatchers("/api/home/potato/wallet", "/api/home/potato/topup", "/api/home/potato/transfer", "/api/home/potato/history").authenticated()
-                        .requestMatchers("/api/home/missions/claim", "/api/home/reading-progress", "/api/home/reading-notes/**").authenticated()
+                        .requestMatchers("/api/home/missions", "/api/home/missions/**", "/api/home/reading-progress", "/api/home/reading-notes/**").authenticated()
 
                         // 5. Các endpoint công khai của cửa hàng sách
                         .requestMatchers("/api/home/**").permitAll()

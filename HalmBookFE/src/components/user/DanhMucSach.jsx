@@ -1,3 +1,4 @@
+import { useMissionVisit } from '@/hooks/useMissionTracking';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom';
 import UserLayout from '@/components/user/layout/UserLayout';
@@ -182,6 +183,7 @@ export default function DanhMucSach() {
 
   // State bộ lọc và tìm kiếm trong trang danh mục
   const [searchQuery, setSearchQuery] = useState(() => searchParams.get('q') || searchParams.get('search') || '');
+  useMissionVisit('SEARCH', searchQuery);
   const [sortBy, setSortBy] = useState('popular');
   const [priceFilter, setPriceFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);

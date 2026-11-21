@@ -13,6 +13,9 @@ import java.util.List;
 @Repository
 public interface ChatMessageRepository extends JpaRepository<Chat_Message, Integer> {
 
+    @Query("SELECT COUNT(m) FROM Chat_Message m WHERE m.chat_session.customer.customer_id = :customerId AND UPPER(m.sender) = 'USER' AND m.sent_at >= :start AND m.sent_at < :end")
+    long countUserMessages(@Param("customerId") String customerId, @Param("start") java.time.LocalDateTime start, @Param("end") java.time.LocalDateTime end);
+
     @Query("SELECT m FROM Chat_Message m WHERE m.chat_session = :session ORDER BY m.sent_at ASC, m.chatMessage_id ASC")
     List<Chat_Message> findBySessionOrderBySentAtAsc(@Param("session") Chat_Session session);
 

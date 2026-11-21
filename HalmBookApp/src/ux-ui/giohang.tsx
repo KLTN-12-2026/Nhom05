@@ -1,5 +1,7 @@
+import { CartQuote, getCartQuote, clearCartCoupon } from './offersService';
+import { CommercePolicy, fetchCommercePolicy, rentalPlanPrice } from './commercePolicy';
 import { API_BASE_URL, CANDIDATE_API_URLS as CANDIDATE_URLS } from './apiService';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,6 +10,7 @@ import {
   TouchableOpacity,
   Image,
   ActivityIndicator,
+  AppState,
   Modal,
   ScrollView,
   Alert,
@@ -21,7 +24,6 @@ import axios from 'axios';
 import { BookData, useAppNavigation, useAutoHideFooter } from './navigation';
 import { getBookChapterLabel } from './bookContentService';
 import {
-  RENTAL_DURATION_OPTIONS,
   RentalDurationDays,
   calculateDynamicKhoai,
   normalizeRentalDays,
@@ -44,16 +46,19 @@ const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const CART_DB_SEEDED_KEY = '@halm_cart_db_seeded_v2';
 
 export type { RentalDurationDays };
-export { RENTAL_DURATION_OPTIONS, calculateDynamicKhoai, normalizeRentalDays };
+export { calculateDynamicKhoai, normalizeRentalDays };
 
 export interface CartItemModel {
   cartItemId: number;
   bookId: string;
+  offerId?: string;
+  offerName?: string;
   title: string;
   author: string;
   coverUrl: string | null;
   description: string;
   baseKhoai: number;
+  bookPrice: number | null;
   rentalDays: RentalDurationDays;
   priceKhoai: number;
   bookData: BookData;
@@ -238,6 +243,12 @@ export default function GioHang() {
   const [cartItems, setCartItems] = useState<CartItemModel[]>([]);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [policy, setPolicy] = useState<CommercePolicy | null>(null);
+  const [quotedSelection, setServerQuote] = useState<(CartQuote & { selectionIdentity: string }) | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteNonce, setQuoteNonce] = useState(0);
+  const lastQuoteError = useRef('');
+  const checkoutPending = useRef(false);
   const [submittingCheckout, setSubmittingCheckout] = useState<boolean>(false);
   const [updatingItemId, setUpdatingItemId] = useState<number | null>(null);
   const [potatoBalance, setPotatoBalance] = useState<number | null>(null);
@@ -322,7 +333,7 @@ export default function GioHang() {
       const baseKhoai = resolveBaseKhoaiForBook(bookId, rawRentPrice);
       const rentalDays = normalizeRentalDays(raw.rentalDays ?? Number(raw.planKey));
       const priceKhoai =
-        typeof raw.priceKhoai === 'number' && raw.priceKhoai > 0
+        typeof raw.priceKhoai === 'number' && raw.priceKhoai >= 0
           ? raw.priceKhoai
           : calculateDynamicKhoai(baseKhoai, rentalDays);
 
@@ -358,12 +369,13 @@ export default function GioHang() {
 
       return {
         cartItemId: Number(raw.cartItemId || raw.cart_item_id || raw.id || index + 1),
-        bookId,
-        title,
+        bookId, offerId: raw.offerId || undefined, offerName: raw.offerName || undefined,
+        title: raw.offerName ? raw.offerName + ' · ' + title : title,
         author,
         coverUrl,
         description,
         baseKhoai,
+        bookPrice: rawRentPrice,
         rentalDays,
         priceKhoai,
         bookData,
@@ -413,6 +425,12 @@ export default function GioHang() {
       const headers = await getAuthHeaders();
       let workingBaseUrl = activeBaseUrl;
       let catalogMap: Record<string, any> = {};
+      try {
+        const snapshot = await fetchCommercePolicy(); setPolicy(snapshot);
+        const member = await axios.get(API_BASE_URL + '/api/home/membership/my-tier', { headers });
+        if (typeof member.data.potatoBalance === 'number') setPotatoBalance(member.data.potatoBalance);
+      } catch { setPolicy(null); }
+
 
       // 1. Tải danh mục sách thật từ DB để đồng bộ metadata (ảnh bìa, mô tả, tác giả)
       for (const candidate of CANDIDATE_URLS) {
@@ -592,9 +610,9 @@ export default function GioHang() {
   const isItemSelected = (cartItemId: number) => selectedIds.includes(cartItemId);
 
   const toggleSelectItem = (cartItemId: number) => {
-    setSelectedIds((prev) =>
-      prev.includes(cartItemId) ? prev.filter((id) => id !== cartItemId) : [...prev, cartItemId]
-    );
+    const current = cartItems.find(item => item.cartItemId === cartItemId);
+    const group = current?.offerId ? cartItems.filter(item => item.offerId === current.offerId).map(item => item.cartItemId) : [cartItemId];
+    setSelectedIds(prev => prev.includes(cartItemId) ? prev.filter(id => !group.includes(id)) : [...new Set([...prev, ...group])]);
   };
 
   const isAllSelected =
@@ -615,22 +633,10 @@ export default function GioHang() {
     setDurationPickerItem(null);
     if (item.rentalDays === newDays) return;
 
-    const newPriceKhoai = calculateDynamicKhoai(item.baseKhoai, newDays);
-
-    // Cập nhật ngay trên UI để phản hồi tức thì
-    setCartItems((prev) =>
-      prev.map((ci) =>
-        ci.cartItemId === item.cartItemId
-          ? { ...ci, rentalDays: newDays, priceKhoai: newPriceKhoai }
-          : ci
-      )
-    );
-    // Nếu đang mở Quick View của chính sách đó thì đồng bộ luôn
-    setQuickViewItem((prev) =>
-      prev && prev.cartItemId === item.cartItemId
-        ? { ...prev, rentalDays: newDays, priceKhoai: newPriceKhoai }
-        : prev
-    );
+    if (!policy) return;
+    const selectedPlan = policy.plans.find(p => p.durationDays === newDays && p.active);
+    if (!selectedPlan) return;
+    const newPriceKhoai = rentalPlanPrice(selectedPlan, item.bookPrice);
 
     setUpdatingItemId(item.cartItemId);
     try {
@@ -655,8 +661,9 @@ export default function GioHang() {
             )
           );
         }
-      } catch {
-        // Fallback đồng bộ vào bảng cart_item MySQL qua POST /api/home/cart/add
+      } catch (error: any) {
+        if (![404, 405].includes(error?.response?.status)) throw error;
+        // Legacy server compatibility.
         await axios.post(
           `${activeBaseUrl}/api/home/cart/add`,
           {
@@ -667,8 +674,9 @@ export default function GioHang() {
           { headers, timeout: 6000 }
         );
       }
-    } catch {
-      // Giữ giá trị đã tính chuẩn trên state nếu người dùng chưa đăng nhập
+    } catch (error: any) {
+      Alert.alert('Cập nhật kỳ hạn', error?.response?.data?.message || 'Không cập nhật được kỳ hạn. Vui lòng thử lại.');
+      await fetchCartFromDatabase(true);
     } finally {
       setUpdatingItemId(null);
     }
@@ -696,8 +704,8 @@ export default function GioHang() {
         });
       }
     } catch {
-      // Đã xóa trên giao diện
-    }
+      // Refresh below preserves the authoritative cart.
+    } finally { await fetchCartFromDatabase(true); }
   };
 
   // ==============================================================
@@ -705,7 +713,45 @@ export default function GioHang() {
   // ==============================================================
   const selectedItems = cartItems.filter((item) => selectedIds.includes(item.cartItemId));
   const selectedCount = selectedItems.length;
-  const totalPriceKhoai = selectedItems.reduce((sum, item) => sum + item.priceKhoai, 0);
+  const quoteIdentity = selectedItems.map(item => item.cartItemId + ':' + item.rentalDays + ':' + item.offerId + ':' + item.priceKhoai).sort().join('|') + ':' + policy?.revision;
+  const serverQuote = quotedSelection?.selectionIdentity === quoteIdentity ? quotedSelection : null;
+  const totalPriceKhoai = serverQuote?.totalKhoaiPaid ?? 0;
+  useEffect(() => {
+    if (!isLoggedIn || !selectedCount) return;
+    let active = true, busy = false;
+    const refresh = async () => {
+      if (!active || busy) return;
+      busy = true;
+      setQuoteLoading(true);
+      try {
+        const quote = await getCartQuote(selectedItems.map(item => item.cartItemId));
+        if (!active) return;
+        setServerQuote({ ...quote, selectionIdentity: quoteIdentity }); setPotatoBalance(quote.potatoBalance); lastQuoteError.current = '';
+        setCartItems(previous => {
+          let changed = false;
+          const next = previous.map(item => { const row = quote.items.find(line => line.cartItemId === item.cartItemId); if (row && row.priceKhoai !== item.priceKhoai) { changed = true; return { ...item, priceKhoai: row.priceKhoai }; } return item; });
+          return changed ? next : previous;
+        });
+        if (policy && quote.policyRevision !== policy.revision) { const latest = await fetchCommercePolicy(); if (active) setPolicy(latest); }
+      } catch (error: any) {
+        if (!active) return;
+        setServerQuote(null);
+        const message = error?.response?.data?.message || error?.message || 'Không tải được báo giá. Vui lòng thử lại.';
+        if (lastQuoteError.current !== message) {
+          lastQuoteError.current = message;
+          Alert.alert('Báo giá giỏ hàng', message, [
+            { text: 'Đóng', style: 'cancel' },
+            { text: 'Bỏ mã giảm giá', onPress: () => { void clearCartCoupon().then(() => setQuoteNonce(value => value + 1)).catch(() => Alert.alert('Mã ưu đãi', 'Chưa xóa được mã. Vui lòng thử lại.')); } },
+            { text: 'Thử lại', onPress: () => setQuoteNonce(value => value + 1) },
+          ]);
+        }
+      } finally { busy = false; if (active) setQuoteLoading(false); }
+    };
+    void Promise.resolve().then(refresh); const listener = AppState.addEventListener('change', state => { if (state === 'active') void refresh(); });
+    return () => { active = false; listener.remove(); };
+    // The serialized selection is the request identity; other object references are deliberately excluded.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quoteIdentity, quoteNonce, isLoggedIn]);
 
   // ==============================================================
   // 6. XỬ LÝ NÚT "ĐỌC THỬ" & "THUÊ NGAY" (POST /api/cart/checkout)
@@ -717,7 +763,9 @@ export default function GioHang() {
   };
 
   const handleCheckout = async () => {
-    if (selectedCount === 0 || submittingCheckout) return;
+    if (selectedCount === 0 || checkoutPending.current) return;
+    if (!serverQuote || quoteLoading) { Alert.alert('Báo giá', 'Vui lòng chờ giá được xác nhận hoặc tải lại giỏ hàng.'); return; }
+    if (!policy) { Alert.alert('Biểu giá', 'Chưa tải được chính sách giá. Hãy tải lại giỏ hàng.'); return; }
 
     const token = await AsyncStorage.getItem('userToken');
     if (!isLoggedIn && !token) {
@@ -725,45 +773,16 @@ export default function GioHang() {
       return;
     }
 
+    checkoutPending.current = true;
     setSubmittingCheckout(true);
     try {
       const headers = await getAuthHeaders();
-      let checkoutResult: any = null;
-
-      try {
-        // 1. Gọi API chuẩn POST /api/cart/checkout với danh sách cartItemIds đã chọn
-        const res = await axios.post(
-          `${activeBaseUrl}/api/cart/checkout`,
-          { cartItemIds: selectedIds },
-          { headers, timeout: 8000 }
-        );
-        checkoutResult = res.data;
-      } catch (primaryErr: any) {
-        const status = primaryErr?.response?.status;
-        // Nếu lỗi nghiệp vụ từ CartController (ví dụ: không đủ Khoai -> 400), ném lỗi ngay
-        if (status === 400 && primaryErr?.response?.data?.message) {
-          throw primaryErr;
-        }
-
-        // 2. Fallback sang POST /api/home/checkout (xử lý @Transactional trên OrderServiceImpl)
-        const fallbackPayload = {
-          paymentMethod: 'POTATO_WALLET',
-          discountAmount: 0,
-          items: selectedItems.map((si) => ({
-            bookId: si.bookId,
-            cartItemId: si.cartItemId,
-            planKey: String(si.rentalDays),
-            durationDays: si.rentalDays,
-            price: si.priceKhoai,
-          })),
-        };
-        const fallbackRes = await axios.post(
-          `${activeBaseUrl}/api/home/checkout`,
-          fallbackPayload,
-          { headers, timeout: 8000 }
-        );
-        checkoutResult = fallbackRes.data;
-      }
+      const response = await axios.post(API_BASE_URL + '/api/home/checkout', {
+        items: selectedItems.map(item => ({ bookId: item.bookId, cartItemId: item.cartItemId, planKey: item.rentalDays === 36500 ? 'forever' : String(item.rentalDays) })),
+        cartItemIds: selectedIds,
+        policyRevision: serverQuote.policyRevision, expectedTotal: serverQuote.totalKhoaiPaid, quoteFingerprint: serverQuote.quoteFingerprint,
+      }, { headers, timeout: 10000 });
+      const checkoutResult = response.data;
 
       const paidKhoai =
         checkoutResult?.totalKhoaiPaid !== undefined
@@ -821,6 +840,7 @@ export default function GioHang() {
         (typeof err?.response?.data === 'string' ? err.response.data : null) ||
         'Không thể thực hiện giao dịch thuê sách. Vui lòng kiểm tra số dư Khoai hoặc thử lại.';
 
+      if (err?.response?.status === 409) await fetchCartFromDatabase(true);
       Alert.alert('Thanh toán chưa hoàn tất', serverMsg, [
         {
           text: 'Nạp thêm Khoai',
@@ -832,6 +852,7 @@ export default function GioHang() {
         },
       ]);
     } finally {
+      checkoutPending.current = false;
       setSubmittingCheckout(false);
     }
   };
@@ -972,7 +993,7 @@ export default function GioHang() {
             >
               <Ionicons name="calendar-outline" size={13} color={colors.accent} />
               <Text style={[styles.durationPillText, { color: colors.textPrimary }]}>
-                {item.rentalDays} ngày
+                {item.rentalDays === 36500 ? 'Mua đứt' : item.rentalDays + ' ngày'}
               </Text>
               <Ionicons name="chevron-down" size={13} color={colors.accent} />
             </TouchableOpacity>
@@ -1276,12 +1297,9 @@ export default function GioHang() {
 
             <View style={styles.durationOptionsList}>
               {durationPickerItem &&
-                RENTAL_DURATION_OPTIONS.map((opt) => {
+                (policy?.plans || []).filter(plan => plan.active && (!durationPickerItem?.offerId || plan.durationDays === durationPickerItem.rentalDays)).map(plan => ({ days: plan.durationDays as RentalDurationDays, label: plan.label, subtitle: plan.useBookPrice ? 'Theo giá từng sách' : plan.priceKhoai + ' Khoai', plan })).map((opt) => {
                   const isActive = durationPickerItem.rentalDays === opt.days;
-                  const optionPrice = calculateDynamicKhoai(
-                    durationPickerItem.baseKhoai,
-                    opt.days
-                  );
+                  const optionPrice = rentalPlanPrice(opt.plan, durationPickerItem.bookPrice);
                   return (
                     <TouchableOpacity
                       key={opt.days}
@@ -1448,7 +1466,7 @@ export default function GioHang() {
                       ]}
                     >
                       <Text style={[styles.quickViewPriceLabel, { color: colors.textSecondary }]}>
-                        Gói {quickViewItem.rentalDays} ngày:
+                        {quickViewItem.rentalDays === 36500 ? 'Mua đứt:' : 'Gói ' + quickViewItem.rentalDays + ' ngày:'}
                       </Text>
                       <Text style={[styles.quickViewPriceValue, { color: colors.accent }]}>
                         {' '}

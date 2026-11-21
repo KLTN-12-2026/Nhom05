@@ -408,7 +408,7 @@ public class BookRentalAdminController {
     @Transactional
     public ResponseEntity<?> revokeRental(@PathVariable("id") int id) {
         try {
-            Optional<Access_Record> opt = accessRecordRepository.findById(id);
+            Optional<Access_Record> opt = accessRecordRepository.findByIdForUpdate(id);
             if (opt.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("message", "Không tìm thấy quyền đọc sách với mã #" + id));

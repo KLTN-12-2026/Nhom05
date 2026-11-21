@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useLegacyAdminPage } from './legacy-runtime';
 import axiosInstance from '@/services/axiosClient';
 import { confirmDialog } from '@/components/common/CustomConfirmModal';
@@ -17,6 +17,8 @@ export default function QuanLyKhachHang() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const lockInFlight = useRef(false);
+  const [locking, setLocking] = useState(false);
 
   // 2. State Bộ lọc & Tìm kiếm
   const [search, setSearch] = useState('');
@@ -99,6 +101,7 @@ export default function QuanLyKhachHang() {
 
   // 7. Thao tác Khóa / Mở khóa tài khoản khách hàng (dùng Custom Confirm Modal)
   const handleToggleLock = async (cust) => {
+    if (lockInFlight.current) return;
     const isLocked = cust.status === 'LOCKED';
     const actionName = isLocked ? 'Mở khóa' : 'Khóa';
     
@@ -106,7 +109,7 @@ export default function QuanLyKhachHang() {
       title: isLocked ? 'Mở Khóa Tài Khoản' : 'Khóa Tài Khoản Độc Giả',
       message: `Bạn có chắc chắn muốn ${actionName.toLowerCase()} tài khoản của độc giả "${cust.name || cust.username}"? ${
         !isLocked
-          ? 'Người dùng sẽ bị tạm dừng phiên làm việc và không thể đăng nhập.'
+          ? 'Máy chủ chặn truy cập ngay. App sẽ đóng phiên ở lần kiểm tra tiếp theo (mỗi 15 giây khi hoạt động) và không thể đăng nhập cho đến khi được mở khóa.'
           : 'Độc giả sẽ có thể đăng nhập và sử dụng dịch vụ trở lại bình thường.'
       }`,
       confirmText: actionName,
@@ -114,10 +117,14 @@ export default function QuanLyKhachHang() {
       type: isLocked ? 'warning' : 'danger',
     });
     if (!confirmed) return;
+    if (lockInFlight.current) return;
+    lockInFlight.current = true;
+    setLocking(true);
 
     try {
       const res = await axiosInstance.put(`/api/admin/customers/${encodeURIComponent(cust.customerId)}/toggle-lock`);
-      const newStatus = res.data?.newStatus || (isLocked ? 'ACTIVE' : 'LOCKED');
+      const newStatus = res.data?.newStatus;
+      if (!['ACTIVE', 'LOCKED'].includes(newStatus)) throw new Error('Máy chủ chưa xác nhận trạng thái tài khoản. Vui lòng làm mới danh sách.');
       
       // Cập nhật ngay trên giao diện
       setCustomers(prev => prev.map(c => c.customerId === cust.customerId ? { ...c, status: newStatus } : c));
@@ -130,7 +137,7 @@ export default function QuanLyKhachHang() {
     } catch (err) {
       console.error('Lỗi khóa/mở khóa tài khoản:', err);
       showToast(err.response?.data?.message || 'Không thể thay đổi trạng thái tài khoản.', 'error');
-    }
+    } finally { lockInFlight.current = false; setLocking(false); }
   };
 
   // 8. Mở modal chỉnh sửa hồ sơ
@@ -583,6 +590,7 @@ export default function QuanLyKhachHang() {
                               <button
                                 type="button"
                                 onClick={() => handleToggleLock(cust)}
+                                disabled={locking}
                                 className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border transition cursor-pointer flex items-center gap-1 ${
                                   isLocked
                                     ? 'bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'

@@ -394,40 +394,43 @@ async function rejectRental(id) {
     }
 }
 
+const pendingRevocations = new Set();
 async function revokeRental(id) {
+    if (pendingRevocations.has(id)) return;
     let confirmed = false;
     if (typeof window.halmConfirm === 'function') {
         confirmed = await window.halmConfirm({
             title: 'Thu Hồi Quyền Đọc Sách',
-            message: 'Bạn có chắc chắn muốn thu hồi quyền đọc của độc giả đối với cuốn sách này? Độc giả sẽ không thể mở đọc tài liệu này nữa.',
+            message: 'Thu hồi quyền đọc cuốn sách này? Máy chủ chặn truy cập ngay; App sẽ đóng sách ở lần kiểm tra quyền tiếp theo (mỗi 15 giây khi hoạt động). Thao tác này không tự hoàn Khoai.',
             confirmText: 'Thu Hồi Quyền Đọc',
             type: 'danger',
         });
     } else if (window.AdminUI && typeof window.AdminUI.confirm === 'function') {
         confirmed = await window.AdminUI.confirm({
             title: 'Thu Hồi Quyền Đọc Sách?',
-            message: 'Bạn có chắc chắn muốn thu hồi quyền đọc của độc giả đối với cuốn sách này?',
+            message: 'Thu hồi quyền đọc cuốn sách này? Máy chủ chặn truy cập ngay; App sẽ đóng sách ở lần kiểm tra quyền tiếp theo (mỗi 15 giây khi hoạt động). Thao tác này không tự hoàn Khoai.',
             confirmText: 'Thu Hồi Quyền Đọc',
             confirmType: 'danger',
         });
     } else {
         confirmed = true;
     }
-    if (!confirmed) return;
+    if (!confirmed || pendingRevocations.has(id)) return;
+    pendingRevocations.add(id);
 
     try {
         if (window.AdminRentalAPI && typeof window.AdminRentalAPI.revoke === 'function') {
             const res = await window.AdminRentalAPI.revoke(id);
+            if (res?.success !== true) throw new Error('Máy chủ chưa xác nhận thu hồi quyền đọc.');
             if (window.DB) window.DB.notify(res.message || 'Đã thu hồi quyền đọc sách!', 'warning');
-        } else if (window.DB) {
-            const rental = window.DB.revokeRental(id);
-            if (rental && window.DB) window.DB.notify(`Đã thu hồi quyền đọc sách ${rental.code}.`, 'warning');
+        } else {
+            throw new Error('Không kết nối được API quản trị. Vui lòng tải lại trang.');
         }
         await loadRentals();
     } catch (err) {
         if (window.DB)
             window.DB.notify('Lỗi khi thu hồi quyền đọc: ' + (err.response?.data?.message || err.message), 'error');
-    }
+    } finally { pendingRevocations.delete(id); }
 }
 
 function exportRentalsExcel() {

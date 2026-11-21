@@ -295,8 +295,8 @@ export const inlinePageStyle1 = `
                     width: min(92vw, 32rem) !important;
                     max-height: 90vh !important;
                     transform: translate(-50%, -50%) scale(0.95) !important;
-                    background: #fffefa !important;
-                    color: #1e1f1d !important;
+                    background: #222420 !important;
+                    color: #ede9df !important;
                     overflow-y: auto;
                 }
                 .dark #rentalModal {

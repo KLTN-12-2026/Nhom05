@@ -19,12 +19,16 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @Builder
 @Entity
-@Table(name = "banners")
+@Table(name = "banners", indexes = @Index(name = "idx_banners_platform_active_order", columnList = "platform,is_active,order_index"))
 public class Banner {
 
     @Id
     @Column(name = "banner_id", length = 64)
     private String id;
+
+    @Builder.Default
+    @Column(name = "platform", nullable = false, columnDefinition = "varchar(8) default 'WEB'")
+    private String platform = "WEB";
 
     @Column(name = "layout_type", length = 50)
     private String layoutType; // 'showcase' | 'mascot_ai' | 'vip_potato' | 'hot_deal' | 'reader_3d' | 'custom_image'

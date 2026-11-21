@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @Builder
 @Entity
-@Table(name = "notification")
+@Table(name = "notification", uniqueConstraints = @UniqueConstraint(name = "uk_notification_broadcast_customer", columnNames = {"broadcast_id", "customer_id"}))
 public class Notification {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -22,6 +22,9 @@ public class Notification {
 
     @Column(name = "customer_id", nullable = false)
     private String customerId;
+
+    @Column(name = "broadcast_id", length = 36)
+    private String broadcastId;
 
     private String title;
 

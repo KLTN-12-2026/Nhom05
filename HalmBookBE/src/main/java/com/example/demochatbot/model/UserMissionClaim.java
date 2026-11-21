@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @Builder
 @Entity
-@Table(name = "user_mission_claim")
+@Table(name = "user_mission_claim", uniqueConstraints = @UniqueConstraint(name = "uk_mission_claim_key", columnNames = "claim_key"))
 public class UserMissionClaim {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -31,6 +31,15 @@ public class UserMissionClaim {
 
     @Column(name = "reward_potato")
     private Integer rewardPotato;
+
+    @Column(name = "claim_key", length = 64)
+    private String claimKey;
+    private Integer rewardXp;
+    @Column(length = 150)
+    private String missionTitle;
+    @Column(length = 20)
+    private String missionPeriod;
+    private Integer balanceAfter;
 
     @Builder.Default
     @Column(name = "created_at")

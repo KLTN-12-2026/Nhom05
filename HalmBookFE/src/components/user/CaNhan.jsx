@@ -191,7 +191,19 @@ export default function Profile() {
         }
     };
 
-    const showToast = (title, message) => {
+    const showToast = (title, message, type = 'info') => {
+        if (window.halmToast) {
+            const lower = (title || '').toLowerCase();
+            if (type === 'success' || lower.includes('thành công') || lower.includes('sao chép')) {
+                window.halmToast.success(title, message);
+            } else if (type === 'error' || lower.includes('thất bại') || lower.includes('lỗi') || lower.includes('không đủ')) {
+                window.halmToast.error(title, message);
+            } else if (type === 'warning' || lower.includes('cảnh báo')) {
+                window.halmToast.warning(title, message);
+            } else {
+                window.halmToast.info(title, message);
+            }
+        }
         setToast({ show: true, title, message });
         window.setTimeout(() => setToast({ show: false, title: '', message: '' }), 3500);
     };
@@ -688,10 +700,10 @@ export default function Profile() {
                                     />
                                 </div>
 
-                                <h2 className="font-display font-black text-2xl text-stone-900 dark:!text-[#EDE9DF] leading-tight">
+                                <h2 className="font-display font-black text-2xl text-[#FAF7F0] leading-tight">
                                     {customer?.customerName || 'Độc giả'}
                                 </h2>
-                                <p className="font-metadata-spec text-xs text-stone-500 dark:!text-[#9CA3AF] mt-1">
+                                <p className="font-metadata-spec text-xs text-[#96938B] mt-1">
                                     {formatCustomerId(customer?.customerId || customer?.customer_id)}
                                 </p>
 
@@ -705,12 +717,12 @@ export default function Profile() {
 
                                 <div className="grid grid-cols-2 gap-3 w-full text-center">
                                     <button type="button" onClick={() => handleSelectTab('wallet')} className="py-4 px-3 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-gold transition-colors flex flex-col justify-center">
-                                        <span className="block font-metadata-spec text-2xl font-black text-stone-900 dark:!text-[#EDE9DF]" style={{ color: isDark ? '#EDE9DF' : undefined }}>{(customer?.potatoBalance ?? 0).toLocaleString()}</span>
-                                        <span className="font-metadata-spec text-xs text-stone-500 dark:!text-[#9CA3AF] mt-1" style={{ color: isDark ? '#9CA3AF' : undefined }}>Khoai Tích Lũy</span>
+                                        <span className="block font-metadata-spec text-2xl font-black text-[#EDE9DF]">{(customer?.potatoBalance ?? 0).toLocaleString()}</span>
+                                        <span className="font-metadata-spec text-xs text-[#96938B] mt-1">Khoai Tích Lũy</span>
                                     </button>
                                     <Link to="/tusachcn" className="py-4 px-3 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-wine dark:hover:border-gold transition-colors flex flex-col justify-center">
-                                        <span className="block font-metadata-spec text-2xl font-black text-stone-900 dark:!text-[#EDE9DF]" style={{ color: isDark ? '#EDE9DF' : undefined }}>{rentedCount}</span>
-                                        <span className="font-metadata-spec text-xs text-stone-500 dark:!text-[#9CA3AF] mt-1" style={{ color: isDark ? '#9CA3AF' : undefined }}>Sách Trong Tủ</span>
+                                        <span className="block font-metadata-spec text-2xl font-black text-[#EDE9DF]">{rentedCount}</span>
+                                        <span className="font-metadata-spec text-xs text-[#96938B] mt-1">Sách Trong Tủ</span>
                                     </Link>
                                 </div>
                             </div>
