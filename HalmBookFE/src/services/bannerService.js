@@ -2,15 +2,12 @@
  * ============================================================================
  * Service: bannerService.js
  * Quản lý danh sách Banner động cho Trang Chủ (User) và Cổng Quản Trị (Admin)
- * Hỗ trợ các kiểu bố cục:
- *  1. 'showcase'     - Bố cục 2 cột với 3 thẻ sách nổi bật đa sắc
- *  2. 'mascot_ai'    - Bố cục Linh vật Khoai Nhỏ AI với bong bóng chat & chip câu hỏi tương tác
- *  3. 'vip_potato'   - Bố cục Hoàng Gia hiển thị 4 cấp bậc hội viên & ví Khoai Tây
- *  4. 'hot_deal'     - Bố cục Voucher coupon & đợt giảm giá sâu
- *  5. 'reader_3d'    - Bố cục Trình đọc lật trang 3D & máy phát nhạc nền Focus
- *  6. 'custom_image' - Bố cục Banner hình ảnh tải lên tự do (Full Image / Overlay)
+ * Tích hợp trực tiếp với CSDL Backend Spring Boot (/api/home/banners, /api/admin/banners)
+ * Kèm cơ chế LocalStorage Cache & Offline Fallback liền mạch
  * ============================================================================
  */
+
+import axiosClient from './axiosClient';
 
 const STORAGE_KEY_BANNERS = 'halm_db_banners';
 const STORAGE_KEY_SETTINGS = 'halm_db_site_settings';
@@ -129,7 +126,7 @@ export const DEFAULT_SITE_SETTINGS = {
 };
 
 /**
- * Lấy danh sách toàn bộ banner (kèm fallback mặc định)
+ * Lấy danh sách banner tức thì từ LocalStorage Cache (không gây giật giao diện)
  */
 export function getBanners() {
   try {
@@ -146,80 +143,161 @@ export function getBanners() {
 }
 
 /**
- * Lưu danh sách banner vào LocalStorage và bắn CustomEvent để User cập nhật tức thì
+ * Tải danh sách Banner từ Backend CSDL (API /api/home/banners hoặc /api/admin/banners)
  */
-export function saveBanners(banners) {
+export async function fetchBanners(isAdmin = false) {
   try {
-    const safeBanners = Array.isArray(banners) ? banners : DEFAULT_BANNERS;
-    localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(safeBanners));
-    window.dispatchEvent(new CustomEvent('halm-banners-updated', { detail: { banners: safeBanners } }));
-    return safeBanners;
-  } catch (error) {
-    console.error('Lỗi lưu danh sách banner:', error);
-    return false;
+    const endpoint = isAdmin ? '/api/admin/banners' : '/api/home/banners';
+    const res = await axiosClient.get(endpoint);
+    const data = res.data;
+    if (Array.isArray(data) && data.length > 0) {
+      localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(data));
+      window.dispatchEvent(new CustomEvent('halm-banners-updated', { detail: { banners: data } }));
+      return data;
+    }
+  } catch (err) {
+    console.warn('Không thể kết nối CSDL Banner từ Backend, dùng bản cache cục bộ:', err);
+  }
+  return getBanners();
+}
+
+/**
+ * Lưu danh sách banner vào CSDL Backend và đồng bộ LocalStorage Cache
+ */
+export async function saveBanners(banners) {
+  const safeBanners = Array.isArray(banners) ? banners : DEFAULT_BANNERS;
+  try {
+    const res = await axiosClient.put('/api/admin/banners/reorder', safeBanners);
+    const data = res.data;
+    if (Array.isArray(data)) {
+      localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(data));
+      window.dispatchEvent(new CustomEvent('halm-banners-updated', { detail: { banners: data } }));
+      return data;
+    }
+  } catch (err) {
+    console.error('Lỗi gọi API saveBanners reorder:', err);
+    throw err;
+  }
+
+  // Fallback nếu không có kết quả
+  localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(safeBanners));
+  window.dispatchEvent(new CustomEvent('halm-banners-updated', { detail: { banners: safeBanners } }));
+  return safeBanners;
+}
+
+/**
+ * Thêm banner mới vào CSDL Backend
+ */
+export async function addBanner(bannerData) {
+  const list = getBanners();
+  const newBanner = {
+    ...bannerData,
+    id: bannerData.id || `banner-${Date.now()}`,
+    order: list.length + 1,
+    isActive: bannerData.isActive !== false
+  };
+
+  try {
+    const res = await axiosClient.post('/api/admin/banners', newBanner);
+    const saved = res.data;
+    const updated = [...list, saved];
+    localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(updated));
+    window.dispatchEvent(new CustomEvent('halm-banners-updated', { detail: { banners: updated } }));
+    return updated;
+  } catch (err) {
+    console.error('Lỗi thêm banner lên Backend CSDL:', err);
+    throw err;
   }
 }
 
 /**
- * Thêm banner mới
+ * Cập nhật banner hiện có lên CSDL Backend
  */
-export function addBanner(bannerData) {
+export async function updateBanner(id, patch) {
   const list = getBanners();
-  const newBanner = {
-    ...bannerData,
-    id: `banner-${Date.now()}`,
-    order: list.length + 1,
-    isActive: bannerData.isActive !== false
-  };
-  const updated = [...list, newBanner];
-  saveBanners(updated);
-  return updated;
+  const idx = list.findIndex(b => b.id === id);
+  const merged = idx !== -1 ? { ...list[idx], ...patch } : { ...patch, id };
+
+  try {
+    const res = await axiosClient.put(`/api/admin/banners/${id}`, merged);
+    const saved = res.data;
+    if (idx !== -1) {
+      list[idx] = saved;
+    } else {
+      list.push(saved);
+    }
+    localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(list));
+    window.dispatchEvent(new CustomEvent('halm-banners-updated', { detail: { banners: list } }));
+    return list;
+  } catch (err) {
+    console.error('Lỗi cập nhật banner lên Backend CSDL:', err);
+    throw err;
+  }
 }
 
 /**
- * Cập nhật banner hiện có
+ * Bật/tắt trạng thái hiển thị của banner trên CSDL Backend
  */
-export function updateBanner(id, patch) {
+export async function toggleBannerStatus(id) {
   const list = getBanners();
   const idx = list.findIndex(b => b.id === id);
   if (idx === -1) return list;
-  list[idx] = { ...list[idx], ...patch };
-  saveBanners(list);
-  return list;
+
+  try {
+    await axiosClient.patch(`/api/admin/banners/${id}/toggle`);
+    list[idx].isActive = !list[idx].isActive;
+    localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(list));
+    window.dispatchEvent(new CustomEvent('halm-banners-updated', { detail: { banners: list } }));
+    return list;
+  } catch (err) {
+    console.error('Lỗi toggle trạng thái banner trên CSDL:', err);
+    throw err;
+  }
 }
 
 /**
- * Bật/tắt trạng thái hiển thị của banner
+ * Xóa banner khỏi CSDL Backend
  */
-export function toggleBannerStatus(id) {
-  const list = getBanners();
-  const idx = list.findIndex(b => b.id === id);
-  if (idx === -1) return list;
-  list[idx].isActive = !list[idx].isActive;
-  saveBanners(list);
-  return list;
-}
-
-/**
- * Xóa banner
- */
-export function deleteBanner(id) {
+export async function deleteBanner(id) {
   const list = getBanners();
   const filtered = list.filter(b => b.id !== id);
-  saveBanners(filtered);
-  return filtered;
+
+  try {
+    await axiosClient.delete(`/api/admin/banners/${id}`);
+    localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(filtered));
+    window.dispatchEvent(new CustomEvent('halm-banners-updated', { detail: { banners: filtered } }));
+    return filtered;
+  } catch (err) {
+    console.error('Lỗi xóa banner khỏi Backend CSDL:', err);
+    throw err;
+  }
 }
 
 /**
- * Khôi phục danh sách banner mặc định ban đầu
+ * Khôi phục danh sách banner mặc định ban đầu trên CSDL Backend
  */
-export function resetDefaultBanners() {
-  saveBanners(DEFAULT_BANNERS);
+export async function resetDefaultBanners() {
+  try {
+    const res = await axiosClient.post('/api/admin/banners/reset');
+    const data = res.data;
+    if (Array.isArray(data)) {
+      localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(data));
+      window.dispatchEvent(new CustomEvent('halm-banners-updated', { detail: { banners: data } }));
+      return data;
+    }
+  } catch (err) {
+    console.error('Lỗi reset banner trên Backend CSDL:', err);
+    throw err;
+  }
+
+  // Fallback Local
+  localStorage.setItem(STORAGE_KEY_BANNERS, JSON.stringify(DEFAULT_BANNERS));
+  window.dispatchEvent(new CustomEvent('halm-banners-updated', { detail: { banners: DEFAULT_BANNERS } }));
   return DEFAULT_BANNERS;
 }
 
 /**
- * Lấy cấu hình thông tin chân trang (Site Settings)
+ * Lấy cấu hình thông tin chân trang (Site Settings) tức thì từ cache
  */
 export function getSiteSettings() {
   try {
@@ -236,15 +314,35 @@ export function getSiteSettings() {
 }
 
 /**
- * Lưu cấu hình thông tin chân trang và bắn CustomEvent
+ * Tải thiết lập website từ CSDL Backend
  */
-export function saveSiteSettings(settings) {
+export async function fetchSiteSettings() {
   try {
-    localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
-    window.dispatchEvent(new CustomEvent('halm-site-settings-updated', { detail: { settings } }));
-    return true;
-  } catch (error) {
-    console.error('Lỗi lưu cấu hình website:', error);
-    return false;
+    const res = await axiosClient.get('/api/home/site-settings');
+    const data = res.data;
+    if (data && typeof data === 'object') {
+      localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(data));
+      window.dispatchEvent(new CustomEvent('halm-site-settings-updated', { detail: { settings: data } }));
+      return data;
+    }
+  } catch (err) {
+    console.warn('Lỗi tải Site Settings từ Backend CSDL:', err);
+  }
+  return getSiteSettings();
+}
+
+/**
+ * Lưu cấu hình thông tin chân trang lên CSDL Backend và đồng bộ Cache
+ */
+export async function saveSiteSettings(settings) {
+  try {
+    const res = await axiosClient.put('/api/admin/site-settings', settings);
+    const data = res.data;
+    localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(data));
+    window.dispatchEvent(new CustomEvent('halm-site-settings-updated', { detail: { settings: data } }));
+    return data;
+  } catch (err) {
+    console.error('Lỗi lưu Site Settings lên Backend CSDL:', err);
+    throw err;
   }
 }

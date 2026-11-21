@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { isDarkMode, applyTheme } from '@/utils/theme';
+import axiosInstance from '@/services/axiosClient';
 
 export default function Payment({ onNavigate }) {
   const navigate = useNavigate();
@@ -52,10 +53,24 @@ export default function Payment({ onNavigate }) {
     cardDate: ''
   });
 
-  const [walletBalance, setWalletBalance] = useState(1250);
+  const [walletBalance, setWalletBalance] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [successReceipt, setSuccessReceipt] = useState(null);
+
+  useEffect(() => {
+    async function fetchWallet() {
+      try {
+        const res = await axiosInstance.get('/api/home/potato/wallet');
+        if (res.data && res.data.potatoBalance !== undefined) {
+          setWalletBalance(Number(res.data.potatoBalance));
+        }
+      } catch (e) {
+        // Nếu chưa đăng nhập hoặc lỗi kết nối, giữ mặc định 0
+      }
+    }
+    fetchWallet();
+  }, []);
 
   // --- 3. COUNTDOWN TIMER (14:59) ---
   const [timeLeft, setTimeLeft] = useState(899);
@@ -241,36 +256,65 @@ export default function Payment({ onNavigate }) {
   ];
 
   // --- 9. PROCESS PAYMENT ENGINE ---
-  const handleProcessPayment = () => {
+  const handleProcessPayment = async () => {
     setIsProcessing(true);
 
-    setTimeout(() => {
-      setIsProcessing(false);
-      const transId = '#HLM-TOPUP-' + Math.floor(100000 + Math.random() * 900000);
+    try {
       let gatewayName = 'VietQR (MB Bank 24/7)';
+      let payMethodCode = 'VIETQR';
       if (paymentGateway === 'ewallet') {
         gatewayName = `Ví Điện Tử ${currentEwallet.toUpperCase()}`;
+        payMethodCode = `EWALLET_${currentEwallet.toUpperCase()}`;
       } else if (paymentGateway === 'atm') {
         gatewayName = `Thẻ ATM Nội Địa (${currentAtmBank})`;
+        payMethodCode = `ATM_${currentAtmBank}`;
       }
 
-      const addedKhoai = selectedPackage.bonusKhoai;
-      const newBal = walletBalance + addedKhoai;
-      setWalletBalance(newBal);
+      // Gọi API nạp tiền thực tế lên backend
+      const res = await axiosInstance.post('/api/home/potato/topup', {
+        amountMoney: selectedPackage.price,
+        paymentMethod: payMethodCode,
+        note: `Thanh toán ${selectedPackage.title} qua ${gatewayName}`
+      });
+
+      const order = res.data?.order;
+      const expectedKhoai = selectedPackage.bonusKhoai || Math.round(selectedPackage.price / 1000);
+
+      // Đồng bộ thông tin giao dịch vào hệ thống client DB
+      if (order && window.DB && typeof window.DB.createUserTransaction === 'function') {
+        try {
+          window.DB.createUserTransaction({
+            id: String(order.id),
+            code: order.transactionNo || ('#HLM-TOPUP-' + Math.floor(100000 + Math.random() * 900000)),
+            type: selectedPackage.title,
+            amount: selectedPackage.price,
+            potatoes: expectedKhoai,
+            status: 'pending',
+            method: gatewayName,
+            createdAt: new Date().toLocaleString('vi-VN')
+          });
+        } catch (_) {}
+      }
 
       setSuccessReceipt({
-        transCode: transId,
+        transCode: order?.transactionNo || ('#HLM-TOPUP-' + Math.floor(100000 + Math.random() * 900000)),
         gatewayName,
         packName: selectedPackage.title,
         price: selectedPackage.price,
-        addedKhoai,
-        newBalance: newBal,
+        addedKhoai: expectedKhoai,
+        newBalance: walletBalance,
+        status: order?.paymentStatus || 'PENDING',
         buyerInfo: 'Độc giả HALM BOOK (Tài khoản đang đăng nhập)'
       });
 
       setIsSuccessModalOpen(true);
-      triggerConfetti();
-    }, 850);
+    } catch (err) {
+      console.error('Lỗi nạp tiền / thanh toán:', err);
+      const errMsg = err?.response?.data?.error || err?.response?.data?.message || 'Có lỗi xảy ra trong quá trình xử lý thanh toán!';
+      showToast('Lỗi Thanh Toán', errMsg);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const getPayButtonText = () => {
@@ -329,7 +373,7 @@ export default function Payment({ onNavigate }) {
           
           {/* Logo & Brand */}
           <div
-            onClick={() => onNavigate ? onNavigate('home') : window.location.href = 'tc.html'}
+            onClick={() => onNavigate ? onNavigate('home') : navigate('/')}
             className="flex items-center gap-3 group shrink-0 cursor-pointer"
             aria-label="HALM BOOK Về Trang Chủ"
           >
@@ -856,7 +900,7 @@ export default function Payment({ onNavigate }) {
       </main>
 
       {/* ========================================================
-           POPUP THÔNG BÁO NẠP THÀNH CÔNG (SUCCESS TOPUP MODAL)
+           POPUP XÁC NHẬN ĐÃ GỬI YÊU CẦU NẠP KHOAI
            ======================================================== */}
       {isSuccessModalOpen && successReceipt && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300">
@@ -874,21 +918,21 @@ export default function Payment({ onNavigate }) {
 
             {/* Success Glowing Icon with celebratory pulse */}
             <div className="relative w-18 h-18 mx-auto flex items-center justify-center">
-              <div className="absolute inset-0 rounded-full bg-emerald-500/20 animate-ping"></div>
-              <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-950/70 border border-emerald-500/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-3xl shadow-inner relative z-10">
-                <i className="ph-bold ph-check"></i>
+              <div className="absolute inset-0 rounded-full bg-amber-500/20 animate-ping"></div>
+              <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-950/70 border border-amber-500/40 text-amber-600 dark:text-amber-400 flex items-center justify-center text-3xl shadow-inner relative z-10">
+                <i className="ph-bold ph-hourglass-medium"></i>
               </div>
             </div>
 
             <div className="space-y-1">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-metadata-spec text-[10px] font-bold uppercase tracking-[0.2em] border border-emerald-200 dark:border-emerald-800">
-                <i className="ph-fill ph-seal-check"></i> GIAO DỊCH THÀNH CÔNG
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 font-metadata-spec text-[10px] font-bold uppercase tracking-[0.2em] border border-amber-200 dark:border-amber-800">
+                <i className="ph-fill ph-clock"></i> ĐANG CHỜ ADMIN XÁC NHẬN
               </span>
               <h3 className="font-display font-black text-2xl sm:text-3xl text-ink dark:text-night-text tracking-tight">
-                Kích Hoạt Gói VIP Thành Công!
+                Yêu Cầu Nạp Đã Được Gửi
               </h3>
               <p className="font-editorial-body text-xs text-ink-muted dark:text-night-muted max-w-md mx-auto">
-                Chúc mừng bạn! Gói Hội Viên VIP đã được kích hoạt thành công. Toàn bộ kho sách bản quyền và đặc quyền thành viên của HALM BOOK đã sẵn sàng phục vụ bạn.
+                Admin sẽ kiểm tra giao dịch và cập nhật Khoai vào ví sau khi xác nhận thanh toán.
               </p>
             </div>
 
@@ -927,7 +971,7 @@ export default function Payment({ onNavigate }) {
               </div>
 
               <div className="flex items-center justify-between">
-                <span className="text-ink-muted dark:text-night-muted">Gói đã nạp:</span>
+                  <span className="text-ink-muted dark:text-night-muted">Gói yêu cầu:</span>
                 <strong className="text-ink dark:text-night-text font-bold">
                   {successReceipt.packName}
                 </strong>
@@ -935,8 +979,8 @@ export default function Payment({ onNavigate }) {
 
               {successReceipt.addedKhoai > 0 ? (
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-gold/10 dark:bg-gold/15 border border-gold/30">
-                  <span className="text-ink dark:text-night-text font-bold">Đã cộng vào ví:</span>
-                  <strong className="text-gold font-black text-sm flex items-center gap-1">
+                  <span className="text-ink dark:text-night-text font-bold">Khoai dự kiến nhận:</span>
+                  <strong className="text-amber-700 dark:text-amber-300 font-black text-sm flex items-center gap-1">
                     +{successReceipt.addedKhoai} Khoai <i className="ph-fill ph-coins"></i>
                   </strong>
                 </div>
@@ -950,14 +994,14 @@ export default function Payment({ onNavigate }) {
               )}
 
               <div className="flex items-center justify-between border-t border-paper-border/80 dark:border-night-border/80 pt-2 text-xs">
-                <span className="text-ink-muted dark:text-night-muted">Số dư ví mới:</span>
-                <strong className="text-emerald-600 dark:text-emerald-400 font-bold text-sm">
+                  <span className="text-ink-muted dark:text-night-muted">Số dư ví hiện tại:</span>
+                <strong className="text-ink dark:text-night-text font-bold text-sm">
                   {successReceipt.newBalance.toLocaleString()} Khoai
                 </strong>
               </div>
 
               <div className="flex items-center justify-between border-t border-paper-border/80 dark:border-night-border/80 pt-2 text-sm">
-                <span className="font-bold text-ink dark:text-night-text">Tổng tiền đã thanh toán:</span>
+                <span className="font-bold text-ink dark:text-night-text">Số tiền yêu cầu:</span>
                 <strong className="font-black text-wine dark:text-gold text-base sm:text-lg">
                   {formatCurrency(successReceipt.price)}
                 </strong>
@@ -968,7 +1012,7 @@ export default function Payment({ onNavigate }) {
             <div className="pt-1 flex flex-col sm:flex-row gap-2.5">
               <button
                 type="button"
-                onClick={() => onNavigate ? onNavigate('cart') : window.location.href = 'cart.html'}
+                onClick={() => onNavigate ? onNavigate('cart') : navigate('/giohang')}
                 className="flex-1 py-3 px-4 rounded-full bg-wine hover:bg-wine-dark text-white font-display font-black text-xs uppercase tracking-wider text-center transition-all shadow-md hover:-translate-y-0.5 flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <i className="ph-bold ph-shopping-bag text-sm"></i>
@@ -984,7 +1028,7 @@ export default function Payment({ onNavigate }) {
               </button>
               <button
                 type="button"
-                onClick={() => onNavigate ? onNavigate('home') : window.location.href = 'tc.html'}
+                onClick={() => onNavigate ? onNavigate('home') : navigate('/')}
                 className="px-4 py-3 rounded-full border border-paper-border dark:border-night-border hover:bg-paper-200 dark:hover:bg-night-card text-xs font-metadata-spec font-bold text-ink dark:text-night-text text-center transition-colors cursor-pointer"
               >
                 Về Trang Chủ

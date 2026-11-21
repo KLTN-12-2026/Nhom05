@@ -8,6 +8,7 @@ let allTxs = [];
 let currentTimeFilter = '7d';
 let finCharts = [];
 let currentPeriodConfigs = null;
+let financeLoadError = null;
 
 // Cấu hình dự phòng nếu mạng gián đoạn
 const FINANCE_PERIOD_CONFIG_FALLBACK = {
@@ -147,6 +148,7 @@ function setTimeFilter(period, btn) {
 }
 
 async function loadFinanceData() {
+    financeLoadError = null;
     try {
         if (window.AdminFinanceAPI) {
             // 1. Tải Summary & Chart configurations từ Backend API thật
@@ -160,15 +162,32 @@ async function loadFinanceData() {
 
             // 2. Tải danh sách Giao dịch chi tiết từ Backend API thật
             if (typeof window.AdminFinanceAPI.getTransactions === 'function') {
-                const txRes = await window.AdminFinanceAPI.getTransactions({ period: currentTimeFilter });
-                allTxs = Array.isArray(txRes) ? txRes : (txRes.transactions || []);
+                // Tải riêng toàn bộ giao dịch chờ duyệt để chúng không bị ẩn bởi kỳ lọc 7/30 ngày.
+                const [periodRes, pendingRes] = await Promise.all([
+                    window.AdminFinanceAPI.getTransactions({ period: currentTimeFilter }),
+                    window.AdminFinanceAPI.getTransactions({ period: 'all', status: 'pending' })
+                ]);
+                const toList = (payload) => {
+                    if (Array.isArray(payload)) return payload;
+                    if (Array.isArray(payload?.transactions)) return payload.transactions;
+                    if (Array.isArray(payload?.data)) return payload.data;
+                    return [];
+                };
+                const periodTxs = toList(periodRes);
+                const pendingTxs = toList(pendingRes);
+                const pendingIds = new Set(pendingTxs.map(tx => String(tx.id)));
+                allTxs = [
+                    ...pendingTxs,
+                    ...periodTxs.filter(tx => !pendingIds.has(String(tx.id)))
+                ];
             }
         } else if (window.DB) {
             allTxs = window.DB.getTransactions();
         }
     } catch (err) {
-        console.warn('Lỗi kết nối API tài chính, dùng dữ liệu dự phòng:', err);
-        if (window.DB) allTxs = window.DB.getTransactions();
+        console.error('Không thể tải dữ liệu giao dịch tài chính từ máy chủ:', err);
+        financeLoadError = 'Không tải được giao dịch từ máy chủ. Hãy kiểm tra kết nối và thử tải lại trang.';
+        allTxs = [];
     }
 
     initFinanceCharts(currentTimeFilter);
@@ -459,6 +478,11 @@ function renderTransactionsTable(txs) {
 
     renderFinancePagination(totalItems, currentFinancePage, totalPages, startIndex, endIndex);
 
+    if (financeLoadError) {
+        tbody.innerHTML = `<tr><td colspan="9" class="py-12 text-center text-rose-500 font-bold">${financeLoadError}</td></tr>`;
+        return;
+    }
+
     if (pageItems.length === 0) {
         tbody.innerHTML = `<tr><td colspan="9" class="py-12 text-center text-slate-400 font-bold"><div class="flex flex-col items-center justify-center gap-2"><i class="fa-solid fa-receipt text-3xl text-slate-300 dark:text-slate-600"></i><span>Không tìm thấy giao dịch nào phù hợp với bộ lọc.</span></div></td></tr>`;
         return;
@@ -611,7 +635,10 @@ async function approveTx(id) {
     try {
         if (window.AdminFinanceAPI && typeof window.AdminFinanceAPI.approve === 'function') {
             const res = await window.AdminFinanceAPI.approve(id);
-            if (window.DB) window.DB.notify(res.message || 'Đã duyệt giao dịch thành công!', 'success');
+            if (window.DB) {
+                try { window.DB.approveTransaction(id); } catch (_) {}
+                window.DB.notify(res.message || 'Đã duyệt giao dịch thành công!', 'success');
+            }
         } else if (window.DB) {
             const tx = window.DB.approveTransaction(id);
             if (tx) window.DB.notify(`Đã duyệt giao dịch ${tx.code}!`, 'success');
@@ -640,7 +667,10 @@ async function rejectTx(id) {
     try {
         if (window.AdminFinanceAPI && typeof window.AdminFinanceAPI.reject === 'function') {
             const res = await window.AdminFinanceAPI.reject(id, reason);
-            if (window.DB) window.DB.notify(res.message || 'Đã từ chối giao dịch!', 'info');
+            if (window.DB) {
+                try { window.DB.rejectTransaction(id, reason); } catch (_) {}
+                window.DB.notify(res.message || 'Đã từ chối giao dịch!', 'info');
+            }
         } else if (window.DB) {
             const tx = window.DB.rejectTransaction(id, reason);
             if (tx) window.DB.notify(`Đã từ chối giao dịch ${tx.code}.`, 'info');

@@ -481,6 +481,7 @@ export default function UploadFile() {
           : `Sách "${finalTitle}" đã được lưu vào Tủ sách thành công với đặc quyền Đại Điền Chủ (Miễn phí vĩnh viễn) 👑!`;
       }
 
+      successMsg += lang === 'en' ? '\nSaved on this device only; Web/App sync is not available.' : '\nChỉ lưu trên thiết bị này; chưa đồng bộ sang Web/App.';
       setIsModalVisible(false);
       setSelectedFile(null);
       setBookTitle('');
@@ -559,6 +560,7 @@ export default function UploadFile() {
 
       // Chuyển màn hình NGAY LẬP TỨC
       navigate('reader', {
+        isPersonal: true,
         id: bookToRead.id,
         title: bookToRead.title,
         author: bookToRead.author,

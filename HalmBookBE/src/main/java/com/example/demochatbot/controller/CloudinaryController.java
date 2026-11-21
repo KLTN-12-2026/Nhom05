@@ -20,6 +20,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
 
@@ -32,6 +33,7 @@ public class CloudinaryController {
     private final CloudinaryService cloudinaryService;
     private final BookService bookService;
     private final CategoryRepository categoryRepository;
+    private final ObjectMapper objectMapper;
 
     private boolean isValidDocumentFile(MultipartFile file) {
         if (file == null || file.isEmpty()) return true;
@@ -278,5 +280,45 @@ public class CloudinaryController {
         Pageable resolvedPageable = PageRequest.of(Math.max(0, page), Math.max(1, size), pageable.getSort());
         Page<BookDto> books = bookService.findAllBook(resolvedPageable).map(BookDto::fromEntity);
         return ResponseEntity.ok(books);
+    }
+
+    /**
+     * API 9: Lấy mục lục sách (Table of Contents)
+     */
+    @GetMapping("/{bookId}/toc")
+    public ResponseEntity<?> getBookToc(@PathVariable String bookId) {
+        try {
+            String toc = bookService.getTableOfContents(bookId);
+            return ResponseEntity.ok(Map.of("tableOfContents", toc != null ? toc : "[]"));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Lỗi lấy mục lục sách: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * API 10: Cập nhật mục lục sách (Table of Contents)
+     */
+    @PutMapping("/{bookId}/toc")
+    public ResponseEntity<?> updateBookToc(@PathVariable String bookId, @RequestBody Map<String, Object> payload) {
+        try {
+            Object rawToc = payload.get("tableOfContents");
+            String tocJson = "[]";
+            if (rawToc instanceof String) {
+                tocJson = (String) rawToc;
+            } else if (rawToc != null) {
+                tocJson = objectMapper.writeValueAsString(rawToc);
+            }
+            Boolean success = bookService.updateTableOfContents(bookId, tocJson);
+            if (success) {
+                return ResponseEntity.ok(Map.of("message", "Đã lưu mục lục sách thành công!", "tableOfContents", tocJson));
+            } else {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("message", "Không tìm thấy sách với mã ID: " + bookId));
+            }
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Lỗi cập nhật mục lục sách: " + e.getMessage()));
+        }
     }
 }

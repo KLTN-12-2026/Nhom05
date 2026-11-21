@@ -4,7 +4,9 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 
@@ -32,5 +34,7 @@ public class Chat_Message {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "chat_session_id", referencedColumnName = "chat_session_id")
     @JsonIgnore
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private Chat_Session chat_session;
 }

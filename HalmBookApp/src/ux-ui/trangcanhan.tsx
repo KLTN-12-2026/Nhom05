@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
+import axios, { AxiosRequestConfig } from 'axios';
 import Constants from 'expo-constants';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { ComponentRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -36,9 +36,55 @@ async function fetchWithCandidateFallback(path: string, options: any = {}) {
   return await fetchApiWithFallback(path, options);
 }
 
-const apiRequestWithFallback = async <T = any>(path: string, options: any = {}) => {
-  return await fetchWithCandidateFallback(path, options) as any;
+// API_BASE_URL & CANDIDATE_API_URLS import từ ../config/api (IMP-06)
+/*
+const resolvePrimaryApiUrl = (): string => {
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL.replace(/\/+$/, '');
+  }
+  const debuggerHost = Constants.expoConfig?.hostUri;
+  const host = debuggerHost
+    ? debuggerHost.split(':')[0]
+    : Platform.OS === 'android'
+      ? '10.0.2.2'
+      : 'localhost';
+  return `http://${host}:8082`;
 };
+
+const API_BASE_URL = resolvePrimaryApiUrl();
+
+const CANDIDATE_API_URLS = Array.from(
+  new Set([
+    API_BASE_URL,
+    'http://localhost:8082',
+    'http://127.0.0.1:8082',
+    'http://10.0.2.2:8082',
+  ])
+);
+*/
+
+async function apiRequestWithFallback<T = any>(
+  path: string,
+  config: AxiosRequestConfig = {}
+) {
+  let lastError: any = null;
+  for (const baseUrl of CANDIDATE_API_URLS) {
+    try {
+      return await axios.request<T>({
+        ...config,
+        url: `${baseUrl}${path}`,
+        timeout: config.timeout ?? 8000,
+      });
+    } catch (err: any) {
+      lastError = err;
+      // Nếu máy chủ đã phản hồi HTTP status (400, 401, 404, 500...), không cần thử IP khác
+      if (err?.response) {
+        throw err;
+      }
+    }
+  }
+  throw lastError;
+}
 
 type LangCode = 'vi' | 'en';
 
@@ -363,7 +409,7 @@ const formatDateForDisplay = (dateVal: any): string => {
 const parseDateToApi = (dateStr: string): string | null => {
   if (!dateStr || !dateStr.trim()) return null;
   const trimmed = dateStr.trim();
-  const parts = trimmed.split(/[\/\-]/);
+  const parts = trimmed.split(/[/-]/);
   if (parts.length === 3) {
     if (parts[0].length <= 2 && parts[2].length === 4) {
       const day = parts[0].padStart(2, '0');
@@ -860,6 +906,7 @@ export default function Toi() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Hydrate the account from AsyncStorage and HTTP, including the loading indicator.
     fetchUserData(true);
   }, [fetchUserData]);
 

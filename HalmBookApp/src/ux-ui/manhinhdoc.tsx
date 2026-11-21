@@ -1,3 +1,4 @@
+import CatalogReader from './CatalogReader';
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   ActivityIndicator,
@@ -376,6 +377,8 @@ function MarqueeText({ text, style }: { text: string; style: any }) {
 }
 
 export default function ManHinhDoc({ onBack, book }: ReaderProps) {
+  const [isTocOpen, setIsTocOpen] = useState(false);
+  const currentScrollYRef = useRef<number>(0);
   const insets = useSafeAreaInsets();
   const { setFooterVisible, isLoggedIn, showLoginAlert } = useAppNavigation();
 
@@ -404,26 +407,9 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
   );
 
   useEffect(() => {
-    if (typeof book?.initialChapterIndex === 'number') {
-      setCurrentChapterIndex(book.initialChapterIndex);
-    }
-  }, [book?.initialChapterIndex]);
-
-  useEffect(() => {
     let isMounted = true;
     const bookIdStr = String(book?.id || '');
-    if (!bookIdStr || isPersonalBook) {
-      setAccessInfo({
-        hasAccess: true,
-        currentPage: 1,
-        readingPercentage: 0,
-        remainingDays: 0,
-        isForever: true,
-        status: 'PERSONAL',
-        checkedFromServer: false,
-      });
-      return;
-    }
+    if (!bookIdStr || isPersonalBook) return;
 
     checkBookAccessDetailApi(bookIdStr)
       .then((detail) => {
@@ -447,7 +433,7 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
     };
   }, [book?.id, book?.initialChapterIndex, chapters.length, isPersonalBook]);
 
-  const isTrialRestricted = !isPersonalBook && !accessInfo.hasAccess && accessInfo.checkedFromServer;
+  const isTrialRestricted = !isPersonalBook && !accessInfo.hasAccess;
   const trialChapterLimit = 3;
 
   // Đồng bộ tiến độ đọc lên Backend khi người dùng có quyền thuê hợp lệ
@@ -516,7 +502,6 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
   // - Khi ẩn đi: lướt xuống hoặc lướt lên là tự động ẩn ngay lập tức!
   const [showControls, setShowControls] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isTocOpen, setIsTocOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Cài đặt phông chữ & Tìm kiếm
@@ -652,11 +637,6 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
   } | null>(null);
 
   // Tự động hủy vùng chọn khi chuyển chương
-  useEffect(() => {
-    setSelectedRange(null);
-    setIsToolbarVisible(false);
-    setToolbarCoords(null);
-  }, [currentChapterIndex]);
 
   // Xử lý sự kiện thay đổi vùng chọn từ TextInput Layer 2
   const handleParagraphSelectionChange = (
@@ -1049,6 +1029,14 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
 
   // Tiến trình đọc
   const [scrollProgress, setScrollProgress] = useState<number>(0);
+  const [selectionChapter, setSelectionChapter] = useState(currentChapterIndex);
+  if (selectionChapter !== currentChapterIndex) {
+    setSelectionChapter(currentChapterIndex);
+    setSelectedRange(null);
+    setIsToolbarVisible(false);
+    setToolbarCoords(null);
+    setScrollProgress(0);
+  }
   const totalBookPages = Math.max(100, chapters.length * 35);
   const currentPage = Math.max(
     1,
@@ -1062,7 +1050,6 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
   );
 
   const scrollViewRef = useRef<any>(null);
-  const currentScrollYRef = useRef<number>(0);
 
   // Nhận diện dấu trang chuẩn xác theo Tiến độ & Trang hiện tại
   // Nếu đang ở 35% có dấu trang -> Sáng tích chọn
@@ -1190,7 +1177,6 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
   // Cuộn lên đầu CHỈ KHI ĐỔI CHƯƠNG (Khắc phục triệt để lỗi đang đọc bị nhảy thụt về đầu trang)
   useEffect(() => {
     scrollViewRef.current?.scrollTo({ y: 0, animated: false });
-    setScrollProgress(0);
   }, [currentChapterIndex]);
 
   // Lưu tiến độ đọc riêng biệt (Không can thiệp vào vị trí cuộn trang của người dùng)
@@ -1265,6 +1251,10 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
       });
     } catch {}
   };
+
+  if (!isPersonalBook && accessInfo.hasAccess && book?.id) {
+    return <CatalogReader key={book.id} bookId={String(book.id)} title={book.title || book.bookName || 'Sách'} author={book.author || 'HALM BOOK'} onBack={onBack} />;
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: currentTheme.bg }]}>

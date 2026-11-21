@@ -108,7 +108,7 @@ CREATE TABLE account (
 -- 2.2 Bảng Khách hàng / Độc giả (Customer)
 DROP TABLE IF EXISTS customer;
 CREATE TABLE customer (
-    customer_id VARCHAR(50) PRIMARY KEY,           -- Mã định dạng: id#C00001
+    customer_id VARCHAR(255) PRIMARY KEY,           -- Mã định dạng: id#C00001
     customer_name VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL UNIQUE,
     phone_number VARCHAR(20),
@@ -132,7 +132,7 @@ CREATE TABLE customer (
 DROP TABLE IF EXISTS potato_transaction;
 CREATE TABLE potato_transaction (
     trans_id INT AUTO_INCREMENT PRIMARY KEY,
-    customer_id VARCHAR(50) NOT NULL,
+    customer_id VARCHAR(255) NOT NULL,
     amount INT NOT NULL,                           -- Số khoai (+10, -9, +500...)
     balance_after INT NOT NULL,                    -- Số dư sau giao dịch
     type VARCHAR(50) NOT NULL,                     -- 'TOPUP', 'RENT_BOOK', 'RENEW_BOOK', 'REWARD'
@@ -145,7 +145,7 @@ CREATE TABLE potato_transaction (
 DROP TABLE IF EXISTS reading_note_bookmark;
 CREATE TABLE reading_note_bookmark (
     note_id INT AUTO_INCREMENT PRIMARY KEY,
-    customer_id VARCHAR(50) NOT NULL,
+    customer_id VARCHAR(255) NOT NULL,
     book_id VARCHAR(50) NOT NULL,
     page_number INT NOT NULL,
     highlight_text TEXT,                           -- Đoạn văn trích dẫn lưu lại
@@ -163,7 +163,7 @@ CREATE TABLE reading_note_bookmark (
 DROP TABLE IF EXISTS cart;
 CREATE TABLE cart (
     cart_id INT AUTO_INCREMENT PRIMARY KEY,
-    customer_id VARCHAR(50) NOT NULL UNIQUE,
+    customer_id VARCHAR(255) NOT NULL UNIQUE,
     CONSTRAINT fk_cart_customer FOREIGN KEY (customer_id) REFERENCES customer(customer_id) ON DELETE CASCADE
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -175,6 +175,8 @@ CREATE TABLE cart_item (
     book_id VARCHAR(50) NOT NULL,
     plan_key VARCHAR(50) NULL,                     -- '1', '3', '7', 'forever'
     rental_days INT DEFAULT 7,                     -- Số ngày thuê
+    created_at DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
     selected_price DOUBLE DEFAULT 0.0,             -- Đơn giá tương ứng với gói
     CONSTRAINT fk_cartitem_cart FOREIGN KEY (cart_id) REFERENCES cart(cart_id) ON DELETE CASCADE,
     CONSTRAINT fk_cartitem_book FOREIGN KEY (book_id) REFERENCES book(book_id) ON DELETE CASCADE
@@ -184,18 +186,45 @@ CREATE TABLE cart_item (
 DROP TABLE IF EXISTS orders;
 CREATE TABLE orders (
     orders_id INT AUTO_INCREMENT PRIMARY KEY,
-    customer_id VARCHAR(50) NOT NULL,
+    customer_id VARCHAR(255) NOT NULL,
     total_amount DOUBLE NOT NULL,
     discount_amount DOUBLE DEFAULT 0.0,
     payment_currency VARCHAR(10) DEFAULT 'VND',    -- 'VND' hoặc 'POTATO'
     order_type VARCHAR(30) DEFAULT 'RENT_BOOK',    -- 'RENT_BOOK', 'TOPUP_POTATO', 'BUY_BOOK'
     payment_status VARCHAR(50) DEFAULT 'PENDING',  -- 'PENDING', 'SUCCESS', 'FAILED'
     payment_method VARCHAR(50) DEFAULT 'VNPAY',    -- 'VNPAY', 'POTATO_WALLET'
-    transaction_no VARCHAR(100),                   -- Mã giao dịch ngân hàng / cổng thanh toán
+    transaction_no VARCHAR(100) UNIQUE,            -- Mã giao dịch / khóa idempotency toàn cục
+    checkout_subtotal DOUBLE NULL,
+    checkout_tier_discount DOUBLE NULL,
+    checkout_coupon_discount DOUBLE NULL,
+    checkout_fingerprint VARCHAR(64) NULL,
+    topup_package_id INT NULL,
+    topup_package_name VARCHAR(255) NULL,
+    topup_potato_amount INT NULL,
     promotion_id VARCHAR(50) NULL,
     order_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_orders_customer FOREIGN KEY (customer_id) REFERENCES customer(customer_id) ON DELETE RESTRICT,
     CONSTRAINT fk_orders_promotion FOREIGN KEY (promotion_id) REFERENCES promotion(promotion_id) ON DELETE SET NULL
+) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+DROP TABLE IF EXISTS momo_topup_order;
+CREATE TABLE momo_topup_order (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    order_id VARCHAR(50) NOT NULL,
+    request_id VARCHAR(50) NOT NULL,
+    customer_id VARCHAR(255) NOT NULL,
+    package_id INT NOT NULL,
+    package_name VARCHAR(120) NOT NULL,
+    amount_vnd BIGINT NOT NULL,
+    potato_amount INT NOT NULL,
+    status ENUM('PENDING','PAID','FAILED') NOT NULL,
+    gateway_transaction_id VARCHAR(80) NULL UNIQUE,
+    created_at DATETIME(6) NOT NULL,
+    paid_at DATETIME(6) NULL,
+    CONSTRAINT uk_momo_topup_order_id UNIQUE (order_id),
+    CONSTRAINT uk_momo_topup_request_id UNIQUE (request_id),
+    INDEX idx_momo_topup_customer (customer_id),
+    CONSTRAINT fk_momo_topup_customer FOREIGN KEY (customer_id) REFERENCES customer(customer_id)
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- 3.4 Bảng Chi tiết Đơn hàng (Order Item)
@@ -215,7 +244,7 @@ CREATE TABLE order_item (
 DROP TABLE IF EXISTS access_record;
 CREATE TABLE access_record (
     access_record_id INT AUTO_INCREMENT PRIMARY KEY,
-    customer_id VARCHAR(50) NOT NULL,
+    customer_id VARCHAR(255) NOT NULL,
     book_id VARCHAR(50) NOT NULL,
     start_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     end_date DATETIME NOT NULL,                    -- Ngày hết hạn đọc sách
@@ -236,7 +265,7 @@ CREATE TABLE access_record (
 DROP TABLE IF EXISTS evaluate;
 CREATE TABLE evaluate (
     evaluate_id INT AUTO_INCREMENT PRIMARY KEY,
-    customer_id VARCHAR(50) NOT NULL,
+    customer_id VARCHAR(255) NOT NULL,
     book_id VARCHAR(50) NOT NULL,
     star INT NOT NULL DEFAULT 5,                   -- Số sao đánh giá (1 -> 5)
     content TEXT,
@@ -252,7 +281,7 @@ CREATE TABLE evaluate (
 DROP TABLE IF EXISTS chat_session;
 CREATE TABLE chat_session (
     chat_session_id INT AUTO_INCREMENT PRIMARY KEY,
-    customer_id VARCHAR(50) NOT NULL,
+    customer_id VARCHAR(255) NOT NULL,
     start_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     last_interaction DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_chatsession_customer FOREIGN KEY (customer_id) REFERENCES customer(customer_id) ON DELETE CASCADE
@@ -268,6 +297,77 @@ CREATE TABLE chat_message (
     sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_chatmessage_session FOREIGN KEY (chat_session_id) REFERENCES chat_session(chat_session_id) ON DELETE CASCADE
 ) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- 4.4 Bảng Phiếu Hỗ Trợ & Khiếu Nại (Support Ticket) - Đồng bộ SupportTicket.java & UserSupportController
+DROP TABLE IF EXISTS support_ticket;
+CREATE TABLE support_ticket (
+    ticket_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    ticket_code VARCHAR(50) NOT NULL UNIQUE,
+    customer_id VARCHAR(255) NULL,
+    sender_name VARCHAR(150),
+    sender_email VARCHAR(150),
+    sender_phone VARCHAR(50),
+    category VARCHAR(50) DEFAULT 'OTHER',          -- 'PAYMENT', 'READING', 'ACCOUNT', 'COPYRIGHT', 'OTHER'
+    priority VARCHAR(20) DEFAULT 'NORMAL',         -- 'LOW', 'NORMAL', 'HIGH', 'URGENT'
+    subject VARCHAR(255),
+    message TEXT,
+    status VARCHAR(30) DEFAULT 'pending',          -- 'pending', 'in_progress', 'resolved', 'closed'
+    admin_reply TEXT,
+    chat_history LONGTEXT,
+    reply_at DATETIME NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_ticket_customer FOREIGN KEY (customer_id) REFERENCES customer(customer_id) ON DELETE SET NULL
+) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- 4.5 Bảng Thông Báo Hệ Thống (Notification) - Đồng bộ Notification.java & ThongBao.jsx
+DROP TABLE IF EXISTS notification;
+CREATE TABLE notification (
+    notification_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    customer_id VARCHAR(255) NOT NULL,
+    title VARCHAR(255),
+    message TEXT,
+    type VARCHAR(50) DEFAULT 'SYSTEM',             -- 'TOPUP', 'RENT', 'EXPIRING', 'REWARD', 'SYSTEM'
+    link VARCHAR(255) NULL,
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_notification_customer FOREIGN KEY (customer_id) REFERENCES customer(customer_id) ON DELETE CASCADE
+) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- 4.6 Bảng Sách Yêu Thích (Favorite Book / Wishlist) - Đồng bộ FavoriteBook.java
+DROP TABLE IF EXISTS favorite_book;
+CREATE TABLE favorite_book (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    customer_id VARCHAR(255) NOT NULL,
+    book_id VARCHAR(50) NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_fav_customer FOREIGN KEY (customer_id) REFERENCES customer(customer_id) ON DELETE CASCADE,
+    CONSTRAINT fk_fav_book FOREIGN KEY (book_id) REFERENCES book(book_id) ON DELETE CASCADE,
+    UNIQUE KEY uk_fav_customer_book (customer_id, book_id)
+) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- 4.7 Bảng Nhận Thưởng Nhiệm Vụ Độc Giả (User Mission Claim) - Đồng bộ UserMissionClaim.java & NhiemVu.jsx
+DROP TABLE IF EXISTS user_mission_claim;
+CREATE TABLE user_mission_claim (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    customer_id VARCHAR(255) NOT NULL,
+    mission_id VARCHAR(100) NOT NULL,
+    claim_date DATE NOT NULL,
+    reward_potato INT DEFAULT 5,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_mission_customer FOREIGN KEY (customer_id) REFERENCES customer(customer_id) ON DELETE CASCADE,
+    KEY idx_mission_claim (customer_id, mission_id, claim_date)
+) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- =============================================================================
+-- 5. CÁC CHỈ MỤC TỐI ƯU HIỆU NĂNG TRUY VẤN (PERFORMANCE INDEXES)
+-- =============================================================================
+CREATE INDEX idx_access_customer_book ON access_record(customer_id, book_id);
+CREATE INDEX idx_access_status_end ON access_record(status, end_date);
+CREATE INDEX idx_orders_customer_status ON orders(customer_id, payment_status, order_date);
+CREATE INDEX idx_eval_book_created ON evaluate(book_id, created_at);
+CREATE INDEX idx_notif_customer_unread ON notification(customer_id, is_read);
+CREATE INDEX idx_ticket_status_created ON support_ticket(status, created_at);
 
 -- Bật lại kiểm tra khóa ngoại sau khi khởi tạo xong cấu trúc
 SET FOREIGN_KEY_CHECKS = 1;

@@ -1,3 +1,6 @@
+import { apiUrl } from '@/config/api';
+import { getAdminAuthToken } from '@/services/authToken';
+
 /**
  * HALMBOOK - Central Database Engine (LocalStorage-backed)
  * Đảm bảo dữ liệu đồng nhất giữa User và Admin:
@@ -18,14 +21,6 @@ const DB_KEYS = {
 const DB_SCHEMA_VERSION = 'halm_db_schema_version';
 const CURRENT_DB_SCHEMA_VERSION = 'clean-live-v1';
 
-// Initial Seed Data (Trống - không dùng dữ liệu mẫu, sẵn sàng nạp dữ liệu thật)
-const DEFAULT_BOOKS = [];
-const DEFAULT_USERS = [];
-const DEFAULT_TRANSACTIONS = [];
-const DEFAULT_RENTALS = [];
-const DEFAULT_TICKETS = [];
-const DEFAULT_PACKAGES = [];
-
 // Database Engine Object
 const DB = {
     init: function() {
@@ -41,14 +36,14 @@ const DB = {
         this.loadBooksFromApi();
     },
     loadBooksFromApi: async function() {
-        const token = (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('token') : null) || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null);
+        const token = getAdminAuthToken();
         if (!token) return;
         // Chỉ gọi API quản trị khi đang truy cập trang Quản Trị
         if (typeof window !== 'undefined' && window.location && window.location.pathname && !window.location.pathname.startsWith('/admin')) {
             return;
         }
         try {
-            const response = await fetch('/api/admin/books?page=0&size=1000', {
+            const response = await fetch(apiUrl('/api/admin/books?page=0&size=1000'), {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (response.status === 401 || response.status === 403) {
@@ -62,7 +57,7 @@ const DB = {
             const books = Array.isArray(payload) ? payload : (payload.content || []);
             localStorage.setItem(DB_KEYS.BOOKS, JSON.stringify(books));
             this.emitChange();
-        } catch (error) {
+        } catch {
             // Không spam console lỗi
         }
     },

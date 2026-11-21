@@ -1,3 +1,4 @@
+import { tailwindConfig, externalStylesheets, pageStyles } from './styles/DocSach.styles.js';
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import axiosInstance from '@/services/axiosClient';
@@ -5,265 +6,50 @@ import { getPersonalBookById } from '@/services/personalBookService';
 import { getBookAccessDetail, updateReadingProgress } from '@/services/userFeatureService';
 import AuthModal, { openAuthModal } from '@/components/common/AuthModal';
 import { isTokenValid } from '@/services/authToken';
+import DynamicWatermark from './DynamicWatermark';
 
-const tailwindConfig = {
-    darkMode: 'class',
-    theme: {
-        extend: {
-            fontFamily: {
-                sans: ['Inter', 'sans-serif'],
-                serif: ['"Playfair Display"', 'serif'],
-                outfit: ['Outfit', 'sans-serif'],
-                nunito: ['Nunito', 'sans-serif'],
-                garamond: ['"Cormorant Garamond"', 'serif'],
-                lora: ['Lora', 'serif'],
-                roboto: ['Roboto', 'sans-serif'],
-            },
-            colors: {
-                paper: {
-                    50: '#FAF8F5',
-                    100: '#F5F2EB',
-                    200: '#EAE5D9',
-                    DEFAULT: '#FAF7F2',
-                    surface: '#FFFFFF',
-                    border: '#E8E2D5',
-                },
-                ink: {
-                    50: '#F5F5F4',
-                    300: '#A8A6A1',
-                    muted: '#6E6D7A',
-                    DEFAULT: '#1E1F1D',
-                    pure: '#111210',
-                },
-                wine: {
-                    50: '#FDF2F4',
-                    100: '#FCE7EB',
-                    DEFAULT: '#8E3038',
-                    light: '#A83B46',
-                    dark: '#6F252C',
-                },
-                gold: {
-                    50: '#FEFDF8',
-                    100: '#FEF9E7',
-                    DEFAULT: '#B8860B',
-                    light: '#D4AF37',
-                    accent: '#F59E0B',
-                },
-                night: {
-                    bg: '#111210',
-                    surface: '#1A1B18',
-                    card: '#222420',
-                    border: '#2F322B',
-                    text: '#EDE9DF',
-                    muted: '#9CA3AF',
-                },
-            },
-        }
-    }
-};
 
-const externalStylesheets = [
-    'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Nunito:wght@400;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600;1,700&family=Cormorant+Garamond:wght@400;600;700&family=Lora:ital,wght@0,400;0,700;1,400&family=Roboto:wght@400;500;700&display=swap',
-    'https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css',
-    'https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css',
-    'https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css',
-    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css',
-];
 
-const pageStyles = `
-    .halm-reader-root {
-        height: 100%;
-        margin: 0;
-        padding: 0;
-        overflow: hidden;
-        background-color: #FAF7F2;
-        font-family: 'Inter', sans-serif;
-        color: #1E1F1D;
-    }
 
-    /* HALM Signature Header Matching TrangChu / ChiTietSach */
-    .halm-reader-header {
-        background: linear-gradient(105deg, #171815 0%, #191916 67%, #21190f 100%) !important;
-        backdrop-filter: blur(16px);
-        border-bottom: 1px solid rgba(212, 175, 55, 0.45) !important;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5) !important;
-        color: #f5f2e8 !important;
-    }
 
-    .halm-header-btn {
-        background-color: #222420;
-        border: 1px solid #2F322B;
-        color: #EDE9DF;
-        transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-    }
-    .halm-header-btn:hover {
-        background-color: #2C2E29;
-        border-color: rgba(212, 175, 55, 0.6);
-        color: #D4AF37;
-        transform: translateY(-1px);
-    }
 
-    .sidebar-overlay {
-        position: fixed;
-        top: 56px;
-        bottom: 0;
-        right: 0;
-        z-index: 1050; 
-        transition: transform 0.38s cubic-bezier(0.16, 1, 0.3, 1);
-        will-change: transform;
-    }
-
-    .sidebar-right-hidden { transform: translateX(110%); }
-    .sidebar-left { left: 0; right: auto; }
-    .sidebar-left-hidden { transform: translateX(-110%); }
-
-    :fullscreen #headerHoverZone,
-    body.is-fullscreen #headerHoverZone {
-        display: block !important;
-        z-index: 9990;
-    }
-    :fullscreen #mainHeader,
-    body.is-fullscreen #mainHeader {
-        position: fixed;
-        top: 0; left: 0; width: 100%;
-        transform: translateY(-100%);
-        z-index: 9995;
-    }
-    :fullscreen #headerHoverZone:hover + #mainHeader,
-    :fullscreen #mainHeader:hover,
-    body.is-fullscreen #headerHoverZone:hover + #mainHeader,
-    body.is-fullscreen #mainHeader:hover {
-        transform: translateY(0);
-    }
-    :fullscreen .sidebar-overlay,
-    body.is-fullscreen .sidebar-overlay {
-        top: 0; 
-        z-index: 10000;
-    }
-
-    /* Paper Themes */
-    .theme-paper-default { 
-        background-color: #FAF7F2; 
-        color: #1E1F1D; 
-    }
-    
-    .theme-paper-sepia {
-        background-color: #F4ECD8;
-        color: #3D2E1E;
-    }
-
-    .theme-paper-starry { 
-        background-color: #111210; 
-        color: #EDE9DF; 
-    }
-
-    /* Twinkling Star background matching TrangChu */
-    .star {
-        position: absolute;
-        background-color: #ffffff;
-        border-radius: 50%;
-        pointer-events: none;
-        animation: starTwinkle 4s ease-in-out infinite;
-    }
-    @keyframes starTwinkle {
-        0%, 100% { opacity: 0.2; transform: scale(0.8); }
-        50% { opacity: 0.9; transform: scale(1.3); }
-    }
-
-    /* Canvas Filters */
-    .canvas-filter-starry {
-        filter: invert(0.9) hue-rotate(180deg) brightness(0.95) contrast(0.92);
-        border-radius: 4px;
-        box-shadow: 0 12px 35px rgba(0,0,0,0.65);
-    }
-
-    .canvas-filter-sepia {
-        filter: sepia(0.35) contrast(0.96) brightness(0.98);
-        border-radius: 4px;
-        box-shadow: 0 12px 30px rgba(61, 46, 30, 0.2);
-    }
-
-    .canvas-filter-default {
-        filter: none;
-        border-radius: 4px;
-        box-shadow: 0 15px 35px rgba(0,0,0,0.12), 0 0 1px rgba(0,0,0,0.15);
-    }
-
-    /* HALM Signature Navigation Buttons (Glassmorphism + Gold/Wine) */
-    .halm-nav-btn {
-        position: absolute;
-        top: 50%;
-        transform: translateY(-50%);
-        width: 46px;
-        height: 46px;
-        background: rgba(26, 27, 24, 0.75);
-        color: #D4AF37;
-        border: 1px solid rgba(212, 175, 55, 0.35);
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        z-index: 40;
-        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-        backdrop-filter: blur(8px);
-        box-shadow: 0 8px 20px rgba(0,0,0,0.25);
-    }
-
-    .halm-nav-btn:hover:not(:disabled) {
-        background-color: #8E3038;
-        color: #FFFFFF;
-        border-color: #A83B46;
-        transform: translateY(-50%) scale(1.08);
-        box-shadow: 0 10px 25px rgba(142, 48, 56, 0.4);
-    }
-
-    .halm-nav-btn:disabled {
-        opacity: 0.18;
-        cursor: not-allowed;
-    }
-
-    .halm-nav-btn.left { left: 20px; }
-    .halm-nav-btn.right { right: 20px; }
-
-    @media (max-width: 640px) {
-        .halm-nav-btn { width: 38px; height: 38px; }
-        .halm-nav-btn.left { left: 8px; }
-        .halm-nav-btn.right { right: 8px; }
-    }
-
-    /* Font List in Aa Menu */
-    .font-list-item {
-        padding: 9px 12px;
-        border-radius: 10px;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        font-size: 13px;
-        font-weight: 600;
-        color: #9CA3AF;
-        border: 1px solid transparent;
-    }
-    .font-list-item:hover {
-        background-color: #222420;
-        color: #EDE9DF;
-    }
-    .font-list-item.active {
-        background-color: rgba(142, 48, 56, 0.2);
-        border-color: rgba(212, 175, 55, 0.5);
-        color: #D4AF37;
-    }
-`;
 
 function loadScript(src) {
     return new Promise((resolve, reject) => {
+        const isLoaded = () => {
+            if (src.includes('pdf.min.js')) return Boolean(window.pdfjsLib);
+            if (src.includes('epub.min.js')) return Boolean(window.ePub);
+            if (src.includes('jszip.min.js')) return Boolean(window.JSZip);
+            if (src.includes('three.min.js')) return Boolean(window.THREE);
+            return false;
+        };
+
+        if (isLoaded()) {
+            return resolve();
+        }
+
         const existing = document.querySelector(`script[src="${src}"]`);
         if (existing) {
-            resolve();
+            let count = 0;
+            const poller = setInterval(() => {
+                count++;
+                if (isLoaded() || count > 60) {
+                    clearInterval(poller);
+                    resolve();
+                }
+            }, 50);
+
+            existing.addEventListener('load', () => {
+                clearInterval(poller);
+                resolve();
+            }, { once: true });
+            existing.addEventListener('error', (e) => {
+                clearInterval(poller);
+                reject(e);
+            }, { once: true });
             return;
         }
+
         const script = document.createElement('script');
         script.src = src;
         script.onload = () => resolve();
@@ -332,7 +118,6 @@ export default function DocSach() {
     });
 
     const targetId = bookId || book?.book_id || book?.id || '';
-    const [pdfUrl, setPdfUrl] = useState("");
     const [isLoading, setIsLoading] = useState(true);
     const [errorMessage, setErrorMessage] = useState("");
     const [bookFormat, setBookFormat] = useState('PDF'); // 'PDF' | 'EPUB'
@@ -470,14 +255,13 @@ export default function DocSach() {
 
     // Load External Design Assets
     useEffect(() => {
-        const links = externalStylesheets
+        externalStylesheets
             .filter((href) => !document.querySelector(`link[href="${href}"]`))
-            .map((href) => {
+            .forEach((href) => {
                 const link = document.createElement('link');
                 link.rel = 'stylesheet';
                 link.href = href;
                 document.head.appendChild(link);
-                return link;
             });
 
         window.tailwind = window.tailwind || {};
@@ -494,7 +278,7 @@ export default function DocSach() {
             if (document.fullscreenElement) {
                 try {
                     document.exitFullscreen();
-                } catch (e) {}
+                } catch {}
             }
             document.body.style.overflow = '';
             document.body.style.position = '';
@@ -505,7 +289,7 @@ export default function DocSach() {
             const preOverlays = document.querySelectorAll('#book-transition-pre-overlay, .epub-container, .epub-view');
             preOverlays.forEach(el => {
                 if (el && el.parentNode && el.id === 'book-transition-pre-overlay') {
-                    try { el.parentNode.removeChild(el); } catch (_) {}
+                    try { el.parentNode.removeChild(el); } catch {}
                 }
             });
             window.dispatchEvent(new Event('resize'));
@@ -564,6 +348,8 @@ export default function DocSach() {
     // 1. Unified Buffer-First Reader Engine (Hỗ trợ PDF & EPUB với phân tích Magic Bytes thực tế)
     useEffect(() => {
         let isCancelled = false;
+        let currentBook = book;
+        let resumePageNumber = 1;
 
         // Ghi nhận hoàn thành nhiệm vụ hằng ngày: Đọc sách hôm nay
         const todayKey = new Date().toISOString().slice(0, 10);
@@ -576,7 +362,7 @@ export default function DocSach() {
             setIsLoading(true);
             setErrorMessage("");
 
-            let currentBook = book;
+            currentBook = book;
             let effectiveId = bookId || currentBook?.book_id || currentBook?.id;
 
             // Nếu người dùng vào /docsach trực tiếp mà không có id và session, tự động lấy cuốn sách đầu tiên làm mặc định
@@ -644,7 +430,7 @@ export default function DocSach() {
                 }
             }
 
-            let resumePageNumber = 1;
+            resumePageNumber = 1;
             if (effectiveId) {
                 try {
                     const localProg = localStorage.getItem(`halm_reading_progress_${effectiveId}`);
@@ -654,7 +440,7 @@ export default function DocSach() {
                             resumePageNumber = Number(parsed.currentPage);
                         }
                     }
-                } catch (_) {}
+                } catch {}
             }
 
             // Nạp danh sách ghi chú & bookmarks
@@ -663,7 +449,7 @@ export default function DocSach() {
                     try {
                         const localBm = localStorage.getItem(`halm-book-notes-${effectiveId}`);
                         if (localBm) setNotes(JSON.parse(localBm));
-                    } catch (_) {}
+                    } catch {}
                 } else {
                     try {
                         const bmRes = await axiosInstance.get(`/api/home/books/${encodeURIComponent(effectiveId)}/bookmarks`);
@@ -671,7 +457,7 @@ export default function DocSach() {
                             setNotes(bmRes.data);
                             localStorage.setItem(`halm-book-notes-${effectiveId}`, JSON.stringify(bmRes.data));
                         }
-                    } catch (_) {}
+                    } catch {}
 
                     // Tự động mở khóa bản đầy đủ nếu khách hàng đã thuê hoặc sở hữu sách, khôi phục trang đọc dở
                     try {
@@ -681,8 +467,31 @@ export default function DocSach() {
                             if (accessDetail.currentPage && Number(accessDetail.currentPage) > 1) {
                                 resumePageNumber = Number(accessDetail.currentPage);
                             }
+                        } else if (accessDetail?.isNetworkError && !isCancelled) {
+                            setToastMessage("Không thể xác thực quyền đọc do lỗi kết nối mạng. Vui lòng tải lại trang.");
                         }
-                    } catch (_) {}
+                    } catch {}
+                }
+            }
+
+            // Nạp Mục Lục Sách (Table of Contents) từ CSDL Backend
+            if (currentBook?.tableOfContents) {
+                try {
+                    let parsed = currentBook.tableOfContents;
+                    if (typeof parsed === 'string') {
+                        parsed = JSON.parse(parsed);
+                    }
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        const mapped = parsed.map(item => ({
+                            title: item.title || item.name || `Chương ${item.chapter || ''}`,
+                            dest: Number(item.page || item.dest || item.pageNum || 1)
+                        })).filter(item => item.title && !isNaN(item.dest));
+                        if (mapped.length > 0 && !isCancelled) {
+                            setPageOutline(mapped);
+                        }
+                    }
+                } catch (e) {
+                    console.warn("Lỗi parse tableOfContents từ sách:", e);
                 }
             }
 
@@ -705,10 +514,6 @@ export default function DocSach() {
 
             if (!resolvedUrl && currentBook?.pdf_url) {
                 resolvedUrl = currentBook.pdf_url;
-            }
-
-            if (resolvedUrl) {
-                setPdfUrl(resolvedUrl);
             }
 
             if (isCancelled) return;
@@ -739,13 +544,16 @@ export default function DocSach() {
             }
 
             // Fallback đọc thử mẫu: Nếu sách trên hệ thống chưa có file PDF / EPUB thực tế
-            if (!arrayBuffer && !resolvedUrl) {
+            if (!arrayBuffer) {
                 try {
-                    const sampleRes = await axiosInstance.get('/sample.pdf', { responseType: 'arraybuffer' });
-                    if (sampleRes.data && sampleRes.data.byteLength > 0 && !isCancelled) {
-                        arrayBuffer = sampleRes.data;
-                        metaFormat = 'PDF';
-                        showToast("Đang hiển thị bản đọc thử mô phỏng của cuốn sách.");
+                    const sampleRes = await fetch('/sample.pdf');
+                    if (sampleRes.ok) {
+                        const sBuf = await sampleRes.arrayBuffer();
+                        if (sBuf && sBuf.byteLength > 0 && !isCancelled) {
+                            arrayBuffer = sBuf;
+                            metaFormat = 'PDF';
+                            showToast("Đang hiển thị bản đọc thử mô phỏng của cuốn sách.");
+                        }
                     }
                 } catch (sErr) {
                     console.warn("Không thể tải sample.pdf fallback:", sErr);
@@ -958,9 +766,11 @@ export default function DocSach() {
                 setIsLoading(false);
 
                 try {
-                    const outline = await loadedPdf.getOutline();
-                    if (!isCancelled && Array.isArray(outline) && outline.length > 0) {
-                        setPageOutline(outline);
+                    if (!currentBook?.tableOfContents) {
+                        const outline = await loadedPdf.getOutline();
+                        if (!isCancelled && Array.isArray(outline) && outline.length > 0) {
+                            setPageOutline(outline);
+                        }
                     }
                 } catch {}
             } catch (err) {
@@ -969,15 +779,17 @@ export default function DocSach() {
                 // Thử tải sample.pdf dự phòng nếu file tải về bị lỗi
                 if (!arrayBuffer?.isSampleFallback) {
                     try {
-                        const sampleRes = await axiosInstance.get('/sample.pdf', { responseType: 'arraybuffer' });
-                        if (sampleRes.data && sampleRes.data.byteLength > 0 && !isCancelled) {
-                            const fallbackBuf = sampleRes.data;
-                            fallbackBuf.isSampleFallback = true;
-                            showToast("Đang hiển thị bản đọc thử mô phỏng của cuốn sách.");
-                            await renderPdfDoc(fallbackBuf, null);
-                            return;
+                        const sampleRes = await fetch('/sample.pdf');
+                        if (sampleRes.ok) {
+                            const fallbackBuf = await sampleRes.arrayBuffer();
+                            if (fallbackBuf && fallbackBuf.byteLength > 0 && !isCancelled) {
+                                fallbackBuf.isSampleFallback = true;
+                                showToast("Đang hiển thị bản đọc thử mô phỏng của cuốn sách.");
+                                await renderPdfDoc(fallbackBuf, null);
+                                return;
+                            }
                         }
-                    } catch (_) {}
+                    } catch {}
                 }
                 setIsLoading(false);
                 setErrorMessage("Không thể hiển thị tệp PDF. Tệp có thể đã bị hỏng hoặc chưa được tải lên đầy đủ.");
@@ -996,7 +808,16 @@ export default function DocSach() {
 
     // 3. Render Canvas (Trang in PDF gốc)
     const renderCanvasPage = useCallback(async (pageNum) => {
-        if (!pdfDoc || !canvasRef.current) return;
+        if (!pdfDoc) return;
+        let canvas = canvasRef.current;
+        if (!canvas) {
+            for (let i = 0; i < 15; i++) {
+                await new Promise(r => setTimeout(r, 40));
+                canvas = canvasRef.current;
+                if (canvas) break;
+            }
+        }
+        if (!canvas) return;
 
         try {
             setIsRendering(true);
@@ -1071,7 +892,7 @@ export default function DocSach() {
                     readingPercentage: percentage,
                     updatedAt: new Date().toISOString()
                 }));
-            } catch (_) {}
+            } catch {}
         }, 1200);
         return () => clearTimeout(timer);
     }, [currentPage, numPages, targetId, isTrialMode]);
@@ -1339,7 +1160,7 @@ export default function DocSach() {
         if (noteId && !String(noteId).startsWith('note_')) {
             try {
                 await axiosInstance.delete(`/api/home/books/bookmarks/${noteId}`);
-            } catch (_) {}
+            } catch {}
         }
     };
 
@@ -1538,39 +1359,6 @@ export default function DocSach() {
                             <i className="ph-bold ph-arrow-left text-base text-[#D4AF37]"></i>
                         </button>
 
-                        <button 
-                            type="button"
-                            onClick={() => {
-                                document.body.style.overflow = '';
-                                document.body.style.position = '';
-                                document.body.style.width = '';
-                                document.body.style.height = '';
-                                document.documentElement.style.overflow = '';
-                                document.documentElement.style.height = '';
-                                navigate('/');
-                            }} 
-                            className="w-9 h-9 rounded-xl flex items-center justify-center halm-header-btn shrink-0 cursor-pointer" 
-                            title="Về Trang Chủ"
-                        >
-                            <i className="ph-bold ph-house text-base text-[#D4AF37]"></i>
-                        </button>
-
-                        <button 
-                            type="button"
-                            onClick={() => {
-                                document.body.style.overflow = '';
-                                document.body.style.position = '';
-                                document.body.style.width = '';
-                                document.body.style.height = '';
-                                document.documentElement.style.overflow = '';
-                                document.documentElement.style.height = '';
-                                navigate('/tusachcn');
-                            }} 
-                            className="w-9 h-9 rounded-xl flex items-center justify-center halm-header-btn shrink-0 cursor-pointer" 
-                            title="Về Tủ Sách Cá Nhân"
-                        >
-                            <i className="ph-bold ph-books text-base text-[#D4AF37]"></i>
-                        </button>
 
                         <button 
                             type="button"
@@ -1634,12 +1422,7 @@ export default function DocSach() {
                         )}
                         
                         {/* Switch Mode: Trang In vs Chữ (Text Mode) - Chỉ hiện khi là sách PDF */}
-                        {bookFormat === 'EPUB' ? (
-                            <div className="flex items-center bg-[#222420] rounded-xl px-3 py-1.5 border border-[#2F322B] text-xs font-outfit font-bold text-[#D4AF37] gap-1.5 shadow-xs">
-                                <i className="ph-bold ph-book-open text-emerald-400"></i>
-                                <span>Sách EPUB</span>
-                            </div>
-                        ) : (
+                        {bookFormat !== 'EPUB' && (
                             <div className="flex items-center bg-[#222420] rounded-xl p-0.5 border border-[#2F322B]">
                                 <button
                                     type="button"
@@ -1757,6 +1540,16 @@ export default function DocSach() {
                         {/* Starry Night Sky Canvas */}
                         {paperTheme === 'starry' && (
                             <div ref={starryBgRef} className="absolute inset-0 pointer-events-none z-0"></div>
+                        )}
+
+                        {/* Dynamic Watermark chống chụp màn hình (HALM DRM) */}
+                        {!isLoading && !errorMessage && (
+                            <DynamicWatermark
+                                bookId={bookId || book?.book_id || book?.id}
+                                bookTitle={book?.bookTitle || book?.title || ''}
+                                paperTheme={paperTheme}
+                                enabled={true}
+                            />
                         )}
 
                         {/* Loading State */}
@@ -2035,9 +1828,17 @@ export default function DocSach() {
                                                     }
                                                     setIsTocOpen(false);
                                                 }}
-                                                className="p-2.5 rounded-xl hover:bg-[#222420] transition cursor-pointer text-xs border border-transparent hover:border-[#2F322B]"
+                                                className="p-2.5 rounded-xl hover:bg-[#222420] transition cursor-pointer text-xs border border-transparent hover:border-[#2F322B] flex items-center justify-between gap-3 group"
                                             >
-                                                <div className="font-serif font-bold text-[#EDE9DF]">{item.title}</div>
+                                                <div className="flex items-center gap-2.5 min-w-0">
+                                                    <i className="fa-solid fa-bookmark text-[#D4AF37]/60 group-hover:text-[#D4AF37] text-[11px] shrink-0 transition-colors"></i>
+                                                    <span className="font-serif font-bold text-[#EDE9DF] truncate group-hover:text-[#D4AF37] transition-colors">{item.title}</span>
+                                                </div>
+                                                {typeof item.dest === 'number' && (
+                                                    <span className="text-[10px] font-mono font-medium text-[#9CA3AF] group-hover:text-[#D4AF37] bg-[#161715] px-2 py-0.5 rounded-md shrink-0 border border-[#2F322B]/60 transition-colors">
+                                                        Trang {item.dest}
+                                                    </span>
+                                                )}
                                             </div>
                                         ))
                                     ) : (
@@ -2833,7 +2634,7 @@ export default function DocSach() {
                                 } else {
                                     showToast("Đăng nhập thành công! Hãy chọn gói thuê để tiếp tục.");
                                 }
-                            } catch (_) {
+                            } catch {
                                 showToast("Đăng nhập thành công!");
                             }
                         }

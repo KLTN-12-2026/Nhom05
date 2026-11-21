@@ -1,4 +1,6 @@
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8082';
+export { API_BASE_URL } from '../config/api';
+
+const resourceId = value => encodeURIComponent(String(value));
 
 export const API_ENDPOINTS = {
   AUTH: {
@@ -21,21 +23,24 @@ export const API_ENDPOINTS = {
   BOOK: {
     LIST: '/api/home/books',
     BASIC_LIST: '/api/home/books/basic',
-    DETAIL: (id) => `/api/home/books/${id}`,
-    BASIC_DETAIL: (id) => `/api/home/books/${id}/basic`,
-    READ_URL: (id) => `/api/home/books/${id}/read-url`,
-    BOOKMARKS: (id) => `/api/home/books/${id}/bookmarks`,
-    DELETE_BOOKMARK: (noteId) => `/api/home/books/bookmarks/${noteId}`,
+    DETAIL: (id) => `/api/home/books/${resourceId(id)}`,
+    BASIC_DETAIL: (id) => `/api/home/books/${resourceId(id)}/basic`,
+    READ_URL: (id) => `/api/home/books/${resourceId(id)}/read-url`,
+    BOOKMARKS: (id) => `/api/home/books/${resourceId(id)}/bookmarks`,
+    DELETE_BOOKMARK: (noteId) => `/api/home/books/bookmarks/${resourceId(noteId)}`,
   },
   CART: {
     ADD: '/api/home/cart/add',
+    LIST: '/api/home/cart/items',
+    ITEM: (id) => `/api/home/cart/items/${resourceId(id)}`,
   },
   CHECKOUT: {
     PROCESS: '/api/home/checkout',
   },
   BOOKSHELF: {
     LIST: '/api/home/bookshelf',
-    CHECK_ACCESS: (bookId) => `/api/home/bookshelf/check/${bookId}`,
+    CHECK_ACCESS: (bookId) => `/api/home/bookshelf/check/${resourceId(bookId)}`,
+    ACCESS_DETAIL: (bookId) => `/api/home/bookshelf/check-detail/${resourceId(bookId)}`,
   },
   POTATO: {
     WALLET: '/api/home/potato/wallet',

@@ -2,118 +2,95 @@ package com.example.demochatbot.service.support;
 
 import com.example.demochatbot.config.RabbitMQConfig;
 import com.example.demochatbot.dto.SupportTicketMessage;
-import com.example.demochatbot.model.Customer;
-import com.example.demochatbot.model.Notification;
 import com.example.demochatbot.model.SupportTicket;
-import com.example.demochatbot.repository.CustomerRepository;
-import com.example.demochatbot.repository.NotificationRepository;
 import com.example.demochatbot.repository.SupportTicketRepository;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.mail.MailAuthenticationException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * ============================================================================
- * CONSUMER / WORKER: SupportTicketConsumer
- * Lắng nghe hàng đợi RabbitMQ, lưu trữ vào Database MySQL, tạo thông báo và gửi mail
- * ============================================================================
- */
+@Slf4j
 @Service
 public class SupportTicketConsumer {
-
-    @Autowired
-    private SupportTicketRepository supportTicketRepository;
-
-    @Autowired
-    private CustomerRepository customerRepository;
-
-    @Autowired
-    private NotificationRepository notificationRepository;
+    private final SupportTicketIntakeService intake;
+    private final SupportTicketRepository tickets;
+    private final AtomicBoolean mailAuthenticationFailed = new AtomicBoolean();
 
     @Autowired(required = false)
     private JavaMailSender mailSender;
 
+    @Value("${halm.support.confirmation-email.enabled:true}")
+    private boolean confirmationEmailEnabled = true;
+
+    @Value("${spring.mail.username:}")
+    private String senderAddress;
+
+    public SupportTicketConsumer(SupportTicketIntakeService intake, SupportTicketRepository tickets) {
+        this.intake = intake;
+        this.tickets = tickets;
+    }
+
     @RabbitListener(queues = RabbitMQConfig.QUEUE_NAME)
-    public void processSupportTicket(SupportTicketMessage msg) {
-        System.out.println("<<< [RabbitMQ Consumer] Nhận được tin nhắn từ Queue: " + msg.getCode() + " - " + msg.getSubject());
-
+    public void processSupportTicket(SupportTicketMessage message) {
+        Optional<SupportTicket> created;
         try {
-            // 1. Tìm Customer tương ứng nếu có
-            Customer customer = null;
-            if (msg.getCustomerId() != null && !msg.getCustomerId().isEmpty()) {
-                customer = customerRepository.findById(msg.getCustomerId()).orElse(null);
-            } else if (msg.getSenderEmail() != null && !msg.getSenderEmail().isEmpty()) {
-                customer = customerRepository.findByEmail(msg.getSenderEmail()).orElse(null);
-            }
-
-            // 2. Lưu vào Database MySQL (Bảng support_ticket)
-            SupportTicket ticket = SupportTicket.builder()
-                    .code(msg.getCode())
-                    .customer(customer)
-                    .senderName(msg.getSenderName() != null ? msg.getSenderName() : (customer != null ? customer.getCustomerName() : "Khách hàng"))
-                    .senderEmail(msg.getSenderEmail() != null ? msg.getSenderEmail() : (customer != null ? customer.getEmail() : ""))
-                    .senderPhone(msg.getSenderPhone() != null ? msg.getSenderPhone() : (customer != null ? customer.getPhoneNumber() : ""))
-                    .category(msg.getCategory() != null ? msg.getCategory() : "OTHER")
-                    .priority(msg.getPriority() != null ? msg.getPriority() : "NORMAL")
-                    .subject(msg.getSubject())
-                    .message(msg.getMessage())
-                    .status("pending")
-                    .createdAt(msg.getCreatedAt() != null ? msg.getCreatedAt() : LocalDateTime.now())
-                    .build();
-
-            supportTicketRepository.save(ticket);
-            System.out.println("<<< [RabbitMQ Consumer] Đã lưu thành công vào MySQL: ID #" + ticket.getTicketId() + " (" + ticket.getCode() + ")");
-
-            // 3. Tạo thông báo (Notification) xác nhận cho độc giả
-            if (customer != null) {
-                Notification notif = Notification.builder()
-                        .customerId(customer.getCustomer_id())
-                        .title("Yêu Cầu Hỗ Trợ Đã Được Tiếp Nhận 📬")
-                        .message("Yêu cầu #" + ticket.getCode() + " (\"" + ticket.getSubject() + "\") đã được gửi qua hàng đợi xử lý. Ban quản trị sẽ phản hồi trong thời gian sớm nhất!")
-                        .type("SYSTEM")
-                        .link("/canhan?tab=support")
-                        .isRead(false)
-                        .createdAt(LocalDateTime.now())
-                        .build();
-                notificationRepository.save(notif);
-            }
-
-            // 4. Gửi email xác nhận bất đồng bộ cho độc giả nếu có cấu hình mail
-            sendConfirmationEmail(ticket);
-
-        } catch (Exception e) {
-            System.err.println("!!! [RabbitMQ Consumer] Lỗi khi xử lý message từ Queue: " + e.getMessage());
-            e.printStackTrace();
-            throw e; // Ném lỗi để RabbitMQ kích hoạt cơ chế retry hoặc đẩy sang Dead Letter Queue (DLQ)
+            created = intake.accept(message);
+        } catch (DataIntegrityViolationException collision) {
+            // Another consumer can commit the same code after accept's existence check.
+            // This catch runs outside the failed transaction, so the lookup is usable.
+            if (message == null || message.getCode() == null || !tickets.existsByCode(message.getCode())) throw collision;
+            log.info("Bỏ qua message đã xử lý: {}", message.getCode());
+            return;
         }
+        if (created.isEmpty()) {
+            log.info("Bỏ qua message đã xử lý: {}", message.getCode());
+            return;
+        }
+        SupportTicket ticket = created.get();
+        log.info("Đã lưu yêu cầu hỗ trợ {} vào MySQL, ID #{}", ticket.getCode(), ticket.getTicketId());
+        // The intake transaction has committed. SMTP failure must not requeue a saved ticket.
+        sendConfirmationEmail(ticket);
     }
 
     private void sendConfirmationEmail(SupportTicket ticket) {
-        if (mailSender == null || ticket.getSenderEmail() == null || ticket.getSenderEmail().isEmpty()) {
-            return;
-        }
+        if (!confirmationEmailEnabled || mailAuthenticationFailed.get() || mailSender == null
+                || ticket.getSenderEmail() == null || ticket.getSenderEmail().isBlank()) return;
         try {
             SimpleMailMessage email = new SimpleMailMessage();
+            if (senderAddress != null && !senderAddress.isBlank()) email.setFrom(senderAddress);
             email.setTo(ticket.getSenderEmail());
             email.setSubject("[HALM BOOK] Xác nhận tiếp nhận yêu cầu hỗ trợ #" + ticket.getCode());
-            email.setText(
-                    "Xin chào " + ticket.getSenderName() + ",\n\n" +
-                    "Hệ thống HALM BOOK đã tiếp nhận yêu cầu hỗ trợ của bạn:\n" +
-                    "- Mã yêu cầu: " + ticket.getCode() + "\n" +
-                    "- Tiêu đề: " + ticket.getSubject() + "\n" +
-                    "- Phân loại: " + ticket.getCategory() + "\n\n" +
-                    "Đội ngũ quản trị viên đang kiểm tra và sẽ phản hồi bạn trong thời gian sớm nhất.\n" +
-                    "Bạn có thể theo dõi tiến độ xử lý trực tiếp tại trang Cá Nhân -> Hỗ Trợ & Khiếu Nại.\n\n" +
-                    "Trân trọng,\nĐội ngũ Hỗ trợ Độc giả HALM BOOK."
-            );
+            email.setText("Xin chào " + ticket.getSenderName() + ",\n\n"
+                    + "HALM BOOK đã tiếp nhận yêu cầu #" + ticket.getCode() + ": " + ticket.getSubject() + ".\n"
+                    + "Bạn có thể theo dõi tại trang Cá Nhân > Hỗ Trợ & Khiếu Nại.\n\n"
+                    + "Trân trọng,\nĐội ngũ Hỗ trợ Độc giả HALM BOOK.");
             mailSender.send(email);
-            System.out.println("<<< [RabbitMQ Consumer] Đã gửi email xác nhận đến: " + ticket.getSenderEmail());
-        } catch (Exception ex) {
-            System.err.println("Notice: Gửi email xác nhận không thành công: " + ex.getMessage());
+            log.info("Đã gửi email xác nhận cho ticket {}", ticket.getCode());
+        } catch (Exception failure) {
+            if (isAuthenticationFailure(failure)) {
+                if (mailAuthenticationFailed.compareAndSet(false, true)) {
+                    log.warn("SMTP xác thực thất bại. Đã tạm ngừng email xác nhận hỗ trợ đến khi khởi động lại. "
+                            + "Kiểm tra MAIL_USERNAME và MAIL_PASSWORD (mật khẩu ứng dụng SMTP). Ticket vẫn được lưu.");
+                }
+            } else {
+                log.warn("Không gửi được email xác nhận cho ticket {} ({}). Ticket vẫn được lưu.",
+                        ticket.getCode(), failure.getClass().getSimpleName());
+            }
         }
+    }
+
+    private boolean isAuthenticationFailure(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof MailAuthenticationException || cause instanceof jakarta.mail.AuthenticationFailedException) return true;
+        }
+        return false;
     }
 }

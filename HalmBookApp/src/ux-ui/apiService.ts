@@ -2,22 +2,14 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import axios, { AxiosRequestConfig } from 'axios';
 
-// ============================================================================
-// [GIẢI THÍCH CODE]: DỊCH VỤ QUẢN LÝ KẾT NỐI API TRUNG TÂM (CENTRALIZED API SERVICE)
-// - Tự động nhận diện môi trường: EXPO_PUBLIC_API_URL -> Expo Debugger Host ->
-//   Android Emulator (10.0.2.2) -> Web/iOS Localhost (localhost:8082)
-// - Cung cấp hàm fetchApiWithFallback với cơ chế Fast-Path: Ưu tiên gọi API_BASE_URL
-//   với timeout tối ưu (3.5s) trước, chỉ khi lỗi mạng mới thử các IP dự phòng
-// - Giúp ứng dụng phản hồi ngay lập tức, không bị treo 20-30s như khi lặp tuần tự
-// ============================================================================
-
+// Use the configured server or the Expo development host.
 export const resolveApiBaseUrl = (): string => {
-  if (process.env.EXPO_PUBLIC_API_URL) {
-    return process.env.EXPO_PUBLIC_API_URL.replace(/\/+$/, '');
+  if (process.env.EXPO_PUBLIC_API_URL?.trim()) {
+    return process.env.EXPO_PUBLIC_API_URL.trim().replace(/\/+$/, '');
   }
   const debuggerHost = Constants.expoConfig?.hostUri;
   const host = debuggerHost
-    ? debuggerHost.split(':')[0]
+    ? (Platform.OS === 'android' && /^(localhost|127\.0\.0\.1)(:|$)/.test(debuggerHost) ? '10.0.2.2' : debuggerHost.split(':')[0])
     : Platform.OS === 'android'
       ? '10.0.2.2'
       : 'localhost';
@@ -58,43 +50,6 @@ export async function fetchApiWithFallback<T = any>(
   endpoint: string,
   config: AxiosRequestConfig = {}
 ): Promise<{ data: T; baseUrl: string }> {
-  // Fast path: Thử API_BASE_URL chính xác trước
-  try {
-    const res = await axios({
-      ...config,
-      url: `${API_BASE_URL}${endpoint}`,
-      timeout: config.timeout || 3500,
-    });
-    return { data: res.data, baseUrl: API_BASE_URL };
-  } catch (err: any) {
-    if (axios.isCancel(err) || err?.name === 'CanceledError') {
-      throw err;
-    }
-    // Nếu là lỗi server trả về (4xx, 5xx) thì trả về luôn không cần thử IP khác
-    if (err.response) {
-      throw err;
-    }
-  }
-
-  // Fallback path: Thử các URLs còn lại
-  let lastError: any = null;
-  const otherUrls = CANDIDATE_API_URLS.filter((u) => u !== API_BASE_URL);
-  for (const url of otherUrls) {
-    try {
-      const res = await axios({
-        ...config,
-        url: `${url}${endpoint}`,
-        timeout: config.timeout || 3000,
-      });
-      return { data: res.data, baseUrl: url };
-    } catch (err: any) {
-      lastError = err;
-      if (axios.isCancel(err) || err?.name === 'CanceledError' || err.response) {
-        throw err;
-      }
-    }
-  }
-
-  throw lastError || new Error('Không thể kết nối đến máy chủ HALM BOOK.');
+  const response = await axios({ ...config, url: API_BASE_URL + endpoint, timeout: config.timeout ?? 10000 });
+  return { data: response.data, baseUrl: API_BASE_URL };
 }
-

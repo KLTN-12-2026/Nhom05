@@ -29,8 +29,21 @@ public class Orders {
     private LocalDateTime order_date = LocalDateTime.now();
     private String payment_status;
     private String payment_method;
+    @Column(unique = true)
     private String transaction_no;
     private double discount_amount;
+
+    // Persist the original receipt; replay must not depend on the customer's current tier.
+    private Double checkoutSubtotal;
+    private Double checkoutTierDiscount;
+    private Double checkoutCouponDiscount;
+    @Column(length = 64)
+    private String checkoutFingerprint;
+
+    // Immutable top-up terms captured when the payment request is created.
+    private Integer topupPackageId;
+    private String topupPackageName;
+    private Integer topupPotatoAmount;
 
     @ManyToOne
     @JoinColumn(name = "promotion_id" , referencedColumnName = "promotion_id")

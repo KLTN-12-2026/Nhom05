@@ -9,7 +9,7 @@ const source = fs.readFileSync(path.join(__dirname, '../src/ux-ui/notificationSe
 const compiled = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText;
-function setup() {
+function setup(server = async () => { throw Error("offline"); }) {
   const values = new Map([['currentUsername', 'alice']]);
   let failWrite = false;
   const storage = {
@@ -20,7 +20,7 @@ function setup() {
       values.set(key, value);
     },
   };
-  const context = { exports: {}, require: name => name === './userStorage'
+  const context = { exports: {}, require: name => name === './apiService' ? { fetchApiWithFallback: server } : name === './userStorage'
     ? { getCurrentUsername: async () => (values.get('currentUsername') || 'guest').toLowerCase() }
     : { __esModule: true, default: storage } };
   vm.runInNewContext(compiled, context);
@@ -88,4 +88,25 @@ test('corrupted storage surfaces an error instead of silently losing history', a
   await assert.rejects(api.getNotifications());
   await assert.rejects(api.addNotification(message('Should not overwrite')));
   assert.equal(values.get('user_notifications_v1_alice'), '{broken');
+});
+
+test('an older server response cannot overwrite concurrent additions or resurrect a deleted notification', async () => {
+  let resolveRequest;
+  const { api, values } = setup(() => new Promise(resolve => { resolveRequest = resolve; }));
+  values.set('userToken', 'token');
+  const remote = { id: 'be_7', backendId: 7, type: 'system', title: 'Old', message: 'Old', timestamp: 1, time: '', isRead: false };
+  values.set('user_notifications_v2_alice', JSON.stringify([remote]));
+  const loading = api.getNotifications();
+  await new Promise(resolve => setImmediate(resolve));
+  await api.deleteNotification('be_7');
+  await api.addNotification(message('Concurrent'));
+  resolveRequest({ data: { notifications: [{ notificationId: 7, title: 'Old', createdAt: 1 }] } });
+  const list = await loading;
+  assert.equal(list.length, 1); assert.equal(list[0].title, 'Concurrent');
+});
+test('corrupted v2 storage is preserved and reported', async () => {
+  const { api, values } = setup();
+  values.set('user_notifications_v2_alice', '{broken');
+  await assert.rejects(api.getNotifications()); await assert.rejects(api.addNotification(message('Never overwrite')));
+  assert.equal(values.get('user_notifications_v2_alice'), '{broken');
 });

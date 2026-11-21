@@ -219,6 +219,7 @@ export default function ThongBaoScreen({ onBack }: { onBack: () => void }) {
 
   useEffect(() => {
     mounted.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Subscribe to the persisted inbox and hydrate it once on mount.
     void loadData();
 
     const unsubscribe = subscribeNotifications(() => {

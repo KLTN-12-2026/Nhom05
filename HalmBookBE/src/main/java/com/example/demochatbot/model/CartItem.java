@@ -13,11 +13,8 @@ import java.time.LocalDateTime;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-@Entity
-@Table(
-        name = "cart_items",
-        uniqueConstraints = @UniqueConstraint(name = "uk_user_book", columnNames = {"user_id", "book_id"})
-)
+// Legacy DTO only. The active cart mapping is Cart_Item / cart_item.
+@Deprecated
 public class CartItem {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

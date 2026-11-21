@@ -21,9 +21,12 @@ import com.example.demochatbot.dto.CheckoutRequest;
 import com.example.demochatbot.dto.CheckoutResponse;
 import com.example.demochatbot.dto.RentedBookDto;
 import com.example.demochatbot.model.Book;
+import com.example.demochatbot.model.Category;
+import com.example.demochatbot.repository.CategoryRepository;
 import com.example.demochatbot.repository.BookRepository;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.data.domain.Page;
@@ -33,6 +36,7 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -73,6 +77,16 @@ public class HomeController {
     @Autowired
     private TierService tierService;
 
+    @Autowired
+    private CategoryRepository categoryRepository;
+
+    /**
+     * API lấy danh sách toàn bộ thể loại sách từ cơ sở dữ liệu
+     */
+    @GetMapping("/categories")
+    public ResponseEntity<List<Category>> getCategories() {
+        return ResponseEntity.ok(categoryRepository.findAll());
+    }
     private ResponseEntity<?> requireBookAccess(String bookId) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated()
@@ -121,6 +135,25 @@ public class HomeController {
                 : bookRepository.findBooksByCategoryId(categoryId, resolvedPageable))
                 .map(this::toPublicBookDto);
         return ResponseEntity.ok(books);
+    }
+
+    /**
+     * API lấy danh sách sách xu hướng / đọc nhiều nhất
+     */
+    @GetMapping("/books/trending")
+    public ResponseEntity<List<BookBasicDto>> getTrendingBooks(
+            @RequestParam(value = "limit", defaultValue = "10") int limit) {
+        return ResponseEntity.ok(bookService.findTrendingBooks(limit));
+    }
+
+    /**
+     * API gợi ý sách thuê cùng cho giỏ hàng (Cart Recommendations)
+     */
+    @GetMapping("/books/recommendations")
+    public ResponseEntity<List<BookBasicDto>> getCartRecommendations(
+            @RequestParam(value = "cartBookIds", required = false) List<String> cartBookIds,
+            @RequestParam(value = "limit", defaultValue = "10") int limit) {
+        return ResponseEntity.ok(bookService.findCartRecommendations(cartBookIds, limit));
     }
 
     @GetMapping("/covers/{fileName}")
@@ -191,6 +224,16 @@ public class HomeController {
     }
 
     /**
+     * API lấy danh sách sách cùng tác giả hoặc cùng thể loại (Author / Related Books)
+     */
+    @GetMapping("/books/{bookId}/author-books")
+    public ResponseEntity<List<BookBasicDto>> getAuthorBooks(
+            @PathVariable("bookId") String bookId,
+            @RequestParam(value = "limit", defaultValue = "8") int limit) {
+        return ResponseEntity.ok(bookService.findAuthorBooks(bookId, limit));
+    }
+
+    /**
      * API lấy đường dẫn xem/đọc nội dung sách từ Cloudinary (Signed URL có thời hạn bảo mật)
      */
     @GetMapping("/books/{bookId}/read-url")
@@ -198,9 +241,19 @@ public class HomeController {
         ResponseEntity<?> accessDenied = requireBookAccess(bookId);
         if (accessDenied != null) return accessDenied;
         try {
-            String readUrl = bookService.getBookReadUrl(bookId);
-            BookDto bookDto = toPublicBookDto(bookService.findBookById(bookId));
+            String readUrl = null;
+            try {
+                readUrl = bookService.getBookReadUrl(bookId);
+            } catch (Exception ignored) {}
+
+            BookDto bookDto = bookService.findBookDetailById(bookId);
             String format = bookDto != null && bookDto.getFileFormat() != null ? bookDto.getFileFormat() : "PDF";
+
+            // Tự động fallback sang endpoint /content nếu sách chưa có link Cloudinary
+            if (readUrl == null || readUrl.trim().isEmpty()) {
+                readUrl = "/api/home/books/" + bookId + "/content";
+            }
+
             return ResponseEntity.ok(Map.of(
                     "book_id", bookId,
                     "readUrl", readUrl,
@@ -208,7 +261,7 @@ public class HomeController {
                     "expiresInSeconds", 3600,
                     "message", "Lấy URL đọc sách thành công!"
             ));
-        } catch (RuntimeException e) {
+        } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("message", e.getMessage()));
         }
@@ -282,6 +335,15 @@ public class HomeController {
                             .body(data);
                 }
                 conn.disconnect();
+            }
+
+            // 3. Fallback đọc thử tài liệu mẫu nếu sách chưa có file PDF riêng
+            ClassPathResource sampleResource = new ClassPathResource("static/sample.pdf");
+            if (sampleResource.exists()) {
+                return ResponseEntity.ok()
+                        .contentType(MediaType.APPLICATION_PDF)
+                        .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
+                        .body(sampleResource);
             }
 
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -460,7 +522,7 @@ public class HomeController {
      * API thực hiện thanh toán thuê sách bằng Khoai Tây
      */
     @PostMapping("/checkout")
-    public ResponseEntity<?> checkoutWithPotato(@RequestBody CheckoutRequest request) {
+    public ResponseEntity<?> checkoutWithPotato(@Valid @RequestBody CheckoutRequest request) {
         try {
             int accountId = customerService.getCurrentAccountId();
             if (accountId <= 0) {
@@ -470,6 +532,8 @@ public class HomeController {
 
             CheckoutResponse response = orderService.checkoutWithPotato(accountId, request);
             return ResponseEntity.ok(response);
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", e.getMessage()));
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(Map.of("message", e.getMessage()));

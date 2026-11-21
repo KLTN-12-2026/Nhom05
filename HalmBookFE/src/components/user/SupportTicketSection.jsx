@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { submitSupportTicket, getMySupportTickets, sendTicketMessage } from '@/services/userSupportService';
+import { submitSupportTicket, getMySupportTickets, sendTicketMessage, deleteSupportTicket } from '@/services/userSupportService';
 
 const CATEGORIES = [
   { id: 'PAYMENT', label: 'Nạp Khoai / Thanh Toán', icon: 'ph-currency-circle-dollar', color: 'text-amber-600 dark:text-amber-400' },
@@ -23,7 +23,12 @@ export default function SupportTicketSection({ customer, showToast }) {
   const [selectedChatTicket, setSelectedChatTicket] = useState(null);
   const [chatReplyInput, setChatReplyInput] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [deletingTicketId, setDeletingTicketId] = useState(null);
   const chatBottomRef = useRef(null);
+  const sendingRef = useRef(false);
+  const submitRef = useRef(false);
+  const requestVersionRef = useRef(0);
+  const pendingMessageRef = useRef(null);
 
   // Form State
   const [category, setCategory] = useState('PAYMENT');
@@ -69,6 +74,7 @@ export default function SupportTicketSection({ customer, showToast }) {
   const loadTickets = useCallback(async (isSilent = false) => {
     try {
       if (!isSilent) setLoading(true);
+      const version = ++requestVersionRef.current;
       const savedCodes = getSavedTicketCodes();
       const currentEmail = senderEmail || customer?.email || '';
       
@@ -76,8 +82,9 @@ export default function SupportTicketSection({ customer, showToast }) {
         email: currentEmail,
         codes: savedCodes.join(',')
       });
+      if (version !== requestVersionRef.current || sendingRef.current) return;
       const list = Array.isArray(data) ? data : [];
-      setTickets(list);
+      setTickets(prev => [...prev.filter(t => !t.id && !list.some(fresh => fresh.code === t.code)), ...list]);
 
       // Tự động đồng bộ nội dung chat của Ticket đang mở (Auto-sync 2 chiều)
       setSelectedChatTicket(prevSelected => {
@@ -91,7 +98,7 @@ export default function SupportTicketSection({ customer, showToast }) {
     } finally {
       if (!isSilent) setLoading(false);
     }
-  }, [senderEmail, customer]);
+  }, [senderEmail, customer?.email, customer?.customer_id]);
 
   // Tải lần đầu và thiết lập Polling thời gian thực mỗi 3 giây
   useEffect(() => {
@@ -112,6 +119,7 @@ export default function SupportTicketSection({ customer, showToast }) {
   const handleSubmit = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
 
+    if (submitRef.current) return;
     if (!subject.trim()) {
       if (showToast) showToast('Thiếu Thông Tin', 'Vui lòng nhập tiêu đề yêu cầu khiếu nại!');
       return;
@@ -122,6 +130,7 @@ export default function SupportTicketSection({ customer, showToast }) {
     }
 
     try {
+      submitRef.current = true;
       setSubmitting(true);
       const payload = {
         senderName: (senderName || customer?.customerName || 'Độc giả').trim(),
@@ -145,7 +154,7 @@ export default function SupportTicketSection({ customer, showToast }) {
 
       // Optimistic update
       const newTicketItem = {
-        id: Date.now(),
+        id: null,
         code: res.ticketCode || ('TK-' + Math.floor(10000 + Math.random() * 90000)),
         subject: payload.subject,
         message: payload.message,
@@ -178,56 +187,68 @@ export default function SupportTicketSection({ customer, showToast }) {
         showToast('Lỗi Gửi Yêu Cầu', err.response?.data?.message || err.message || 'Không thể gửi qua RabbitMQ');
       }
     } finally {
+      submitRef.current = false;
       setSubmitting(false);
     }
   };
 
   // Gửi tin nhắn trả lời tiếp trong cuộc trò chuyện 2 chiều
   const handleSendMessage = async (e) => {
-    if (e && e.preventDefault) e.preventDefault();
-    if (!selectedChatTicket || !chatReplyInput.trim() || sendingMessage) return;
-
+    e?.preventDefault();
+    if (!selectedChatTicket?.id || !chatReplyInput.trim() || sendingRef.current) return;
     const messageContent = chatReplyInput.trim();
     const ticketId = selectedChatTicket.id;
-    const currentSenderName = senderName || customer?.customerName || 'Độc giả';
-
+    const key = JSON.stringify([ticketId, messageContent]);
+    if (pendingMessageRef.current?.key !== key) pendingMessageRef.current = { key, id: crypto.randomUUID() };
+    sendingRef.current = true;
+    requestVersionRef.current += 1;
+    setSendingMessage(true);
     try {
-      setSendingMessage(true);
-
-      // Optimistic update tin nhắn vào UI ngay lập tức
-      const optimisticMsg = {
-        sender: 'USER',
-        senderName: currentSenderName,
-        content: messageContent,
-        time: 'Vừa xong'
-      };
-
-      setSelectedChatTicket(prev => {
-        if (!prev) return null;
-        const currentHist = Array.isArray(prev.chatHistory) ? prev.chatHistory : [];
-        return {
-          ...prev,
-          status: 'pending',
-          chatHistory: [...currentHist, optimisticMsg]
-        };
-      });
-
-      setChatReplyInput('');
-
-      // Gọi API Backend
-      await sendTicketMessage(ticketId, messageContent, currentSenderName);
-
-      // Nạp lại ngầm từ DB
-      loadTickets(true);
-
+      const result = await sendTicketMessage(ticketId, messageContent,
+        senderName || customer?.customerName || 'Độc giả', pendingMessageRef.current.id, selectedChatTicket.code);
+      const update = ticket => String(ticket?.id) === String(ticketId)
+        ? { ...ticket, status: 'pending', chatHistory: result.chatHistory } : ticket;
+      setSelectedChatTicket(update);
+      setTickets(prev => prev.map(update));
+      setChatReplyInput(current => current === messageContent ? '' : current);
+      pendingMessageRef.current = null;
     } catch (err) {
       console.error('Lỗi khi gửi tin nhắn trao đổi:', err);
-      if (showToast) {
-        showToast('Lỗi Gửi Tin Nhắn', 'Không thể gửi tin nhắn, vui lòng thử lại sau.');
-      }
+      showToast?.('Lỗi Gửi Tin Nhắn', err.response?.data?.message || 'Chưa xác nhận gửi thành công. Bạn có thể thử lại.');
     } finally {
+      requestVersionRef.current += 1;
+      sendingRef.current = false;
       setSendingMessage(false);
+      loadTickets(true);
     }
+  };
+
+  const handleDeleteTicket = async (ticket) => {
+    if (!ticket?.id || deletingTicketId) return;
+    if (!window.confirm(`Xóa yêu cầu #${ticket.code} khỏi lịch sử hỗ trợ của bạn?`)) return;
+    try {
+      setDeletingTicketId(ticket.id);
+      await deleteSupportTicket(ticket.id, ticket.code);
+      setTickets(prev => prev.filter(item => String(item.id) !== String(ticket.id)));
+      setSelectedChatTicket(prev => String(prev?.id) === String(ticket.id) ? null : prev);
+      if (showToast) showToast('Đã xóa yêu cầu', 'Yêu cầu hỗ trợ đã được xóa khỏi lịch sử của bạn.');
+    } catch (err) {
+      if (showToast) showToast('Không thể xóa', err.response?.data?.message || 'Vui lòng tải lại trang và thử lại.');
+    } finally {
+      setDeletingTicketId(null);
+    }
+  };
+
+  const getStatusBadge = (status) => {
+    const normalized = (status || 'pending').toLowerCase();
+    const badges = {
+      pending: ['Chờ tiếp nhận', 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-800'],
+      in_progress: ['Đang xử lý', 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border-blue-300 dark:border-blue-800'],
+      resolved: ['Đã giải quyết', 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'],
+      closed: ['Đã đóng', 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-300 dark:border-slate-700']
+    };
+    const [label, classes] = badges[normalized] || badges.pending;
+    return <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${classes}`}>{label}</span>;
   };
 
   return (
@@ -425,27 +446,7 @@ export default function SupportTicketSection({ customer, showToast }) {
               </div>
             ) : (
               tickets.map(t => {
-                const isResolved = t.status === 'resolved';
-                const isInProgress = t.status === 'in_progress';
-
-                let statusBadge = (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
-                    Chờ tiếp nhận
-                  </span>
-                );
-                if (isResolved) {
-                  statusBadge = (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-                      Đã giải quyết
-                    </span>
-                  );
-                } else if (isInProgress) {
-                  statusBadge = (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-300 dark:border-blue-800">
-                      Đang xử lý
-                    </span>
-                  );
-                }
+                const statusBadge = getStatusBadge(t.status);
 
                 const chatCount = Array.isArray(t.chatHistory) ? t.chatHistory.length : (t.adminReply ? 2 : 1);
 
@@ -459,6 +460,16 @@ export default function SupportTicketSection({ customer, showToast }) {
                       <div className="flex items-center gap-1.5">
                         {statusBadge}
                         <span className="text-[10px] text-stone-400 font-mono">{t.createdAt}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteTicket(t)}
+                          disabled={!t.id || deletingTicketId !== null}
+                          className="w-7 h-7 rounded-lg text-stone-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-40 transition-colors"
+                          title="Xóa yêu cầu"
+                          aria-label={`Xóa yêu cầu ${t.code}`}
+                        >
+                          <i className={`ph-bold ${String(deletingTicketId) === String(t.id) ? 'ph-spinner animate-spin' : 'ph-trash'} text-sm`}></i>
+                        </button>
                       </div>
                     </div>
 
@@ -489,12 +500,13 @@ export default function SupportTicketSection({ customer, showToast }) {
                     {/* NÚT MỞ PHÒNG CHAT TRỰC TIẾP 2 CHIỀU VỚI ADMIN */}
                     <button
                       type="button"
-                      onClick={() => setSelectedChatTicket(t)}
+                      onClick={() => { setChatReplyInput(''); setSelectedChatTicket(t); }}
+                      disabled={!t.id}
                       className="w-full py-2 px-3 rounded-xl bg-paper hover:bg-[#C28807] hover:text-[#111210] dark:bg-night-card dark:hover:bg-[#C28807] dark:hover:text-[#111210] border border-paper-border dark:border-night-border text-ink dark:text-night-text text-xs font-bold flex items-center justify-between transition-colors cursor-pointer"
                     >
                       <div className="flex items-center gap-1.5">
                         <i className="ph-bold ph-chat-centered-text text-amber-600"></i>
-                        <span>Mở Cuộc Trò Chuyện Trực Tiếp</span>
+                        <span>{t.id ? 'Mở Cuộc Trò Chuyện Trực Tiếp' : 'Đang lưu yêu cầu...'}</span>
                       </div>
                       <span className="text-[10px] px-2 py-0.5 rounded-md bg-white dark:bg-night-surface font-mono font-bold">
                         {chatCount} tin
@@ -548,15 +560,7 @@ export default function SupportTicketSection({ customer, showToast }) {
             <div className="px-5 py-2 bg-paper-200/50 dark:bg-night-surface/50 border-b border-paper-border dark:border-night-border flex items-center justify-between text-xs font-metadata-spec">
               <div className="flex items-center gap-2">
                 <span className="text-ink-muted dark:text-night-muted">Trạng thái:</span>
-                {selectedChatTicket.status === 'resolved' ? (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
-                    Đã giải quyết
-                  </span>
-                ) : (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
-                    Chờ xử lý
-                  </span>
-                )}
+                {getStatusBadge(selectedChatTicket.status)}
               </div>
               <span className="text-[11px] text-ink-muted dark:text-night-muted font-mono">
                 {selectedChatTicket.createdAt}
@@ -663,7 +667,7 @@ export default function SupportTicketSection({ customer, showToast }) {
               />
               <button
                 type="submit"
-                disabled={sendingMessage || !chatReplyInput.trim()}
+                disabled={sendingMessage || !selectedChatTicket.id || !chatReplyInput.trim()}
                 className="px-4 py-2.5 bg-[#1E1F1D] hover:bg-[#C28807] hover:text-[#111210] dark:bg-[#C28807] dark:text-[#111210] text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shrink-0"
               >
                 {sendingMessage ? (

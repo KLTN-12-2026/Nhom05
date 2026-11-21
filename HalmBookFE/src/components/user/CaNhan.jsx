@@ -1,65 +1,18 @@
-import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import { profileTailwindConfig, inlinePageStyle1 } from './styles/CaNhan.styles.js';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import { Link, useLocation, useSearchParams, useNavigate } from 'react-router-dom';
 import UserLayout from './layout/UserLayout';
 import * as customerService from '@/services/customerService';
 import { getPotatoPackages, getPotatoTransactions, topupPotato, transferPotato } from '@/services/potatoService';
-import DB from '@/components/admin/js/db.js';
 import { getCustomerBookshelf } from '@/services/orderService';
-import StreakDiemDanh from './StreakDiemDanh';
 import { isDarkMode, applyTheme } from '@/utils/theme';
-import { getTierInfo, formatCustomerId, getTierAvatarFrame, getTierBadgeClass, getTierLevel } from '@/utils/tierUtils';
+import { getTierInfo, formatCustomerId, getTierBadgeClass } from '@/utils/tierUtils';
 import AvatarWithFrame from '@/components/common/AvatarWithFrame';
 import { uploadAvatar } from '@/services/userFeatureService';
-import { clearAuthSession, isTokenValid } from '@/services/authToken';
+import { clearAuthSession, isTokenValid, logoutUser } from '@/services/authToken';
 import SupportTicketSection from './SupportTicketSection';
 
-const profileTailwindConfig = {
-    darkMode: 'class',
-    theme: {
-        extend: {
-            fontFamily: {
-                sans: ['var(--font-ui)', 'sans-serif'],
-                display: ['var(--font-display)', 'sans-serif'],
-                metadata: ['var(--font-metadata)', 'sans-serif'],
-                editorial: ['var(--font-editorial)', 'sans-serif'],
-            },
-            colors: {
-                paper: {
-                    50: '#FAF8F5',
-                    100: '#F5F2EB',
-                    200: '#EAE5D9',
-                    DEFAULT: '#F7F4EE',
-                    surface: '#FFFEFA',
-                    border: '#E3DDD0',
-                },
-                ink: {
-                    50: '#F5F5F4',
-                    300: '#A8A6A1',
-                    muted: '#66645E',
-                    DEFAULT: '#1E1F1D',
-                    pure: '#111210',
-                },
-                wine: {
-                    DEFAULT: '#8E3038',
-                    light: '#A83B46',
-                    dark: '#6F252C',
-                },
-                gold: {
-                    DEFAULT: '#B8860B',
-                    light: '#D4AF37',
-                },
-                night: {
-                    bg: '#111210',
-                    surface: '#181916',
-                    card: '#20221E',
-                    border: '#2C2E29',
-                    text: '#EDE9DF',
-                    muted: '#96938B',
-                }
-            }
-        }
-    }
-};
+
 
 const PROFILE_ASSETS = {
     fonts: 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Open+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,600&family=Roboto:wght@300;400;500;700;900&display=swap',
@@ -67,36 +20,33 @@ const PROFILE_ASSETS = {
     tailwind: 'https://cdn.tailwindcss.com',
 };
 
-const DEFAULT_PACKAGES = [
-    { packageId: 1, packageName: 'Gói Trải Nghiệm', priceVnd: 50000, potatoAmount: 50, bonusPotato: 0, bonusRate: 0, isHot: false, tag: 'Cơ Bản' },
-    { packageId: 2, packageName: 'Gói Tiêu Chuẩn', priceVnd: 200000, potatoAmount: 200, bonusPotato: 20, bonusRate: 10, isHot: true, tag: 'Đề Xuất 🔥' },
-    { packageId: 3, packageName: 'Gói Thân Thiết', priceVnd: 500000, potatoAmount: 500, bonusPotato: 75, bonusRate: 15, isHot: false, tag: '+15% Thưởng' },
-    { packageId: 4, packageName: 'Gói Đặc Quyền VIP', priceVnd: 1000000, potatoAmount: 1000, bonusPotato: 250, bonusRate: 25, isHot: false, tag: '+25% Thưởng VIP' },
-];
+const DEFAULT_PACKAGES = [];
 
-const DEFAULT_HISTORY_LIST = [
-    { code: 'GD984321', note: 'Thuê sách: Atomic Habits (7 ngày)', type: 'THUÊ SÁCH', time: 'Hôm nay 14:32', amount: -9, status: 'Thành công' },
-    { code: 'GD984210', note: 'Điểm danh hằng ngày', type: 'THƯỞNG HẰNG NGÀY', time: 'Hôm nay 08:15', amount: 5, status: 'Thành công' },
-    { code: 'GD982109', note: 'Nạp khoai: Gói Mọt Sách (+200 thưởng)', type: 'NẠP KHOAI', time: 'Hôm qua 19:40', amount: 1200, status: 'Thành công' },
-    { code: 'GD979924', note: 'Thuê sách: Điện Biên Phủ 56 Ngày Đêm', type: 'THUÊ SÁCH', time: '15/10/2026', amount: -9, status: 'Thành công' },
-    { code: 'GD910022', note: 'Thưởng thăng hạng: Thợ Cày 🌱', type: 'THƯỞNG VIP', time: '15/01/2026', amount: 50, status: 'Thành công' },
-    { code: 'GD889211', note: 'Thuê sách: Cây Cam Ngọt Của Tôi (14 ngày)', type: 'THUÊ SÁCH', time: '02/01/2026', amount: -15, status: 'Thành công' },
-    { code: 'GD875412', note: 'Nạp khoai: Gói Khởi Đầu (+10 thưởng)', type: 'NẠP KHOAI', time: '28/12/2025', amount: 110, status: 'Thành công' }
-];
+
 
 const normalizeSearch = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+const STATIC_PROFILE_STARS = Array.from({ length: 80 }, (_, id) => {
+    const pseudoRand1 = ((id * 137 + 43) % 100) / 100;
+    const pseudoRand2 = ((id * 269 + 71) % 100) / 100;
+    const pseudoRand3 = ((id * 353 + 97) % 100) / 100;
+    const pseudoRand4 = ((id * 491 + 131) % 100) / 100;
+    return {
+        id,
+        size: pseudoRand1 * 2.5 + 0.5,
+        top: pseudoRand2 * 100,
+        left: pseudoRand3 * 100,
+        duration: pseudoRand4 * 3 + 2,
+        delay: pseudoRand1 * 3,
+    };
+});
 
 export default function Profile() {
     const [searchParams, setSearchParams] = useSearchParams();
     const location = useLocation();
-    const currentTab = searchParams.get('tab') || (location.hash === '#tab-history' ? 'history' : 'profile');
-    const [activeTab, setActiveTabState] = useState(() => currentTab);
+    const activeTab = searchParams.get('tab') || (location.hash === '#tab-history' ? 'history' : 'profile');
     const [isDark, setIsDark] = useState(() => isDarkMode());
     const [isScrollTopVisible, setIsScrollTopVisible] = useState(false);
-    const [isChatOpen, setIsChatOpen] = useState(false);
-    const [chatInput, setChatInput] = useState('');
-    const [messages, setMessages] = useState([]);
-    const [stars, setStars] = useState([]);
     const [isEditing, setIsEditing] = useState(false);
     const [toast, setToast] = useState({ show: false, title: '', message: '' });
     const avatarInputRef = useRef(null);
@@ -140,14 +90,7 @@ export default function Profile() {
         }
     };
 
-    // Đồng bộ tức thì tab khi URL thay đổi (từ sidebar, header hay back/forward)
-    useEffect(() => {
-        const targetTab = searchParams.get('tab') || (location.hash === '#tab-history' ? 'history' : 'profile');
-        setActiveTabState(targetTab);
-    }, [searchParams, location.hash]);
-
     const handleSelectTab = (tab) => {
-        setActiveTabState(tab);
         if (tab === 'profile') {
             setSearchParams({});
         } else {
@@ -172,7 +115,6 @@ export default function Profile() {
     const [historySearchQuery, setHistorySearchQuery] = useState('');
     const [historyCurrentPage, setHistoryCurrentPage] = useState(1);
     const HISTORY_PER_PAGE = 5;
-    const [dailyCheckinDone, setDailyCheckinDone] = useState(false);
 
     // State phục vụ Đổi Mật Khẩu (Popup 2 bước + Mắt hiển thị mật khẩu)
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
@@ -297,63 +239,14 @@ export default function Profile() {
     const navigate = useNavigate();
 
     const loadWalletAndBookshelf = async () => {
-        try {
-            const [pkgs, txs, books] = await Promise.all([
-                getPotatoPackages().catch(() => []),
-                getPotatoTransactions().catch(() => []),
-                getCustomerBookshelf().catch(() => [])
-            ]);
-            if (Array.isArray(pkgs) && pkgs.length > 0) {
-                setPackages(pkgs);
-            }
-
-            let combinedTxs = Array.isArray(txs) ? [...txs] : [];
-            const localTxs = (window.DB && typeof window.DB.getTransactions === 'function')
-                ? window.DB.getTransactions()
-                : (DB && typeof DB.getTransactions === 'function' ? DB.getTransactions() : []);
-
-            if (Array.isArray(localTxs) && localTxs.length > 0) {
-                const currentId = String(customer?.customerId || customer?.id || '');
-                const currentName = customer?.customerName || customer?.name || '';
-                const userLocal = localTxs.filter(t => 
-                    (currentId && String(t.userId) === currentId) || 
-                    (currentName && t.userName === currentName) ||
-                    (t.code && String(t.code).startsWith('#TX-'))
-                ).map(t => ({
-                    id: t.id,
-                    code: t.code,
-                    transactionCode: t.code,
-                    transactionId: t.id,
-                    type: t.type || 'NẠP KHOAI',
-                    note: t.type || `Nạp ${t.potatoes} Khoai`,
-                    amount: t.potatoes || 0,
-                    priceVnd: t.amount,
-                    status: t.status, // 'pending', 'approved', 'rejected'
-                    rejectReason: t.rejectReason,
-                    time: t.createdAt || 'Gần đây',
-                    createdAt: t.createdAt
-                }));
-
-                userLocal.forEach(lt => {
-                    const idx = combinedTxs.findIndex(ct => ct.code === lt.code || ct.id === lt.id || ct.transactionCode === lt.code);
-                    if (idx === -1) {
-                        combinedTxs.unshift(lt);
-                    } else {
-                        combinedTxs[idx] = { ...combinedTxs[idx], status: lt.status, rejectReason: lt.rejectReason };
-                    }
-                });
-            }
-
-            if (combinedTxs.length > 0) {
-                setTransactions(combinedTxs);
-            }
-            if (Array.isArray(books)) {
-                setBookshelf(books);
-                const active = books.filter(b => !b.expired && (b.remainingDays > 0 || b.remainingDays > 1000) && b.status === 'ACTIVE');
-                setRentedCount(active.length);
-            }
-        } catch (err) {
-            console.error("Lỗi khi tải dữ liệu ví / sách:", err);
+        const [packageResult, transactionResult, bookResult] = await Promise.allSettled([
+            getPotatoPackages(), getPotatoTransactions(), getCustomerBookshelf(),
+        ]);
+        if (packageResult.status === 'fulfilled') setPackages(Array.isArray(packageResult.value) ? packageResult.value : []);
+        if (transactionResult.status === 'fulfilled') setTransactions(Array.isArray(transactionResult.value) ? transactionResult.value : []);
+        if (bookResult.status === 'fulfilled' && Array.isArray(bookResult.value)) {
+            setBookshelf(bookResult.value);
+            setRentedCount(bookResult.value.filter(book => !book.expired && book.status === 'ACTIVE').length);
         }
     };
 
@@ -453,13 +346,6 @@ export default function Profile() {
         }
     };
 
-    const messagesEndRef = useRef(null);
-    const nextMessageId = useRef(0);
-    const pendingTimers = useRef(new Set());
-    const starsInitialized = useRef(false);
-
-
-
     useEffect(() => {
         applyTheme(isDark);
     }, [isDark]);
@@ -497,7 +383,7 @@ export default function Profile() {
                     const parsed = JSON.parse(cached);
                     setCustomer(prev => ({ ...prev, ...parsed }));
                 }
-            } catch (err) {
+            } catch {
                 // ignore
             }
         };
@@ -520,9 +406,10 @@ export default function Profile() {
     }, []);
 
     const openRechargeModal = (pkg) => {
-        setSelectedPkg(pkg || packages[0] || DEFAULT_PACKAGES[0]);
+        setSelectedPkg(pkg || packages[0] || null);
         setPaymentMethod('vietqr');
-        setIsRechargeModalOpen(true);
+        if (pkg || packages.length) setIsRechargeModalOpen(true);
+        else showToast('Chưa có gói nạp', 'Không tải được gói nạp từ máy chủ. Vui lòng thử lại.');
     };
 
     const handleConfirmTopup = async () => {
@@ -532,66 +419,48 @@ export default function Profile() {
             const totalReceived = (selectedPkg.potatoAmount || 0) + (selectedPkg.bonusPotato || 0);
             const price = Number(selectedPkg.priceVnd || selectedPkg.price || 0);
             const pkgName = selectedPkg.packageName || selectedPkg.tag || 'Gói nạp';
-            const codeNum = Math.floor(10000 + Math.random() * 90000);
-            const txCode = `#TX-${codeNum}`;
 
-            const now = new Date();
-            const formattedDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-            const txPayload = {
-                id: `TX-${codeNum}`,
-                code: txCode,
-                userId: customer?.customerId || customer?.id || 'U1001',
-                userName: customer?.customerName || customer?.name || 'Độc giả HALM',
-                userEmail: customer?.email || '',
-                type: `Nạp Khoai - ${pkgName}`,
-                amount: price,
-                potatoes: totalReceived,
-                status: 'pending',
-                method: 'Chuyển khoản QR MB Bank',
-                createdAt: formattedDate
-            };
+            // 1. Gửi yêu cầu nạp tiền thực tế lên máy chủ backend
+            const apiRes = await topupPotato({
+                packageId: selectedPkg.packageId || selectedPkg.id,
+                amountMoney: price,
+                paymentMethod: paymentMethod === 'vietqr' ? 'VIETQR' : 'BANK_TRANSFER',
+                note: 'Nạp ' + pkgName,
+            });
+            const serverOrder = apiRes?.order;
+            if (!serverOrder?.id || !serverOrder.transactionNo) throw new Error('Máy chủ chưa ghi nhận yêu cầu nạp.');
+            const realId = String(serverOrder.id);
+            const realCode = serverOrder.transactionNo;
 
-            // 1. Gửi thông tin giao dịch chờ duyệt sang Admin (Quản Lý Tài Chính)
-            if (window.DB && typeof window.DB.createUserTransaction === 'function') {
-                window.DB.createUserTransaction(txPayload);
-            } else if (DB && typeof DB.createUserTransaction === 'function') {
-                DB.createUserTransaction(txPayload);
-            } else {
-                const existing = JSON.parse(localStorage.getItem('halm_db_transactions') || '[]');
-                existing.unshift(txPayload);
-                localStorage.setItem('halm_db_transactions', JSON.stringify(existing));
-                window.dispatchEvent(new Event('halm_db_updated'));
-            }
-
-            // 2. Ghi nhận giao dịch vào lịch sử của User với trạng thái "Chờ duyệt" (TUYỆT ĐỐI KHÔNG CỘNG KHOAI NGAY)
+            // 3. Ghi nhận giao dịch vào lịch sử của User với trạng thái "Chờ duyệt" (TUYỆT ĐỐI KHÔNG CỘNG KHOAI NGAY)
             const userTx = {
-                id: txPayload.id,
-                code: txCode,
-                transactionCode: txCode,
-                transactionId: txPayload.id,
+                id: realId,
+                code: realCode,
+                transactionCode: realCode,
+                transactionId: realId,
                 type: 'NẠP KHOAI',
                 note: `Nạp gói ${pkgName} (+${totalReceived.toLocaleString()} Khoai)`,
                 amount: totalReceived,
                 priceVnd: price,
                 status: 'pending',
                 time: 'Vừa xong',
-                createdAt: formattedDate
+                createdAt: serverOrder.createdAt || serverOrder.orderDate || null
             };
             setTransactions(prev => [userTx, ...(prev && prev.length > 0 ? prev : rawHistoryList)]);
 
-            // 3. Đóng modal nạp
+            // 4. Đóng modal nạp
             setIsRechargeModalOpen(false);
 
-            // 4. Thông báo rõ ràng cho người dùng là đang chờ Admin xét duyệt
+            // 5. Thông báo rõ ràng cho người dùng là đang chờ Admin xét duyệt
             showToast(
                 "Yêu Cầu Nạp Khoai Đã Gửi Đi!",
-                `Giao dịch ${txCode} (${price.toLocaleString('vi-VN')} đ) đã được gửi tới Ban Quản Trị. Khoai sẽ được cộng vào ví của bạn ngay sau khi Admin duyệt giao dịch!`
+                `Giao dịch ${realCode} (${price.toLocaleString('vi-VN')} đ) đã được gửi tới Ban Quản Trị. Khoai sẽ được cộng vào ví của bạn ngay sau khi Admin duyệt giao dịch!`
             );
 
         } catch (error) {
             console.error("Lỗi gửi yêu cầu nạp khoai:", error);
-            showToast("Lỗi Gửi Yêu Cầu", "Không thể gửi yêu cầu nạp đến hệ thống. Vui lòng thử lại!");
+            showToast("Lỗi Gửi Yêu Cầu", error?.response?.data?.message || error.message || "Không thể gửi yêu cầu nạp đến hệ thống. Vui lòng thử lại!");
         } finally {
             setIsSubmittingTopup(false);
         }
@@ -639,20 +508,6 @@ export default function Profile() {
         }
     };
 
-    const handleDailyCheckin = () => {
-        if (dailyCheckinDone) {
-            showToast("Điểm Danh Hằng Ngày", "Hôm nay bạn đã điểm danh và nhận thưởng rồi!");
-            return;
-        }
-        setDailyCheckinDone(true);
-        const newBal = (customer?.potatoBalance ?? 0) + 5;
-        setCustomer(prev => prev ? { ...prev, potatoBalance: newBal } : prev);
-        showToast("Điểm Danh Thành Công!", "Chúc mừng bạn nhận được +5 Khoai Tây thưởng đọc sách mỗi ngày! 🥔");
-        window.dispatchEvent(new CustomEvent('halm-potato-updated', {
-            detail: { potatoBalance: newBal }
-        }));
-    };
-
     useEffect(() => {
         const handleGlobalThemeChange = (e) => {
             if (typeof e.detail?.isDark === 'boolean') {
@@ -662,20 +517,6 @@ export default function Profile() {
         window.addEventListener('halm-theme-change', handleGlobalThemeChange);
         return () => window.removeEventListener('halm-theme-change', handleGlobalThemeChange);
     }, []);
-
-    useEffect(() => {
-        if (!isDark || starsInitialized.current) return;
-
-        starsInitialized.current = true;
-        setStars(Array.from({ length: 80 }, (_, id) => ({
-            id,
-            size: Math.random() * 2.5 + 0.5,
-            top: Math.random() * 100,
-            left: Math.random() * 100,
-            duration: Math.random() * 3 + 2,
-            delay: Math.random() * 3,
-        })));
-    }, [isDark]);
 
     useEffect(() => {
         document.title = 'HALM BOOK — Thông Tin Cá Nhân';
@@ -706,15 +547,6 @@ export default function Profile() {
     }, []);
 
     useEffect(() => {
-        if (messages.length) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-    }, [messages]);
-
-    useEffect(() => () => {
-        pendingTimers.current.forEach((timerId) => window.clearTimeout(timerId));
-        pendingTimers.current.clear();
-    }, []);
-
-    useEffect(() => {
         if (!document.querySelector('link[data-profile-fonts]')) {
             const fontLink = document.createElement('link');
             fontLink.rel = 'stylesheet';
@@ -740,43 +572,11 @@ export default function Profile() {
         }
     }, []);
 
-    const addMessage = (sender, content) => {
-        setMessages((current) => [...current, { id: nextMessageId.current++, sender, content }]);
-    };
-
-    const scheduleBotReply = (text) => {
-        const timerId = window.setTimeout(() => {
-            addMessage('bot', getBotReply(text));
-            pendingTimers.current.delete(timerId);
-        }, 600);
-        pendingTimers.current.add(timerId);
-    };
-
     const openChatbot = (initialMessage) => {
-        setIsChatOpen(true);
-        if (initialMessage) {
-            addMessage('user', initialMessage);
-            scheduleBotReply(initialMessage);
-        }
+        window.dispatchEvent(new CustomEvent('halm-open-chatbot', { detail: { message: initialMessage || 'Xin chào, tôi cần hỗ trợ về tài khoản!' } }));
     };
 
-    const sendMessage = (text = chatInput) => {
-        const message = text.trim();
-        if (!message) return;
-        addMessage('user', message);
-        setChatInput('');
-        scheduleBotReply(message);
-    };
-
-    const resetChat = () => {
-        pendingTimers.current.forEach((timerId) => window.clearTimeout(timerId));
-        pendingTimers.current.clear();
-        setMessages([]);
-    };
-
-    const rawHistoryList = useMemo(() => {
-        return (transactions && transactions.length > 0) ? transactions : DEFAULT_HISTORY_LIST;
-    }, [transactions]);
+    const rawHistoryList = transactions;
 
     const filteredTransactions = useMemo(() => {
         return rawHistoryList.filter(tx => {
@@ -809,18 +609,6 @@ export default function Profile() {
         return filteredTransactions.slice((historyCurrentPage - 1) * HISTORY_PER_PAGE, historyCurrentPage * HISTORY_PER_PAGE);
     }, [filteredTransactions, historyCurrentPage]);
 
-    const userTierLevel = useMemo(() => {
-        return getTierLevel(customer?.membershipTier, customer?.potatoBalance ?? 0, rentedCount);
-    }, [customer?.membershipTier, customer?.potatoBalance, rentedCount]);
-
-    const avatarFrame = useMemo(() => {
-        return getTierAvatarFrame(userTierLevel, customer?.potatoBalance ?? 0, rentedCount);
-    }, [userTierLevel, customer?.potatoBalance, rentedCount]);
-
-    const tierBadgeClass = useMemo(() => {
-        return getTierBadgeClass(userTierLevel, customer?.potatoBalance ?? 0, rentedCount);
-    }, [userTierLevel, customer?.potatoBalance, rentedCount]);
-
     if (isLoading) {
         return (
             <UserLayout className="profile-page" onOpenChatbot={openChatbot} onThemeChange={setIsDark}>
@@ -834,368 +622,13 @@ export default function Profile() {
 
     return (
         <>
-            <style>{String.raw`
-        /* ========================================================
-           TYPOGRAPHY & CSS VARIABLES (ĐỒNG BỘ TRANG CHỦ)
-           ======================================================== */
-        :root {
-            --font-display: "Inter", sans-serif;
-            --font-ui: "Inter", sans-serif;
-            --font-metadata: "Roboto", sans-serif;
-            --font-editorial: "Open Sans", sans-serif;
-        }
-
-        html {
-            scroll-behavior: smooth;
-        }
-
-        body {
-            font-family: var(--font-ui);
-            background-color: #F7F4EE;
-            color: #1E1F1D;
-            overflow-x: hidden;
-            -webkit-font-smoothing: antialiased;
-            transition: background-color 0.4s ease, color 0.4s ease;
-        }
-
-        .dark body {
-            background-color: #111210;
-            color: #EDE9DF;
-        }
-
-        .font-display-hero {
-            font-family: var(--font-display);
-            font-weight: 900;
-            letter-spacing: -0.03em;
-        }
-
-        .font-editorial-body {
-            font-family: var(--font-editorial);
-            line-height: 1.65;
-        }
-
-        .font-metadata-spec {
-            font-family: var(--font-metadata);
-        }
-
-        /* Paper grain texture */
-        .paper-grain {
-            background-image: radial-gradient(rgba(30, 31, 29, 0.04) 1px, transparent 1px);
-            background-size: 28px 28px;
-        }
-        .dark .paper-grain {
-            background-image: radial-gradient(rgba(237, 233, 223, 0.04) 1px, transparent 1px);
-            background-size: 28px 28px;
-        }
-
-        .profile-page {
-            background-color: #F7F4EE;
-            color: #1E1F1D;
-        }
-        .dark .profile-page {
-            background-color: #111210;
-            color: #EDE9DF;
-        }
-
-        html:not(.dark) [class~="bg-paper"] { background-color: #F7F4EE; }
-        html:not(.dark) [class~="bg-paper-surface"] { background-color: #FFFEFA; }
-        html:not(.dark) [class~="bg-paper-200"] { background-color: #EAE5D9; }
-        html:not(.dark) [class~="bg-paper-200/70"] { background-color: rgb(234 229 217 / 0.7); }
-        html:not(.dark) [class~="bg-wine"] { background-color: #8E3038; }
-        html:not(.dark) [class~="bg-wine/10"] { background-color: rgb(142 48 56 / 0.1); }
-        html:not(.dark) [class~="bg-wine/20"] { background-color: rgb(142 48 56 / 0.2); }
-        html:not(.dark) [class~="bg-gold"] { background-color: #B8860B; }
-        html:not(.dark) [class~="bg-gold/15"] { background-color: rgb(184 134 11 / 0.15); }
-
-        html:not(.dark) [class~="text-ink"] { color: #1E1F1D; }
-        html:not(.dark) [class~="text-ink/80"] { color: rgb(30 31 29 / 0.8); }
-        html:not(.dark) [class~="text-ink-muted"] { color: #66645E; }
-        html:not(.dark) [class~="text-ink-muted/60"] { color: rgb(102 100 94 / 0.6); }
-        html:not(.dark) [class~="border-paper-border"] { border-color: #E3DDD0; }
-        [class~="text-wine"] { color: #8E3038; }
-        [class~="text-gold"] { color: #B8860B; }
-        [class~="text-night-text"] { color: #EDE9DF; }
-        [class~="text-night-muted"] { color: #96938B; }
-
-        [class~="border-paper-border"] { border-color: #E3DDD0; }
-        [class~="border-night-border"] { border-color: #2C2E29; }
-        [class~="border-wine/25"] { border-color: rgb(142 48 56 / 0.25); }
-        [class~="border-wine/30"] { border-color: rgb(142 48 56 / 0.3); }
-        [class~="border-wine/40"] { border-color: rgb(142 48 56 / 0.4); }
-
-        [class~="from-wine"][class~="to-wine-light"] {
-            background-image: linear-gradient(to top right, #8E3038, #A83B46);
-        }
-
-        [class~="hover:bg-paper-200"]:hover { background-color: #EAE5D9; }
-        [class~="hover:bg-night-border"]:hover { background-color: #2C2E29; }
-        [class~="hover:bg-wine-dark"]:hover { background-color: #6F252C; }
-        [class~="hover:text-ink"]:hover { color: #1E1F1D; }
-        [class~="hover:text-wine"]:hover { color: #8E3038; }
-        [class~="hover:text-gold"]:hover { color: #B8860B; }
-        [class~="group-hover:text-wine"]:hover,
-        .group:hover [class~="group-hover:text-wine"] { color: #8E3038; }
-        [class~="focus:border-wine"]:focus { border-color: #8E3038; }
-        [class~="placeholder-ink-muted/80"]::placeholder { color: rgb(102 100 94 / 0.8); }
-        [class~="placeholder-night-muted"]::placeholder { color: #96938B; }
-
-        html.dark [class~="dark:bg-gold"] { background-color: #B8860B; }
-        html.dark [class~="dark:bg-gold/10"] { background-color: rgb(184 134 11 / 0.1); }
-        html.dark [class~="dark:bg-gold/15"] { background-color: rgb(184 134 11 / 0.15); }
-        html.dark [class~="dark:bg-night-bg"] { background-color: #111210; }
-        html.dark [class~="dark:bg-night-card"] { background-color: #20221E; }
-        html.dark [class~="dark:bg-night-surface"] { background-color: #181916; }
-        html.dark [class*="user-sidebar-card"],
-        html.dark [class*="dark:bg-night-surface"],
-        html.dark [class*="dark:bg-[#181916]"] {
-            background-color: #181916 !important;
-            border-color: #2C2E29 !important;
-        }
-        html.dark [class*="user-sidebar-box"] {
-            background-color: #181916 !important;
-            border-color: #2C2E29 !important;
-        }
-        html.dark [class*="user-sidebar-card"] h2,
-        html.dark [class*="user-sidebar-card"] [class*="font-display"],
-        html.dark [class*="user-sidebar-box"] span.text-2xl,
-        html.dark [class*="user-sidebar-box"] span:first-child {
-            color: #EDE9DF !important;
-        }
-        html.dark [class*="user-sidebar-box"] span:last-child,
-        html.dark [class*="user-sidebar-card"] p {
-            color: #9CA3AF !important;
-        }
-        html.dark [class*="dark:border-night-border"],
-        html.dark [class*="dark:border-[#2C2E29]"] {
-            border-color: #2C2E29 !important;
-        }
-        html.dark [class*="dark:bg-[#242116]"] {
-            background-color: #242116 !important;
-        }
-        html.dark [class*="dark:border-[#52441D]"] {
-            border-color: #52441D !important;
-        }
-        html.dark [class~="bg-paper-surface"] {
-            background-color: #181916 !important;
-        }
-        html.dark [class~="bg-paper"] {
-            background-color: #111210 !important;
-        }
-        html.dark [class~="border-paper-border"] {
-            border-color: #2C2E29 !important;
-        }
-        html.dark [class~="text-ink"],
-        html.dark .text-ink {
-            color: #EDE9DF !important;
-        }
-        html.dark [class~="text-ink-muted"],
-        html.dark .text-ink-muted {
-            color: #9CA3AF !important;
-        }
-        html.dark [class~="dark:text-gold"] { color: #B8860B; }
-        html.dark [class~="dark:text-night-bg"] { color: #111210; }
-        html.dark [class~="dark:text-night-muted"] { color: #96938B; }
-        html.dark [class~="dark:text-night-muted/60"] { color: rgb(150 147 139 / 0.6); }
-        html.dark [class~="dark:text-night-text"] { color: #EDE9DF; }
-        html.dark [class~="dark:border-night-border"] { border-color: #2C2E29; }
-        html.dark [class~="dark:border-night-card"] { border-color: #20221E; }
-        html.dark [class~="dark:border-gold/30"] { border-color: rgb(184 134 11 / 0.3); }
-        html.dark [class~="dark:border-gold/40"] { border-color: rgb(184 134 11 / 0.4); }
-        html.dark [class~="dark:from-gold"][class~="dark:to-gold-light"] {
-            background-image: linear-gradient(to top right, #B8860B, #D4AF37);
-        }
-
-        html.dark [class~="dark:hover:bg-night-card"]:hover { background-color: #20221E; }
-        html.dark [class~="dark:hover:bg-night-surface"]:hover { background-color: #181916; }
-        html.dark [class~="dark:hover:text-gold"]:hover { color: #B8860B; }
-        html.dark [class~="dark:hover:text-night-text"]:hover { color: #EDE9DF; }
-        html.dark [class~="dark:focus:border-gold"]:focus { border-color: #D4AF37; }
-        html.dark [class~="dark:group-hover:text-gold"]:hover,
-        html.dark .group:hover [class~="dark:group-hover:text-gold"] { color: #D4AF37; }
-
-        /* ========================================================
-           DARK MODE FIX FOR FOOTER
-           ======================================================== */
-        html.dark footer {
-            background-color: #111210 !important;
-            color: #EDE9DF !important;
-            border-color: #2C2E29 !important;
-        }
-        html.dark footer h2 {
-            color: #D4AF37 !important;
-            border-color: #2C2E29 !important;
-        }
-        html.dark footer a {
-            color: rgba(237, 233, 223, 0.85);
-        }
-        html.dark footer a:hover {
-            color: #D4AF37 !important;
-        }
-        html.dark footer button {
-            color: rgba(237, 233, 223, 0.85);
-        }
-        html.dark footer button:hover {
-            color: #D4AF37 !important;
-        }
-        html.dark footer .text-\[\#5A564F\],
-        html.dark footer .text-\[\#85817A\] {
-            color: #96938B !important;
-        }
-        html.dark footer .border-\[\#E6E1D8\] {
-            border-color: #2C2E29 !important;
-        }
-        html.dark footer .bg-white {
-            background-color: #181916 !important;
-            border-color: rgba(229, 169, 60, 0.3) !important;
-        }
-
-        /* Starry sky overlay for dark mode */
-        #starry-background {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 1;
-            opacity: 0;
-            transition: opacity 0.6s ease;
-        }
-        .dark #starry-background {
-            opacity: 1;
-        }
-
-        .star {
-            position: absolute;
-            background-color: #fff;
-            border-radius: 50%;
-            pointer-events: none;
-        }
-
-        @keyframes starTwinkle {
-            0%, 100% { opacity: 0.2; transform: scale(0.8); }
-            50% { opacity: 0.9; transform: scale(1.3); }
-        }
-
-        /* Scrolled Header */
-        #navbar {
-            transition: transform 0.38s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, padding 0.3s ease;
-            will-change: transform;
-        }
-        #navbar.scrolled {
-            background-color: rgba(247, 244, 238, 0.94);
-            backdrop-filter: blur(16px);
-            border-color: rgba(227, 221, 208, 0.8);
-            box-shadow: 0 4px 20px -4px rgba(0,0,0,0.06);
-        }
-        .dark #navbar.scrolled {
-            background-color: rgba(17, 18, 16, 0.94);
-            border-color: rgba(44, 46, 41, 0.8);
-            box-shadow: 0 4px 25px -4px rgba(0,0,0,0.5);
-        }
-
-        /* Potato Badge */
-        .potato-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.35rem;
-            background: rgba(184, 134, 11, 0.12);
-            color: #B8860B;
-            border: 1px solid rgba(184, 134, 11, 0.25);
-            border-radius: 9999px;
-            padding: 0.25rem 0.65rem;
-            font-size: 0.8rem;
-            font-weight: 700;
-            font-family: var(--font-metadata);
-        }
-        .dark .potato-badge {
-            background: rgba(212, 175, 55, 0.15);
-            color: #D4AF37;
-            border-color: rgba(212, 175, 55, 0.3);
-        }
-
-        /* Chatbot Modal Styling */
-        #chatbot-container {
-            position: fixed;
-            bottom: 24px;
-            right: 24px;
-            z-index: 50;
-        }
-        #chat-window {
-            position: absolute;
-            bottom: 70px;
-            right: 0;
-            width: 360px;
-            height: 480px;
-            max-width: calc(100vw - 32px);
-            background: #181916;
-            border: 1px solid #2C2E29;
-            border-radius: 16px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            transform: scale(0.9) translateY(20px);
-            opacity: 0;
-            pointer-events: none;
-            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-            transform-origin: bottom right;
-        }
-        #chat-window.show {
-            transform: scale(1) translateY(0);
-            opacity: 1;
-            pointer-events: auto;
-        }
-
-        /* Floating Scroll to Top */
-        #btnScrollToTop {
-            position: fixed;
-            bottom: 24px;
-            left: 24px;
-            z-index: 40;
-            width: 44px;
-            height: 44px;
-            border-radius: 50%;
-            background: #FFFEFA;
-            color: #1E1F1D;
-            border: 1px solid #E3DDD0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 4px 14px rgba(0,0,0,0.08);
-            cursor: pointer;
-            opacity: 0;
-            visibility: hidden;
-            transition: all 0.3s ease;
-        }
-        .dark #btnScrollToTop {
-            background: #20221E;
-            color: #EDE9DF;
-            border-color: #2C2E29;
-            box-shadow: 0 4px 14px rgba(0,0,0,0.4);
-        }
-        #btnScrollToTop.show {
-            opacity: 1;
-            visibility: visible;
-        }
-        #btnScrollToTop:hover {
-            transform: translateY(-3px);
-            background: #8E3038;
-            color: #fff;
-            border-color: #8E3038;
-        }
-        .dark #btnScrollToTop:hover {
-            background: #B8860B;
-            color: #111210;
-            border-color: #B8860B;
-        }
-    `}</style>
+            <style>{inlinePageStyle1}</style>
             <UserLayout className="profile-page" onOpenChatbot={openChatbot} onThemeChange={setIsDark}>
 
 
 
                 <div id="starry-background" aria-hidden="true">
-                    {stars.map((star) => (
+                    {STATIC_PROFILE_STARS.map((star) => (
                         <div
                             key={star.id}
                             className="star"
@@ -1380,8 +813,8 @@ export default function Profile() {
 
                                 <button
                                     type="button"
-                                    onClick={() => {
-                                        clearAuthSession();
+                                    onClick={async () => {
+                                        await logoutUser();
                                         window.location.assign('/');
                                     }}
                                     className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-metadata-spec font-bold text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"

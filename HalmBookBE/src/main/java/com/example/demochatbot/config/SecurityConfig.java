@@ -3,6 +3,7 @@ package com.example.demochatbot.config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -70,7 +71,7 @@ public class SecurityConfig {
 
         // Cho phép các nguồn Frontend và Mobile App trên mạng LAN
         configuration.setAllowedOriginPatterns(Arrays.asList("*"));
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("Authorization", "Cache-Control", "Content-Type", "Accept", "X-Requested-With", "Origin"));
         configuration.setExposedHeaders(Arrays.asList("Authorization"));
 
@@ -117,13 +118,14 @@ public class SecurityConfig {
                         .requestMatchers("/api/home/potato/wallet", "/api/home/potato/topup", "/api/home/potato/transfer", "/api/home/potato/history", "/api/home/potato/transactions").authenticated()
                         .requestMatchers("/api/home/missions/claim", "/api/home/reading-progress", "/api/home/reading-notes/**").authenticated()
 
-                        // 5. Các endpoint công khai của cửa hàng sách
+                        // 6. Các endpoint công khai của cửa hàng sách
                         .requestMatchers("/api/home/**").permitAll()
 
-                        // 6. Phân quyền Quản trị viên (Admin Portal): Siết chặt bảo mật, chỉ ADMIN mới được truy cập
+                        // 7. Phân quyền Quản trị viên (Admin Portal): Siết chặt bảo mật, chỉ ADMIN mới được truy cập
                         .requestMatchers("/api/admin/**", "/admin/**").hasAnyAuthority("ROLE_ADMIN", "ADMIN")
 
-                        // 7. Phân quyền Người dùng (Độc giả)
+
+                        // 8. Phân quyền Người dùng (Độc giả)
                         .requestMatchers("/user/**", "/api/user/**").hasAnyAuthority("ROLE_USER", "USER", "ROLE_ADMIN", "ADMIN")
 
                         .anyRequest().authenticated()

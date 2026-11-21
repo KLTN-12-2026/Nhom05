@@ -17,6 +17,10 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import com.example.demochatbot.service.auth.TokenBlacklistService;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.util.StringUtils;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -36,6 +40,9 @@ public class AuthController {
 
     @Autowired
     private JwtTokenProvider jwtTokenProvider;
+
+    @Autowired
+    private TokenBlacklistService tokenBlacklistService;
 
     @GetMapping("/me")
     public ResponseEntity<?> getMyInfo() throws NullPointerException {
@@ -201,5 +208,24 @@ public class AuthController {
                     "message", e.getMessage()
             ));
         }
+    }
+
+    /**
+     * Endpoint đăng xuất: Thu hồi Token vào danh sách đen (Blacklist) và xóa SecurityContext
+     */
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(HttpServletRequest request) {
+        String bearerToken = request.getHeader("Authorization");
+        if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
+            String token = bearerToken.substring(7);
+            if (tokenBlacklistService != null) {
+                tokenBlacklistService.blacklistToken(token, null);
+            }
+        }
+        SecurityContextHolder.clearContext();
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Đăng xuất thành công, phiên làm việc đã được thu hồi an toàn!"
+        ));
     }
 }

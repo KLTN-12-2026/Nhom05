@@ -25,19 +25,22 @@ public class MomoTopupPaymentService {
     private final PotatoPackageRepository packageRepository;
     private final CustomerRepository customerRepository;
     private final PotatoService potatoService;
+    private final com.example.demochatbot.repository.OrdersRepository receipts;
 
     public MomoTopupPaymentService(
             MomoGatewayClient momoGatewayClient,
             MomoTopupOrderRepository orderRepository,
             PotatoPackageRepository packageRepository,
             CustomerRepository customerRepository,
-            PotatoService potatoService
+            PotatoService potatoService,
+            com.example.demochatbot.repository.OrdersRepository receipts
     ) {
         this.momoGatewayClient = momoGatewayClient;
         this.orderRepository = orderRepository;
         this.packageRepository = packageRepository;
         this.customerRepository = customerRepository;
         this.potatoService = potatoService;
+        this.receipts = receipts;
     }
 
     public MomoTopupResponse createPayment(int accountId, int packageId) {
@@ -164,6 +167,19 @@ public class MomoTopupPaymentService {
                 order.getPotatoAmount(),
                 "Nạp " + order.getPackageName() + " thành công qua MoMo (" + transId + ")"
         );
+        com.example.demochatbot.model.Orders receipt = new com.example.demochatbot.model.Orders();
+        receipt.setCustomer(order.getCustomer());
+        receipt.setTransaction_no("MOMO-" + order.getOrderId());
+        receipt.setTotal_amount(order.getAmountVnd());
+        receipt.setPaymentCurrency("VND");
+        receipt.setOrderType("TOPUP_POTATO");
+        receipt.setPayment_method("MOMO");
+        receipt.setPayment_status("APPROVED");
+        receipt.setTopupPackageId(order.getPackageId());
+        receipt.setTopupPackageName(order.getPackageName());
+        receipt.setTopupPotatoAmount(order.getPotatoAmount());
+        receipt.setOrder_date(LocalDateTime.now());
+        receipts.saveAndFlush(receipt);
         order.setStatus(MomoTopupOrder.Status.PAID);
         order.setGatewayTransactionId(transId);
         order.setPaidAt(LocalDateTime.now());

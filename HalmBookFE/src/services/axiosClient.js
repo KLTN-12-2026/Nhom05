@@ -1,77 +1,49 @@
-import axios from "axios";
-import { getValidAuthToken, getAdminAuthToken } from "./authToken";
-import { API_BASE_URL } from "@/constants/apiEndpoints";
+import axios from 'axios';
+import { API_BASE_URL, normalizeAssetLinks } from '../config/api.js';
+import { getAuthToken, getValidAuthToken, getAdminAuthToken, isTokenExpired, clearAuthSession, clearAdminAuthSession } from './authToken.js';
+import { resolveAuthScope } from './requestPolicy.js';
 
-const axiosClient = axios.create({
-    baseURL: API_BASE_URL || "http://localhost:8082"
+const axiosClient = axios.create({ baseURL: API_BASE_URL, timeout: 30000 });
+
+axiosClient.interceptors.request.use(config => {
+  const scope = resolveAuthScope(config);
+  const rawToken = scope === 'admin' ? getAdminAuthToken() : scope === 'user' ? getAuthToken() : null;
+  const token = scope === 'admin' ? (rawToken && !isTokenExpired(rawToken) ? rawToken : null)
+    : scope === 'user' ? getValidAuthToken() : null;
+  config.sessionScope = scope;
+  config.hadSession = Boolean(rawToken);
+  if (token) config.headers.Authorization = 'Bearer ' + token;
+  else delete config.headers.Authorization;
+  return config;
 });
 
-axiosClient.interceptors.request.use((config) => {
-    const url = config.url || "";
-    const isAdminEndpoint = url.startsWith("/api/promotions") ||
-                            url.startsWith("/api/admin") ||
-                            (typeof window !== "undefined" && window.location.pathname.startsWith("/admin"));
-
-    // Tách biệt Token: Request của Quản trị ưu tiên admin_token, request của Độc giả dùng token thường
-    const token = isAdminEndpoint ? (getAdminAuthToken() || getValidAuthToken()) : getValidAuthToken();
-
-    if (token) {
-        config.headers.Authorization = "Bearer " + token;
-    } else {
-        delete config.headers.Authorization;
+axiosClient.interceptors.response.use(response => {
+  response.data = normalizeAssetLinks(response.data);
+  return response;
+}, error => {
+  if (typeof window !== 'undefined') {
+    const { sessionScope: scope, hadSession } = error.config || {};
+    const { status, data } = error.response || {};
+    if (scope === 'user' && (status === 423 || data?.error === 'ACCOUNT_LOCKED')) {
+      window.dispatchEvent(new CustomEvent('halm:account_locked', {
+        detail: { message: data?.message || 'Tài khoản của bạn đã bị khóa bởi Quản trị viên!' },
+      }));
     }
-
-    return config;
-});
-
-// Hàm hỗ trợ dispatch sự kiện tài khoản bị khóa (chỉ dành riêng cho phiên người dùng Độc giả)
-const triggerAccountLockedEvent = (error) => {
-    if (typeof window === "undefined") return;
-
-    // Tuyệt đối không kích hoạt sự kiện khóa tài khoản nếu lỗi phát sinh từ thao tác quản trị của Admin
-    const url = error?.config?.url || "";
-    const isAdminEndpoint = url.startsWith("/api/promotions") ||
-                            url.startsWith("/api/admin") ||
-                            window.location.pathname.startsWith("/admin");
-    if (isAdminEndpoint) return;
-
-    const status = error.response?.status;
-    const errCode = error.response?.data?.error;
-    const errMsg = error.response?.data?.message;
-
-    if (status === 423 || errCode === "ACCOUNT_LOCKED") {
-        window.dispatchEvent(new CustomEvent("halm:account_locked", {
-            detail: {
-                message: errMsg || "Tài khoản của bạn đã bị khóa bởi Quản trị viên!"
-            }
-        }));
-    }
-};
-
-axiosClient.interceptors.response.use(
-    (response) => response,
-    (error) => {
-        triggerAccountLockedEvent(error);
-
-        if (error.response?.status === 401) {
-            const url = error.config?.url || "";
-            const isAdminEndpoint = url.startsWith("/api/promotions") ||
-                                    url.startsWith("/api/admin") ||
-                                    (typeof window !== "undefined" && window.location.pathname.startsWith("/admin"));
-
-            console.warn(`[Axios Interceptor] 401 Unauthorized (${isAdminEndpoint ? 'Admin' : 'User'}) tại:`, url);
+    if (status === 401 && hadSession) {
+      if (scope === 'admin' && getAdminAuthToken()) {
+        clearAdminAuthSession();
+        if (window.location.pathname.startsWith('/admin') && window.location.pathname !== '/admin/login') {
+          window.location.assign('/admin/login?reason=session_expired');
         }
-        return Promise.reject(error);
+      } else if (scope === 'user' && getAuthToken()) {
+        clearAuthSession();
+        window.dispatchEvent(new CustomEvent('halm-open-auth-modal', {
+          detail: { mode: 'login', message: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại!' },
+        }));
+      }
     }
-);
-
-// Gắn thêm vào axios gốc để phòng ngừa những nơi gọi trực tiếp axios.get / axios.post
-axios.interceptors.response.use(
-    (response) => response,
-    (error) => {
-        triggerAccountLockedEvent(error);
-        return Promise.reject(error);
-    }
-);
+  }
+  return Promise.reject(error);
+});
 
 export default axiosClient;

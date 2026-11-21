@@ -16,10 +16,18 @@ import axiosInstance from './axiosClient';
 export const getBookAccessDetail = async (bookId) => {
   try {
     const res = await axiosInstance.get(`/api/home/bookshelf/check-detail/${encodeURIComponent(bookId)}`);
-    return res.data;
+    return { ...res.data, isError: false };
   } catch (error) {
     console.warn('Lỗi khi lấy chi tiết quyền đọc:', error);
-    return { hasAccess: false, currentPage: 1, readingPercentage: 0 };
+    const isNetworkError = !error.response || error.code === 'ERR_NETWORK' || error.message?.includes('Network');
+    return {
+      hasAccess: false,
+      currentPage: 1,
+      readingPercentage: 0,
+      isError: true,
+      isNetworkError,
+      errorMessage: error.response?.data?.message || error.message || 'Lỗi kết nối máy chủ'
+    };
   }
 };
 
@@ -31,7 +39,7 @@ export const updateReadingProgress = async (bookId, { currentPage, readingPercen
       totalPages
     });
     return res.data;
-  } catch (error) {
+  } catch {
     // Lưu fallback vào LocalStorage nếu mạng yếu
     try {
       localStorage.setItem(`halm_reading_progress_${bookId}`, JSON.stringify({
@@ -62,7 +70,7 @@ export const getClaimedMissions = async () => {
   try {
     const res = await axiosInstance.get('/api/home/missions/claimed');
     return res.data;
-  } catch (error) {
+  } catch {
     return { dailyClaimed: [], milestoneClaimed: [] };
   }
 };
@@ -82,7 +90,7 @@ export const getNotifications = async () => {
   try {
     const res = await axiosInstance.get('/api/home/notifications');
     return res.data;
-  } catch (error) {
+  } catch {
     return { unreadCount: 0, notifications: [] };
   }
 };
@@ -91,7 +99,7 @@ export const markNotificationAsRead = async (id) => {
   try {
     const res = await axiosInstance.put(`/api/home/notifications/${id}/read`);
     return res.data;
-  } catch (error) {
+  } catch {
     return null;
   }
 };
@@ -100,7 +108,7 @@ export const markAllNotificationsAsRead = async () => {
   try {
     const res = await axiosInstance.put('/api/home/notifications/read-all');
     return res.data;
-  } catch (error) {
+  } catch {
     return null;
   }
 };
@@ -110,7 +118,7 @@ export const getFavoriteBooks = async () => {
   try {
     const res = await axiosInstance.get('/api/home/favorites');
     return Array.isArray(res.data) ? res.data : [];
-  } catch (error) {
+  } catch {
     return [];
   }
 };
@@ -119,7 +127,7 @@ export const checkIsFavorite = async (bookId) => {
   try {
     const res = await axiosInstance.get(`/api/home/favorites/check/${encodeURIComponent(bookId)}`);
     return Boolean(res.data?.isFavorite);
-  } catch (error) {
+  } catch {
     return false;
   }
 };

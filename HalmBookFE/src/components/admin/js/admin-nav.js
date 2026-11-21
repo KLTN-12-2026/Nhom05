@@ -1,3 +1,5 @@
+import { logoutAdmin } from '@/services/authToken';
+
 /**
  * HALMBOOK Admin Navigation & Shared UI Components
  * Quản lý Sidebar, Header, Admin Profile Dropdown, Modals dùng chung
@@ -1048,16 +1050,11 @@ function submitRecoverPassword() {
     closeAdminModal('recoverPasswordModal');
 }
 
-function executeLogout() {
+async function executeLogout() {
     closeAdminModal('logoutModal');
-    sessionStorage.removeItem('admin_token');
-    sessionStorage.removeItem('admin_role');
-    localStorage.removeItem('admin_token');
-    localStorage.removeItem('admin_role');
-    window.DB.notify('Đã đăng xuất phiên làm việc của Quản trị viên.', 'info');
-    setTimeout(() => {
-        window.location.href = '/dangnhap';
-    }, 800);
+    await logoutAdmin();
+    window.DB?.notify?.('Đã đăng xuất phiên làm việc của Quản trị viên.', 'info');
+    setTimeout(() => { window.location.href = '/dangnhap'; }, 500);
 }
 
 Object.assign(window, {

@@ -3,13 +3,16 @@ import { Animated, Dimensions, StyleSheet } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
+export const DARK_MODE_PRIMARY = '#9A8BC2';
+export const DARK_MODE_SECONDARY = '#D8B36A';
+
 const BRAND = {
-  primary: '#9A8BC2',
-  secondary: '#D8B36A',
+  primary: DARK_MODE_PRIMARY,
+  secondary: DARK_MODE_SECONDARY,
 };
 
 // Hào quang tinh vân (Nebula)
-const Nebula = React.memo(() => {
+const Nebula = React.memo(function Nebula() {
   const anim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -64,7 +67,7 @@ const Nebula = React.memo(() => {
 });
 
 // Sao băng rơi chéo màn hình
-const ShootingStar = React.memo(({ delay, top, left }: { delay: number; top: string; left: string }) => {
+const ShootingStar = React.memo(function ShootingStar({ delay, top, left }: { delay: number; top: string; left: string }) {
   const anim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -105,7 +108,7 @@ const ShootingStar = React.memo(({ delay, top, left }: { delay: number; top: str
 
 // Ngôi sao lấp lánh (Tối ưu số lượng và chu kỳ mượt)
 const TwinkleStar = React.memo(
-  ({
+  function TwinkleStar({
     duration,
     top,
     left,
@@ -117,7 +120,7 @@ const TwinkleStar = React.memo(
     left: string;
     size: number;
     color: string;
-  }) => {
+  }) {
     const anim = useRef(new Animated.Value(0.1)).current;
 
     useEffect(() => {
@@ -157,7 +160,7 @@ interface CosmicBackgroundProps {
 }
 
 // Bầu trời sao tinh gọn, tiết kiệm 80% CPU & Pin so với render 120 vòng lặp liên tục
-export const CosmicBackground = React.memo(({ visible }: CosmicBackgroundProps) => {
+export const CosmicBackground = React.memo(function CosmicBackground({ visible }: CosmicBackgroundProps) {
   const opacityAnim = useRef(new Animated.Value(visible ? 1 : 0)).current;
 
   useEffect(() => {

@@ -37,7 +37,9 @@ public class WebMvcConfig implements WebMvcConfigurer {
         }
         registry.addResourceHandler("/uploads/**")
                 .addResourceLocations("file:" + normalized)
-                .resourceChain(true)
+                // Authorization belongs to each request, never to a shared resource cache.
+                .setCacheControl(org.springframework.http.CacheControl.noStore())
+                .resourceChain(false)
                 .addResolver(new PathResourceResolver() {
                     @Override
                     protected Resource getResource(String resourcePath, org.springframework.core.io.Resource location) throws java.io.IOException {

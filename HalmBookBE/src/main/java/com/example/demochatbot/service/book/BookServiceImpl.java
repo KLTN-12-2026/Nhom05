@@ -12,13 +12,15 @@ import com.example.demochatbot.repository.CategoryRepository;
 import com.example.demochatbot.service.data.CloudinaryService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
-import java.util.Optional;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class BookServiceImpl implements BookService {
@@ -164,6 +166,9 @@ public class BookServiceImpl implements BookService {
         if (request.getFileFormat() != null && !request.getFileFormat().trim().isEmpty()) {
             book.setFileFormat(request.getFileFormat().trim().toUpperCase());
         }
+        if (request.getTableOfContents() != null) {
+            book.setTableOfContents(request.getTableOfContents().trim());
+        }
         book.setCreatedAt(LocalDateTime.now());
         book.setUpdatedAt(LocalDateTime.now());
 
@@ -236,6 +241,9 @@ public class BookServiceImpl implements BookService {
         if (request.getFileFormat() != null && !request.getFileFormat().trim().isEmpty()) {
             book.setFileFormat(request.getFileFormat().trim().toUpperCase());
         }
+        if (request.getTableOfContents() != null) {
+            book.setTableOfContents(request.getTableOfContents().trim());
+        }
 
         // Cập nhật thể loại
         if (request.getCategory_id() != null) {
@@ -296,7 +304,19 @@ public class BookServiceImpl implements BookService {
             return false;
         }
 
-        // Dọn dẹp tài nguyên trên Cloudinary trước khi xóa DB
+        // Kiểm tra xem sách đã từng phát sinh đơn hàng hoặc quyền đọc chưa
+        boolean hasOrders = book.getOrder_item() != null && !book.getOrder_item().isEmpty();
+        boolean hasAccess = book.getAccess_record() != null && !book.getAccess_record().isEmpty();
+
+        if (hasOrders || hasAccess) {
+            // Chuyển sang trạng thái ARCHIVED để không hiển thị trên kệ công khai nhưng bảo toàn lịch sử giao dịch
+            book.setStatus("ARCHIVED");
+            book.setUpdatedAt(LocalDateTime.now());
+            bookRepository.save(book);
+            return true;
+        }
+
+        // Nếu sách chưa từng có người thuê: Dọn dẹp tài nguyên trên Cloudinary trước khi xóa hẳn trong DB
         if (book.getPdfPublicId() != null) {
             try {
                 cloudinaryService.deleteFile(book.getPdfPublicId(), true);
@@ -308,12 +328,126 @@ public class BookServiceImpl implements BookService {
             } catch (Exception ignored) {}
         }
 
-        bookRepository.delete(book);
-        return true;
+        try {
+            bookRepository.delete(book);
+            return true;
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            // Fallback an toàn nếu có ràng buộc ngoại khác (cart, evaluate...)
+            book.setStatus("ARCHIVED");
+            book.setUpdatedAt(LocalDateTime.now());
+            bookRepository.save(book);
+            return true;
+        }
     }
 
     @Override
     public Page<Book> findAllBook(Pageable pageable) {
         return bookRepository.findAllBook(pageable);
+    }
+
+    @Override
+    public Boolean updateTableOfContents(String bookId, String tableOfContentsJson) {
+        Optional<Book> opt = bookRepository.findById(bookId);
+        if (opt.isEmpty()) return false;
+        Book book = opt.get();
+        book.setTableOfContents(tableOfContentsJson);
+        book.setUpdatedAt(LocalDateTime.now());
+        bookRepository.save(book);
+        return true;
+    }
+
+    @Override
+    public String getTableOfContents(String bookId) {
+        return bookRepository.findById(bookId)
+                .map(Book::getTableOfContents)
+                .orElse(null);
+    }
+
+    @Override
+    public List<BookBasicDto> findTrendingBooks(int limit) {
+        Pageable pageable = PageRequest.of(0, Math.max(1, limit));
+        return bookRepository.findTopTrendingBooks(pageable).stream()
+                .map(BookBasicDto::fromEntity)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<BookBasicDto> findCartRecommendations(List<String> cartBookIds, int limit) {
+        int safeLimit = Math.max(1, limit);
+        List<String> cleanExcludeIds = (cartBookIds != null)
+                ? cartBookIds.stream()
+                        .filter(Objects::nonNull)
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .distinct()
+                        .collect(Collectors.toList())
+                : Collections.emptyList();
+
+        if (cleanExcludeIds.isEmpty()) {
+            return findTrendingBooks(safeLimit);
+        }
+
+        // 1. Tìm các category_id của sách đang có trong giỏ
+        List<Book> cartBooks = bookRepository.findAllById(cleanExcludeIds);
+        List<Integer> categoryIds = cartBooks.stream()
+                .map(Book::getCategory)
+                .filter(Objects::nonNull)
+                .map(Category::getCategory_id)
+                .distinct()
+                .collect(Collectors.toList());
+
+        List<Book> resultBooks = new ArrayList<>();
+        Set<String> addedIds = new HashSet<>(cleanExcludeIds);
+
+        // 2. Ưu tiên gợi ý sách cùng thể loại (Cross-sell)
+        if (!categoryIds.isEmpty()) {
+            List<Book> catRecommendations = bookRepository.findRecommendationsByCategories(
+                    categoryIds, cleanExcludeIds, PageRequest.of(0, safeLimit));
+            for (Book b : catRecommendations) {
+                if (resultBooks.size() < safeLimit && !addedIds.contains(b.getBook_id())) {
+                    resultBooks.add(b);
+                    addedIds.add(b.getBook_id());
+                }
+            }
+        }
+
+        // 3. Nếu chưa đủ số lượng, bù thêm các sách xu hướng (Top trending)
+        if (resultBooks.size() < safeLimit) {
+            int remaining = safeLimit - resultBooks.size();
+            List<Book> trending = bookRepository.findTopTrendingExcluding(
+                    new ArrayList<>(addedIds), PageRequest.of(0, remaining));
+            for (Book b : trending) {
+                if (resultBooks.size() < safeLimit && !addedIds.contains(b.getBook_id())) {
+                    resultBooks.add(b);
+                    addedIds.add(b.getBook_id());
+                }
+            }
+        }
+
+        return resultBooks.stream()
+                .map(BookBasicDto::fromEntity)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<BookBasicDto> findAuthorBooks(String bookId, int limit) {
+        int safeLimit = Math.max(1, limit);
+        Book currentBook = findBookById(bookId);
+        if (currentBook == null) {
+            return Collections.emptyList();
+        }
+
+        String author = currentBook.getAuthor();
+        if (author == null || author.trim().isEmpty() || author.equalsIgnoreCase("Nhiều tác giả")) {
+            return Collections.emptyList();
+        }
+
+        // Truy vấn CHÍNH XÁC sách của cùng tác giả (loại trừ sách đang xem chi tiết)
+        List<Book> authorList = bookRepository.findByAuthorExcluding(
+                author.trim(), currentBook.getBook_id(), PageRequest.of(0, safeLimit));
+
+        return authorList.stream()
+                .map(BookBasicDto::fromEntity)
+                .collect(Collectors.toList());
     }
 }

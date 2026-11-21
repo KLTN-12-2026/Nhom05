@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL, fetchApiWithFallback } from './apiService';
+import { API_BASE_URL, fetchApiWithFallback, normalizeAssetUrl } from './apiService';
 import {
   getUserItem,
   KEY_POTATO_BALANCE,
@@ -30,32 +30,32 @@ export const RENTAL_DURATION_OPTIONS: Array<{
     label: '7 ngày',
     labelEn: '7 days',
     multiplier: 1.0,
-    subtitle: '100% giá gốc (Mặc định)',
-    subtitleEn: '100% base price (Default)',
+    subtitle: '9 Khoai',
+    subtitleEn: '9 Potatoes',
   },
   {
     days: 14,
     label: '14 ngày',
     labelEn: '14 days',
     multiplier: 1.8,
-    subtitle: 'Tiết kiệm 10% (x1.8)',
-    subtitleEn: 'Save 10% (x1.8)',
+    subtitle: '15 Khoai',
+    subtitleEn: '15 Potatoes',
   },
   {
     days: 30,
     label: '30 ngày',
     labelEn: '30 days',
     multiplier: 3.5,
-    subtitle: 'Gói tháng phổ biến (x3.5)',
-    subtitleEn: 'Popular monthly (x3.5)',
+    subtitle: '25 Khoai',
+    subtitleEn: '25 Potatoes',
   },
   {
     days: 90,
     label: '90 ngày',
     labelEn: '90 days',
     multiplier: 9.0,
-    subtitle: 'Gói quý siêu tiết kiệm (x9.0)',
-    subtitleEn: 'Best value 90 days (x9.0)',
+    subtitle: '50 Khoai',
+    subtitleEn: '50 Potatoes',
   },
 ];
 
@@ -100,17 +100,7 @@ export const normalizeRentalDays = (days?: number | null): RentalDurationDays =>
 };
 
 export const calculateDynamicKhoai = (baseKhoai: number, days: number): number => {
-  switch (days) {
-    case 14:
-      return Math.round(baseKhoai * 1.8);
-    case 30:
-      return Math.round(baseKhoai * 3.5);
-    case 90:
-      return Math.round(baseKhoai * 9.0);
-    case 7:
-    default:
-      return Math.round(baseKhoai * 1.0);
-  }
+  return ({ 7: 9, 14: 15, 30: 25, 90: 50 } as Record<number, number>)[days] ?? 9;
 };
 
 export const resolveBaseKhoaiForBook = (bookId: string, rawRentPrice?: number | null): number => {
@@ -131,14 +121,8 @@ export const resolveBaseKhoaiForBook = (bookId: string, rawRentPrice?: number | 
 export const isPersonalOrLocalBook = (book: any): boolean => {
   if (!book) return false;
   const id = String(book.id || book.bookId || book.book_id || '');
-  return Boolean(
-    book.fileUri ||
-      book.pdf_url ||
-      book.isPersonal ||
-      id.startsWith('upload') ||
-      id.startsWith('tmp') ||
-      id.startsWith('personal')
-  );
+  return /^(uploaded|upload|tmp|personal)[_-]/i.test(id)
+    && (book.isPersonal === true || /^(file:|content:|blob:|data:)/i.test(String(book.fileUri || '')));
 };
 
 export const resolveCoverUrlWithBase = (
@@ -149,7 +133,7 @@ export const resolveCoverUrlWithBase = (
   if (rawUrl && typeof rawUrl === 'string' && rawUrl.trim().length > 0) {
     const trimmed = rawUrl.trim();
     if (/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(trimmed)) {
-      return trimmed;
+      return normalizeAssetUrl(trimmed, baseHost);
     }
     const cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
     return `${baseHost}${cleanPath}`;
@@ -563,7 +547,7 @@ export const addToCartApi = async (
 /**
  * Thanh toán thuê sách bằng Khoai Tây xuống Backend (tạo Orders, Order_Item & Access_Record)
  */
-export const checkoutBooksApi = async (
+const executeCheckout = async (
   items: CheckoutLineItem[],
   cartItemIds?: number[]
 ): Promise<RentalActionResult> => {
@@ -582,61 +566,35 @@ export const checkoutBooksApi = async (
 
   const headers = { Authorization: `Bearer ${token}` };
 
-  // Nếu thanh toán theo danh sách cartItemIds từ Giỏ hàng -> ưu tiên /api/cart/checkout
-  if (cartItemIds && cartItemIds.length > 0) {
-    try {
-      const res = await fetchApiWithFallback('/api/cart/checkout', {
-        method: 'POST',
-        headers,
-        data: { cartItemIds },
-        timeout: 8000,
-      });
-      const remaining = res.data?.remainingPotatoBalance;
-      if (typeof remaining === 'number') {
-        await syncStoredPotatoBalance(remaining);
-      }
-      return {
-        success: true,
-        message: res.data?.message || 'Thuê sách thành công!',
-        totalKhoaiPaid: res.data?.totalKhoaiPaid,
-        remainingPotatoBalance: remaining,
-      };
-    } catch (primaryErr: any) {
-      const status = primaryErr?.response?.status;
-      if (status === 400 && primaryErr?.response?.data?.message) {
-        return {
-          success: false,
-          message: primaryErr.response.data.message,
-        };
-      }
-      // Tiếp tục fallback sang /api/home/checkout bên dưới
-    }
-  }
-
-  // Thanh toán trực tiếp hoặc fallback qua POST /api/home/checkout
   try {
     const payload = {
       paymentMethod: 'POTATO_WALLET',
       discountAmount: 0,
-      items: items.map((item) => ({
+      items: items.map((item, index) => ({
         bookId: item.bookId,
-        cartItemId: item.cartItemId ?? null,
+        cartItemId: item.cartItemId ?? cartItemIds?.[index] ?? null,
         planKey: String(item.durationDays),
         durationDays: item.durationDays,
-        price: item.price,
-      })),
+      })).sort((a, b) => a.bookId.localeCompare(b.bookId)),
     };
 
+    const identity = JSON.stringify(payload);
+    const pendingKey = 'checkout_pending_' + (await AsyncStorage.getItem('currentUsername') || 'unknown');
+    const saved = await AsyncStorage.getItem(pendingKey);
+    const previous = saved ? JSON.parse(saved) as { identity: string; key: string } : null;
+    const idempotencyKey = previous?.identity === identity ? previous.key : 'APP-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+    await AsyncStorage.setItem(pendingKey, JSON.stringify({ identity, key: idempotencyKey }));
     const res = await fetchApiWithFallback('/api/home/checkout', {
       method: 'POST',
       headers,
-      data: payload,
-      timeout: 8000,
+      data: { ...payload, idempotencyKey },
+      timeout: 15000,
     });
     const remaining = res.data?.remainingPotatoBalance;
     if (typeof remaining === 'number') {
       await syncStoredPotatoBalance(remaining);
     }
+    await AsyncStorage.removeItem(pendingKey);
     return {
       success: true,
       message: res.data?.message || 'Thuê sách thành công! Sách đã được thêm vào Tủ Sách.',
@@ -697,3 +655,14 @@ export const syncReadingProgressApi = async (
   }
 };
 
+
+const activeCheckouts = new Map<string, { identity: string; promise: Promise<RentalActionResult> }>();
+export const checkoutBooksApi = async (items: CheckoutLineItem[], cartItemIds?: number[]): Promise<RentalActionResult> => {
+  const owner = await AsyncStorage.getItem('currentUsername') || 'guest';
+  const identity = JSON.stringify({ items, cartItemIds });
+  const active = activeCheckouts.get(owner);
+  if (active) return active.identity === identity ? active.promise : { success: false, message: 'Một giao dịch khác đang được xử lý. Vui lòng chờ.' };
+  const promise = executeCheckout(items, cartItemIds);
+  activeCheckouts.set(owner, { identity, promise });
+  try { return await promise; } finally { if (activeCheckouts.get(owner)?.promise === promise) activeCheckouts.delete(owner); }
+};

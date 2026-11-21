@@ -7,8 +7,7 @@ import com.example.demochatbot.repository.CustomerRepository;
 import com.example.demochatbot.repository.NotificationRepository;
 import com.example.demochatbot.repository.SupportTicketRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.core.type.TypeReference;
+import com.example.demochatbot.service.support.SupportChatHistory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,7 +38,6 @@ public class SupportTicketAdminController {
     @Autowired
     private NotificationRepository notificationRepository;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
 
     
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
@@ -71,39 +69,7 @@ public class SupportTicketAdminController {
     }
 
     private List<Map<String, String>> parseChatHistory(SupportTicket ticket, String userAvatar) {
-        List<Map<String, String>> list = new ArrayList<>();
-        if (ticket.getChatHistory() != null && !ticket.getChatHistory().trim().isEmpty()) {
-            try {
-                list = objectMapper.readValue(ticket.getChatHistory(), new TypeReference<List<Map<String, String>>>() {});
-                if (userAvatar != null && !userAvatar.isEmpty()) {
-                    for (Map<String, String> m : list) {
-                        if ("USER".equalsIgnoreCase(m.get("sender")) && (m.get("avatar") == null || m.get("avatar").isEmpty())) {
-                            m.put("avatar", userAvatar);
-                        }
-                    }
-                }
-                return list;
-            } catch (Exception ignored) {}
-        }
-        if (ticket.getMessage() != null && !ticket.getMessage().trim().isEmpty()) {
-            Map<String, String> m1 = new HashMap<>();
-            m1.put("sender", "USER");
-            m1.put("senderName", ticket.getSenderName() != null ? ticket.getSenderName() : "Độc giả");
-            m1.put("content", ticket.getMessage());
-            m1.put("avatar", userAvatar != null ? userAvatar : "");
-            m1.put("time", ticket.getCreatedAt() != null ? ticket.getCreatedAt().format(DATE_TIME_FORMATTER) : LocalDateTime.now().format(DATE_TIME_FORMATTER));
-            list.add(m1);
-        }
-        if (ticket.getAdminReply() != null && !ticket.getAdminReply().trim().isEmpty()) {
-            Map<String, String> m2 = new HashMap<>();
-            m2.put("sender", "ADMIN");
-            m2.put("senderName", "Ban Quản Trị HALMBOOK");
-            m2.put("content", ticket.getAdminReply());
-            m2.put("avatar", "");
-            m2.put("time", ticket.getReplyAt() != null ? ticket.getReplyAt().format(DATE_TIME_FORMATTER) : LocalDateTime.now().format(DATE_TIME_FORMATTER));
-            list.add(m2);
-        }
-        return list;
+        return SupportChatHistory.read(ticket, userAvatar);
     }
 
     /**
@@ -205,7 +171,7 @@ public class SupportTicketAdminController {
             @RequestBody Map<String, String> body
     ) {
         try {
-            Optional<SupportTicket> opt = supportTicketRepository.findById(id);
+            Optional<SupportTicket> opt = supportTicketRepository.findByIdForUpdate(id);
             if (opt.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("message", "Không tìm thấy yêu cầu hỗ trợ với mã #" + id));
@@ -218,21 +184,28 @@ public class SupportTicketAdminController {
 
             SupportTicket ticket = opt.get();
             String chosenStatus = body.getOrDefault("status", "resolved");
+
+            // 1. Phân tích lịch sử chat hiện tại TRƯỚC KHI cập nhật adminReply mới (tránh duplicate)
+            List<Map<String, String>> history = parseChatHistory(ticket, resolveCustomerAvatar(ticket));
+            String requestId = body.get("requestId");
+            if (SupportChatHistory.containsRequest(history, "ADMIN", requestId)) {
+                return ResponseEntity.ok(Map.of("success", true, "ticketId", ticket.getTicketId(), "chatHistory", history));
+            }
+
             ticket.setStatus(chosenStatus);
             ticket.setAdminReply(replyText.trim());
             ticket.setReplyAt(LocalDateTime.now());
 
-            List<Map<String, String>> history = parseChatHistory(ticket, resolveCustomerAvatar(ticket));
             Map<String, String> newMsg = new HashMap<>();
+            newMsg.put("id", requestId == null || requestId.isBlank() ? UUID.randomUUID().toString() : requestId);
             newMsg.put("sender", "ADMIN");
             newMsg.put("senderName", "Ban Quản Trị HALMBOOK");
             newMsg.put("content", replyText.trim());
             newMsg.put("avatar", "");
             newMsg.put("time", LocalDateTime.now().format(DATE_TIME_FORMATTER));
+
             history.add(newMsg);
-            try {
-                ticket.setChatHistory(objectMapper.writeValueAsString(history));
-            } catch (Exception ignored) {}
+            ticket.setChatHistory(SupportChatHistory.write(history));
 
             supportTicketRepository.save(ticket);
 
@@ -252,7 +225,7 @@ public class SupportTicketAdminController {
                         .title("Yêu Cầu Hỗ Trợ Đã Được Phản Hồi: " + ticket.getCode())
                         .message("Quản trị viên đã phản hồi yêu cầu \"" + ticket.getSubject() + "\":\n" + replyText)
                         .type("SYSTEM")
-                        .link("/hotro")
+                        .link("/canhan?tab=support")
                         .isRead(false)
                         .createdAt(LocalDateTime.now())
                         .build();
@@ -265,6 +238,7 @@ public class SupportTicketAdminController {
             res.put("ticketId", ticket.getTicketId());
             res.put("code", ticket.getCode());
             res.put("status", ticket.getStatus());
+            res.put("chatHistory", history);
             return ResponseEntity.ok(res);
         } catch (Exception e) {
             e.printStackTrace();
@@ -283,7 +257,7 @@ public class SupportTicketAdminController {
             @RequestBody Map<String, String> body
     ) {
         try {
-            Optional<SupportTicket> opt = supportTicketRepository.findById(id);
+            Optional<SupportTicket> opt = supportTicketRepository.findByIdForUpdate(id);
             if (opt.isEmpty()) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("message", "Không tìm thấy yêu cầu hỗ trợ #" + id));

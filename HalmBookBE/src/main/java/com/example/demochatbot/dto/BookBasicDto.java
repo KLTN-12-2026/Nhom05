@@ -23,6 +23,7 @@ public class BookBasicDto {
     private Integer category_id;
     private String category_name;
     private String status;
+    private String tableOfContents;
 
     public static BookBasicDto fromEntity(Book book) {
         if (book == null) return null;
@@ -43,7 +44,8 @@ public class BookBasicDto {
                 book.getDescription(),
                 categoryId,
                 categoryName,
-                book.getStatus()
+                book.getStatus(),
+                book.getTableOfContents()
         );
     }
 }

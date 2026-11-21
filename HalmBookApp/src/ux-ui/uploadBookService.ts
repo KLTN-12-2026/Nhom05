@@ -1,4 +1,3 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { API_BASE_URL } from './apiService';
 import { Chapter } from './pdfExtractor';
@@ -72,7 +71,7 @@ export interface UploadResult {
 }
 
 // ============================================================================
-// [GIẢI THÍCH CODE]: 1. LẤY DANH MỤC THỂ LOẠI TỪ BACKEND (/api/admin/books/categories)
+// [GIẢI THÍCH CODE]: 1. LẤY DANH MỤC THỂ LOẠI TỪ BACKEND (/api/home/categories)
 // ============================================================================
 export const fetchBookCategories = async (): Promise<BookCategory[]> => {
   try {
@@ -91,96 +90,14 @@ export const fetchBookCategories = async (): Promise<BookCategory[]> => {
   return DEFAULT_CATEGORIES;
 };
 
-// ============================================================================
-// [GIẢI THÍCH CODE]: 2. TẢI FILE SÁCH LÊN BACKEND & CLOUDINARY
-// Sử dụng endpoint chuẩn Backend: POST /api/admin/books (Multipart Form-Data)
-// Nếu tài khoản có quyền hoặc endpoint mở -> Tự động lưu trữ Cloudinary & Database
-// Nếu không -> Fallback lưu trữ an toàn ngoại tuyến trên thiết bị
-// ============================================================================
-export const uploadBookToBackend = async (payload: UploadBookPayload): Promise<UploadResult> => {
-  try {
-    const token = await AsyncStorage.getItem('userToken');
+/** Personal documents stay in this device's private bookshelf. Catalog publishing is admin-only. */
+export const uploadBookToBackend = async (_payload: UploadBookPayload): Promise<UploadResult> => ({
+  success: false,
+  syncedWithBE: false,
+  message: 'Sách cá nhân được lưu trên thiết bị này; chưa hỗ trợ đồng bộ Web/App.',
+});
 
-    const isEpub =
-      payload.fileName.toLowerCase().endsWith('.epub') ||
-      (payload.mimeType && payload.mimeType.toLowerCase().includes('epub'));
-
-    const formData = new FormData();
-    formData.append('bookName', payload.title.trim());
-    formData.append('author', (payload.author && payload.author.trim()) ? payload.author.trim() : 'Tác giả tự do');
-    
-    if (payload.categoryId) {
-      formData.append('category_id', String(payload.categoryId));
-    }
-    if (payload.description) {
-      formData.append('description', payload.description.trim());
-    }
-    formData.append('fileFormat', isEpub ? 'EPUB' : 'PDF');
-    formData.append('status', 'PUBLISHED');
-
-    // Tệp nội dung sách (PDF / EPUB)
-    formData.append('pdf', {
-      uri: payload.fileUri,
-      name: payload.fileName,
-      type: isEpub ? 'application/epub+zip' : 'application/pdf',
-    } as any);
-
-    // Tệp ảnh bìa (nếu người dùng chọn từ thiết bị)
-    if (payload.coverUri) {
-      const ext = payload.coverName?.split('.').pop()?.toLowerCase() || 'jpg';
-      const imgMime = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
-      formData.append('image', {
-        uri: payload.coverUri,
-        name: payload.coverName || `cover_${Date.now()}.${ext}`,
-        type: imgMime,
-      } as any);
-    }
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'multipart/form-data',
-    };
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
-
-    const res = await axios.post(`${API_BASE_URL}/api/admin/books`, formData, {
-      headers,
-      timeout: 35000, // Timeout dài hơn để hỗ trợ upload file tài liệu lớn
-    });
-
-    if (res.status === 200 || res.status === 201) {
-      return {
-        success: true,
-        syncedWithBE: true,
-        beBook: res.data?.book,
-        message: res.data?.message || 'Đồng bộ Cloudinary & Máy chủ thành công!',
-      };
-    }
-
-    return {
-      success: false,
-      syncedWithBE: false,
-      message: 'Máy chủ phản hồi trạng thái: ' + res.status,
-    };
-  } catch (err: any) {
-    const errorMsg =
-      err?.response?.data?.message ||
-      err?.message ||
-      'Không thể kết nối máy chủ để upload';
-
-    return {
-      success: false,
-      syncedWithBE: false,
-      error: errorMsg,
-    };
-  }
-};
-
-// ============================================================================
-// ============================================================================
-// [GIẢI THÍCH CODE]: 3. SÁCH TẢI LÊN LÀ TÀI LIỆU CÁ NHÂN CỦA NGƯỜI DÙNG
-// Tuyệt đối không kéo sách mẫu của cửa hàng (/api/home/books) vào mục Sách tải lên
-// ============================================================================
+/** There is no personal-document sync endpoint in the current backend. */
 export const fetchBackendUploadedBooks = async (): Promise<UploadedBook[]> => {
   return [];
 };

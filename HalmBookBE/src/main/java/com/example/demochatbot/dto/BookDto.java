@@ -32,6 +32,7 @@ public class BookDto {
     private Integer readCount;
     private String createdAt;
     private String updatedAt;
+    private String tableOfContents;
 
     public BookDto(String book_id, String bookName, String author, String publisher,
                    Integer yearOfPublished, Double rent_price, String img_url,
@@ -39,7 +40,7 @@ public class BookDto {
                    String description, Integer category_id) {
         this(book_id, bookName, author, publisher, yearOfPublished, rent_price,
                 img_url, imgPublicId, pdf_url, pdfPublicId, description, category_id, null,
-                null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null);
     }
 
     public static BookDto fromEntity(Book book) {
@@ -76,7 +77,8 @@ public class BookDto {
                 book.getFileSizeMb(),
                 book.getReadCount(),
                 createdStr,
-                updatedStr
+                updatedStr,
+                book.getTableOfContents()
         );
     }
 }
