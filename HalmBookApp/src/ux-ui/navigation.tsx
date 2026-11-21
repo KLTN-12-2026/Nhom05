@@ -57,7 +57,7 @@ export interface GenreBooksParams {
 
 export interface AppNavigate {
   (screen: 'genreBooks', params: GenreBooksParams): void;
-  (screen: Exclude<AppScreen, 'genreBooks'>, book?: BookData): void;
+  (screen: Exclude<AppScreen, 'genreBooks'>, book?: BookData, options?: NavigationOptions): void;
 }
 
 export interface NavigationContextValue {

@@ -14,7 +14,7 @@ import GenreBooksScreen from './src/ux-ui/genreBooks';
 import LoginLogout from './src/ux-ui/loginlogout';
 import HalmBookHistory from './src/ux-ui/lsgiaodich';
 import ManHinhDoc from './src/ux-ui/manhinhdoc';
-import { AppLanguage, AppNavigate, AppScreen, BookData, GenreBooksParams, NavigationContext } from './src/ux-ui/navigation';
+import { AppLanguage, AppNavigate, AppScreen, BookData, GenreBooksParams, NavigationContext, NavigationOptions } from './src/ux-ui/navigation';
 import ThanhToan from './src/ux-ui/PTThanhtoan';
 import SharedHeader from './src/ux-ui/sharedheader';
 import TheLoai from './src/ux-ui/theloai';
@@ -34,6 +34,7 @@ interface ScreenRoute extends NavigationOptions {
   name: AppScreen;
   book?: BookData;
   genre?: GenreBooksParams;
+  initialBookshelfTab?: 'dangdoc' | 'dangthue' | 'dathue' | 'yeuthich' | 'tailen' | 'duoctang';
 }
 
 const SCREENS_WITH_SHARED_HEADER: AppScreen[] = [
@@ -278,9 +279,10 @@ export default function App() {
     return activeTabRoute?.name ?? 'home';
   }, [routes]);
 
-  const navigate: AppNavigate = useCallback((name: AppScreen, params?: BookData | GenreBooksParams) => {
+  const navigate: AppNavigate = useCallback((name: AppScreen, params?: BookData | GenreBooksParams, options?: NavigationOptions) => {
     const book = name === 'genreBooks' ? undefined : params as BookData | undefined;
     const genre = name === 'genreBooks' ? params as GenreBooksParams : undefined;
+    const initialBookshelfTab = options?.initialBookshelfTab;
     if (name === 'auth') {
       setAuthModal({ visible: true, message: lang === 'en' ? 'Sign in or create an account to continue.' : 'Đăng nhập hoặc tạo tài khoản để tiếp tục.', showForm: true });
       pendingAuthAction.current = null;
@@ -290,41 +292,41 @@ export default function App() {
       if (name === 'upload') {
         showLoginAlert(lang === 'en' ? 'Please log in to use upload file feature' : 'Bạn phải đăng nhập mới dùng được chức năng uploadfile', () => {
           setIsFooterVisible(true);
-          setRoutes((current) => [...current, { name, book }]);
+          setRoutes((current) => [...current, { name, book, initialBookshelfTab }]);
         });
         return;
       }
       if (name === 'bookshelf') {
         showLoginAlert(lang === 'en' ? 'Please log in to use bookshelf feature' : 'Bạn phải đăng nhập để dùng chức năng tủ sách', () => {
           setIsFooterVisible(true);
-          setRoutes((current) => [...current, { name, book }]);
+          setRoutes((current) => [...current, { name, book, initialBookshelfTab }]);
         });
         return;
       }
       if (name === 'profile') {
         showLoginAlert(lang === 'en' ? 'Please log in to use profile feature' : 'Bạn phải đăng nhập để dùng chức năng trang cá nhân', () => {
           setIsFooterVisible(true);
-          setRoutes((current) => [...current, { name, book }]);
+          setRoutes((current) => [...current, { name, book, initialBookshelfTab }]);
         });
         return;
       }
       if (name === 'cart') {
         showLoginAlert(lang === 'en' ? 'Please log in to use cart feature' : 'Bạn phải đăng nhập để dùng chức năng giỏ hàng', () => {
           setIsFooterVisible(true);
-          setRoutes((current) => [...current, { name, book }]);
+          setRoutes((current) => [...current, { name, book, initialBookshelfTab }]);
         });
         return;
       }
       if (name === 'payment') {
         showLoginAlert(lang === 'en' ? 'Please log in to proceed to payment' : 'Bạn phải đăng nhập để thanh toán', () => {
           setIsFooterVisible(true);
-          setRoutes((current) => [...current, { name, book }]);
+          setRoutes((current) => [...current, { name, book, initialBookshelfTab }]);
         });
         return;
       }
     }
     setIsFooterVisible(true);
-    setRoutes((current) => [...current, { name, book, genre }]);
+    setRoutes((current) => [...current, { name, book, genre, initialBookshelfTab }]);
   }, [isLoggedIn, lang, showLoginAlert]);
 
   const handleModalLoginPress = useCallback(() => {

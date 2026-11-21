@@ -30,7 +30,7 @@ public class PromotionController {
     @GetMapping({"/api/home/promotions", "/api/home/vouchers"})
     public ResponseEntity<?> getActivePromotions() {
         try {
-            List<Promotion> active = promotionRepository.findByStatusIgnoreCase("ACTIVE");
+            List<Promotion> active = promotionRepository.findActivePromotions();
             return ResponseEntity.ok(active);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

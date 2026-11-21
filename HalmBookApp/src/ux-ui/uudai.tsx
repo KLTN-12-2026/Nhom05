@@ -2,6 +2,7 @@ import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import Constants from "expo-constants";
+import * as Clipboard from "expo-clipboard";
 import * as Font from "expo-font";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -11,6 +12,7 @@ import {
   Animated,
   Image,
   Modal,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -21,6 +23,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getBookCoverSource } from "./bookCovers";
 import { useAppNavigation, useAutoHideFooter } from "./navigation";
+import ScallopDiscountBadge from "./ScallopDiscountBadge";
 import {
   calculateDynamicKhoai,
   checkoutBooksApi,
@@ -84,6 +87,9 @@ export interface PromotionItem {
   } | null;
   book_id?: string | null;
   status?: string;
+  description?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
 }
 
 // Bảng: book trong CSDL
@@ -204,6 +210,7 @@ export default function OffersScreen() {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const bookCardWidth = 175;
+  const voucherCardWidth = Math.min(Math.round(windowWidth * 0.76), 280);
 
   // Sizing & Animation cho Carousel sách ưu đãi hình cánh quạt
   const posterWidth = Math.min(240, Math.round(windowWidth * 0.60));
@@ -301,120 +308,141 @@ export default function OffersScreen() {
     };
   }, [isLoggedIn]);
 
-  // 1. Fetch Potato Packages từ GET /api/home/potato/packages
-  useEffect(() => {
-    const controller = new AbortController();
-    const fetchPackages = async () => {
-      for (const baseUrl of CANDIDATE_URLS) {
-        try {
-          const res = await axios.get(`${baseUrl}/api/home/potato/packages`, {
-            timeout: 5000,
-            signal: controller.signal,
-          });
-          if (Array.isArray(res.data) && res.data.length > 0) {
-            setPotatoPackages(res.data);
-            return;
-          }
-        } catch {
-          // Thử candidate URL tiếp theo
-        }
-      }
-    };
-    fetchPackages();
-    return () => controller.abort();
-  }, []);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // 2. Fetch Promotions từ CSDL (thử /api/promotions để lấy đầy đủ mọi khuyến mãi, fallback /api/home/promotions)
-  useEffect(() => {
-    const controller = new AbortController();
-    const fetchPromotions = async () => {
-      for (const baseUrl of CANDIDATE_URLS) {
-        try {
-          let res = await axios.get(`${baseUrl}/api/promotions`, {
-            timeout: 5000,
-            signal: controller.signal,
-          });
-          if (Array.isArray(res.data) && res.data.length > 0) {
-            setPromotions(res.data);
-            return;
-          }
-          res = await axios.get(`${baseUrl}/api/home/promotions`, {
-            timeout: 5000,
-            signal: controller.signal,
-          });
-          if (Array.isArray(res.data) && res.data.length > 0) {
-            setPromotions(res.data);
-            return;
-          }
-        } catch {
-          // Thử candidate URL tiếp theo
+  // 1. Fetch Potato Packages từ GET /api/home/potato/packages
+  const fetchPackages = async (signal?: AbortSignal) => {
+    for (const baseUrl of CANDIDATE_URLS) {
+      try {
+        const res = await axios.get(`${baseUrl}/api/home/potato/packages`, {
+          timeout: 5000,
+          signal,
+        });
+        if (Array.isArray(res.data) && res.data.length > 0) {
+          setPotatoPackages(res.data);
+          return;
         }
+      } catch {
+        // Thử candidate URL tiếp theo
       }
-    };
-    fetchPromotions();
-    return () => controller.abort();
-  }, []);
+    }
+  };
+
+  // 2. Fetch Promotions từ CSDL qua endpoint public /api/home/promotions
+  const fetchPromotions = async (signal?: AbortSignal) => {
+    for (const baseUrl of CANDIDATE_URLS) {
+      try {
+        const res = await axios.get(`${baseUrl}/api/home/promotions`, {
+          timeout: 5000,
+          signal,
+        });
+        if (Array.isArray(res.data) && res.data.length > 0) {
+          setPromotions(res.data);
+          return;
+        }
+      } catch {
+        // Thử tiếp endpoint fallback
+      }
+      try {
+        const res = await axios.get(`${baseUrl}/api/promotions`, {
+          timeout: 5000,
+          signal,
+        });
+        if (Array.isArray(res.data) && res.data.length > 0) {
+          setPromotions(res.data);
+          return;
+        }
+      } catch {
+        // Thử candidate URL tiếp theo
+      }
+    }
+  };
 
   // 3. Fetch Real Books từ GET /api/home/books
+  const fetchBooks = async (signal?: AbortSignal) => {
+    setBooksLoading(true);
+    setBooksError(null);
+    let data: any = null;
+    let successfulBaseUrl: string | null = null;
+    for (const baseUrl of CANDIDATE_URLS) {
+      try {
+        const res = await axios.get(`${baseUrl}/api/home/books`, {
+          params: { page: 0, size: 150 },
+          timeout: 8000,
+          signal,
+        });
+        data = res.data;
+        if (data) {
+          successfulBaseUrl = baseUrl;
+          break;
+        }
+      } catch (err: any) {
+        if (axios.isCancel(err) || err?.name === "CanceledError") return;
+      }
+    }
+    if (data) {
+      const rawList: any[] = Array.isArray(data)
+        ? data
+        : Array.isArray(data.content)
+          ? data.content
+          : [];
+      const mapped: RealBook[] = rawList
+        .filter((b) => b.status !== "DELETED")
+        .map((b) => {
+          let imgUrl = b.img_url || null;
+          if (imgUrl && !/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(imgUrl)) {
+            const imagePath = imgUrl.startsWith("/") ? imgUrl : `/${imgUrl}`;
+            imgUrl = (successfulBaseUrl || API_BASE_URL) + imagePath;
+          }
+          return {
+            book_id: String(b.book_id || ""),
+            bookName: b.bookName || "Chưa có tiêu đề",
+            author: b.author || "HALM BOOK",
+            img_url: imgUrl,
+            rent_price: b.rent_price !== null && b.rent_price !== undefined ? b.rent_price : 15,
+            description: b.description || null,
+            category_id: b.category_id !== undefined && b.category_id !== null ? Number(b.category_id) : null,
+            category_name: b.category_name || null,
+            readCount: b.readCount || 0,
+          };
+        });
+      setRealBooks(mapped);
+      setBooksLoading(false);
+    } else {
+      setBooksError("Không thể kết nối backend để lấy danh sách sách.");
+      setBooksLoading(false);
+    }
+  };
+
+  // Nạp dữ liệu lần đầu khi vào màn hình
   useEffect(() => {
     const controller = new AbortController();
-    const fetchBooks = async () => {
-      setBooksLoading(true);
-      setBooksError(null);
-      let data: any = null;
-      let successfulBaseUrl: string | null = null;
-      for (const baseUrl of CANDIDATE_URLS) {
-        try {
-          const res = await axios.get(`${baseUrl}/api/home/books`, {
-            params: { page: 0, size: 30 },
-            timeout: 8000,
-            signal: controller.signal,
-          });
-          data = res.data;
-          if (data) {
-            successfulBaseUrl = baseUrl;
-            break;
-          }
-        } catch (err: any) {
-          if (axios.isCancel(err) || err?.name === "CanceledError") return;
-        }
-      }
-      if (data) {
-        const rawList: any[] = Array.isArray(data)
-          ? data
-          : Array.isArray(data.content)
-            ? data.content
-            : [];
-        const mapped: RealBook[] = rawList
-          .filter((b) => b.status !== "DELETED")
-          .map((b) => {
-            let imgUrl = b.img_url || null;
-            if (imgUrl && !/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(imgUrl)) {
-              const imagePath = imgUrl.startsWith("/") ? imgUrl : `/${imgUrl}`;
-              imgUrl = (successfulBaseUrl || API_BASE_URL) + imagePath;
-            }
-            return {
-              book_id: String(b.book_id || ""),
-              bookName: b.bookName || "Chưa có tiêu đề",
-              author: b.author || "HALM BOOK",
-              img_url: imgUrl,
-              rent_price: b.rent_price !== null && b.rent_price !== undefined ? b.rent_price : 15,
-              description: b.description || null,
-              category_id: b.category_id !== undefined && b.category_id !== null ? Number(b.category_id) : null,
-              category_name: b.category_name || null,
-              readCount: b.readCount || 0,
-            };
-          });
-        setRealBooks(mapped);
-        setBooksLoading(false);
-      } else {
-        setBooksError("Không thể kết nối backend để lấy danh sách sách.");
-        setBooksLoading(false);
-      }
-    };
-    fetchBooks();
+    fetchPackages(controller.signal);
+    fetchPromotions(controller.signal);
+    fetchBooks(controller.signal);
     return () => controller.abort();
   }, []);
+
+  // Kéo xuống để làm mới (Pull-to-refresh) dữ liệu từ Database
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([
+        fetchPackages(),
+        fetchPromotions(),
+        fetchBooks(),
+        isLoggedIn
+          ? fetchWalletBalanceApi().then((bal) => {
+              if (bal !== null) setKhoaiBalance(bal);
+            })
+          : Promise.resolve(),
+      ]);
+    } catch {
+      // Silent
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   // System Colors
   const isDark = isDarkMode;
@@ -554,9 +582,107 @@ export default function OffersScreen() {
   }, [realBooks, promotions]);
 
   // ==============================================================
+  // 3. TOÀN BỘ SÁCH ƯU ĐÃI (DÀNH CHO MỤC "SÁCH ƯU ĐÃI")
+  // Tổng hợp tất cả các sách được giảm giá: theo từng sách (book_id)
+  // và theo thể loại (category_id), lọc trùng lặp và lấy % giảm tốt nhất.
+  // ==============================================================
+  const displayDiscountBooks = useMemo(() => {
+    const map = new Map<string, any>();
+
+    // 1. Thêm từ promotionalBooks (sách được gán khuyến mãi trực tiếp qua book_id)
+    promotionalBooks.forEach((book) => {
+      const bid = String(book.book_id || "").trim();
+      if (bid) {
+        map.set(bid, book);
+      }
+    });
+
+    // 2. Thêm từ categoryPromotionalBooks (sách được giảm giá theo thể loại)
+    categoryPromotionalBooks.forEach((book) => {
+      const bid = String(book.book_id || "").trim();
+      if (bid) {
+        if (!map.has(bid)) {
+          map.set(bid, book);
+        } else {
+          const existing = map.get(bid);
+          if ((book.discount_percent || 0) > (existing.discount_percent || 0)) {
+            map.set(bid, book);
+          }
+        }
+      }
+    });
+
+    return Array.from(map.values());
+  }, [promotionalBooks, categoryPromotionalBooks]);
+
+  // Chia danh sách sách ưu đãi thành các line (mỗi line hiển thị tối đa 10 cuốn sách, hết 10 cuốn tự động xuống line 2)
+  const discountBookRows = useMemo(() => {
+    const rows: any[][] = [];
+    const chunkSize = 10;
+    for (let i = 0; i < displayDiscountBooks.length; i += chunkSize) {
+      rows.push(displayDiscountBooks.slice(i, i + chunkSize));
+    }
+    return rows;
+  }, [displayDiscountBooks]);
+
+  // ==============================================================
+  // VOUCHER & TIỆN ÍCH ĐỘC QUYỀN (ĐỒNG BỘ TỪ PROMOTION TABLE TRONG CSDL)
+  // Khi admin thêm voucher/khuyến mãi trên Web thì sẽ tự động hiện ở đây
+  // ==============================================================
+  const voucherOffers = useMemo(() => {
+    if (promotions.length === 0) return [];
+    return promotions.map((p) => {
+      const code = String(p.promotion_id || "VOUCHER").trim().toUpperCase();
+      const title =
+        p.promotion_name && p.promotion_name.trim().length > 0
+          ? p.promotion_name
+          : `Voucher Ưu Đãi ${code}`;
+      const pct = p.discount_percent || 0;
+      const amt = p.discount_amount || 0;
+      const desc =
+        p.description && p.description.trim().length > 0
+          ? p.description
+          : "Áp dụng cho mọi độc giả của HALM BOOK";
+      const costPotato =
+        amt > 0 ? Math.max(1, Math.round(amt / 1000)) : pct > 0 ? 5 : 10;
+
+      const features: string[] = [
+        desc,
+        `Mã kích hoạt: ${code}`,
+        pct > 0
+          ? `Chiết khấu ${pct}% khi thuê sách`
+          : amt > 0
+          ? `Giảm ngay ${amt.toLocaleString("vi-VN")} đ`
+          : "Ưu đãi độc quyền toàn hệ thống",
+      ];
+
+      return {
+        id: code,
+        code,
+        title,
+        discountPercent: pct,
+        discountAmount: amt,
+        description: desc,
+        costPotato,
+        tag: pct > 0 ? `GIẢM ${pct}%` : "VOUCHER",
+        category: "Ưu Đãi Đặc Quyền",
+        features,
+        action: "Nhận Mã",
+      };
+    });
+  }, [promotions]);
+
+  // Sách hiển thị trên Hero Banner: Ưu tiên promotionalBooks (theo book_id), nếu ít thì lấy thêm từ displayDiscountBooks
+  const heroBannerBooks = useMemo(() => {
+    if (promotionalBooks.length >= 3) return promotionalBooks;
+    if (displayDiscountBooks.length > 0) return displayDiscountBooks.slice(0, 10);
+    return promotionalBooks;
+  }, [promotionalBooks, displayDiscountBooks]);
+
+  // ==============================================================
   // CẤU HÌNH CAROUSEL CÁNH QUẠT & VÒNG LẶP VÔ TẬN TỪ SÁCH DATABASE
   // ==============================================================
-  const promoCount = promotionalBooks.length;
+  const promoCount = heroBannerBooks.length;
   const loopCopies = 7;
   const middleCopyIdx = 3;
   const startIndex = promoCount > 0 ? middleCopyIdx * promoCount : 0;
@@ -564,13 +690,13 @@ export default function OffersScreen() {
   const loopBooks = useMemo(() => {
     if (promoCount === 0) return [];
     return Array.from({ length: loopCopies }).flatMap((_, copyIdx) =>
-      promotionalBooks.map((book, itemIdx) => ({
+      heroBannerBooks.map((book, itemIdx) => ({
         ...book,
         loopKey: `copy-${copyIdx}-book-${book.book_id}-${itemIdx}`,
         originalIndex: itemIdx,
       }))
     );
-  }, [promotionalBooks, promoCount]);
+  }, [heroBannerBooks, promoCount]);
 
   // Căn giữa sách đầu tiên ngay khi danh sách sách khuyến mãi được tải xong
   useEffect(() => {
@@ -659,7 +785,7 @@ export default function OffersScreen() {
   };
 
   // Cuốn sách đang được chọn / nằm ở trung tâm của Carousel cánh quạt
-  const activeBook = promotionalBooks[activeDot] || promotionalBooks[0] || null;
+  const activeBook = heroBannerBooks[activeDot] || heroBannerBooks[0] || null;
 
   // Thuê sách thật từ catalog DB
   const handleConfirmAction = async () => {
@@ -812,6 +938,190 @@ export default function OffersScreen() {
     );
   };
 
+  // Sao chép mã voucher vào clipboard & thông báo
+  const handleCopyVoucher = async (code: string, title: string) => {
+    try {
+      await Clipboard.setStringAsync(code);
+    } catch {
+      // Fallback
+    }
+    showToast("Đã lưu mã giảm giá!", `Mã "${code}" đã được sao chép vào bộ nhớ tạm.`);
+    Alert.alert(
+      "Nhận Mã Ưu Đãi Thành Công!",
+      `Đã sao chép mã "${code}" (${title}).\nBạn có thể áp dụng mã này khi thuê sách hoặc nạp Khoai!`,
+      [{ text: "Tuyệt vời", style: "default" }]
+    );
+  };
+
+  // ==============================================================
+  // 1.5. RENDER THẺ MÃ GIẢM GIÁ & TIỆN ÍCH ĐỘC QUYỀN (GIỐNG BẢN WEB)
+  // ==============================================================
+  const renderVoucherCard = (item: any, index: number) => {
+    return (
+      <View
+        key={item.id || index}
+        style={[
+          styles.voucherCard,
+          {
+            width: voucherCardWidth,
+            backgroundColor: colors.cardBg,
+            borderColor: colors.cardBorder,
+          },
+        ]}
+      >
+        {/* Phần trên: Icon vé + Tag chiết khấu */}
+        <View style={styles.voucherTopArea}>
+          <View
+            style={[
+              styles.voucherBannerBox,
+              {
+                backgroundColor: isDark
+                  ? "rgba(251, 191, 36, 0.12)"
+                  : "rgba(217, 119, 6, 0.08)",
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.voucherIconCircle,
+                {
+                  backgroundColor: isDark
+                    ? "rgba(251, 191, 36, 0.22)"
+                    : "rgba(217, 119, 6, 0.15)",
+                },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name="ticket-percent"
+                size={28}
+                color={colors.gold}
+              />
+            </View>
+            {item.tag ? (
+              <View
+                style={[
+                  styles.voucherTagBadge,
+                  { backgroundColor: colors.gold },
+                ]}
+              >
+                <Text style={styles.voucherTagBadgeText}>{item.tag}</Text>
+              </View>
+            ) : null}
+          </View>
+
+          {/* Danh mục & Tiêu đề Voucher */}
+          <View style={styles.voucherMetaWrap}>
+            <Text
+              style={[
+                styles.voucherCategoryText,
+                { color: colors.textSecondary },
+              ]}
+            >
+              {item.category}
+            </Text>
+            <Text
+              numberOfLines={2}
+              style={[styles.voucherTitleText, { color: colors.textPrimary }]}
+            >
+              {item.title}
+            </Text>
+          </View>
+
+          {/* Danh sách đặc quyền / điều kiện */}
+          <View
+            style={[
+              styles.voucherFeaturesList,
+              { borderTopColor: colors.cardBorder },
+            ]}
+          >
+            {item.features.map((feat: string, fIdx: number) => (
+              <View key={fIdx} style={styles.voucherFeatureRow}>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={14}
+                  color="#10B981"
+                  style={{ marginRight: 6 }}
+                />
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.voucherFeatureText,
+                    { color: colors.textSecondary },
+                  ]}
+                >
+                  {feat}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Phần dưới: Mã Code + Nút Nhận Mã */}
+        <View
+          style={[
+            styles.voucherBottomArea,
+            { borderTopColor: colors.cardBorder },
+          ]}
+        >
+          <View style={styles.voucherCodeRow}>
+            <View
+              style={[
+                styles.voucherCodeBox,
+                {
+                  backgroundColor: colors.chipBg,
+                  borderColor: colors.cardBorder,
+                },
+              ]}
+            >
+              <MaterialCommunityIcons
+                name="tag"
+                size={12}
+                color={colors.gold}
+                style={{ marginRight: 4 }}
+              />
+              <Text style={[styles.voucherCodeText, { color: colors.gold }]}>
+                {item.code}
+              </Text>
+            </View>
+
+            <View style={styles.voucherCostRow}>
+              <Text style={styles.voucherCostEmoji}>🥔</Text>
+              <Text
+                style={[styles.voucherCostNum, { color: colors.textPrimary }]}
+              >
+                {item.costPotato}
+              </Text>
+              <Text
+                style={[styles.voucherCostLabel, { color: colors.gold }]}
+              >
+                Khoai
+              </Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={[
+              styles.voucherActionBtn,
+              { backgroundColor: colors.potatoColor },
+            ]}
+            onPress={() => handleCopyVoucher(item.code, item.title)}
+            activeOpacity={0.8}
+          >
+            <MaterialCommunityIcons
+              name="content-copy"
+              size={14}
+              color="#FFFFFF"
+              style={{ marginRight: 5 }}
+            />
+            <Text style={styles.voucherActionBtnText}>
+              {item.action || "Nhận Mã"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
   // ==============================================================
   // 2. RENDER SÁCH ƯU ĐÃI (BẢNG BOOK — GIẢM GIÁ THEO CATEGORY TỪ DB)
   // ==============================================================
@@ -823,7 +1133,7 @@ export default function OffersScreen() {
 
     return (
       <TouchableOpacity
-        key={book.book_id}
+        key={`${book.book_id}-${_index}`}
         style={[
           styles.bookCard,
           {
@@ -852,18 +1162,22 @@ export default function OffersScreen() {
         activeOpacity={0.85}
       >
         <View style={styles.bookCoverFrame}>
-          {coverSource ? (
-            <Image source={coverSource} style={styles.bookCoverImg} resizeMode="cover" />
-          ) : (
-            <View style={[styles.bookCoverPlaceholder, { backgroundColor: colors.chipBg }]}>
-              <MaterialCommunityIcons name="book-open-variant" size={26} color={colors.textSecondary} />
-            </View>
-          )}
-
-          {/* Badge giảm giá góc trên ảnh bìa */}
-          <View style={[styles.bookDiscountBadge, { backgroundColor: colors.discountBadgeBg }]}>
-            <Text style={styles.bookDiscountBadgeText}>-{discountPct}%</Text>
+          <View style={styles.bookCoverImgWrap}>
+            {coverSource ? (
+              <Image source={coverSource} style={styles.bookCoverImg} resizeMode="cover" />
+            ) : (
+              <View style={[styles.bookCoverPlaceholder, { backgroundColor: colors.chipBg }]}>
+                <MaterialCommunityIcons name="book-open-variant" size={26} color={colors.textSecondary} />
+              </View>
+            )}
           </View>
+
+          {/* Badge giảm giá hoa thị ngay đầu góc cuốn sách */}
+          <ScallopDiscountBadge
+            percent={discountPct}
+            size={40}
+            style={styles.bookDiscountBadge}
+          />
         </View>
 
         <Text
@@ -951,6 +1265,14 @@ export default function OffersScreen() {
         showsVerticalScrollIndicator={false}
         onScroll={handleFooterScroll}
         scrollEventThrottle={16}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            colors={[colors.gold, colors.potatoColor]}
+            tintColor={colors.gold}
+          />
+        }
         contentContainerStyle={{
           paddingTop: 8,
           paddingBottom: 110 + Math.max(insets.bottom, 16),
@@ -958,12 +1280,12 @@ export default function OffersScreen() {
       >
         {/* ============================================================
             CAROUSEL SÁCH ƯU ĐÃI DATABASE — HÌNH CÁNH QUẠT & VÒNG LẶP VÔ TẬN
-            - Nguồn dữ liệu: Các cuốn sách ưu đãi đã thêm vào database (promotionalBooks)
+            - Nguồn dữ liệu: Các cuốn sách ưu đãi đã thêm vào database (heroBannerBooks)
             - Góc trên bên phải: Mức giá cũ bị gạch đi và mức giá giảm giá bên cạnh
             - Phía dưới: Tên sách nổi bật, tác giả và nút thuê
             - Hiệu ứng: Cánh quạt 3D xòe vòng cung, lướt nối tiếp vô tận
             ============================================================ */}
-        {promotionalBooks.length > 0 && (
+        {heroBannerBooks.length > 0 && (
           <View style={styles.postersSectionWrap}>
             {/* TIÊU ĐỀ NẰM TRÊN MẤY CUỐN SÁCH BANNER */}
             <View style={styles.bannerSectionHeaderWrap}>
@@ -984,9 +1306,10 @@ export default function OffersScreen() {
               bounces={false}
               scrollEventThrottle={16}
               contentOffset={{ x: startIndex * posterItemSize, y: 0 }}
+              style={{ overflow: "visible" }}
               contentContainerStyle={{
                 paddingHorizontal: posterSideSpacer,
-                paddingTop: 12,
+                paddingTop: 32,
                 paddingBottom: 22,
               }}
               onScroll={Animated.event(
@@ -1046,6 +1369,8 @@ export default function OffersScreen() {
                       marginRight: posterSpacing,
                       alignItems: "center",
                       justifyContent: "center",
+                      paddingTop: 16,
+                      overflow: "visible",
                     }}
                   >
                     <Animated.View
@@ -1065,26 +1390,27 @@ export default function OffersScreen() {
                       ]}
                     >
                       <View style={styles.posterTouchable}>
-                        {/* Ảnh bìa cuốn sách */}
-                        {coverSource ? (
-                          <Image
-                            source={coverSource}
-                            style={styles.posterImage}
-                            resizeMode="cover"
-                          />
-                        ) : (
-                          <View style={[styles.posterImage, styles.posterFallbackBg]}>
-                            <MaterialCommunityIcons name="book-open-page-variant" size={44} color="#94A3B8" />
-                          </View>
-                        )}
-
-                        {/* GÓC TRÊN BÊN PHẢI: ICON & MỨC GIẢM GIÁ THIẾT KẾ ĐẸP MẮT */}
-                        <View style={styles.fanDiscountCornerBadge}>
-                          <View style={styles.fanDiscountIconWrap}>
-                            <MaterialCommunityIcons name="lightning-bolt" size={11} color="#FFE600" />
-                          </View>
-                          <Text style={styles.fanDiscountCornerText}>-{discountPct}%</Text>
+                        {/* Ảnh bìa cuốn sách bo tròn */}
+                        <View style={styles.posterImageWrap}>
+                          {coverSource ? (
+                            <Image
+                              source={coverSource}
+                              style={styles.posterImage}
+                              resizeMode="cover"
+                            />
+                          ) : (
+                            <View style={[styles.posterImage, styles.posterFallbackBg]}>
+                              <MaterialCommunityIcons name="book-open-page-variant" size={44} color="#94A3B8" />
+                            </View>
+                          )}
                         </View>
+
+                        {/* GÓC TRÊN BÊN PHẢI: ICON HOA THỊ GIẢM GIÁ NGAY ĐẦU GÓC */}
+                        <ScallopDiscountBadge
+                          percent={discountPct}
+                          size={52}
+                          style={styles.fanDiscountCornerBadge}
+                        />
                       </View>
                     </Animated.View>
                   </View>
@@ -1170,7 +1496,49 @@ export default function OffersScreen() {
           </View>
         </View>
 
-        {/* MỤC 2: SÁCH ƯU ĐÃI (ĐỒNG BỘ THEO THỂ LOẠI KHUYẾN MÃI TỪ DATABASE) */}
+        {/* MỤC 2: MÃ GIẢM GIÁ & TIỆN ÍCH ĐỘC QUYỀN (ĐỒNG BỘ TỪ ADMIN WEB & CSDL) */}
+        <View style={styles.sectionWrap}>
+          <CleanSectionHeader
+            icon="ticket-percent"
+            iconColor={colors.gold}
+            label="Mã giảm giá & tiện ích độc quyền"
+            textColor={colors.gold}
+          />
+
+          {voucherOffers.length === 0 ? (
+            <View style={styles.booksEmptyBox}>
+              <MaterialCommunityIcons
+                name="ticket-percent-outline"
+                size={28}
+                color={colors.textSecondary}
+              />
+              <Text
+                style={[styles.booksEmptyTitle, { color: colors.textPrimary }]}
+              >
+                Chưa có mã giảm giá
+              </Text>
+              <Text
+                style={[styles.booksEmptySub, { color: colors.textSecondary }]}
+              >
+                Các mã giảm giá và voucher quà tặng từ hệ thống sẽ hiển thị tại
+                đây khi được quản trị viên kích hoạt.
+              </Text>
+            </View>
+          ) : (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.voucherScrollContent}
+              style={{ overflow: "visible" }}
+            >
+              {voucherOffers.map((item, index) =>
+                renderVoucherCard(item, index)
+              )}
+            </ScrollView>
+          )}
+        </View>
+
+        {/* MỤC 3: SÁCH ƯU ĐÃI (ĐỒNG BỘ THEO THỂ LOẠI KHUYẾN MÃI TỪ DATABASE) */}
         <View style={styles.sectionWrap}>
           <CleanSectionHeader
             icon="sale"
@@ -1193,24 +1561,32 @@ export default function OffersScreen() {
                 {booksError}
               </Text>
             </View>
-          ) : categoryPromotionalBooks.length === 0 ? (
+          ) : discountBookRows.length === 0 ? (
             <View style={styles.booksEmptyBox}>
               <MaterialCommunityIcons name="tag-off-outline" size={28} color={colors.textSecondary} />
               <Text style={[styles.booksEmptyTitle, { color: colors.textPrimary }]}>
-                Chưa có sách ưu đãi theo thể loại
+                Chưa có sách ưu đãi
               </Text>
               <Text style={[styles.booksEmptySub, { color: colors.textSecondary }]}>
-                Các chương trình khuyến mãi theo thể loại sách sẽ được hiển thị tại đây khi được thêm vào hệ thống.
+                Các chương trình khuyến mãi theo sách hoặc thể loại sẽ hiển thị tại đây khi được thêm vào hệ thống.
               </Text>
             </View>
           ) : (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.horizontalScrollContent}
-            >
-              {categoryPromotionalBooks.slice(0, 10).map((book, index) => renderDiscountBookCard(book, index))}
-            </ScrollView>
+            <View style={{ gap: 14 }}>
+              {discountBookRows.map((row, rowIndex) => (
+                <ScrollView
+                  key={`discount-row-${rowIndex}`}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.horizontalScrollContent}
+                  style={{ overflow: "visible" }}
+                >
+                  {row.map((book, bookIndex) =>
+                    renderDiscountBookCard(book, rowIndex * 10 + bookIndex)
+                  )}
+                </ScrollView>
+              ))}
+            </View>
           )}
         </View>
       </ScrollView>
@@ -1329,8 +1705,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     alignSelf: "center",
-    marginTop: 4,
-    marginBottom: 10,
+    marginTop: 8,
+    marginBottom: 16,
   },
   bannerSectionTitle: {
     fontFamily: FONTS.jakarta,
@@ -1342,18 +1718,21 @@ const styles = StyleSheet.create({
 
   // ---- Carousel Sách Ưu Đãi Cánh Quạt Hero ----
   postersSectionWrap: {
+    marginTop: 14,
     marginBottom: 10,
+    overflow: "visible",
   },
   posterCard: {
     borderRadius: 18,
-    overflow: "hidden",
-    backgroundColor: "#1E293B",
-    elevation: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
+    overflow: "visible",
+    backgroundColor: "transparent",
     borderWidth: 1,
+  },
+  posterImageWrap: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 18,
+    overflow: "hidden",
   },
   posterTouchable: {
     width: "100%",
@@ -1380,23 +1759,9 @@ const styles = StyleSheet.create({
   },
   fanDiscountCornerBadge: {
     position: "absolute",
-    top: 10,
-    right: 10,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#E11D48",
-    paddingLeft: 4,
-    paddingRight: 7.5,
-    paddingVertical: 3.5,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.45)",
-    elevation: 6,
-    shadowColor: "#E11D48",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.45,
-    shadowRadius: 4,
-    gap: 3.5,
+    top: -8,
+    right: -8,
+    zIndex: 50,
   },
   fanDiscountIconWrap: {
     width: 17,
@@ -1523,6 +1888,8 @@ const styles = StyleSheet.create({
   sectionWrap: { marginBottom: 20 },
   horizontalScrollContent: {
     paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 6,
     gap: 10,
   },
 
@@ -1608,21 +1975,167 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 
+  // ---- MÃ GIẢM GIÁ & TIỆN ÍCH ĐỘC QUYỀN ----
+  voucherScrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 8,
+    gap: 12,
+  },
+  voucherCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    justifyContent: "space-between",
+  },
+  voucherTopArea: {
+    gap: 10,
+  },
+  voucherBannerBox: {
+    height: 72,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+    overflow: "hidden",
+  },
+  voucherIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  voucherTagBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  voucherTagBadgeText: {
+    fontFamily: FONTS.jakarta,
+    fontSize: 9.5,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    letterSpacing: 0.3,
+  },
+  voucherMetaWrap: {
+    gap: 3,
+  },
+  voucherCategoryText: {
+    fontFamily: FONTS.jakarta,
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  voucherTitleText: {
+    fontFamily: FONTS.jakarta,
+    fontSize: 14.5,
+    fontWeight: "800",
+    lineHeight: 19,
+  },
+  voucherFeaturesList: {
+    borderTopWidth: 1,
+    paddingTop: 8,
+    gap: 5,
+  },
+  voucherFeatureRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  voucherFeatureText: {
+    fontFamily: FONTS.roboto,
+    fontSize: 11.5,
+    flex: 1,
+  },
+  voucherBottomArea: {
+    borderTopWidth: 1,
+    paddingTop: 10,
+    marginTop: 10,
+    gap: 10,
+  },
+  voucherCodeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  voucherCodeBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  voucherCodeText: {
+    fontFamily: FONTS.jakarta,
+    fontSize: 11.5,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  voucherCostRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+  },
+  voucherCostEmoji: {
+    fontSize: 13,
+  },
+  voucherCostNum: {
+    fontFamily: FONTS.jakarta,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  voucherCostLabel: {
+    fontFamily: FONTS.jakarta,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  voucherActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8.5,
+    borderRadius: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  voucherActionBtnText: {
+    fontFamily: FONTS.jakarta,
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    letterSpacing: 0.3,
+  },
+
   // ---- SÁCH ƯU ĐÃI ----
   bookCard: {
     borderRadius: 12,
     borderWidth: 1,
     padding: 6,
     justifyContent: "space-between",
+    overflow: "visible",
   },
   bookCoverFrame: {
     width: "100%",
     height: 220,
     borderRadius: 8,
-    overflow: "hidden",
+    overflow: "visible",
     backgroundColor: "#F3F4F6",
     marginBottom: 6,
     position: "relative",
+  },
+  bookCoverImgWrap: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 8,
+    overflow: "hidden",
   },
   bookCoverImg: {
     width: "100%",
@@ -1636,20 +2149,9 @@ const styles = StyleSheet.create({
   },
   bookDiscountBadge: {
     position: "absolute",
-    top: 6,
-    right: 6,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 8,
-    borderWidth: 0.5,
-    borderColor: "rgba(255, 255, 255, 0.45)",
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
+    top: -8,
+    right: -8,
+    zIndex: 20,
   },
   bookDiscountBadgeText: {
     fontFamily: FONTS.inter,

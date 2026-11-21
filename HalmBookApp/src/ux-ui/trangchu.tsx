@@ -26,13 +26,13 @@ import { BookData, useAppNavigation } from './navigation';
 import { fetchApiWithFallback } from './apiService';
 import HomeCover from './home/HomeBookCover';
 import ContinueReading from './home/ContinueReading';
-import { formatHomeBookDate, getRankedHomeBooks, getRecentHomeBooks, HomeBookItem, readHomePage } from './home/homeData';
-export type { HomeBookItem } from './home/homeData';
+import { formatHomeBookDate, getRankedHomeBooks, getRecentHomeBooks, readHomePage } from './home/homeData';
 import { getBookCoverSource } from './bookCovers';
 import { getBookChapterLabel } from './bookContentService';
-import { getBookCoverSource } from './bookCovers';
-import { BookData, useAppNavigation } from './navigation';
 import { useUnreadNotificationCount } from './useUnreadNotificationCount';
+
+const DARK_MODE_PRIMARY = '#9A8BC2';
+const DARK_MODE_SECONDARY = '#D8B36A';
 
 const { width, height } = Dimensions.get('window');
 const FLOATING_MENU_SIZE = 40;
@@ -363,7 +363,8 @@ interface TrangChuProps {
 }
 
 export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps) {
-  const { navigate, setFooterVisible } = useAppNavigation();
+  const { navigate, setFooterVisible, isLoggedIn } = useAppNavigation();
+  const unreadNotifications = useUnreadNotificationCount(isLoggedIn);
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const width = Math.min(1040, window.width - insets.left - insets.right);
@@ -559,8 +560,6 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
     inputRange: [0, 1],
     outputRange: [0, 0.55],
   });
-
-  const bgAnim = useRef(new Animated.Value(isDarkMode ? 1 : 0)).current;
 
   useEffect(() => {
     Animated.timing(bgAnim, {
