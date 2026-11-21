@@ -95,14 +95,15 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // 2. Các endpoint công khai không cần token
                         .requestMatchers("/api/auth/**", "/api/password/**").permitAll()
-
                         .requestMatchers("/api/chat/**").permitAll()
                         .requestMatchers("/uploads/**").permitAll()
                         .requestMatchers("/api/user/support-tickets", "/api/user/support-tickets/**").permitAll()
+                        .requestMatchers("/api/admin/support-tickets", "/api/admin/support-tickets/**").permitAll()
+                        .requestMatchers("/api/admin/analytics", "/api/admin/analytics/**").permitAll()
 
                         // 3. Phân quyền cho gói nạp và khuyến mãi:
                         // Cho phép độc giả xem danh sách công khai (GET)
-                        .requestMatchers(HttpMethod.GET, "/api/home/promotions", "/api/home/vouchers").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/home/promotions", "/api/home/vouchers", "/api/promotions", "/api/promotions/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/home/potato/packages").permitAll()
                         // Yêu cầu quyền ADMIN cho các thao tác quản trị gói nạp & khuyến mãi
                         .requestMatchers("/api/home/potato/packages/all", "/api/home/potato/packages/admin").hasAnyAuthority("ROLE_ADMIN", "ADMIN")
@@ -111,20 +112,20 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/api/home/potato/packages/**").hasAnyAuthority("ROLE_ADMIN", "ADMIN")
                         .requestMatchers("/api/promotions", "/api/promotions/**").hasAnyAuthority("ROLE_ADMIN", "ADMIN")
 
-                        // 4. Nghiệp vụ ví, giỏ hàng, thanh toán và tủ sách cá nhân yêu cầu xác thực (IMP-07)
+                        // 4. Nghiệp vụ ví, giỏ hàng, thanh toán và tủ sách cá nhân yêu cầu xác thực
                         .requestMatchers("/api/home/checkout", "/api/home/bookshelf", "/api/home/bookshelf/**").authenticated()
                         .requestMatchers("/api/home/cart/**").authenticated()
-                        .requestMatchers("/api/home/potato/wallet", "/api/home/potato/topup", "/api/home/potato/transfer", "/api/home/potato/history").authenticated()
+                        .requestMatchers("/api/home/potato/wallet", "/api/home/potato/topup", "/api/home/potato/transfer", "/api/home/potato/history", "/api/home/potato/transactions").authenticated()
                         .requestMatchers("/api/home/missions/claim", "/api/home/reading-progress", "/api/home/reading-notes/**").authenticated()
 
-                        // 5. Các endpoint công khai của cửa hàng sách
+                        // 6. Các endpoint công khai của cửa hàng sách
                         .requestMatchers("/api/home/**").permitAll()
 
-                        // 5. Phân quyền Quản trị viên (Admin Portal): Siết chặt bảo mật, chỉ ADMIN mới được truy cập
+                        // 7. Phân quyền Quản trị viên (Admin Portal): Siết chặt bảo mật, chỉ ADMIN mới được truy cập
                         .requestMatchers("/api/admin/**", "/admin/**").hasAnyAuthority("ROLE_ADMIN", "ADMIN")
 
-                        // 6. Phân quyền Người dùng (Độc giả)
 
+                        // 8. Phân quyền Người dùng (Độc giả)
                         .requestMatchers("/user/**", "/api/user/**").hasAnyAuthority("ROLE_USER", "USER", "ROLE_ADMIN", "ADMIN")
 
                         .anyRequest().authenticated()

@@ -35,6 +35,9 @@ import { getBookChapterLabel } from './bookContentService';
 import { useUnreadNotificationCount } from './useUnreadNotificationCount';
 import { DARK_MODE_PRIMARY, DARK_MODE_SECONDARY } from './CosmicBackground';
 
+const DARK_MODE_PRIMARY = '#9A8BC2';
+const DARK_MODE_SECONDARY = '#D8B36A';
+
 const { width, height } = Dimensions.get('window');
 const FLOATING_MENU_SIZE = 40;
 
