@@ -6,6 +6,7 @@ import { saveAuthSession } from '@/services/authToken';
 import { getCurrentCustomer } from '@/services/customerService';
 import AvatarWithFrame from '@/components/common/AvatarWithFrame';
 import { getTierInfo } from '@/utils/tierUtils';
+import halmToast from '@/utils/toast';
 import logo from '@/assets/images/logo.png';
 
 import { API_BASE_URL } from '@/constants/apiEndpoints';
@@ -236,7 +237,12 @@ export default function AuthModal({
 
   const handleWelcomeComplete = () => {
     const role = welcomeData?.role;
+    const name = welcomeData?.customerName || '';
     handleClose();
+
+    if (name) {
+      halmToast.success('Đăng nhập thành công', `Chào mừng ${name} đến với HALM BOOK!`);
+    }
 
     if (successCallback) {
       successCallback(welcomeData);
@@ -481,12 +487,10 @@ export default function AuthModal({
       {welcomeData ? (
         <div
           style={{
-            backgroundColor: isDarkTheme ? '#181916' : '#FFFDF9',
-            color: isDarkTheme ? '#EDE9DF' : '#1E1F1D',
+            backgroundColor: '#181916',
+            color: '#EDE9DF',
           }}
-          className={`relative w-full max-w-[460px] overflow-hidden rounded-3xl border ${
-            isDarkTheme ? 'border-[#D4AF37]/50 shadow-[0_25px_80px_rgba(0,0,0,0.95)]' : 'border-[#D4AF37]/60 shadow-[0_25px_70px_rgba(212,175,55,0.2)]'
-          } backdrop-blur-2xl transition-all duration-300 ease-out transform ${
+          className={`relative w-full max-w-[460px] overflow-hidden rounded-3xl border border-[#2C2E29] shadow-[0_25px_60px_rgba(0,0,0,0.85)] backdrop-blur-2xl transition-all duration-300 ease-out transform ${
             isVisible ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-4'
           }`}
         >
@@ -508,17 +512,17 @@ export default function AuthModal({
             </div>
 
             {/* Tiêu đề & Phụ đề chính thức - Rực rỡ, rõ ràng, không bị chìm màu */}
-            <h2 className="font-nunito text-xl sm:text-2xl font-black tracking-tight mb-2 text-[#1E1F1D] dark:text-[#FAF7F0]">
-              Chào mừng tới với <span className="text-[#B8860B] dark:text-[#F5D061] drop-shadow-[0_2px_12px_rgba(245,208,97,0.3)]">HALMBOOK</span>
+            <h2 className="font-nunito text-xl sm:text-2xl font-black tracking-tight mb-2 text-[#FAF7F0]">
+              Chào mừng tới với <span className="text-[#F5D061] drop-shadow-[0_1px_4px_rgba(245,208,97,0.25)]">HALMBOOK</span>
             </h2>
-            <div className="inline-flex items-center gap-1.5 rounded-full px-4 py-1 text-xs font-black uppercase tracking-wider mb-6 bg-amber-500/15 text-amber-900 border border-amber-500/35 dark:bg-[#D4AF37]/15 dark:text-[#FBE596] dark:border-[#D4AF37]/40 shadow-xs">
+            <div className="inline-flex items-center gap-1.5 rounded-full px-4 py-1 text-xs font-black uppercase tracking-wider mb-6 bg-[#D4AF37]/15 text-[#FBE596] border border-[#D4AF37]/35 shadow-xs">
               <span>🚀</span>
               <span>NỀN TẢNG ĐỌC SÁCH TƯƠNG LAI !</span>
             </div>
 
-            {/* Thẻ người dùng vừa đăng nhập - Đồng bộ chuẩn Dark/Light Mode */}
-            <div className="mb-6 rounded-2xl border border-stone-200/90 dark:border-[#2C2E29] bg-stone-50/90 dark:bg-[#1E201B] p-4 text-left shadow-xs">
-              <div className="flex items-center justify-between mb-2.5 pb-2.5 border-b border-stone-200/70 dark:border-[#2C2E29]">
+            {/* Thẻ người dùng vừa đăng nhập - Đồng bộ chuẩn Dark Mode */}
+            <div className="mb-6 rounded-2xl border border-[#2C2E29] bg-[#1E201B] p-4 text-left shadow-xs">
+              <div className="flex items-center justify-between mb-2.5 pb-2.5 border-b border-[#2C2E29]">
                 <div className="flex items-center gap-3">
                   <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-tr from-[#D4AF37] to-[#F5D061] text-[#161713] font-black text-base shadow-sm shrink-0 overflow-hidden">
                     {welcomeData.avatar ? (
@@ -535,34 +539,39 @@ export default function AuthModal({
                     )}
                   </div>
                   <div>
-                    <div className="text-[11px] font-semibold text-stone-500 dark:text-[#96938B]">
+                    <div className="text-[11px] font-semibold text-[#96938B]">
                       Tài khoản độc giả
                     </div>
-                    <div className="text-sm font-black text-stone-900 dark:text-[#FAF7F0] truncate max-w-[170px]">
+                    <div className="text-sm font-black text-[#FAF7F0] truncate max-w-[170px]">
                       {welcomeData.customerName}
                     </div>
                   </div>
                 </div>
-                <span className="rounded-full bg-amber-500/15 dark:bg-[#D4AF37]/20 px-3 py-1 text-xs font-bold text-amber-800 dark:text-[#FBE596] border border-amber-500/30 dark:border-[#D4AF37]/40 shrink-0">
+                <span className="rounded-full bg-[#D4AF37]/20 px-3 py-1 text-xs font-bold text-[#FBE596] border border-[#D4AF37]/40 shrink-0">
                   {welcomeData.tierName}
                 </span>
               </div>
 
               <div className="flex items-center justify-between text-xs">
-                <span className="flex items-center gap-1.5 font-bold text-stone-600 dark:text-[#B5B2AA]">
+                <span className="flex items-center gap-1.5 font-bold text-[#B5B2AA]">
                   <i className="ph-fill ph-wallet text-[#D4AF37] text-base"></i> Số dư ví khoai:
                 </span>
-                <span className="font-black text-[#B8860B] dark:text-[#F5D061] text-base">
+                <span className="font-black text-[#F5D061] text-base">
                   {welcomeData.potatoBalance.toLocaleString()} 🥔
                 </span>
               </div>
             </div>
 
-            {/* Nút hành động Bắt đầu khám phá - Tương phản cao, rực rỡ */}
+            {/* Nút hành động Bắt đầu khám phá - Tương phản cao, rực rỡ, loại bỏ quầng hắt sáng đáy */}
             <button
               type="button"
               onClick={handleWelcomeComplete}
-              className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-[#D4AF37] via-[#F3D374] to-[#C99C28] hover:from-[#F0CE5E] hover:to-[#D4AF37] text-[#161713] font-black text-sm uppercase tracking-wider shadow-[0_10px_25px_rgba(212,175,55,0.35)] hover:shadow-[0_12px_30px_rgba(212,175,55,0.45)] hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer"
+              style={{
+                background: 'linear-gradient(135deg, #D4AF37 0%, #E6C65C 50%, #C59B27 100%)',
+                color: '#141412',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.4), 0 1px 3px rgba(212,175,55,0.25)',
+              }}
+              className="btn-gold w-full py-3.5 px-6 rounded-2xl font-black text-sm uppercase tracking-wider hover:brightness-110 hover:scale-[1.01] active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer border border-[#D4AF37]/40"
             >
               <span>Bắt Đầu Khám Phá Ngay</span>
               <i className="ph-bold ph-arrow-right text-base"></i>
@@ -575,28 +584,26 @@ export default function AuthModal({
            ======================================================== */
         <div
           style={{
-            backgroundColor: isDarkTheme ? '#181916' : '#FFFDF9',
-            color: isDarkTheme ? '#EDE9DF' : '#1E1F1D',
+            backgroundColor: '#181916',
+            color: '#EDE9DF',
           }}
-          className={`relative w-full max-w-[560px] max-h-[85vh] flex flex-col overflow-hidden rounded-3xl border ${
-            isDarkTheme ? 'border-[#D4AF37]/40 shadow-[0_25px_80px_rgba(0,0,0,0.95)]' : 'border-[#D4AF37]/50 shadow-[0_25px_70px_rgba(0,0,0,0.5)]'
-          } backdrop-blur-2xl transition-all duration-300 ease-out transform ${
+          className={`relative w-full max-w-[560px] max-h-[85vh] flex flex-col overflow-hidden rounded-3xl border border-[#2C2E29] shadow-[0_25px_80px_rgba(0,0,0,0.95)] backdrop-blur-2xl transition-all duration-300 ease-out transform ${
             isVisible ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-4'
           }`}
         >
           <div className="h-1.5 w-full bg-gradient-to-r from-[#8B3038] via-[#D4AF37] to-[#8B3038]" />
 
           {/* Header Modal Điều khoản */}
-          <div className="p-5 sm:p-6 border-b border-stone-200 dark:border-[#2C2E29] flex items-center justify-between">
+          <div className="p-5 sm:p-6 border-b border-[#2C2E29] flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/40">
                 <i className="ph-bold ph-shield-check text-lg"></i>
               </div>
               <div>
-                <h3 className="font-nunito font-black text-base text-stone-900 dark:text-[#FAF7F0]">
+                <h3 className="font-nunito font-black text-base text-[#FAF7F0]">
                   Điều Khoản & Chính Sách HALM BOOK
                 </h3>
-                <p className="text-[11px] text-stone-500 dark:text-[#96938B]">
+                <p className="text-[11px] text-[#96938B]">
                   Cập nhật lần cuối: Tháng 11/2026
                 </p>
               </div>
@@ -604,21 +611,21 @@ export default function AuthModal({
             <button
               type="button"
               onClick={() => setShowTermsModal(false)}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-stone-200/60 dark:bg-[#252822] text-stone-500 hover:text-stone-900 dark:text-stone-300 dark:hover:text-white transition cursor-pointer"
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-[#20221E] hover:bg-[#2A2C26] text-[#96938B] hover:text-[#FAF7F0] border border-[#2C2E29] transition cursor-pointer"
             >
               <i className="ph-bold ph-x text-sm"></i>
             </button>
           </div>
 
           {/* Tab chọn Điều khoản hoặc Bảo mật */}
-          <div className="flex border-b border-stone-200 dark:border-[#2C2E29] px-6 pt-3 bg-stone-100/50 dark:bg-[#1B1D18]">
+          <div className="flex border-b border-[#2C2E29] px-6 pt-3 bg-[#141512]">
             <button
               type="button"
               onClick={() => setTermsActiveTab('terms')}
               className={`pb-2.5 px-3 text-xs font-bold transition-all border-b-2 flex items-center gap-1.5 cursor-pointer ${
                 termsActiveTab === 'terms'
-                  ? 'border-[#D4AF37] text-amber-800 dark:text-[#F5D061] font-black'
-                  : 'border-transparent text-stone-500 hover:text-stone-800 dark:text-[#96938B] dark:hover:text-[#EDE9DF]'
+                  ? 'border-[#D4AF37] text-[#D4AF37] font-black'
+                  : 'border-transparent text-[#96938B] hover:text-[#EDE9DF]'
               }`}
             >
               <i className="ph-bold ph-file-text"></i>
@@ -629,8 +636,8 @@ export default function AuthModal({
               onClick={() => setTermsActiveTab('privacy')}
               className={`pb-2.5 px-3 text-xs font-bold transition-all border-b-2 flex items-center gap-1.5 cursor-pointer ${
                 termsActiveTab === 'privacy'
-                  ? 'border-[#D4AF37] text-amber-800 dark:text-[#F5D061] font-black'
-                  : 'border-transparent text-stone-500 hover:text-stone-800 dark:text-[#96938B] dark:hover:text-[#EDE9DF]'
+                  ? 'border-[#D4AF37] text-[#D4AF37] font-black'
+                  : 'border-transparent text-[#96938B] hover:text-[#EDE9DF]'
               }`}
             >
               <i className="ph-bold ph-lock-key"></i>
@@ -639,11 +646,11 @@ export default function AuthModal({
           </div>
 
           {/* Nội dung chi tiết có thanh cuộn mượt */}
-          <div className="flex-1 overflow-y-auto p-5 sm:p-6 text-xs leading-relaxed space-y-4 text-stone-700 dark:text-[#C5C2BA]">
+          <div className="flex-1 overflow-y-auto p-5 sm:p-6 text-xs leading-relaxed space-y-4 text-[#C5C2BA]">
             {termsActiveTab === 'terms' ? (
               <>
                 <section>
-                  <h4 className="font-bold text-sm text-stone-900 dark:text-[#FAF7F0] mb-1">
+                  <h4 className="font-bold text-sm text-[#FAF7F0] mb-1">
                     1. Chấp thuận các điều khoản
                   </h4>
                   <p>
@@ -651,7 +658,7 @@ export default function AuthModal({
                   </p>
                 </section>
                 <section>
-                  <h4 className="font-bold text-sm text-stone-900 dark:text-[#FAF7F0] mb-1">
+                  <h4 className="font-bold text-sm text-[#FAF7F0] mb-1">
                     2. Quyền sở hữu trí tuệ & Bản quyền tác phẩm
                   </h4>
                   <p>
@@ -659,7 +666,7 @@ export default function AuthModal({
                   </p>
                 </section>
                 <section>
-                  <h4 className="font-bold text-sm text-stone-900 dark:text-[#FAF7F0] mb-1">
+                  <h4 className="font-bold text-sm text-[#FAF7F0] mb-1">
                     3. Cơ chế Khoai Tây & Thuê sách
                   </h4>
                   <p>
@@ -667,7 +674,7 @@ export default function AuthModal({
                   </p>
                 </section>
                 <section>
-                  <h4 className="font-bold text-sm text-stone-900 dark:text-[#FAF7F0] mb-1">
+                  <h4 className="font-bold text-sm text-[#FAF7F0] mb-1">
                     4. Tủ sách cá nhân & Trách nhiệm độc giả
                   </h4>
                   <p>
@@ -678,7 +685,7 @@ export default function AuthModal({
             ) : (
               <>
                 <section>
-                  <h4 className="font-bold text-sm text-stone-900 dark:text-[#FAF7F0] mb-1">
+                  <h4 className="font-bold text-sm text-[#FAF7F0] mb-1">
                     1. Thu thập thông tin cá nhân
                   </h4>
                   <p>
@@ -686,7 +693,7 @@ export default function AuthModal({
                   </p>
                 </section>
                 <section>
-                  <h4 className="font-bold text-sm text-stone-900 dark:text-[#FAF7F0] mb-1">
+                  <h4 className="font-bold text-sm text-[#FAF7F0] mb-1">
                     2. Mục đích sử dụng dữ liệu
                   </h4>
                   <p>
@@ -694,7 +701,7 @@ export default function AuthModal({
                   </p>
                 </section>
                 <section>
-                  <h4 className="font-bold text-sm text-stone-900 dark:text-[#FAF7F0] mb-1">
+                  <h4 className="font-bold text-sm text-[#FAF7F0] mb-1">
                     3. Cam kết không chia sẻ dữ liệu
                   </h4>
                   <p>
@@ -702,7 +709,7 @@ export default function AuthModal({
                   </p>
                 </section>
                 <section>
-                  <h4 className="font-bold text-sm text-stone-900 dark:text-[#FAF7F0] mb-1">
+                  <h4 className="font-bold text-sm text-[#FAF7F0] mb-1">
                     4. Quyền của độc giả
                   </h4>
                   <p>
@@ -714,8 +721,8 @@ export default function AuthModal({
           </div>
 
           {/* Footer Modal Điều khoản */}
-          <div className="p-4 sm:p-5 border-t border-stone-200 dark:border-[#2C2E29] bg-stone-50/70 dark:bg-[#1B1D18] flex items-center justify-between gap-3">
-            <span className="text-[11px] text-stone-500 dark:text-[#96938B]">
+          <div className="p-4 sm:p-5 border-t border-[#2C2E29] bg-[#141512] flex items-center justify-between gap-3">
+            <span className="text-[11px] text-[#96938B]">
               Nhấn Đồng ý để hoàn tất đăng ký
             </span>
             <button
@@ -725,7 +732,12 @@ export default function AuthModal({
                 setShowTermsModal(false);
                 triggerToast('success', 'Đã ghi nhận bạn đồng ý với Điều khoản & Bảo mật.');
               }}
-              className="py-2.5 px-5 rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#F3D374] to-[#C99C28] hover:from-[#F0CE5E] hover:to-[#D4AF37] text-[#161713] font-black text-xs uppercase tracking-wide shadow-md transition cursor-pointer"
+              style={{
+                background: 'linear-gradient(135deg, #D4AF37 0%, #E6C65C 50%, #C59B27 100%)',
+                color: '#141412',
+                boxShadow: '0 4px 14px rgba(0,0,0,0.4)',
+              }}
+              className="btn-gold py-2.5 px-5 rounded-xl font-black text-xs uppercase tracking-wide border border-[#D4AF37]/40 transition cursor-pointer"
             >
               Tôi Đã Hiểu & Đồng Ý
             </button>
@@ -738,12 +750,10 @@ export default function AuthModal({
         <div
           ref={modalRef}
           style={{
-            backgroundColor: isDarkTheme ? '#181916' : '#FFFDF9',
-            color: isDarkTheme ? '#EDE9DF' : '#1E1F1D',
+            backgroundColor: '#181916',
+            color: '#EDE9DF',
           }}
-          className={`relative w-full max-w-[460px] overflow-hidden rounded-3xl border ${
-            isDarkTheme ? 'border-[#D4AF37]/40 shadow-[0_25px_80px_rgba(0,0,0,0.95)]' : 'border-[#D4AF37]/45 shadow-[0_25px_60px_rgba(212,175,55,0.18)]'
-          } backdrop-blur-2xl transition-all duration-300 ease-out transform ${
+          className={`relative w-full max-w-[460px] overflow-hidden rounded-3xl border border-[#2C2E29] shadow-[0_25px_60px_rgba(0,0,0,0.85)] backdrop-blur-2xl transition-all duration-300 ease-out transform ${
             isVisible ? 'scale-100 opacity-100 translate-y-0' : 'scale-95 opacity-0 translate-y-4'
           }`}
         >
@@ -754,11 +764,11 @@ export default function AuthModal({
           <button
             type="button"
             onClick={handleClose}
-            className="absolute right-4 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-stone-200/60 dark:bg-[#252822] text-stone-500 hover:text-stone-900 dark:text-stone-300 dark:hover:text-white transition-colors cursor-pointer"
+            className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-[#20221E] hover:bg-[#2A2C26] text-[#96938B] hover:text-[#EDE9DF] border border-[#2C2E29] transition-all cursor-pointer"
             aria-label="Đóng cửa sổ"
             title="Đóng (Esc)"
           >
-            <i className="ph-bold ph-x text-lg"></i>
+            <i className="ph-bold ph-x text-base"></i>
           </button>
 
           <div className="p-6 sm:p-7">
@@ -766,34 +776,32 @@ export default function AuthModal({
             <div className="text-center mb-5">
               <div className="inline-flex items-center justify-center gap-2 mb-2">
                 <img src={logo} alt="HALM BOOK" className="h-10 w-10 object-contain drop-shadow-sm" />
-                <span className="font-nunito text-xl font-black tracking-tight text-[#1E1F1D] dark:text-[#FAF7F0]">
-                  HALM <span className="text-[#B8860B] dark:text-[#F5D061]">BOOK</span>
+                <span className="font-nunito text-xl font-black tracking-tight text-[#FAF7F0]">
+                  HALM <span className="text-[#D4AF37] drop-shadow-[0_1px_4px_rgba(212,175,55,0.25)]">BOOK</span>
                 </span>
               </div>
 
               {customMessage ? (
-                <div className="mx-auto mt-1 max-w-sm rounded-xl bg-amber-500/10 dark:bg-[#D4AF37]/15 border border-amber-500/30 dark:border-[#D4AF37]/35 px-3 py-1.5 text-xs font-semibold text-amber-900 dark:text-[#FBE596] flex items-center justify-center gap-1.5">
-                  <i className="ph-bold ph-info text-sm shrink-0"></i>
+                <div className="mx-auto mt-1 max-w-sm rounded-xl bg-[#D4AF37]/15 border border-[#D4AF37]/35 px-3 py-1.5 text-xs font-semibold text-[#FBE596] flex items-center justify-center gap-1.5">
+                  <i className="ph-bold ph-info text-sm shrink-0 text-[#D4AF37]"></i>
                   <span>{customMessage}</span>
                 </div>
               ) : (
-                <p className="text-xs text-stone-500 dark:text-[#96938B]">
+                <p className="text-xs text-[#96938B]">
                   Thế giới tri thức chọn lọc & Trợ lý đọc sách thông minh
                 </p>
               )}
             </div>
 
             {/* Thanh chuyển đổi Tab (Đăng Nhập / Đăng Ký / Mã QR) */}
-            <div className="flex rounded-2xl bg-stone-200/70 dark:bg-[#1E201B] border border-transparent dark:border-[#2C2E29] p-1 mb-5">
+            <div className="flex rounded-2xl bg-[#141512] border border-[#2C2E29] p-1 mb-5">
               <button
                 type="button"
                 onClick={() => setActiveTab('login')}
                 className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                   activeTab === 'login'
-                    ? isDarkTheme
-                      ? 'bg-[#2A2C26] text-[#F5D061] border border-[#D4AF37]/35 shadow-md font-black'
-                      : 'bg-white text-[#8B3038] shadow-sm font-black'
-                    : 'text-stone-500 hover:text-stone-800 dark:text-[#96938B] dark:hover:text-[#FAF7F0]'
+                    ? 'bg-[#20221E] text-[#D4AF37] border border-[#D4AF37]/40 shadow-sm font-black'
+                    : 'text-[#96938B] hover:text-[#FAF7F0] hover:bg-[#1C1E1A]'
                 }`}
               >
                 <i className="ph-bold ph-sign-in"></i>
@@ -804,10 +812,8 @@ export default function AuthModal({
                 onClick={() => setActiveTab('register')}
                 className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                   activeTab === 'register'
-                    ? isDarkTheme
-                      ? 'bg-[#2A2C26] text-[#F5D061] border border-[#D4AF37]/35 shadow-md font-black'
-                      : 'bg-white text-[#8B3038] shadow-sm font-black'
-                    : 'text-stone-500 hover:text-stone-800 dark:text-[#96938B] dark:hover:text-[#FAF7F0]'
+                    ? 'bg-[#20221E] text-[#D4AF37] border border-[#D4AF37]/40 shadow-sm font-black'
+                    : 'text-[#96938B] hover:text-[#FAF7F0] hover:bg-[#1C1E1A]'
                 }`}
               >
                 <i className="ph-bold ph-user-plus"></i>
@@ -818,10 +824,8 @@ export default function AuthModal({
                 onClick={() => setActiveTab('qr')}
                 className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
                   activeTab === 'qr'
-                    ? isDarkTheme
-                      ? 'bg-[#2A2C26] text-[#F5D061] border border-[#D4AF37]/35 shadow-md font-black'
-                      : 'bg-white text-[#8B3038] shadow-sm font-black'
-                    : 'text-stone-500 hover:text-stone-800 dark:text-[#96938B] dark:hover:text-[#FAF7F0]'
+                    ? 'bg-[#20221E] text-[#D4AF37] border border-[#D4AF37]/40 shadow-sm font-black'
+                    : 'text-[#96938B] hover:text-[#FAF7F0] hover:bg-[#1C1E1A]'
                 }`}
                 title="Đăng nhập bằng mã QR trên app di động"
               >
@@ -836,12 +840,11 @@ export default function AuthModal({
             {activeTab === 'login' && (
               <form onSubmit={handleLoginSubmit} className="space-y-3.5">
                 <div>
-                  <label className="block text-xs font-bold text-stone-700 dark:text-[#D1CEC7] mb-1">
+                  <label className="block text-xs font-bold text-[#D1CEC7] mb-1">
                     Tên đăng nhập
                   </label>
                   <div className="relative flex items-center">
-                    {/* Icon căn chuẩn tâm dọc tuyệt đối */}
-                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-stone-400 dark:text-[#A89354]">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[#D4AF37]">
                       <i className="ph-bold ph-user text-base"></i>
                     </div>
                     <input
@@ -851,27 +854,26 @@ export default function AuthModal({
                       placeholder="Nhập tên đăng nhập của bạn"
                       required
                       autoComplete="username"
-                      className="h-11 w-full rounded-xl border border-stone-300 dark:border-[#32352E] bg-white dark:bg-[#1E201B] py-2 pl-10 pr-3.5 text-xs sm:text-sm text-stone-900 dark:text-[#FAF7F0] placeholder:text-stone-400 dark:placeholder:text-[#6C6963] outline-none focus:border-[#D4AF37] focus:ring-2 focus:ring-[#D4AF37]/25 transition"
+                      className="h-11 w-full rounded-xl border border-[#2C2E29] bg-[#20221E] py-2 pl-10 pr-3.5 text-xs sm:text-sm text-[#FAF7F0] placeholder-[#807D75] outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]/30 transition shadow-inner"
                     />
                   </div>
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-xs font-bold text-stone-700 dark:text-[#D1CEC7]">
+                    <label className="block text-xs font-bold text-[#D1CEC7]">
                       Mật khẩu
                     </label>
                     <a
                       href="/quenmatkhau"
-                      className="text-[11px] font-bold text-amber-700 dark:text-[#F5D061] hover:underline"
+                      className="text-[11px] font-bold text-[#D4AF37] hover:underline"
                       onClick={() => handleClose()}
                     >
                       Quên mật khẩu?
                     </a>
                   </div>
                   <div className="relative flex items-center">
-                    {/* Icon ổ khóa căn tâm tuyệt đối */}
-                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-stone-400 dark:text-[#A89354]">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[#D4AF37]">
                       <i className="ph-bold ph-lock-key text-base"></i>
                     </div>
                     <input
@@ -881,14 +883,13 @@ export default function AuthModal({
                       placeholder="Nhập mật khẩu"
                       required
                       autoComplete="current-password"
-                      className="h-11 w-full rounded-xl border border-stone-300 dark:border-[#32352E] bg-white dark:bg-[#1E201B] py-2 pl-10 pr-10 text-xs sm:text-sm text-stone-900 dark:text-[#FAF7F0] placeholder:text-stone-400 dark:placeholder:text-[#6C6963] outline-none focus:border-[#D4AF37] focus:ring-2 focus:ring-[#D4AF37]/25 transition"
+                      className="h-11 w-full rounded-xl border border-[#2C2E29] bg-[#20221E] py-2 pl-10 pr-10 text-xs sm:text-sm text-[#FAF7F0] placeholder-[#807D75] outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]/30 transition shadow-inner"
                     />
-                    {/* Nút ẩn/hiện mật khẩu căn tâm tuyệt đối */}
                     <div className="absolute inset-y-0 right-0 flex items-center pr-2">
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-stone-400 hover:text-stone-700 dark:text-[#A89354] dark:hover:text-[#F5D061] transition cursor-pointer"
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-[#96938B] hover:text-[#D4AF37] transition cursor-pointer"
                         aria-label="Ẩn hiện mật khẩu"
                       >
                         <i className={`ph-bold ${showPassword ? 'ph-eye-slash' : 'ph-eye'} text-base`}></i>
@@ -900,7 +901,12 @@ export default function AuthModal({
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full mt-2 py-3 rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#F3D374] to-[#C99C28] hover:from-[#F0CE5E] hover:to-[#D4AF37] text-[#161713] font-black text-xs uppercase tracking-wider shadow-[0_6px_20px_rgba(212,175,55,0.3)] hover:shadow-[0_8px_25px_rgba(212,175,55,0.4)] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  style={{
+                    background: 'linear-gradient(135deg, #D4AF37 0%, #E6C65C 50%, #C59B27 100%)',
+                    color: '#141412',
+                    boxShadow: '0 4px 14px rgba(0,0,0,0.4), 0 1px 3px rgba(212,175,55,0.2)',
+                  }}
+                  className="btn-gold w-full mt-2 py-3 rounded-xl font-black text-xs uppercase tracking-wider border border-[#D4AF37]/40 hover:brightness-110 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   {isLoading ? (
                     <>
@@ -917,9 +923,9 @@ export default function AuthModal({
 
                 <div className="relative my-4 text-center">
                   <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-stone-200 dark:border-[#2C2E29]"></div>
+                    <div className="w-full border-t border-[#2C2E29]"></div>
                   </div>
-                  <span className="relative bg-[#FFFDF9] dark:bg-[#161714] px-3 text-[11px] font-semibold text-stone-500 dark:text-[#96938B] uppercase tracking-wider">
+                  <span className="relative bg-[#181916] px-3 text-[11px] font-bold text-[#96938B] uppercase tracking-wider">
                     Hoặc đăng nhập nhanh bằng
                   </span>
                 </div>
@@ -929,7 +935,7 @@ export default function AuthModal({
                   <button
                     type="button"
                     onClick={() => loginWithGoogle()}
-                    className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border border-stone-300 dark:border-[#32352E] bg-white dark:bg-[#1E201B] hover:bg-stone-50 dark:hover:bg-[#252822] text-xs font-bold text-stone-800 dark:text-[#FAF7F0] transition shadow-xs cursor-pointer"
+                    className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border border-[#2C2E29] bg-[#20221E] hover:bg-[#282A24] text-xs font-bold text-[#FAF7F0] transition shadow-sm cursor-pointer"
                   >
                     <svg width="18" height="18" viewBox="0 0 24 24">
                       <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
@@ -949,7 +955,7 @@ export default function AuthModal({
                       <button
                         type="button"
                         onClick={renderProps.onClick}
-                        className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border border-stone-300 dark:border-[#32352E] bg-white dark:bg-[#1E201B] hover:bg-stone-50 dark:hover:bg-[#252822] text-xs font-bold text-[#1877F2] dark:text-[#5B9DF8] transition shadow-xs cursor-pointer"
+                        className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border border-[#2C2E29] bg-[#20221E] hover:bg-[#282A24] text-xs font-bold text-[#5B9DF8] transition shadow-sm cursor-pointer"
                       >
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                           <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
@@ -968,11 +974,11 @@ export default function AuthModal({
             {activeTab === 'register' && (
               <form onSubmit={handleRegisterSubmit} className="space-y-3">
                 <div>
-                  <label className="block text-xs font-bold text-stone-700 dark:text-[#D1CEC7] mb-1">
+                  <label className="block text-xs font-bold text-[#D1CEC7] mb-1">
                     Tên đăng nhập
                   </label>
                   <div className="relative flex items-center">
-                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-stone-400 dark:text-[#A89354]">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[#D4AF37]">
                       <i className="ph-bold ph-user text-base"></i>
                     </div>
                     <input
@@ -981,17 +987,17 @@ export default function AuthModal({
                       onChange={(e) => setNewUsername(e.target.value)}
                       placeholder="4 - 20 ký tự (chữ, số, _)"
                       required
-                      className="h-11 w-full rounded-xl border border-stone-300 dark:border-[#32352E] bg-white dark:bg-[#1E201B] py-2 pl-10 pr-3.5 text-xs sm:text-sm text-stone-900 dark:text-[#FAF7F0] placeholder:text-stone-400 dark:placeholder:text-[#6C6963] outline-none focus:border-[#D4AF37] focus:ring-2 focus:ring-[#D4AF37]/25 transition"
+                      className="h-11 w-full rounded-xl border border-[#2C2E29] bg-[#20221E] py-2 pl-10 pr-3.5 text-xs sm:text-sm text-[#FAF7F0] placeholder-[#807D75] outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]/30 transition shadow-inner"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-stone-700 dark:text-[#D1CEC7] mb-1">
+                  <label className="block text-xs font-bold text-[#D1CEC7] mb-1">
                     Địa chỉ Email
                   </label>
                   <div className="relative flex items-center">
-                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-stone-400 dark:text-[#A89354]">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-[#D4AF37]">
                       <i className="ph-bold ph-envelope text-base"></i>
                     </div>
                     <input
@@ -1000,18 +1006,18 @@ export default function AuthModal({
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="email@example.com"
                       required
-                      className="h-11 w-full rounded-xl border border-stone-300 dark:border-[#32352E] bg-white dark:bg-[#1E201B] py-2 pl-10 pr-3.5 text-xs sm:text-sm text-stone-900 dark:text-[#FAF7F0] placeholder:text-stone-400 dark:placeholder:text-[#6C6963] outline-none focus:border-[#D4AF37] focus:ring-2 focus:ring-[#D4AF37]/25 transition"
+                      className="h-11 w-full rounded-xl border border-[#2C2E29] bg-[#20221E] py-2 pl-10 pr-3.5 text-xs sm:text-sm text-[#FAF7F0] placeholder-[#807D75] outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]/30 transition shadow-inner"
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
-                    <label className="block text-xs font-bold text-stone-700 dark:text-[#D1CEC7] mb-1">
+                    <label className="block text-xs font-bold text-[#D1CEC7] mb-1">
                       Mật khẩu
                     </label>
                     <div className="relative flex items-center">
-                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-stone-400 dark:text-[#A89354]">
+                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-[#D4AF37]">
                         <i className="ph-bold ph-lock-key text-base"></i>
                       </div>
                       <input
@@ -1020,12 +1026,12 @@ export default function AuthModal({
                         onChange={(e) => setNewPassword(e.target.value)}
                         placeholder=">= 6 ký tự"
                         required
-                        className="h-11 w-full rounded-xl border border-stone-300 dark:border-[#32352E] bg-white dark:bg-[#1E201B] py-2 pl-9 pr-8 text-xs sm:text-sm text-stone-900 dark:text-[#FAF7F0] placeholder:text-stone-400 dark:placeholder:text-[#6C6963] outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] transition"
+                        className="h-11 w-full rounded-xl border border-[#2C2E29] bg-[#20221E] py-2 pl-9 pr-8 text-xs sm:text-sm text-[#FAF7F0] placeholder-[#807D75] outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]/30 transition shadow-inner"
                       />
                       <button
                         type="button"
                         onClick={() => setShowNewPassword(!showNewPassword)}
-                        className="absolute right-2 text-stone-400 hover:text-stone-600 dark:text-[#A89354] dark:hover:text-[#F5D061] cursor-pointer"
+                        className="absolute right-2 text-[#96938B] hover:text-[#D4AF37] cursor-pointer"
                         aria-label="Ẩn hiện mật khẩu"
                       >
                         <i className={`ph-bold ${showNewPassword ? 'ph-eye-slash' : 'ph-eye'} text-xs`}></i>
@@ -1034,11 +1040,11 @@ export default function AuthModal({
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-stone-700 dark:text-[#D1CEC7] mb-1">
+                    <label className="block text-xs font-bold text-[#D1CEC7] mb-1">
                       Xác nhận
                     </label>
                     <div className="relative flex items-center">
-                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-stone-400 dark:text-[#A89354]">
+                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-[#D4AF37]">
                         <i className="ph-bold ph-check text-base"></i>
                       </div>
                       <input
@@ -1047,12 +1053,12 @@ export default function AuthModal({
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         placeholder="Nhập lại mật khẩu"
                         required
-                        className="h-11 w-full rounded-xl border border-stone-300 dark:border-[#32352E] bg-white dark:bg-[#1E201B] py-2 pl-9 pr-8 text-xs sm:text-sm text-stone-900 dark:text-[#FAF7F0] placeholder:text-stone-400 dark:placeholder:text-[#6C6963] outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37] transition"
+                        className="h-11 w-full rounded-xl border border-[#2C2E29] bg-[#20221E] py-2 pl-9 pr-8 text-xs sm:text-sm text-[#FAF7F0] placeholder-[#807D75] outline-none focus:border-[#D4AF37] focus:ring-1 focus:ring-[#D4AF37]/30 transition shadow-inner"
                       />
                       <button
                         type="button"
                         onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        className="absolute right-2 text-stone-400 hover:text-stone-600 dark:text-[#A89354] dark:hover:text-[#F5D061] cursor-pointer"
+                        className="absolute right-2 text-[#96938B] hover:text-[#D4AF37] cursor-pointer"
                         aria-label="Ẩn hiện xác nhận mật khẩu"
                       >
                         <i className={`ph-bold ${showConfirmPassword ? 'ph-eye-slash' : 'ph-eye'} text-xs`}></i>
@@ -1068,14 +1074,14 @@ export default function AuthModal({
                     id="modal-agree-terms"
                     checked={agreeTerms}
                     onChange={(e) => setAgreeTerms(e.target.checked)}
-                    className="h-4 w-4 rounded border-stone-300 dark:border-[#32352E] text-amber-600 focus:ring-amber-500 cursor-pointer accent-[#D4AF37]"
+                    className="h-4 w-4 rounded border-[#2C2E29] bg-[#20221E] text-[#D4AF37] focus:ring-[#D4AF37] cursor-pointer accent-[#D4AF37]"
                   />
-                  <label htmlFor="modal-agree-terms" className="text-[11px] text-stone-600 dark:text-[#96938B] cursor-pointer select-none">
+                  <label htmlFor="modal-agree-terms" className="text-[11px] text-[#96938B] cursor-pointer select-none">
                     Tôi đồng ý với{' '}
                     <button
                       type="button"
                       onClick={() => { setTermsActiveTab('terms'); setShowTermsModal(true); }}
-                      className="text-amber-700 dark:text-[#F5D061] font-bold hover:underline cursor-pointer"
+                      className="text-[#D4AF37] font-bold hover:underline cursor-pointer"
                     >
                       Điều khoản
                     </button>{' '}
@@ -1083,7 +1089,7 @@ export default function AuthModal({
                     <button
                       type="button"
                       onClick={() => { setTermsActiveTab('privacy'); setShowTermsModal(true); }}
-                      className="text-amber-700 dark:text-[#F5D061] font-bold hover:underline cursor-pointer"
+                      className="text-[#D4AF37] font-bold hover:underline cursor-pointer"
                     >
                       Chính sách bảo mật
                     </button>
@@ -1093,7 +1099,12 @@ export default function AuthModal({
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full mt-2 py-3 rounded-xl bg-gradient-to-r from-[#D4AF37] via-[#F3D374] to-[#C99C28] hover:from-[#F0CE5E] hover:to-[#D4AF37] text-[#161713] font-black text-xs uppercase tracking-wider shadow-[0_6px_20px_rgba(212,175,55,0.3)] hover:shadow-[0_8px_25px_rgba(212,175,55,0.4)] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  style={{
+                    background: 'linear-gradient(135deg, #D4AF37 0%, #E6C65C 50%, #C59B27 100%)',
+                    color: '#141412',
+                    boxShadow: '0 4px 14px rgba(0,0,0,0.4), 0 1px 3px rgba(212,175,55,0.2)',
+                  }}
+                  className="btn-gold w-full mt-2 py-3 rounded-xl font-black text-xs uppercase tracking-wider border border-[#D4AF37]/40 hover:brightness-110 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   {isLoading ? (
                     <>
@@ -1115,23 +1126,23 @@ export default function AuthModal({
                ======================================================== */}
             {activeTab === 'qr' && (
               <div className="text-center py-3 animate-fade-in">
-                <div className="mx-auto mb-3 flex h-44 w-44 items-center justify-center rounded-2xl border-2 border-dashed border-[#D4AF37]/60 bg-white p-2.5 shadow-sm">
+                <div className="mx-auto mb-3 flex h-44 w-44 items-center justify-center rounded-2xl border-2 border-dashed border-[#D4AF37]/60 bg-[#F5F2EB] p-2.5 shadow-md">
                   <img
                     src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=HALMBOOK_AUTH_PORTAL_TOKEN"
                     alt="QR Login"
                     className="h-full w-full object-contain"
                   />
                 </div>
-                <h4 className="text-sm font-bold text-stone-900 dark:text-[#FAF7F0] mb-1">
+                <h4 className="text-sm font-bold text-[#FAF7F0] mb-1">
                   Quét mã QR bằng App HALM BOOK
                 </h4>
-                <p className="text-xs text-stone-500 dark:text-[#96938B] max-w-xs mx-auto mb-3">
+                <p className="text-xs text-[#96938B] max-w-xs mx-auto mb-3">
                   Mở ứng dụng trên điện thoại, vào mục Quét mã để đăng nhập vào tài khoản tức thì mà không cần nhập mật khẩu.
                 </p>
                 <button
                   type="button"
                   onClick={() => setActiveTab('login')}
-                  className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-[#F5D061] hover:underline cursor-pointer"
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-[#D4AF37] hover:underline cursor-pointer"
                 >
                   <i className="ph-bold ph-arrow-left"></i>
                   <span>Quay lại đăng nhập thường</span>
@@ -1140,14 +1151,14 @@ export default function AuthModal({
             )}
 
             {/* Chân Modal: Chuyển đổi nhanh qua lại giữa Đăng nhập & Đăng ký */}
-            <div className="mt-5 pt-3 border-t border-stone-200 dark:border-[#2C2E29] text-center text-xs text-stone-500 dark:text-[#96938B]">
+            <div className="mt-5 pt-3 border-t border-[#2C2E29] text-center text-xs text-[#96938B]">
               {activeTab === 'login' ? (
                 <span>
                   Chưa có tài khoản độc giả?{' '}
                   <button
                     type="button"
                     onClick={() => setActiveTab('register')}
-                    className="font-bold text-amber-700 dark:text-[#F5D061] hover:underline cursor-pointer"
+                    className="font-bold text-[#D4AF37] hover:underline cursor-pointer"
                   >
                     Đăng ký ngay miễn phí
                   </button>
@@ -1158,7 +1169,7 @@ export default function AuthModal({
                   <button
                     type="button"
                     onClick={() => setActiveTab('login')}
-                    className="font-bold text-amber-700 dark:text-[#F5D061] hover:underline cursor-pointer"
+                    className="font-bold text-[#D4AF37] hover:underline cursor-pointer"
                   >
                     Đăng nhập tại đây
                   </button>

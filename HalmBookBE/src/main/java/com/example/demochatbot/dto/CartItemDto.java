@@ -12,6 +12,8 @@ import lombok.NoArgsConstructor;
 public class CartItemDto {
     private int cartItemId;
     private String bookId;
+    private String offerId;
+    private String offerName;
 
     // Trường chuẩn cho Mobile App (title, coverUrl, description, rentalDays, priceKhoai)
     private String title;

@@ -23,6 +23,7 @@ class AiConfigurationTests {
     private OpenAiChatOptions actualRequestOptions(MockEnvironment environment) {
         var properties = Binder.get(environment).bind("spring.ai.openai.chat", OpenAiChatProperties.class).get();
         ChatModel model = mock(ChatModel.class);
+        when(model.getOptions()).thenReturn(OpenAiChatOptions.builder().build());
         when(model.call(any(Prompt.class))).thenReturn(new ChatResponse(List.of(new Generation(new AssistantMessage("fixture")))));
         var builder = ChatClient.builder(model);
         new AiChatConfig().boundedAiRequests(properties).customize(builder);

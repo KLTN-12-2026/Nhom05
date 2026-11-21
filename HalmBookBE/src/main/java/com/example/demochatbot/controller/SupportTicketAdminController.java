@@ -30,6 +30,9 @@ import java.util.*;
 public class SupportTicketAdminController {
 
     @Autowired
+    private com.example.demochatbot.service.notification.NotificationBroadcastService broadcastService;
+
+    @Autowired
     private SupportTicketRepository supportTicketRepository;
 
     @Autowired
@@ -280,50 +283,13 @@ public class SupportTicketAdminController {
      * 4. Phát thông báo hệ thống (Broadcast Notification)
      */
     @PostMapping("/broadcast")
-    @Transactional
-    public ResponseEntity<?> broadcastNotification(@RequestBody Map<String, String> payload) {
-        try {
-            String title = payload.get("title");
-            String message = payload.get("message");
-            String target = payload.getOrDefault("target", "all"); // all, vip, standard
-
-            if (title == null || title.trim().isEmpty() || message == null || message.trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(Map.of("message", "Tiêu đề và nội dung thông báo không được để trống!"));
-            }
-
-            List<Customer> customers = customerRepository.findAll();
-            int count = 0;
-
-            for (Customer c : customers) {
-                if ("vip".equalsIgnoreCase(target)) {
-                    // Chỉ gửi cho khách hàng VIP
-                    int potato = c.getPotatoBalance() != null ? c.getPotatoBalance() : 0;
-                    if (potato < 500) continue;
-                }
-
-                Notification notif = Notification.builder()
-                        .customerId(c.getCustomer_id())
-                        .title(title.trim())
-                        .message(message.trim())
-                        .type("SYSTEM")
-                        .link("/thong-bao")
-                        .isRead(false)
-                        .createdAt(LocalDateTime.now())
-                        .build();
-                notificationRepository.save(notif);
-                count++;
-            }
-
-            Map<String, Object> res = new HashMap<>();
-            res.put("success", true);
-            res.put("message", "Đã phát thông báo hệ thống thành công đến " + count + " độc giả!");
-            res.put("sentCount", count);
-            return ResponseEntity.ok(res);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("message", "Lỗi khi phát thông báo: " + e.getMessage()));
+    public ResponseEntity<?> broadcastNotification(@jakarta.validation.Valid @RequestBody com.example.demochatbot.dto.BroadcastRequest payload) {
+        var authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated() || authentication.getAuthorities().stream()
+                .noneMatch(a -> Set.of("ADMIN", "ROLE_ADMIN").contains(a.getAuthority()))) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", "Chỉ quản trị viên được phát thông báo."));
         }
+        return ResponseEntity.ok(broadcastService.broadcast(payload, authentication.getName()));
     }
 
     /**

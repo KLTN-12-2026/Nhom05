@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppNavigation } from './navigation';
+import { notificationDestination } from './notificationDestination';
 import {
   AppNotification,
   clearAllNotifications,
@@ -231,11 +232,13 @@ export default function ThongBaoScreen({ onBack }: { onBack: () => void }) {
         void loadData();
       }
     });
+    const timer = setInterval(() => { if (AppState.currentState === 'active') void loadData(); }, 15000);
 
     return () => {
       mounted.current = false;
       unsubscribe();
       appStateSub.remove();
+      clearInterval(timer);
     };
   }, [loadData]);
 
@@ -283,6 +286,11 @@ export default function ThongBaoScreen({ onBack }: { onBack: () => void }) {
     const { type, data, link } = detailItem;
     setDetailItem(null);
 
+    const destination = notificationDestination(link);
+    if (destination && destination !== 'genreBooks') {
+      navigate(destination);
+      return;
+    }
     // If explicit backend link exists:
     if (link) {
       if (link.includes('wallet') || link.includes('potato')) {
@@ -771,7 +779,7 @@ export default function ThongBaoScreen({ onBack }: { onBack: () => void }) {
 
                 {/* Action Buttons */}
                 <View style={styles.modalActionsWrap}>
-                  <Pressable
+                  {(detailItem.link || detailItem.type !== 'system') && <Pressable
                     onPress={handleNavigateRelated}
                     style={[styles.primaryActionBtn, { backgroundColor: colors.brand, flex: 1 }]}
                   >
@@ -803,10 +811,10 @@ export default function ThongBaoScreen({ onBack }: { onBack: () => void }) {
                               ? 'Open Gifted Books'
                               : 'Xem sách được tặng'
                             : en
-                              ? 'Go to Home'
-                              : 'Về Trang chủ'}
+                              ? 'Open related content'
+                              : 'Mở nội dung liên quan'}
                     </Text>
-                  </Pressable>
+                  </Pressable>}
 
                   <Pressable
                     onPress={() => setDetailItem(null)}

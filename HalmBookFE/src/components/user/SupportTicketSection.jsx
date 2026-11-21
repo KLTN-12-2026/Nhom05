@@ -225,7 +225,20 @@ export default function SupportTicketSection({ customer, showToast }) {
 
   const handleDeleteTicket = async (ticket) => {
     if (!ticket?.id || deletingTicketId) return;
-    if (!window.confirm(`Xóa yêu cầu #${ticket.code} khỏi lịch sử hỗ trợ của bạn?`)) return;
+    let confirmed = true;
+    if (typeof window.halmConfirm === 'function') {
+      confirmed = await window.halmConfirm({
+        title: 'Xác Nhận Xóa Yêu Cầu',
+        message: `Bạn có chắc chắn muốn xóa yêu cầu #${ticket.code} khỏi lịch sử hỗ trợ của bạn?`,
+        confirmText: 'Xóa Yêu Cầu',
+        cancelText: 'Hủy Bỏ',
+        type: 'danger',
+        icon: 'fa-solid fa-trash-can text-rose-500'
+      });
+    } else {
+      confirmed = window.confirm(`Xóa yêu cầu #${ticket.code} khỏi lịch sử hỗ trợ của bạn?`);
+    }
+    if (!confirmed) return;
     try {
       setDeletingTicketId(ticket.id);
       await deleteSupportTicket(ticket.id, ticket.code);

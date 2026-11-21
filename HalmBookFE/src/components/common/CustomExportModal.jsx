@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { registerExportModalHandler, unregisterExportModalHandler } from '@/services/customExport';
+import halmToast from '@/utils/toast';
 
 export default function CustomExportModal() {
   const [modalConfig, setModalConfig] = useState(null);
@@ -113,7 +114,7 @@ export default function CustomExportModal() {
 
   const handleConfirmExport = async () => {
     if (selectedCols.size === 0) {
-      alert('Vui lòng chọn ít nhất 1 cột / chỉ số dữ liệu để xuất!');
+      halmToast.warning('Chưa chọn cột dữ liệu', 'Vui lòng chọn ít nhất 1 cột / chỉ số dữ liệu để xuất file!');
       return;
     }
 
@@ -139,12 +140,14 @@ export default function CustomExportModal() {
 
       if (window.DB && typeof window.DB.notify === 'function') {
         window.DB.notify(`Đã xuất thành công tệp ${fullFilename} (${format.toUpperCase()})!`, 'success');
+      } else {
+        halmToast.success('Xuất file thành công', `Đã xuất tệp ${fullFilename} (${format.toUpperCase()})!`);
       }
 
       handleClose(exportResult);
     } catch (err) {
       console.error('Lỗi khi xuất file:', err);
-      alert('Có lỗi xảy ra trong quá trình xuất file: ' + err.message);
+      halmToast.error('Lỗi xuất dữ liệu', 'Có lỗi xảy ra trong quá trình xuất file: ' + err.message);
       setIsExporting(false);
     }
   };
@@ -153,7 +156,7 @@ export default function CustomExportModal() {
   const performDefaultExport = async (cfg) => {
     const targetData = (scope === 'all' ? modalConfig.data?.all : modalConfig.data?.filtered) || [];
     if (!targetData || targetData.length === 0) {
-      alert('Không có dữ liệu để xuất!');
+      halmToast.warning('Không có dữ liệu', 'Không có dữ liệu phù hợp để xuất báo cáo!');
       return;
     }
 
@@ -184,64 +187,67 @@ export default function CustomExportModal() {
 
   return (
     <div
-      className="fixed inset-0 z-[999990] bg-slate-900/60 dark:bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 md:p-6 animate-in fade-in duration-150 select-none"
+      className="fixed inset-0 z-[999990] bg-black/80 backdrop-blur-md flex items-center justify-center p-3 md:p-6 animate-in fade-in duration-150 select-none"
       onClick={(e) => {
         if (e.target === e.currentTarget && !isExporting) handleClose(null);
       }}
       role="dialog"
       aria-modal="true"
     >
-      <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-4xl w-full border border-slate-200 dark:border-slate-700 shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+      <div className="bg-[#181916] rounded-3xl max-w-4xl w-full border border-[#2C2E29] shadow-[0_25px_70px_rgba(0,0,0,0.9)] flex flex-col max-h-[92vh] overflow-hidden text-[#FAF7F0]">
+        {/* Header Gradient Accent */}
+        <div className="h-1.5 w-full bg-gradient-to-r from-[#8E3038] via-[#D4AF37] to-[#8E3038]" />
+
         {/* Modal Sticky Header */}
-        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/90 flex justify-between items-center shrink-0">
+        <div className="px-6 py-4 border-b border-[#2C2E29] bg-[#141512] flex justify-between items-center shrink-0">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950/70 text-emerald-600 dark:text-emerald-400 flex items-center justify-center border border-emerald-300 dark:border-emerald-800 text-lg shadow-xs">
+            <div className="w-10 h-10 rounded-xl bg-[#D4AF37]/15 border border-[#D4AF37]/35 text-[#D4AF37] flex items-center justify-center text-lg shadow-xs">
               <i className="fa-solid fa-file-export"></i>
             </div>
             <div>
-              <h3 className="font-black text-slate-800 dark:text-white text-base leading-tight">
+              <h3 className="font-black text-[#FAF7F0] text-base leading-tight">
                 {modalConfig.title}
               </h3>
-              <p className="text-xs text-slate-400 mt-0.5">
-                {modalConfig.datasetName} • <span className="font-semibold text-slate-500 dark:text-slate-300">{modalConfig.currentFilterDesc}</span>
+              <p className="text-xs text-[#96938B] mt-0.5">
+                {modalConfig.datasetName} • <span className="font-semibold text-[#D1CEC7]">{modalConfig.currentFilterDesc}</span>
               </p>
             </div>
           </div>
           <button
             onClick={() => handleClose(null)}
             disabled={isExporting}
-            className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center transition cursor-pointer"
+            className="w-8 h-8 rounded-full bg-[#20221E] border border-[#2C2E29] text-[#96938B] hover:text-[#FAF7F0] hover:bg-[#282A24] flex items-center justify-center transition cursor-pointer"
           >
             <i className="fa-solid fa-xmark text-sm"></i>
           </button>
         </div>
 
         {/* Modal Body: Scrollable */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-[#181916]">
           {/* 1. Chọn định dạng xuất file */}
           <div>
-            <label className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center gap-2 mb-2.5">
-              <i className="fa-solid fa-file-code text-blue-600"></i>
+            <label className="text-xs font-black uppercase text-[#96938B] tracking-wider flex items-center gap-2 mb-2.5">
+              <i className="fa-solid fa-file-code text-[#D4AF37]"></i>
               <span>1. Định Dạng File Xuất</span>
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div
                 onClick={() => setFormat('excel')}
-                className={`p-3.5 rounded-xl border-2 cursor-pointer transition flex items-start space-x-3 ${
+                className={`p-3.5 rounded-2xl border-2 cursor-pointer transition flex items-start space-x-3 ${
                   format === 'excel'
-                    ? 'border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 shadow-sm'
-                    : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600 text-slate-700 dark:text-slate-300'
+                    ? 'border-emerald-500 bg-emerald-950/40 text-emerald-200 shadow-sm'
+                    : 'border-[#2C2E29] bg-[#20221E] hover:border-stone-600 text-[#C5C2BA]'
                 }`}
               >
-                <div className="w-9 h-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-lg shrink-0 mt-0.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-900/60 text-emerald-400 flex items-center justify-center text-lg shrink-0 mt-0.5 border border-emerald-700/50">
                   <i className="fa-solid fa-file-excel"></i>
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <h4 className="font-black text-xs text-slate-800 dark:text-white">Bảng Tính Excel (.CSV / .XLSX)</h4>
-                    {format === 'excel' && <i className="fa-solid fa-circle-check text-emerald-600 dark:text-emerald-400 text-sm"></i>}
+                    <h4 className="font-black text-xs text-[#FAF7F0]">Bảng Tính Excel (.CSV / .XLSX)</h4>
+                    {format === 'excel' && <i className="fa-solid fa-circle-check text-emerald-400 text-sm"></i>}
                   </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">
+                  <p className="text-[11px] text-[#96938B] mt-1 leading-snug">
                     Tương thích Microsoft Excel & Google Sheets, chuẩn UTF-8 BOM hiển thị tiếng Việt trọn vẹn.
                   </p>
                 </div>
@@ -249,21 +255,21 @@ export default function CustomExportModal() {
 
               <div
                 onClick={() => setFormat('pdf')}
-                className={`p-3.5 rounded-xl border-2 cursor-pointer transition flex items-start space-x-3 ${
+                className={`p-3.5 rounded-2xl border-2 cursor-pointer transition flex items-start space-x-3 ${
                   format === 'pdf'
-                    ? 'border-rose-500 bg-rose-50/70 dark:bg-rose-950/40 text-rose-900 dark:text-rose-200 shadow-sm'
-                    : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600 text-slate-700 dark:text-slate-300'
+                    ? 'border-rose-500 bg-rose-950/40 text-rose-200 shadow-sm'
+                    : 'border-[#2C2E29] bg-[#20221E] hover:border-stone-600 text-[#C5C2BA]'
                 }`}
               >
-                <div className="w-9 h-9 rounded-lg bg-rose-100 dark:bg-rose-900/60 text-rose-600 dark:text-rose-400 flex items-center justify-center text-lg shrink-0 mt-0.5">
+                <div className="w-9 h-9 rounded-xl bg-rose-900/60 text-rose-400 flex items-center justify-center text-lg shrink-0 mt-0.5 border border-rose-700/50">
                   <i className="fa-solid fa-file-pdf"></i>
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <h4 className="font-black text-xs text-slate-800 dark:text-white">Báo Cáo In PDF (.PDF)</h4>
-                    {format === 'pdf' && <i className="fa-solid fa-circle-check text-rose-600 dark:text-rose-400 text-sm"></i>}
+                    <h4 className="font-black text-xs text-[#FAF7F0]">Báo Cáo In PDF (.PDF)</h4>
+                    {format === 'pdf' && <i className="fa-solid fa-circle-check text-rose-400 text-sm"></i>}
                   </div>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-snug">
+                  <p className="text-[11px] text-[#96938B] mt-1 leading-snug">
                     Trang in báo cáo tài chính & chỉ số hệ thống, có đóng dấu kiểm duyệt và chữ ký xác nhận.
                   </p>
                 </div>
@@ -275,22 +281,22 @@ export default function CustomExportModal() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {/* Scope */}
             <div>
-              <label className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center gap-2 mb-2">
-                <i className="fa-solid fa-filter text-blue-600"></i>
+              <label className="text-xs font-black uppercase text-[#96938B] tracking-wider flex items-center gap-2 mb-2">
+                <i className="fa-solid fa-filter text-[#D4AF37]"></i>
                 <span>2. Phạm Vi Dữ Liệu</span>
               </label>
-              <div className="space-y-2 bg-slate-50 dark:bg-slate-800/80 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+              <div className="space-y-2 bg-[#20221E] p-3.5 rounded-2xl border border-[#2C2E29]">
                 <label className="flex items-center space-x-2.5 cursor-pointer">
                   <input
                     type="radio"
                     name="exportScope"
                     checked={scope === 'filtered'}
                     onChange={() => setScope('filtered')}
-                    className="w-4 h-4 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                    className="w-4 h-4 text-emerald-500 focus:ring-emerald-500 cursor-pointer"
                   />
-                  <div className="text-xs font-bold text-slate-800 dark:text-white">
+                  <div className="text-xs font-bold text-[#FAF7F0]">
                     Theo bộ lọc hiện tại{' '}
-                    <span className="font-mono text-blue-600 dark:text-blue-400">({modalConfig.filteredCount} mốc)</span>
+                    <span className="font-mono text-[#D4AF37]">({modalConfig.filteredCount} mốc)</span>
                   </div>
                 </label>
                 <label className="flex items-center space-x-2.5 cursor-pointer">
@@ -299,11 +305,11 @@ export default function CustomExportModal() {
                     name="exportScope"
                     checked={scope === 'all'}
                     onChange={() => setScope('all')}
-                    className="w-4 h-4 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                    className="w-4 h-4 text-emerald-500 focus:ring-emerald-500 cursor-pointer"
                   />
-                  <div className="text-xs font-bold text-slate-800 dark:text-white">
+                  <div className="text-xs font-bold text-[#FAF7F0]">
                     Toàn bộ dữ liệu các kỳ{' '}
-                    <span className="font-mono text-emerald-600 dark:text-emerald-400">({modalConfig.totalCount} mốc)</span>
+                    <span className="font-mono text-emerald-400">({modalConfig.totalCount} mốc)</span>
                   </div>
                 </label>
               </div>
@@ -311,8 +317,8 @@ export default function CustomExportModal() {
 
             {/* Custom Filename */}
             <div>
-              <label className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center gap-2 mb-2">
-                <i className="fa-solid fa-signature text-blue-600"></i>
+              <label className="text-xs font-black uppercase text-[#96938B] tracking-wider flex items-center gap-2 mb-2">
+                <i className="fa-solid fa-signature text-[#D4AF37]"></i>
                 <span>3. Tên Tệp Xuất</span>
               </label>
               <div className="relative">
@@ -321,13 +327,13 @@ export default function CustomExportModal() {
                   value={filename}
                   onChange={(e) => setFilename(e.target.value)}
                   placeholder="Nhập tên file xuất..."
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-xs font-bold text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 pr-16"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-[#2C2E29] bg-[#20221E] text-xs font-bold text-[#FAF7F0] placeholder-[#807D75] focus:outline-none focus:border-[#D4AF37] pr-16"
                 />
-                <span className="absolute right-3 top-2.5 text-[11px] font-mono font-bold text-slate-400 uppercase">
+                <span className="absolute right-3 top-2.5 text-[11px] font-mono font-bold text-[#807D75] uppercase">
                   {extension}
                 </span>
               </div>
-              <p className="text-[10px] text-slate-400 mt-1 italic">
+              <p className="text-[10px] text-[#96938B] mt-1 italic">
                 * Có thể sửa đổi tên file tùy ý trước khi xuất lưu trữ
               </p>
             </div>
@@ -336,10 +342,10 @@ export default function CustomExportModal() {
           {/* 3. Tùy chọn cột dữ liệu */}
           <div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5">
-              <label className="text-xs font-black uppercase text-slate-400 tracking-wider flex items-center gap-2">
-                <i className="fa-solid fa-table-columns text-blue-600"></i>
+              <label className="text-xs font-black uppercase text-[#96938B] tracking-wider flex items-center gap-2">
+                <i className="fa-solid fa-table-columns text-[#D4AF37]"></i>
                 <span>4. Chọn Các Chỉ Số / Cột Cần Xuất</span>
-                <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 font-black border border-emerald-200 dark:border-emerald-800">
+                <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-[#20221E] text-[#D4AF37] font-black border border-[#2C2E29]">
                   {selectedCols.size} / {colList.length} cột
                 </span>
               </label>
@@ -347,23 +353,23 @@ export default function CustomExportModal() {
                 <button
                   type="button"
                   onClick={handleSelectAll}
-                  className="text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                  className="text-[#D4AF37] hover:underline cursor-pointer"
                 >
                   Chọn tất cả
                 </button>
-                <span className="text-slate-300 dark:text-slate-600">•</span>
+                <span className="text-[#2C2E29]">•</span>
                 <button
                   type="button"
                   onClick={handleDeselectAll}
-                  className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 cursor-pointer"
+                  className="text-[#96938B] hover:text-[#FAF7F0] cursor-pointer"
                 >
                   Bỏ chọn
                 </button>
-                <span className="text-slate-300 dark:text-slate-600">•</span>
+                <span className="text-[#2C2E29]">•</span>
                 <button
                   type="button"
                   onClick={handleResetDefault}
-                  className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 cursor-pointer"
+                  className="text-[#96938B] hover:text-[#FAF7F0] cursor-pointer"
                 >
                   Mặc định
                 </button>
@@ -372,7 +378,7 @@ export default function CustomExportModal() {
 
             {/* Primary Columns */}
             <div className="space-y-2">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Chỉ số tài chính & kinh doanh</span>
+              <span className="text-[11px] font-bold text-[#96938B] uppercase tracking-wide">Chỉ số tài chính & kinh doanh</span>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                 {primaryCols.map((c) => {
                   const isChecked = selectedCols.has(c.key);
@@ -380,10 +386,10 @@ export default function CustomExportModal() {
                     <label
                       key={c.key}
                       onClick={() => toggleColumn(c.key)}
-                      className={`flex items-center space-x-2.5 p-2 rounded-lg border cursor-pointer select-none transition ${
+                      className={`flex items-center space-x-2.5 p-2 rounded-xl border cursor-pointer select-none transition ${
                         isChecked
-                          ? 'bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-200 shadow-xs'
-                          : 'bg-white dark:bg-slate-700/50 border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-slate-400'
+                          ? 'bg-emerald-950/40 border-emerald-700/60 text-emerald-200 shadow-xs'
+                          : 'bg-[#20221E] border-[#2C2E29] text-[#FAF7F0] hover:border-stone-500'
                       }`}
                     >
                       <input
@@ -393,7 +399,7 @@ export default function CustomExportModal() {
                         className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
                       />
                       <span className="font-bold text-xs flex-1 truncate">{c.label}</span>
-                      <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/60 dark:text-blue-300 shrink-0">
+                      <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-[#D4AF37]/20 text-[#FBE596] border border-[#D4AF37]/35 shrink-0">
                         Chính
                       </span>
                     </label>
@@ -404,8 +410,8 @@ export default function CustomExportModal() {
 
             {/* Secondary Columns */}
             {secondaryCols.length > 0 && (
-              <div className="space-y-2 mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">Chỉ số hành vi độc giả</span>
+              <div className="space-y-2 mt-3 pt-3 border-t border-[#2C2E29]">
+                <span className="text-[11px] font-bold text-[#96938B] uppercase tracking-wide">Chỉ số hành vi độc giả</span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                   {secondaryCols.map((c) => {
                     const isChecked = selectedCols.has(c.key);
@@ -413,10 +419,10 @@ export default function CustomExportModal() {
                       <label
                         key={c.key}
                         onClick={() => toggleColumn(c.key)}
-                        className={`flex items-center space-x-2.5 p-2 rounded-lg border cursor-pointer select-none transition ${
+                        className={`flex items-center space-x-2.5 p-2 rounded-xl border cursor-pointer select-none transition ${
                           isChecked
-                            ? 'bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-200 shadow-xs'
-                            : 'bg-white dark:bg-slate-700/50 border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:border-slate-400'
+                            ? 'bg-emerald-950/40 border-emerald-700/60 text-emerald-200 shadow-xs'
+                            : 'bg-[#20221E] border-[#2C2E29] text-[#FAF7F0] hover:border-stone-500'
                         }`}
                       >
                         <input
@@ -426,7 +432,7 @@ export default function CustomExportModal() {
                           className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
                         />
                         <span className="font-bold text-xs flex-1 truncate">{c.label}</span>
-                        <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-slate-200 text-slate-700 dark:bg-slate-600 dark:text-slate-300 shrink-0">
+                        <span className="text-[9px] font-black uppercase px-1.5 py-0.2 rounded bg-[#141512] text-[#96938B] border border-[#2C2E29] shrink-0">
                           Phụ
                         </span>
                       </label>
@@ -439,11 +445,11 @@ export default function CustomExportModal() {
         </div>
 
         {/* Modal Sticky Footer */}
-        <div className="px-6 py-4 bg-slate-50 dark:bg-slate-800/90 border-t border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
-          <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-            Tóm tắt: Định dạng <span className="font-bold text-slate-800 dark:text-white uppercase">{format}</span> •{' '}
-            <span className="font-bold text-blue-600 dark:text-blue-400">{activeRecordCount}</span> bản ghi •{' '}
-            <span className="font-bold text-emerald-600 dark:text-emerald-400">{selectedCols.size}</span> cột
+        <div className="px-6 py-4 bg-[#141512] border-t border-[#2C2E29] flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+          <div className="text-xs text-[#96938B] font-medium">
+            Tóm tắt: Định dạng <span className="font-bold text-[#FAF7F0] uppercase">{format}</span> •{' '}
+            <span className="font-bold text-[#D4AF37]">{activeRecordCount}</span> bản ghi •{' '}
+            <span className="font-bold text-emerald-400">{selectedCols.size}</span> cột
           </div>
 
           <div className="flex items-center space-x-2.5 w-full sm:w-auto">
@@ -451,7 +457,7 @@ export default function CustomExportModal() {
               type="button"
               onClick={() => handleClose(null)}
               disabled={isExporting}
-              className="flex-1 sm:flex-none px-4 py-2 border border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition cursor-pointer"
+              className="flex-1 sm:flex-none px-4 py-2 border border-[#2C2E29] hover:bg-[#20221E] text-[#FAF7F0] rounded-xl text-xs font-bold transition cursor-pointer"
             >
               Hủy bỏ
             </button>
@@ -459,15 +465,15 @@ export default function CustomExportModal() {
               type="button"
               onClick={handleConfirmExport}
               disabled={isExporting || selectedCols.size === 0}
-              className={`flex-1 sm:flex-none px-5 py-2 text-white rounded-xl text-xs font-black shadow-md flex items-center justify-center space-x-2 transition cursor-pointer ${
+              className={`flex-1 sm:flex-none px-5 py-2 text-[#141412] font-black rounded-xl text-xs shadow-md flex items-center justify-center space-x-2 transition cursor-pointer ${
                 format === 'pdf'
-                  ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-600/20'
-                  : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20'
+                  ? 'btn-wine text-white'
+                  : 'btn-gold'
               } ${isExporting || selectedCols.size === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               {isExporting ? (
                 <>
-                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
                   <span>Đang xuất tệp...</span>
                 </>
               ) : (

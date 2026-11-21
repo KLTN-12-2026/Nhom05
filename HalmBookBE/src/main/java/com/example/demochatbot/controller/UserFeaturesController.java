@@ -40,32 +40,8 @@ public class UserFeaturesController {
     private final BookRepository bookRepository;
     private final TierService tierService;
 
-    private static class MissionDefinition {
-        final int potatoReward;
-        final int xpReward;
-        final boolean isMilestone;
-        final String name;
-
-        MissionDefinition(int potatoReward, int xpReward, boolean isMilestone, String name) {
-            this.potatoReward = potatoReward;
-            this.xpReward = xpReward;
-            this.isMilestone = isMilestone;
-            this.name = name;
-        }
-    }
-
-    private static final Map<String, MissionDefinition> VALID_MISSIONS = Map.of(
-            "m1", new MissionDefinition(5, 20, false, "Điểm danh đọc sách hằng ngày"),
-            "m2", new MissionDefinition(10, 30, false, "Đọc sách hoặc khám phá chương mới"),
-            "m3", new MissionDefinition(5, 20, false, "Đàm đạo cùng Trợ lý AI Khoai Nhỏ"),
-            "m4", new MissionDefinition(5, 20, false, "Tìm kiếm tác phẩm yêu thích"),
-            "m5", new MissionDefinition(5, 20, false, "Khám phá kho Ưu Đãi & Gói Khoai"),
-            "m6", new MissionDefinition(5, 20, false, "Kiểm tra Tủ Sách Cá Nhân"),
-            "ms1", new MissionDefinition(50, 150, true, "Độc Giả Chăm Chỉ (Chuỗi 7 Ngày)"),
-            "ms2", new MissionDefinition(30, 100, true, "Tủ Sách Khởi Đầu (3 Cuốn)"),
-            "ms3", new MissionDefinition(40, 120, true, "Nhà Tích Lũy Tri Thức (100 Khoai)"),
-            "ms4", new MissionDefinition(100, 300, true, "Đại Sứ HALM BOOK (500 Khoai)")
-    );
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.example.demochatbot.service.mission.MissionService missions;
 
     // Helper: Lấy customer đăng nhập hiện tại
     private Customer getAuthenticatedCustomer() {
@@ -89,7 +65,7 @@ public class UserFeaturesController {
     public ResponseEntity<?> getBookAccessDetail(@PathVariable("bookId") String bookId) {
         Customer customer = getAuthenticatedCustomer();
         if (customer == null) {
-            return ResponseEntity.ok(Map.of(
+            return ResponseEntity.ok().header("Cache-Control", "private, no-store").body(Map.of(
                     "hasAccess", false,
                     "currentPage", 1,
                     "readingPercentage", 0.0,
@@ -99,7 +75,7 @@ public class UserFeaturesController {
 
         Optional<Access_Record> recordOpt = accessRecordRepository.findByCustomerIdAndBookId(customer.getCustomer_id(), bookId);
         if (recordOpt.isEmpty()) {
-            return ResponseEntity.ok(Map.of(
+            return ResponseEntity.ok().header("Cache-Control", "private, no-store").body(Map.of(
                     "hasAccess", false,
                     "currentPage", 1,
                     "readingPercentage", 0.0,
@@ -116,8 +92,10 @@ public class UserFeaturesController {
             LocalDateTime now = LocalDateTime.now();
             if (ar.getEnd_date().isBefore(now)) {
                 isExpired = true;
-                ar.setStatus("EXPIRED");
-                accessRecordRepository.save(ar);
+                if ("ACTIVE".equalsIgnoreCase(ar.getStatus())) {
+                    ar.setStatus("EXPIRED");
+                    accessRecordRepository.save(ar);
+                }
             } else {
                 remainingDays = Math.max(1, ChronoUnit.DAYS.between(now, ar.getEnd_date()));
             }
@@ -128,7 +106,7 @@ public class UserFeaturesController {
 
         boolean hasAccess = !isExpired && "ACTIVE".equalsIgnoreCase(ar.getStatus());
 
-        return ResponseEntity.ok(Map.of(
+        return ResponseEntity.ok().header("Cache-Control", "private, no-store").body(Map.of(
                 "hasAccess", hasAccess,
                 "currentPage", ar.getCurrentPage() != null && ar.getCurrentPage() > 0 ? ar.getCurrentPage() : 1,
                 "readingPercentage", ar.getReadingPercentage() != null ? ar.getReadingPercentage() : 0.0,
@@ -264,132 +242,22 @@ public class UserFeaturesController {
             ));
         }
 
-        LocalDate today = LocalDate.now();
-        List<UserMissionClaim> todayClaims = userMissionClaimRepository.findByCustomerIdAndClaimDate(customer.getCustomer_id(), today);
-        List<UserMissionClaim> allClaims = userMissionClaimRepository.findByCustomerId(customer.getCustomer_id());
-
-        List<String> dailyClaimedIds = todayClaims.stream()
-                .map(UserMissionClaim::getMissionId)
-                .filter(id -> id != null && id.startsWith("m"))
-                .toList();
-
-        List<String> milestoneClaimedIds = allClaims.stream()
-                .map(UserMissionClaim::getMissionId)
-                .filter(id -> id != null && id.startsWith("ms"))
-                .distinct()
-                .toList();
-
-        return ResponseEntity.ok(Map.of(
-                "dailyClaimed", dailyClaimedIds,
-                "milestoneClaimed", milestoneClaimedIds,
-                "potatoBalance", customer.getPotatoBalance() != null ? customer.getPotatoBalance() : 0
-        ));
+        Map<String, Object> dashboard = missions.dashboard(customer);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> rows = (List<Map<String, Object>>) dashboard.get("missions");
+        return ResponseEntity.ok().header("Cache-Control", "private, no-store").body(Map.of(
+            "dailyClaimed", rows.stream().filter(r -> "DAILY".equals(r.get("period")) && Boolean.TRUE.equals(r.get("claimed"))).map(r -> r.get("id")).toList(),
+            "milestoneClaimed", rows.stream().filter(r -> "MILESTONE".equals(r.get("period")) && Boolean.TRUE.equals(r.get("claimed"))).map(r -> r.get("id")).toList(),
+            "potatoBalance", dashboard.get("potatoBalance")));
     }
 
-    /**
-     * API nhận thưởng nhiệm vụ (Cộng khoai vào DB & Lưu lịch sử giao dịch)
-     */
     @PostMapping("/missions/claim")
-    @Transactional
     public ResponseEntity<?> claimMissionReward(@RequestBody MissionClaimRequest request) {
         Customer customer = getAuthenticatedCustomer();
-        if (customer == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("message", "Vui lòng đăng nhập để nhận thưởng nhiệm vụ!"));
-        }
-
-        // Khóa bi quan bản ghi customer để bảo vệ chống nhận thưởng đồng thời (IMP-03)
-        Optional<Customer> lockedCustomerOpt = customerRepository.findByIdForUpdate(customer.getCustomer_id());
-        if (lockedCustomerOpt.isPresent()) {
-            customer = lockedCustomerOpt.get();
-        }
-
-        if (request == null || request.getMissionId() == null || request.getMissionId().trim().isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Mã nhiệm vụ không hợp lệ!"));
-        }
-
-        String missionId = request.getMissionId().trim();
-        MissionDefinition missionDef = VALID_MISSIONS.get(missionId);
-        if (missionDef == null) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Nhiệm vụ '" + missionId + "' không tồn tại trong hệ thống!"));
-        }
-        boolean isMilestone = missionDef.isMilestone;
-
-        // Kiểm tra điều kiện hoàn thành thực tế phía server (QA7-05)
-        if ("ms1".equals(missionId)) {
-            int streak = customer.getStreakDays() != null ? customer.getStreakDays() : 0;
-            if (streak < 7) {
-                return ResponseEntity.badRequest().body(Map.of("message", "Bạn chưa đủ điều kiện nhận mốc này (Cần chuỗi điểm danh tối thiểu 7 ngày, hiện tại: " + streak + " ngày)!"));
-            }
-        } else if ("ms2".equals(missionId)) {
-            long bookCount = accessRecordRepository.countByCustomer(customer);
-            if (bookCount < 3) {
-                return ResponseEntity.badRequest().body(Map.of("message", "Bạn cần sở hữu hoặc thuê tối thiểu 3 cuốn sách trong Tủ sách (Hiện có: " + bookCount + ")!"));
-            }
-        } else if ("ms3".equals(missionId)) {
-            int earned = customer.getTotalPotatoEarned() != null ? customer.getTotalPotatoEarned() : 0;
-            if (earned < 100) {
-                return ResponseEntity.badRequest().body(Map.of("message", "Bạn cần tích lũy tối thiểu 100 Khoai (Hiện có: " + earned + ")!"));
-            }
-        } else if ("ms4".equals(missionId)) {
-            int earned = customer.getTotalPotatoEarned() != null ? customer.getTotalPotatoEarned() : 0;
-            if (earned < 500) {
-                return ResponseEntity.badRequest().body(Map.of("message", "Bạn cần tích lũy tối thiểu 500 Khoai (Hiện có: " + earned + ")!"));
-            }
-        } else if ("m1".equals(missionId)) {
-            LocalDate todayCheck = LocalDate.now();
-            if (customer.getLastStreakDate() == null || !customer.getLastStreakDate().equals(todayCheck)) {
-                return ResponseEntity.badRequest().body(Map.of("message", "Bạn chưa hoàn thành điểm danh đọc sách hôm nay!"));
-            }
-        }
-        LocalDate today = LocalDate.now();
-
-        // Kiểm tra xem đã nhận thưởng chưa
-        if (isMilestone) {
-            if (userMissionClaimRepository.existsByCustomerIdAndMissionId(customer.getCustomer_id(), missionId)) {
-                return ResponseEntity.badRequest().body(Map.of("message", "Cột mốc thành tựu này bạn đã nhận thưởng rồi!"));
-            }
-        } else {
-            if (userMissionClaimRepository.existsByCustomerIdAndMissionIdAndClaimDate(customer.getCustomer_id(), missionId, today)) {
-                return ResponseEntity.badRequest().body(Map.of("message", "Hôm nay bạn đã nhận thưởng nhiệm vụ này rồi!"));
-            }
-        }
-
-        int reward = missionDef.potatoReward;
-        int currentBalance = customer.getPotatoBalance() != null ? customer.getPotatoBalance() : 0;
-        int newBalance = currentBalance + reward;
-
-        // 1. Cập nhật số dư khoai của người dùng
-        customer.setPotatoBalance(newBalance);
-        customer.setTotalPotatoEarned((customer.getTotalPotatoEarned() != null ? customer.getTotalPotatoEarned() : 0) + reward);
-        customerRepository.save(customer);
-
-        // 2. Ghi nhận giao dịch khoai tây
-        PotatoTransaction tx = new PotatoTransaction();
-        tx.setCustomer(customer);
-        tx.setAmount(reward);
-        tx.setBalanceAfter(newBalance);
-        tx.setType("REWARD");
-        tx.setDescription((isMilestone ? "Thưởng thành tựu: " : "Thưởng nhiệm vụ hằng ngày: ") + missionId);
-        tx.setCreatedAt(LocalDateTime.now());
-        potatoTransactionRepository.save(tx);
-
-        // 3. Lưu bản ghi claim nhiệm vụ
-        UserMissionClaim claim = UserMissionClaim.builder()
-                .customerId(customer.getCustomer_id())
-                .missionId(missionId)
-                .claimDate(today)
-                .rewardPotato(reward)
-                .createdAt(LocalDateTime.now())
-                .build();
-        userMissionClaimRepository.save(claim);
-
-        return ResponseEntity.ok(Map.of(
-                "message", "Nhận thưởng thành công!",
-                "missionId", missionId,
-                "rewardPotato", reward,
-                "newBalance", newBalance
-        ));
+        if (customer == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Vui lòng đăng nhập!"));
+        if (request == null || request.getMissionId() == null || request.getMissionId().isBlank())
+            return ResponseEntity.badRequest().body(Map.of("message", "Mã nhiệm vụ không hợp lệ."));
+        return ResponseEntity.ok(missions.claim(customer.getCustomer_id(), request.getMissionId().trim()));
     }
 
     // =========================================================================
@@ -403,7 +271,7 @@ public class UserFeaturesController {
     public ResponseEntity<?> getNotifications() {
         Customer customer = getAuthenticatedCustomer();
         if (customer == null) {
-            return ResponseEntity.ok(Map.of(
+            return ResponseEntity.ok().header("Cache-Control", "private, no-store").body(Map.of(
                     "unreadCount", 0,
                     "notifications", List.of()
             ));
@@ -412,23 +280,7 @@ public class UserFeaturesController {
         List<Notification> list = notificationRepository.findByCustomerIdOrderByCreatedAtDesc(customer.getCustomer_id());
         long unreadCount = notificationRepository.countByCustomerIdAndIsReadFalse(customer.getCustomer_id());
 
-        // Nếu người dùng mới chưa có thông báo nào, tạo một thông báo chào mừng mặc định
-        if (list.isEmpty()) {
-            Notification welcomeNoti = Notification.builder()
-                    .customerId(customer.getCustomer_id())
-                    .title("Chào Mừng Bạn Đến Với HALM BOOK!")
-                    .message("Khám phá hàng ngàn ấn phẩm tinh tuyển, tích lũy khoai tây mỗi ngày và trải nghiệm trợ lý đọc sách AI.")
-                    .type("SYSTEM")
-                    .link("/trangchu")
-                    .isRead(false)
-                    .createdAt(LocalDateTime.now())
-                    .build();
-            notificationRepository.save(welcomeNoti);
-            list = List.of(welcomeNoti);
-            unreadCount = 1;
-        }
-
-        return ResponseEntity.ok(Map.of(
+        return ResponseEntity.ok().header("Cache-Control", "private, no-store").body(Map.of(
                 "unreadCount", unreadCount,
                 "notifications", list
         ));

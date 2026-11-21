@@ -20,6 +20,10 @@ import java.util.Optional;
 @Repository
 public interface AccessRecordRepository extends JpaRepository<Access_Record, Integer> {
 
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT ar FROM Access_Record ar WHERE ar.access_record_id = :id")
+    Optional<Access_Record> findByIdForUpdate(@Param("id") int id);
+
     @Query("SELECT ar FROM Access_Record ar WHERE ar.customer = :customer ORDER BY ar.lastReadAt DESC")
     List<Access_Record> findByCustomerOrderByLastReadAtDesc(@Param("customer") Customer customer);
 

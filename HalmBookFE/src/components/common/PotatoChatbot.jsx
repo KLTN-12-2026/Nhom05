@@ -377,12 +377,12 @@ export default function PotatoChatbot() {
                     </div>
 
                     {/* VÙNG THÂN TIN NHẮN (MESSAGE THREAD) */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-gradient-to-b from-[#FAF8F5] via-[#FFFDF9] to-[#FAF8F5] dark:from-[#111210] dark:via-[#151613] dark:to-[#111210]">
+                    <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-[#111210]">
                         {/* Lời chào Mừng Hoạt Họa (Empty State) */}
                         {messages.length === 0 && (
-                            <div className="p-4 rounded-2xl bg-white/90 dark:bg-[#1C1E19]/90 border border-[#D4AF37]/35 text-center space-y-3 shadow-sm relative overflow-hidden">
+                            <div className="p-4 rounded-2xl bg-[#181916] border border-[#2C2E29] text-center space-y-3 shadow-sm relative overflow-hidden">
                                 <div className="w-20 h-20 mx-auto rounded-full p-1 bg-gradient-to-tr from-[#D4AF37] to-[#F5E096] shadow-md relative group">
-                                    <div className="w-full h-full rounded-full bg-white dark:bg-[#20221D] overflow-hidden flex items-center justify-center">
+                                    <div className="w-full h-full rounded-full bg-[#20221D] overflow-hidden flex items-center justify-center">
                                         <img
                                             src="/mascot-reading.png"
                                             alt="Khoai Nhỏ Đọc Sách"
@@ -396,18 +396,18 @@ export default function PotatoChatbot() {
                                 </div>
 
                                 <div>
-                                    <h4 className="font-extrabold text-sm text-[#1E1F1D] dark:text-[#EDE9DF] flex items-center justify-center gap-1.5">
+                                    <h4 className="font-extrabold text-sm text-[#FAF7F0] flex items-center justify-center gap-1.5">
                                         <span>Chào bạn, tớ là Khoai Nhỏ!</span>
                                         <span>🥔🌱</span>
                                     </h4>
-                                    <p className="text-xs text-[#66645E] dark:text-[#96938B] mt-1 leading-relaxed max-w-xs mx-auto">
+                                    <p className="text-xs text-[#96938B] mt-1 leading-relaxed max-w-xs mx-auto">
                                         Linh vật củ khoai tây có chồi lá non của thư viện HALM BOOK. Tớ sẵn sàng tóm tắt sách, tra cứu số dư Khoai, gợi ý sách đúng gu và gói nạp ưu đãi cho bạn!
                                     </p>
                                 </div>
 
                                 {/* Gợi ý câu hỏi thông minh dạng Chip Cards */}
-                                <div className="pt-2 text-left space-y-2 border-t border-[#F0EBE1] dark:border-[#262822]">
-                                    <div className="text-[10px] font-extrabold text-[#8E3038] dark:text-[#D4AF37] uppercase tracking-wider flex items-center gap-1.5">
+                                <div className="pt-2 text-left space-y-2 border-t border-[#2C2E29]">
+                                    <div className="text-[10px] font-extrabold text-[#D4AF37] uppercase tracking-wider flex items-center gap-1.5">
                                         <i className="ph-fill ph-sparkle text-amber-500"></i>
                                         <span>Gợi ý câu hỏi nhanh:</span>
                                     </div>
@@ -417,10 +417,10 @@ export default function PotatoChatbot() {
                                                 key={idx}
                                                 type="button"
                                                 onClick={() => handleSend(s.text)}
-                                                className="w-full text-left px-3 py-2 rounded-xl bg-[#F7F4EE]/90 hover:bg-[#8E3038] hover:text-white dark:bg-[#20221E] dark:hover:bg-[#D4AF37] dark:hover:text-[#111210] border border-[#E3DDD0] dark:border-[#2C2E29] hover:border-transparent text-xs text-[#1E1F1D] dark:text-[#EDE9DF] flex items-center justify-between transition-all duration-200 group cursor-pointer shadow-2xs hover:shadow-md hover:scale-[1.01]"
+                                                className="w-full text-left px-3 py-2 rounded-xl bg-[#20221E] hover:bg-[#D4AF37] hover:text-[#111210] border border-[#2C2E29] hover:border-transparent text-xs text-[#FAF7F0] flex items-center justify-between transition-all duration-200 group cursor-pointer shadow-2xs hover:shadow-md hover:scale-[1.01]"
                                             >
                                                 <span className="flex items-center gap-2.5 truncate">
-                                                    <i className={`ph-bold ${s.icon} text-[#B8860B] dark:text-[#D4AF37] group-hover:text-white dark:group-hover:text-[#111210] text-sm shrink-0 transition-colors`}></i>
+                                                    <i className={`ph-bold ${s.icon} text-[#D4AF37] group-hover:text-[#111210] text-sm shrink-0 transition-colors`}></i>
                                                     <span className="truncate font-medium">{s.text}</span>
                                                 </span>
                                                 <i className="ph-bold ph-arrow-up-right text-xs opacity-60 group-hover:opacity-100 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all shrink-0"></i>
@@ -442,7 +442,7 @@ export default function PotatoChatbot() {
                                     {/* Avatar bot mini */}
                                     {!isUser && (
                                         <div className="w-7 h-7 rounded-full p-0.5 bg-gradient-to-tr from-[#D4AF37] to-[#F5E096] shrink-0 shadow-xs mb-0.5">
-                                            <div className="w-full h-full rounded-full bg-white dark:bg-[#1F201C] overflow-hidden flex items-center justify-center">
+                                            <div className="w-full h-full rounded-full bg-[#1F201C] overflow-hidden flex items-center justify-center">
                                                 <img
                                                     src="/mascot.png"
                                                     alt="Khoai Nhỏ"
@@ -459,12 +459,12 @@ export default function PotatoChatbot() {
                                             className={`rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed shadow-sm ${
                                                 isUser
                                                     ? 'bg-gradient-to-r from-[#8E3038] to-[#AA3B47] text-white rounded-br-xs font-medium'
-                                                    : 'bg-white/95 text-[#1E1F1D] dark:bg-[#1E201B] dark:text-[#EDE9DF] border border-[#D4AF37]/30 rounded-bl-xs shadow-2xs whitespace-pre-line'
+                                                    : 'bg-[#20221E] text-[#FAF7F0] border border-[#2C2E29] rounded-bl-xs shadow-2xs whitespace-pre-line'
                                             }`}
                                         >
                                             {m.content}
                                         </div>
-                                        <span className={`text-[9px] text-[#96938B] dark:text-[#7A7870] mt-1 px-1 ${isUser ? 'self-end' : 'self-start'}`}>
+                                        <span className={`text-[9px] text-[#96938B] mt-1 px-1 ${isUser ? 'self-end' : 'self-start'}`}>
                                             {formatChatTime(m.sentAt)}{m.failed ? ' · Chưa xác nhận gửi' : ''}
                                         </span>
                                     </div>
@@ -476,18 +476,18 @@ export default function PotatoChatbot() {
                         {isLoading && (
                             <div className="flex gap-2.5 items-end">
                                 <div className="w-7 h-7 rounded-full p-0.5 bg-gradient-to-tr from-[#D4AF37] to-[#F5E096] shrink-0 shadow-xs animate-bounce mb-0.5">
-                                    <div className="w-full h-full rounded-full bg-white dark:bg-[#1F201C] overflow-hidden flex items-center justify-center">
+                                    <div className="w-full h-full rounded-full bg-[#1F201C] overflow-hidden flex items-center justify-center">
                                         <img src="/mascot.png" alt="Khoai Nhỏ" className="w-full h-full object-cover" />
                                     </div>
                                 </div>
-                                <div className="px-4 py-2.5 rounded-2xl rounded-bl-xs bg-white/90 dark:bg-[#1E201B]/90 border border-[#D4AF37]/40 text-xs text-[#66645E] dark:text-[#EDE9DF] flex items-center gap-2 shadow-xs">
-                                    <span className="font-medium text-[11px] text-[#8E3038] dark:text-[#D4AF37]">
+                                <div className="px-4 py-2.5 rounded-2xl rounded-bl-xs bg-[#20221E] border border-[#D4AF37]/40 text-xs text-[#FAF7F0] flex items-center gap-2 shadow-xs">
+                                    <span className="font-medium text-[11px] text-[#D4AF37]">
                                         Khoai Nhỏ đang lục tìm tri thức
                                     </span>
                                     <div className="flex items-center gap-1">
                                         <span className="typing-dot-1 w-1.5 h-1.5 rounded-full bg-[#D4AF37]"></span>
                                         <span className="typing-dot-2 w-1.5 h-1.5 rounded-full bg-[#B8860B]"></span>
-                                        <span className="typing-dot-3 w-1.5 h-1.5 rounded-full bg-[#8E3038] dark:bg-[#D4AF37]"></span>
+                                        <span className="typing-dot-3 w-1.5 h-1.5 rounded-full bg-[#D4AF37]"></span>
                                     </div>
                                 </div>
                             </div>
@@ -497,8 +497,8 @@ export default function PotatoChatbot() {
                     </div>
 
                     {/* VÙNG NHẬP LIỆU DẠNG VIÊN CON NHỘNG (CAPSULE INPUT) */}
-                    <div className="p-3 bg-white/95 dark:bg-[#181916]/95 border-t border-[#D4AF37]/30 shrink-0">
-                        {chatError && <p role="alert" className="mb-2 text-xs text-red-600">{chatError}</p>}
+                    <div className="p-3 bg-[#141512] border-t border-[#2C2E29] shrink-0">
+                        {chatError && <p role="alert" className="mb-2 text-xs text-red-400">{chatError}</p>}
                         <form
                             onSubmit={(e) => {
                                 e.preventDefault();
@@ -514,7 +514,7 @@ export default function PotatoChatbot() {
                                 onKeyDown={handleKeyDown}
                                 placeholder="Hỏi Khoai Nhỏ về sách, gói nạp, hạng..."
                                 disabled={isLoading}
-                                className="w-full bg-[#FAF8F5] dark:bg-[#111210] text-[#1E1F1D] dark:text-[#EDE9DF] placeholder-[#96938B] text-xs rounded-full pl-4 pr-11 py-3 border border-[#E3DDD0] dark:border-[#2C2E29] focus:outline-none focus:border-[#D4AF37] focus:ring-2 focus:ring-[#D4AF37]/25 transition-all shadow-inner"
+                                className="w-full bg-[#20221E] text-[#FAF7F0] placeholder-[#807D75] text-xs rounded-full pl-4 pr-11 py-3 border border-[#2C2E29] focus:outline-none focus:border-[#D4AF37] focus:ring-2 focus:ring-[#D4AF37]/25 transition-all shadow-inner"
                             />
                             <button
                                 type="submit"
@@ -526,8 +526,8 @@ export default function PotatoChatbot() {
                                 <i className="ph-bold ph-paper-plane-tilt text-sm transform -rotate-12"></i>
                             </button>
                         </form>
-                        <p className="text-[10px] text-center text-[#96938B] dark:text-[#7A7870] mt-1.5">
-                            Nhấn <kbd className="font-mono bg-paper-200 dark:bg-night-card px-1 py-0.5 rounded text-[9px]">Enter ↵</kbd> để gửi nhanh câu hỏi
+                        <p className="text-[10px] text-center text-[#96938B] mt-1.5">
+                            Nhấn <kbd className="font-mono bg-[#20221E] px-1 py-0.5 rounded text-[9px] border border-[#2C2E29]">Enter ↵</kbd> để gửi nhanh câu hỏi
                         </p>
                     </div>
                 </div>
@@ -543,10 +543,10 @@ export default function PotatoChatbot() {
                         setIsOpen(true);
                     }}
                     style={{ position: 'absolute', bottom: 76, [edge === 'left' ? 'left' : 'right']: 0, width: 'min(280px, calc(100vw - 24px))', display: position.y < 100 ? 'none' : undefined }}
-                    className="mb-2.5 px-3.5 py-2 rounded-2xl bg-white/95 dark:bg-[#1E201B]/95 backdrop-blur-md border border-[#D4AF37]/60 shadow-[0_10px_25px_-5px_rgba(212,175,55,0.3)] text-xs font-bold text-[#8E3038] dark:text-[#D4AF37] flex items-center gap-2 cursor-pointer hover:scale-105 transition-all select-none group"
+                    className="mb-2.5 px-3.5 py-2 rounded-2xl bg-[#181916] backdrop-blur-md border border-[#D4AF37]/60 shadow-[0_10px_25px_-5px_rgba(212,175,55,0.3)] text-xs font-bold text-[#D4AF37] flex items-center gap-2 cursor-pointer hover:scale-105 transition-all select-none group"
                 >
                     <span className="text-base animate-bounce">🥔</span>
-                    <span className="text-xs font-medium text-[#1E1F1D] dark:text-[#EDE9DF]">
+                    <span className="text-xs font-medium text-[#FAF7F0]">
                         {BUBBLE_GREETINGS[greetingIndex]}
                     </span>
                     <button
@@ -555,7 +555,7 @@ export default function PotatoChatbot() {
                             e.stopPropagation();
                             setShowBubble(false);
                         }}
-                        className="text-[#96938B] hover:text-[#1E1F1D] dark:hover:text-white ml-1 text-xs p-1 transition-colors"
+                        className="text-[#96938B] hover:text-[#FAF7F0] ml-1 text-xs p-1 transition-colors cursor-pointer"
                         title="Tắt gợi ý"
                     >
                         ✕

@@ -315,6 +315,22 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
   };
 
   const handleLogout = async () => {
+    let confirmed = true;
+    if (typeof window.halmConfirm === 'function') {
+      confirmed = await window.halmConfirm({
+        title: 'Xác Nhận Đăng Xuất',
+        message: 'Bạn có chắc chắn muốn đăng xuất khỏi tài khoản HALM BOOK?',
+        confirmText: 'Đăng Xuất',
+        cancelText: 'Ở Lại',
+        type: 'warning',
+        icon: 'fa-solid fa-right-from-bracket text-amber-500'
+      });
+    }
+    if (!confirmed) return;
+
+    if (window.halmToast) {
+      window.halmToast.success('Đăng xuất thành công', 'Hẹn gặp lại bạn trong những hành trình đọc sách tiếp theo!');
+    }
     await logoutUser();
     setIsLoggedIn(false);
     setCustomer(null);
@@ -322,7 +338,9 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
     try {
       localStorage.removeItem("halm_customer_cache");
     } catch (_) {}
-    window.location.assign("/");
+    setTimeout(() => {
+      window.location.assign("/");
+    }, 600);
   };
 
   useEffect(() => {
@@ -460,11 +478,7 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
     triggerAirplaneBannerAnimation(event);
   };
 
-  const toggleTheme = () => {
-    const next = !isDark;
-    setIsDark(next);
-    applyTheme(next);
-  };
+
 
   const handleNavClick = (e, targetPath, isPrivate = false) => {
     let path = targetPath;
@@ -628,10 +642,27 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
           color: #d6b64c !important;
         }
         #navbar.halm-home-header .avatar-dropdown {
-          border-color: rgba(212, 175, 55, 0.3);
-          background: #201f1b;
-          color: #eee9dd;
-          box-shadow: 0 18px 42px rgba(0, 0, 0, 0.32);
+          border-color: #2C2E29 !important;
+          background: #181916 !important;
+          color: #FAF7F0 !important;
+          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.85) !important;
+        }
+        #navbar.halm-home-header .avatar-dropdown [class*="overflow-y-auto"] {
+          scrollbar-width: thin;
+          scrollbar-color: #2C2E29 transparent;
+        }
+        #navbar.halm-home-header .avatar-dropdown [class*="overflow-y-auto"]::-webkit-scrollbar {
+          width: 5px;
+        }
+        #navbar.halm-home-header .avatar-dropdown [class*="overflow-y-auto"]::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        #navbar.halm-home-header .avatar-dropdown [class*="overflow-y-auto"]::-webkit-scrollbar-thumb {
+          background: #2C2E29;
+          border-radius: 999px;
+        }
+        #navbar.halm-home-header .avatar-dropdown [class*="overflow-y-auto"]::-webkit-scrollbar-thumb:hover {
+          background: #D4AF37;
         }
         #navbar.halm-home-header .avatar-dropdown-item {
           color: #eee9dd;
@@ -1083,13 +1114,13 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
 
               {/* Notification Dropdown */}
               {isNotiOpen && (
-                <div className="avatar-dropdown absolute right-0 top-full z-50 mt-3 w-80 sm:w-96 rounded-2xl border p-3 text-xs shadow-2xl backdrop-blur-md">
-                  <div className="flex items-center justify-between pb-2.5 mb-2 border-b border-[#D4AF37]/25">
+                <div className="avatar-dropdown absolute right-0 top-full z-50 mt-3 w-80 sm:w-96 rounded-2xl border border-[#2C2E29] bg-[#181916] p-3.5 text-xs shadow-[0_20px_50px_rgba(0,0,0,0.85)] backdrop-blur-xl">
+                  <div className="flex items-center justify-between pb-2.5 mb-2 border-b border-[#2C2E29]">
                     <div className="flex items-center gap-2">
                       <i className="ph-bold ph-bell-ringing text-sm text-[#D4AF37]"></i>
-                      <span className="font-display font-bold text-sm text-stone-900 dark:text-[#eee9dd]">Thông Báo</span>
+                      <span className="font-display font-bold text-sm text-[#FAF7F0]">Thông Báo</span>
                       {unreadNotiCount > 0 && (
-                        <span className="px-1.5 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-400 text-[10px] font-black">
+                        <span className="px-1.5 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 text-[10px] font-black">
                           {unreadNotiCount} mới
                         </span>
                       )}
@@ -1098,7 +1129,7 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
                       <button
                         type="button"
                         onClick={handleMarkAllNotisRead}
-                        className="text-[11px] text-[#D4AF37] hover:underline cursor-pointer"
+                        className="text-[11px] font-bold text-[#D4AF37] hover:underline cursor-pointer"
                       >
                         Đã đọc tất cả
                       </button>
@@ -1107,8 +1138,8 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
 
                   <div className="max-h-80 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin">
                     {notifications.length === 0 ? (
-                      <div className="py-8 text-center text-xs text-stone-400">
-                        <i className="ph-bold ph-bell-slash text-2xl block mb-1 opacity-50"></i>
+                      <div className="py-8 text-center text-xs text-[#96938B]">
+                        <i className="ph-bold ph-bell-slash text-2xl block mb-1 opacity-50 text-[#D4AF37]"></i>
                         <span>Bạn chưa có thông báo mới nào.</span>
                       </div>
                     ) : (
@@ -1116,17 +1147,17 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
                         <div
                           key={noti.notificationId}
                           onClick={() => handleNotiItemClick(noti)}
-                          className={`p-2.5 rounded-xl transition-all cursor-pointer flex items-start gap-2.5 ${
+                          className={`p-2.5 rounded-xl transition-all cursor-pointer flex items-start gap-2.5 border ${
                             noti.isRead
-                              ? 'bg-transparent hover:bg-white/5 opacity-75'
-                              : 'bg-[#D4AF37]/10 hover:bg-[#D4AF37]/15 border border-[#D4AF37]/20'
+                              ? 'bg-[#20221E]/60 hover:bg-[#20221E] border-[#2C2E29]/70'
+                              : 'bg-[#D4AF37]/10 hover:bg-[#D4AF37]/15 border-[#D4AF37]/35 shadow-xs'
                           }`}
                         >
-                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
-                            noti.type === 'TOPUP' ? 'bg-emerald-500/15 text-emerald-500' :
-                            noti.type === 'RENT' ? 'bg-indigo-500/15 text-indigo-400' :
-                            noti.type === 'REWARD' ? 'bg-amber-500/15 text-amber-400' :
-                            'bg-[#D4AF37]/15 text-[#D4AF37]'
+                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 border ${
+                            noti.type === 'TOPUP' ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400' :
+                            noti.type === 'RENT' ? 'bg-indigo-500/15 border-indigo-500/30 text-indigo-300' :
+                            noti.type === 'REWARD' ? 'bg-[#D4AF37]/20 border-[#D4AF37]/40 text-[#F5D061]' :
+                            'bg-[#D4AF37]/15 border-[#D4AF37]/30 text-[#D4AF37]'
                           }`}>
                             <i className={`ph-bold ${
                               noti.type === 'TOPUP' ? 'ph-wallet' :
@@ -1137,17 +1168,17 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-1">
-                              <h5 className="font-display font-bold text-xs text-stone-900 dark:text-[#f4f2ec] line-clamp-1">
+                              <h5 className="font-display font-bold text-xs text-[#FAF7F0] line-clamp-1">
                                 {noti.title}
                               </h5>
                               {!noti.isRead && (
                                 <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0"></span>
                               )}
                             </div>
-                            <p className="font-editorial-body text-[11px] text-stone-600 dark:text-stone-300 mt-0.5 line-clamp-2 leading-relaxed">
+                            <p className="text-[11px] text-[#C5C2BA] mt-0.5 line-clamp-2 leading-relaxed">
                               {noti.message}
                             </p>
-                            <span className="text-[10px] text-stone-400 mt-1 block">
+                            <span className="text-[10px] font-medium text-[#96938B] mt-1.5 block">
                               {noti.createdAt ? new Date(noti.createdAt).toLocaleDateString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : 'Vừa xong'}
                             </span>
                           </div>
@@ -1158,9 +1189,7 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
                 </div>
               )}
             </div>
-            <button id="theme-toggle" type="button" onClick={toggleTheme} className="home-header-control hidden h-11 w-11 items-center justify-center rounded-full text-lg transition-colors lg:inline-flex" title="Đổi chế độ sáng/tối" aria-label="Đổi giao diện sáng/tối">
-              <i id="theme-icon" className={`ph-bold ${isDark ? "ph-sun" : "ph-moon"} text-lg`}></i>
-            </button>
+
             <button
               type="button"
               id="airplane-animation-btn"
@@ -1234,11 +1263,11 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
                           <i className="ph-bold ph-user-circle text-lg"></i>
                         </div>
                         <div>
-                          <h4 className="font-bold text-sm text-stone-900 dark:text-[#eee9dd]">Khách Vãng Lai</h4>
-                          <p className="text-[11px] text-stone-500 dark:text-[#96938B]">Chưa kích hoạt tài khoản</p>
+                          <h4 className="font-bold text-sm text-[#FAF7F0]">Khách Vãng Lai</h4>
+                          <p className="text-[11px] text-[#96938B]">Chưa kích hoạt tài khoản</p>
                         </div>
                       </div>
-                      <p className="text-[11px] leading-relaxed text-stone-600 dark:text-[#c7c2b4]">
+                      <p className="text-[11px] leading-relaxed text-[#C5C2BA]">
                         Đăng nhập ngay để thuê sách, đọc hàng ngàn ấn phẩm và nhận khoai tây miễn phí!
                       </p>
                     </div>
@@ -1416,7 +1445,7 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
             <button type="button" onClick={() => onOpenChatbot?.("Xin chào, tôi cần hỗ trợ.")} className="rounded-lg px-2 py-2 text-left text-[#D6B64C]">Trợ lý AI</button>
           </nav>
           <div className="flex gap-2 border-t border-[#D4AF37]/30 pt-3">
-            <button type="button" onClick={toggleTheme} className="home-header-control flex h-10 flex-1 items-center justify-center gap-2 rounded-xl text-xs font-semibold text-[#D6B64C]"><i className={`ph-bold ${isDark ? "ph-sun" : "ph-moon"}`}></i>Giao diện</button>
+
             {isLoggedIn ? (
               <button type="button" onClick={handleLogout} className="home-header-control flex h-10 flex-1 items-center justify-center gap-2 rounded-xl text-xs font-semibold text-rose-400 hover:text-rose-300"><i className="ph-bold ph-sign-out"></i>Đăng xuất</button>
             ) : (

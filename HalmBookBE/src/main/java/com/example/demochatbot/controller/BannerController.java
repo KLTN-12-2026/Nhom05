@@ -31,10 +31,12 @@ public class BannerController {
     // =========================================================================
 
     @GetMapping("/api/home/banners")
-    public ResponseEntity<?> getActiveBanners() {
+    public ResponseEntity<?> getActiveBanners(@RequestParam(defaultValue = "WEB") String platform) {
         try {
-            List<BannerDto> banners = bannerService.getActiveBanners();
+            List<BannerDto> banners = bannerService.getActiveBanners(platform);
             return ResponseEntity.ok(banners);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
             log.error("Lỗi khi lấy danh sách banner kích hoạt: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -59,10 +61,12 @@ public class BannerController {
     // =========================================================================
 
     @GetMapping("/api/admin/banners")
-    public ResponseEntity<?> getAllBanners() {
+    public ResponseEntity<?> getAllBanners(@RequestParam(defaultValue = "WEB") String platform) {
         try {
-            List<BannerDto> list = bannerService.getAllBanners();
+            List<BannerDto> list = bannerService.getAllBanners(platform);
             return ResponseEntity.ok(list);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
             log.error("Lỗi khi admin lấy toàn bộ banner: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -71,9 +75,9 @@ public class BannerController {
     }
 
     @GetMapping("/api/admin/banners/{id}")
-    public ResponseEntity<?> getBannerById(@PathVariable String id) {
+    public ResponseEntity<?> getBannerById(@PathVariable String id, @RequestParam(defaultValue = "WEB") String platform) {
         try {
-            BannerDto banner = bannerService.getBannerById(id);
+            BannerDto banner = bannerService.getBannerById(id, platform);
             return ResponseEntity.ok(banner);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
@@ -94,9 +98,9 @@ public class BannerController {
     }
 
     @PutMapping("/api/admin/banners/{id}")
-    public ResponseEntity<?> updateBanner(@PathVariable String id, @RequestBody BannerDto bannerDto) {
+    public ResponseEntity<?> updateBanner(@PathVariable String id, @RequestBody BannerDto bannerDto, @RequestParam(defaultValue = "WEB") String platform) {
         try {
-            BannerDto updated = bannerService.updateBanner(id, bannerDto);
+            BannerDto updated = bannerService.updateBanner(id, bannerDto, platform);
             return ResponseEntity.ok(updated);
         } catch (Exception e) {
             log.error("Lỗi khi cập nhật banner {}: {}", id, e.getMessage());
@@ -106,9 +110,9 @@ public class BannerController {
     }
 
     @PatchMapping("/api/admin/banners/{id}/toggle")
-    public ResponseEntity<?> toggleBannerStatus(@PathVariable String id) {
+    public ResponseEntity<?> toggleBannerStatus(@PathVariable String id, @RequestParam(defaultValue = "WEB") String platform) {
         try {
-            bannerService.toggleBannerStatus(id);
+            bannerService.toggleBannerStatus(id, platform);
             return ResponseEntity.ok(Map.of("message", "Thay đổi trạng thái banner thành công!"));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -117,14 +121,14 @@ public class BannerController {
     }
 
     @PutMapping("/api/admin/banners/{id}/toggle")
-    public ResponseEntity<?> toggleBannerStatusPut(@PathVariable String id) {
-        return toggleBannerStatus(id);
+    public ResponseEntity<?> toggleBannerStatusPut(@PathVariable String id, @RequestParam(defaultValue = "WEB") String platform) {
+        return toggleBannerStatus(id, platform);
     }
 
     @DeleteMapping("/api/admin/banners/{id}")
-    public ResponseEntity<?> deleteBanner(@PathVariable String id) {
+    public ResponseEntity<?> deleteBanner(@PathVariable String id, @RequestParam(defaultValue = "WEB") String platform) {
         try {
-            bannerService.deleteBanner(id);
+            bannerService.deleteBanner(id, platform);
             return ResponseEntity.ok(Map.of("message", "Đã xóa banner thành công!"));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -133,9 +137,9 @@ public class BannerController {
     }
 
     @PutMapping("/api/admin/banners/reorder")
-    public ResponseEntity<?> saveAllBanners(@RequestBody List<BannerDto> bannerDtos) {
+    public ResponseEntity<?> saveAllBanners(@RequestBody List<BannerDto> bannerDtos, @RequestParam(defaultValue = "WEB") String platform) {
         try {
-            List<BannerDto> saved = bannerService.saveAllBanners(bannerDtos);
+            List<BannerDto> saved = bannerService.saveAllBanners(bannerDtos, platform);
             return ResponseEntity.ok(saved);
         } catch (Exception e) {
             log.error("Lỗi khi cập nhật danh sách thứ tự banner: {}", e.getMessage());
@@ -145,10 +149,12 @@ public class BannerController {
     }
 
     @PostMapping("/api/admin/banners/reset")
-    public ResponseEntity<?> resetDefaultBanners() {
+    public ResponseEntity<?> resetDefaultBanners(@RequestParam(defaultValue = "WEB") String platform) {
         try {
-            List<BannerDto> defaults = bannerService.resetDefaultBanners();
+            List<BannerDto> defaults = bannerService.resetDefaultBanners(platform);
             return ResponseEntity.ok(defaults);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
             log.error("Lỗi khi khôi phục banner mặc định: {}", e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

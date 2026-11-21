@@ -35,6 +35,12 @@ public class CartServiceImpl implements CartService {
     @Autowired
     private OrderService orderService;
 
+    @Autowired
+    private com.example.demochatbot.service.policy.CommercePolicyService commercePolicy;
+
+    @Autowired
+    private com.example.demochatbot.repository.BookOfferRepository bookOffers;
+
 
     /**
      * Lấy thông tin Customer theo userId (accountId) hoặc ngữ cảnh đăng nhập hiện tại.
@@ -78,7 +84,12 @@ public class CartServiceImpl implements CartService {
     }
 
     private int resolveRentalDays(String planKey) {
-        return RentalPricing.duration(planKey == null || planKey.isBlank() ? "7" : planKey);
+        var policy = commercePolicy.current();
+        String selected = planKey;
+        if (selected == null || selected.isBlank()) selected = policy.plans().stream().filter(p -> p.active() && "7".equals(p.key()))
+            .findFirst().or(() -> policy.plans().stream().filter(p -> p.active()).findFirst())
+            .orElseThrow(() -> new IllegalArgumentException("Hiện chưa có gói thuê đang mở.")).key();
+        return commercePolicy.plan(policy, selected, true).durationDays();
     }
 
     /**
@@ -122,9 +133,9 @@ public class CartServiceImpl implements CartService {
     private CartItemDto toCartItemDto(Cart_Item item) {
         Book b = item.getBook();
         String plan = item.getPlanKey() == null ? String.valueOf(normalizeRentalDays(item.getRentalDays())) : item.getPlanKey();
-        int days = RentalPricing.duration(plan);
+        int days = commercePolicy.plan(commercePolicy.current(), plan, false).durationDays();
         int baseKhoai = resolveBaseKhoai(b);
-        int priceKhoai = (int) Math.round(RentalPricing.price(plan, b));
+        int priceKhoai = item.getOfferId() != null && item.getSelectedPrice() != null ? (int) Math.round(item.getSelectedPrice()) : commercePolicy.price(commercePolicy.current(), plan, b, false);
         String title = b != null && b.getBookName() != null ? b.getBookName() : "";
         String author = b != null && b.getAuthor() != null ? b.getAuthor() : "HALM BOOK";
         String coverUrl = b != null && b.getImg_url() != null ? b.getImg_url() : "";
@@ -133,6 +144,7 @@ public class CartServiceImpl implements CartService {
         return CartItemDto.builder()
                 .cartItemId(item.getCart_item_id())
                 .bookId(b != null ? b.getBook_id() : "")
+                .offerId(item.getOfferId()).offerName(item.getOfferId() == null ? null : bookOffers.findById(item.getOfferId()).map(com.example.demochatbot.model.BookOffer::getName).orElse("Ưu đãi đã ngừng"))
                 .title(title)
                 .bookName(title)
                 .author(author)
@@ -141,7 +153,7 @@ public class CartServiceImpl implements CartService {
                 .description(description)
                 .rentalDays(days)
                 .priceKhoai(priceKhoai)
-                .rentPrice((double) baseKhoai)
+                .rentPrice(b != null && b.getRent_price() != null && b.getRent_price() > 0 ? b.getRent_price() : 0.0)
                 .planKey(plan)
                 .selectedPrice((double) priceKhoai)
                 .build();
@@ -168,11 +180,12 @@ public class CartServiceImpl implements CartService {
         int days = resolveRentalDays(request.getPlanKey());
         int baseKhoai = resolveBaseKhoai(book);
         String plan = days == 36500 ? "forever" : String.valueOf(days);
-        int dynamicPrice = (int) Math.round(RentalPricing.price(plan, book));
+        int dynamicPrice = commercePolicy.price(commercePolicy.current(), plan, book, true);
         double finalPrice = dynamicPrice;
 
         if (existingItem.isPresent()) {
             Cart_Item item = existingItem.get();
+            if (item.getOfferId() != null) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT, "Sách đang thuộc combo/deal. Hãy xóa ưu đãi đó để chọn sách lẻ.");
             item.setPlanKey(plan);
             item.setRentalDays(days);
             item.setSelectedPrice(finalPrice);
@@ -184,7 +197,7 @@ public class CartServiceImpl implements CartService {
         Cart_Item newItem = new Cart_Item();
         newItem.setCart(cart);
         newItem.setBook(book);
-        newItem.setPlanKey(String.valueOf(days));
+        newItem.setPlanKey(plan);
         newItem.setRentalDays(days);
         newItem.setSelectedPrice(finalPrice);
         newItem.setCreatedAt(LocalDateTime.now());
@@ -230,10 +243,12 @@ public class CartServiceImpl implements CartService {
             throw new RuntimeException("Bạn không có quyền chỉnh sửa mục giỏ hàng này!");
         }
 
+        if (item.getOfferId() != null && days != item.getRentalDays()) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT, "Kỳ hạn combo/deal được cố định theo ưu đãi.");
+        if (item.getOfferId() != null) return toCartItemDto(item);
         int normalizedDays = normalizeRentalDays(days);
         int baseKhoai = resolveBaseKhoai(item.getBook());
         String plan = normalizedDays == 36500 ? "forever" : String.valueOf(normalizedDays);
-        int priceKhoai = (int) Math.round(RentalPricing.price(plan, item.getBook()));
+        int priceKhoai = commercePolicy.price(commercePolicy.current(), plan, item.getBook(), true);
 
         item.setRentalDays(normalizedDays);
         item.setPlanKey(plan);
@@ -275,7 +290,8 @@ public class CartServiceImpl implements CartService {
             throw new RuntimeException("Bạn không có quyền xóa sản phẩm này!");
         }
 
-        cartItemRepository.delete(item);
+        if (item.getOfferId() == null) cartItemRepository.delete(item);
+        else cartItemRepository.deleteAll(cartItemRepository.findByCartId(item.getCart().getCart_id()).stream().filter(row -> item.getOfferId().equals(row.getOfferId())).toList());
     }
 
     @Override

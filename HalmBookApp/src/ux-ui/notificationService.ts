@@ -53,6 +53,20 @@ const PREFIX = 'user_notifications_v2_';
 const DELETED_PREFIX = '@halm_deleted_notifications_';
 const listeners = new Set<() => void>();
 const pending = new Map<string, Promise<unknown>>();
+const remoteRequests = new Map<string, Promise<BackendNotificationResponse>>();
+
+async function fetchRemoteInbox(owner: string, token: string): Promise<BackendNotificationResponse> {
+  const key = owner + ':' + token;
+  let operation = remoteRequests.get(key);
+  if (!operation) {
+    operation = fetchApiWithFallback<BackendNotificationResponse>('/api/home/notifications', {
+      method: 'GET', headers: { Authorization: 'Bearer ' + token }, timeout: 5000,
+    }).then(response => response.data);
+    remoteRequests.set(key, operation);
+  }
+  try { return await operation; }
+  finally { if (remoteRequests.get(key) === operation) remoteRequests.delete(key); }
+}
 
 export function subscribeNotifications(listener: () => void) {
   listeners.add(listener);
@@ -203,10 +217,8 @@ export async function getNotifications(username?: string): Promise<AppNotificati
   const token = await AsyncStorage.getItem('userToken');
   if (token && owner === await getCurrentUsername()) {
     try {
-      const response = await fetchApiWithFallback<BackendNotificationResponse>('/api/home/notifications', {
-        method: 'GET', headers: { Authorization: 'Bearer ' + token }, timeout: 5000,
-      });
-      if (Array.isArray(response.data?.notifications)) remote = response.data.notifications.map(mapBackendItem);
+      const response = await fetchRemoteInbox(owner, token);
+      if (Array.isArray(response?.notifications)) remote = response.notifications.map(mapBackendItem);
     } catch { /* Network failure uses the last committed local inbox. */ }
   }
   return updateLocal(owner, async local => {

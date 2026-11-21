@@ -27,4 +27,7 @@ public class CheckoutRequest {
     private String couponCode;              // Mã voucher giảm giá (nếu áp dụng)
     private Double discountAmount = 0.0;     // Số Khoai được giảm giá từ coupon
     private String idempotencyKey;           // Khóa giao dịch duy nhất chống thanh toán lặp (IMP-04)
+    private Long policyRevision;
+    private Integer expectedTotal;
+    private String quoteFingerprint;
 }

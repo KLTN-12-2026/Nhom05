@@ -68,8 +68,19 @@ public class OrderServiceImpl implements OrderService {
     @Autowired
     private CheckoutCoordinator checkoutCoordinator;
 
+    @Autowired
+    private com.example.demochatbot.service.policy.CommercePolicyService commercePolicy;
+
+    @Autowired
+    private com.example.demochatbot.service.offer.OfferPricingService offerPricing;
+
     @Override
     public CheckoutResponse checkoutWithPotato(int accountId, CheckoutRequest request) {
+        if (request != null && request.getCartItemIds() != null && !request.getCartItemIds().isEmpty()
+                && request.getCartItemIds().stream().noneMatch(Objects::isNull)
+                && (request.getIdempotencyKey() == null || request.getIdempotencyKey().isBlank())) {
+            request.setIdempotencyKey("CART-" + accountId + "-" + RentalPricing.digest(request.getCartItemIds().stream().sorted().map(String::valueOf).collect(java.util.stream.Collectors.joining(","))));
+        }
         String key = request == null ? null : request.getIdempotencyKey();
         try {
             return checkoutCoordinator.execute(key, () -> processCheckout(accountId, request));
@@ -90,6 +101,7 @@ public class OrderServiceImpl implements OrderService {
                 .orElse(initial);
         if (entityManager != null) {
             entityManager.refresh(customer, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
+            if (customer.getCart() != null) entityManager.refresh(customer.getCart());
         }
 
         if (request == null || ((request.getItems() == null || request.getItems().isEmpty()) && (request.getCartItemIds() == null || request.getCartItemIds().isEmpty()))) {
@@ -179,7 +191,10 @@ public class OrderServiceImpl implements OrderService {
                             .idempotencyKey(cleanIdempotencyKey)
                             .subtotal(originalSubtotal)
                             .discountAmount(totalDiscount)
+                            .policyRevision(existingOrder.getCheckoutPolicyRevision())
                             .tierDiscountAmount(tierDiscount)
+                            .offerDiscountAmount(existingOrder.getCheckoutOfferDiscount() == null ? 0 : existingOrder.getCheckoutOfferDiscount())
+                            .couponCode(existingOrder.getPromotion() == null ? "" : existingOrder.getPromotion().getPromotion_id())
                             .couponDiscountAmount(couponDiscount)
                             .totalKhoaiPaid((int) Math.round(existingOrder.getTotal_amount()))
                             .remainingPotatoBalance(customer.getPotatoBalance() != null ? customer.getPotatoBalance() : 0)
@@ -189,6 +204,10 @@ public class OrderServiceImpl implements OrderService {
                 }
             }
         }
+
+        var policy = commercePolicy.checkout(request.getPolicyRevision());
+        var effectiveTier = tierService.calculateAndUpdateCustomerTier(customer);
+        if (effectiveTier != null) customer.setMembershipTier(effectiveTier);
 
         if (request.getCartItemIds() != null && !request.getCartItemIds().isEmpty()) {
             List<Integer> ids = request.getCartItemIds();
@@ -202,6 +221,7 @@ public class OrderServiceImpl implements OrderService {
                 item.setBookId(row.getBook().getBook_id());
                 item.setCartItemId(row.getCart_item_id());
                 item.setPlanKey(row.getPlanKey() != null ? row.getPlanKey() : String.valueOf(row.getRentalDays()));
+                item.setOfferId(row.getOfferId());
                 return item;
             }).toList());
         }
@@ -252,48 +272,29 @@ public class OrderServiceImpl implements OrderService {
             }
 
             // Tính giá chuẩn của Server, tuyệt đối không tin cậy giá client gửi lên (IMP-01)
-            double itemPrice = resolveItemPrice(item.getPlanKey(), b);
+            double itemPrice = commercePolicy.price(policy, item.getPlanKey(), b, true);
             item.setPrice(itemPrice);
             subtotal += itemPrice;
+            if (!Double.isFinite(subtotal) || subtotal > Integer.MAX_VALUE) throw new IllegalArgumentException("Giá trị đơn hàng vượt giới hạn cho phép.");
         }
 
-        // Áp dụng chiết khấu hạng thành viên nếu có (Thợ Cày 0%, Cao Thủ Cày 5%, Lão Nông 10%, Đại Điền Chủ 20%)
-        int tierDiscountPercent = (customer.getMembershipTier() != null && customer.getMembershipTier().getDiscountPercent() != null)
-                ? customer.getMembershipTier().getDiscountPercent() : 0;
-        double tierDiscountAmount = (tierDiscountPercent > 0) ? (subtotal * tierDiscountPercent / 100.0) : 0.0;
-
-        // Xác thực mã giảm giá (Voucher / Coupon) hợp lệ từ CSDL hoặc danh mục chuẩn hệ thống
-        double couponDiscountAmount = 0.0;
-        Promotion appliedPromotion = null;
-        if (request.getCouponCode() != null && !request.getCouponCode().trim().isEmpty()) {
-            String code = request.getCouponCode().trim().toUpperCase();
-            Optional<Promotion> promoOpt = promotionRepository.findById(code);
-            if (promoOpt.isPresent()) {
-                Promotion p = promoOpt.get();
-                boolean isActive = "ACTIVE".equalsIgnoreCase(p.getStatus());
-                boolean isStarted = p.getStart_date() == null || !p.getStart_date().isAfter(LocalDateTime.now());
-                boolean isNotEnded = p.getEnd_date() == null || !p.getEnd_date().isBefore(LocalDateTime.now());
-                if (isActive && isStarted && isNotEnded) {
-                    appliedPromotion = p;
-                    if (p.getDiscount_percent() > 0) {
-                        couponDiscountAmount = subtotal * p.getDiscount_percent() / 100.0;
-                    } else if (p.getDiscount_amount() > 0) {
-                        couponDiscountAmount = p.getDiscount_amount();
-                    }
-                }
-            } else {
-                // Hỗ trợ fallback các voucher chiến dịch tiêu chuẩn của hệ sinh thái HALM BOOK
-                if ("HALM2026".equals(code) || "VIPBOOK".equals(code) || "KHOAI5".equals(code)) {
-                    couponDiscountAmount = 5.0;
-                } else if ("HALMVIP10".equals(code)) {
-                    couponDiscountAmount = 10.0;
-                }
-            }
+        var quote = offerPricing.quote(customer, request.getItems(), policy, request.getCouponCode());
+        subtotal = quote.subtotal();
+        double offerDiscountAmount = quote.offerDiscount();
+        double tierDiscountAmount = quote.tierDiscount();
+        double couponDiscountAmount = quote.couponDiscount();
+        double totalDiscount = offerDiscountAmount + tierDiscountAmount + couponDiscountAmount;
+        Promotion appliedPromotion = quote.promotion();
+        int totalKhoaiPaid = quote.total();
+        if (request.getQuoteFingerprint() != null && !request.getQuoteFingerprint().equals(quote.fingerprint())) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
+                "Ưu đãi, mã giảm giá hoặc giá sách đã thay đổi. Vui lòng tải lại báo giá trước khi thanh toán.");
         }
 
-        double totalDiscount = Math.min(tierDiscountAmount + couponDiscountAmount, subtotal);
-        int totalKhoaiPaid = (int) Math.max(0, Math.round(subtotal - totalDiscount));
-
+        if (request.getExpectedTotal() != null && request.getExpectedTotal() != totalKhoaiPaid) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
+                "Tổng thanh toán đã thay đổi. Vui lòng tải lại giỏ hàng và xác nhận giá mới.");
+        }
         // 2. Kiểm tra số dư Khoai thực tế của khách hàng (Đã được lock dòng PESSIMISTIC_WRITE)
         int currentBalance = customer.getPotatoBalance() != null ? customer.getPotatoBalance() : 0;
         if (currentBalance < totalKhoaiPaid) {
@@ -335,6 +336,8 @@ public class OrderServiceImpl implements OrderService {
         order.setDiscount_amount(totalDiscount);
         order.setCheckoutSubtotal(subtotal);
         order.setCheckoutTierDiscount(tierDiscountAmount);
+        order.setCheckoutOfferDiscount(offerDiscountAmount);
+        order.setCheckoutPolicyRevision(policy.revision());
         order.setCheckoutCouponDiscount(couponDiscountAmount);
         order.setCheckoutFingerprint(fingerprint);
         order.setOrder_date(LocalDateTime.now());
@@ -345,11 +348,7 @@ public class OrderServiceImpl implements OrderService {
 
         List<Map<String, Object>> rentedBooksResult = new ArrayList<>();
 
-        List<Double> grossPrices = request.getItems().stream()
-                .map(item -> resolveItemPrice(item.getPlanKey(), bookRepository.findById(item.getBookId().trim())
-                        .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy sách đã xác thực!"))))
-                .toList();
-        int[] netPrices = CheckoutPricing.allocateNetPayment(grossPrices, totalKhoaiPaid);
+        int[] netPrices = quote.netPrices();
         int itemIndex = 0;
 
         // 6. Xử lý từng tác phẩm trong đơn hàng
@@ -359,7 +358,7 @@ public class OrderServiceImpl implements OrderService {
 
             // Xác định số ngày thuê theo gói chuẩn của Server (tuyệt đối không cho client tự sửa durationDays)
             boolean isForever = "forever".equalsIgnoreCase(item.getPlanKey().trim());
-            int durationDays = resolveDurationDays(item.getPlanKey());
+            int durationDays = commercePolicy.plan(policy, item.getPlanKey(), true).durationDays();
 
             // Lưu chi tiết đơn hàng Order_Item với giá net thực trả đã trừ chiết khấu (IMP-01/02)
             Order_Item orderItem = new Order_Item();
@@ -367,7 +366,8 @@ public class OrderServiceImpl implements OrderService {
             orderItem.setBook(book);
             orderItem.setRentalType(isForever ? "BUY" : "RENT");
             orderItem.setDurationDays(durationDays);
-            double singleItemPrice = (item.getPrice() != null && item.getPrice() > 0) ? item.getPrice() : resolveItemPrice(item.getPlanKey(), book);
+            orderItem.setOfferId(item.getOfferId());
+            double singleItemPrice = item.getPrice();
             double netPrice = netPrices[itemIndex++];
             orderItem.setPrice(netPrice);
             orderItemRepository.save(orderItem);
@@ -413,6 +413,7 @@ public class OrderServiceImpl implements OrderService {
             bookInfo.put("author", book.getAuthor());
             bookInfo.put("imgUrl", book.getImg_url());
             bookInfo.put("durationDays", durationDays);
+            bookInfo.put("offerId", item.getOfferId());
             bookInfo.put("isForever", isForever);
             rentedBooksResult.add(bookInfo);
         }
@@ -446,6 +447,8 @@ public class OrderServiceImpl implements OrderService {
         // Trả về số dư thực tế cuối cùng trong transaction (bao gồm cả thưởng thăng hạng nếu có)
         int finalBalance = customer.getPotatoBalance() != null ? customer.getPotatoBalance() : newBalance;
 
+        if (customer.getCart() != null && quote.couponCode().equalsIgnoreCase(Objects.toString(customer.getCart().getCouponCode(), ""))) customer.getCart().setCouponCode(null);
+
         return CheckoutResponse.builder()
                 .success(true)
                 .message("Thuê sách thành công! Sách đã được chuyển vào Tủ Sách Cá Nhân của bạn.")
@@ -454,8 +457,10 @@ public class OrderServiceImpl implements OrderService {
                 .idempotencyKey(cleanIdempotencyKey)
                 .subtotal(subtotal)
                 .discountAmount(totalDiscount)
+                .policyRevision(policy.revision())
                 .tierDiscountAmount(tierDiscountAmount)
                 .couponDiscountAmount(couponDiscountAmount)
+                .offerDiscountAmount(offerDiscountAmount).couponCode(quote.couponCode())
                 .totalKhoaiPaid(totalKhoaiPaid)
                 .remainingPotatoBalance(finalBalance)
                 .orderDate(savedOrder.getOrder_date())
@@ -491,13 +496,17 @@ public class OrderServiceImpl implements OrderService {
                     }
                 } else {
                     remainingDays = 0;
-                    if (!"EXPIRED".equalsIgnoreCase(ar.getStatus())) {
+                    if ("ACTIVE".equalsIgnoreCase(ar.getStatus())) {
                         ar.setStatus("EXPIRED");
                         accessRecordRepository.save(ar);
                     }
                 }
             }
 
+            if (ar.getEnd_date() == null) {
+                isForever = true;
+                remainingDays = 9999;
+            }
             dtoList.add(RentedBookDto.builder()
                     .accessRecordId(ar.getAccess_record_id())
                     .bookId(b.getBook_id())
@@ -528,7 +537,7 @@ public class OrderServiceImpl implements OrderService {
         if (record.isEmpty()) return false;
 
         Access_Record ar = record.get();
-        if ("EXPIRED".equalsIgnoreCase(ar.getStatus())) return false;
+        if (!"ACTIVE".equalsIgnoreCase(ar.getStatus())) return false;
         if (ar.getEnd_date() != null && ar.getEnd_date().isBefore(LocalDateTime.now())) {
             ar.setStatus("EXPIRED");
             accessRecordRepository.save(ar);
@@ -555,29 +564,6 @@ public class OrderServiceImpl implements OrderService {
     /**
      * Xác định thời hạn thuê chính xác từ planKey của Server
      */
-    private int resolveDurationDays(String planKey) {
-        validatePlanKey(planKey);
-        String key = planKey.trim().toLowerCase();
-        switch (key) {
-            case "1": return 1;
-            case "3": return 3;
-            case "7": return 7;
-            case "14": return 14;
-            case "15": return 15;
-            case "30": return 30;
-            case "90": return 90;
-            case "forever": return 36500;
-            default: return 7;
-        }
-    }
-
-    /**
-     * Xác định giá chuẩn của từng gói thuê sách từ cấu hình Server, tuyệt đối không cho client ghi đè
-     */
-    private double resolveItemPrice(String planKey, Book book) {
-        return RentalPricing.price(planKey, book);
-    }
-
     private String checkoutFingerprint(CheckoutRequest request) {
         if (request == null || ((request.getItems() == null || request.getItems().isEmpty()) && (request.getCartItemIds() == null || request.getCartItemIds().isEmpty()))) {
             throw new IllegalArgumentException("Giỏ hàng thanh toán trống!");
@@ -596,7 +582,7 @@ public class OrderServiceImpl implements OrderService {
             String plan = item.getPlanKey().trim().toLowerCase(Locale.ROOT);
             resolveDurationDays(plan);
             if (!seen.add(bookId)) throw new IllegalArgumentException("Đơn hàng chứa ấn phẩm trùng lặp!");
-            items.add(bookId.length() + ":" + bookId + ":" + plan);
+            items.add(bookId.length() + ":" + bookId + ":" + plan + ":offer:" + Objects.toString(item.getOfferId(), ""));
         }
         Collections.sort(items);
         String coupon = request.getCouponCode() == null ? "" : request.getCouponCode().trim().toUpperCase(Locale.ROOT);
@@ -607,12 +593,15 @@ public class OrderServiceImpl implements OrderService {
             throw new IllegalStateException("SHA-256 không khả dụng.", impossible);
         }
     }
+    private int resolveDurationDays(String planKey) { return RentalPricing.duration(planKey); }
     private double legacySubtotal(Orders order) {
-        if (order.getOrder_items() == null || order.getOrder_items().isEmpty()) {
-            return order.getTotal_amount() + order.getDiscount_amount();
+        // Pre-policy rental receipts used the immutable original tariff and have no subtotal snapshot.
+        // Paid amounts and refunds still come from the persisted payment, never from today's policy.
+        if (order.getOrder_items() != null && !order.getOrder_items().isEmpty()
+                && order.getOrder_items().stream().noneMatch(item -> "BUY".equalsIgnoreCase(item.getRentalType()))) {
+            return order.getOrder_items().stream().mapToDouble(item -> RentalPricing.price(
+                String.valueOf(item.getDurationDays() != null ? item.getDurationDays() : 30), null)).sum();
         }
-        return order.getOrder_items().stream().filter(item -> item.getBook() != null)
-                .mapToDouble(item -> resolveItemPrice("BUY".equalsIgnoreCase(item.getRentalType()) ? "forever"
-                        : String.valueOf(item.getDurationDays() != null ? item.getDurationDays() : 30), item.getBook())).sum();
+        return Math.max(0, order.getTotal_amount() + order.getDiscount_amount());
     }
 }

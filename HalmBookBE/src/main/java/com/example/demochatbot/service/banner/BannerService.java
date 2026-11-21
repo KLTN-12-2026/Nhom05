@@ -6,15 +6,15 @@ import java.util.List;
 import java.util.Map;
 
 public interface BannerService {
-    List<BannerDto> getActiveBanners();
-    List<BannerDto> getAllBanners();
-    BannerDto getBannerById(String id);
+    List<BannerDto> getActiveBanners(String platform);
+    List<BannerDto> getAllBanners(String platform);
+    BannerDto getBannerById(String id, String platform);
     BannerDto createBanner(BannerDto bannerDto);
-    BannerDto updateBanner(String id, BannerDto bannerDto);
-    void toggleBannerStatus(String id);
-    void deleteBanner(String id);
-    List<BannerDto> saveAllBanners(List<BannerDto> bannerDtos);
-    List<BannerDto> resetDefaultBanners();
+    BannerDto updateBanner(String id, BannerDto bannerDto, String platform);
+    void toggleBannerStatus(String id, String platform);
+    void deleteBanner(String id, String platform);
+    List<BannerDto> saveAllBanners(List<BannerDto> bannerDtos, String platform);
+    List<BannerDto> resetDefaultBanners(String platform);
 
     // Site Settings
     Map<String, String> getSiteSettings();

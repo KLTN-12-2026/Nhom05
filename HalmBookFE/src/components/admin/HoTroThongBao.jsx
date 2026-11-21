@@ -29,7 +29,8 @@ if (typeof window !== 'undefined') {
         },
         updateStatus: async (ticketId, status) => {
             return await adminSupportService.updateAdminTicketStatus(ticketId, status);
-        }
+        },
+        broadcast: adminSupportService.broadcastNotification,
     };
 }
 
@@ -277,7 +278,7 @@ export default function ThongBaoHoTro() {
 
     {/* Modal Thông Báo Toàn Hệ Thống */}
     <div id="broadcastModal" className="fixed inset-0 bg-slate-800/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-slate-700 rounded-2xl max-w-md w-full p-6 border border-slate-300 dark:border-slate-600 shadow-2xl space-y-4">
+        <div className="bg-white dark:bg-slate-700 rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto p-6 border border-slate-300 dark:border-slate-600 shadow-2xl space-y-4">
             <div className="flex justify-between items-center border-b-2 border-slate-300 dark:border-slate-600 pb-3">
                 <h3 className="font-black text-base text-slate-800 dark:text-white flex items-center space-x-2">
                     <i className="fa-solid fa-bullhorn text-blue-600"></i>
@@ -288,16 +289,39 @@ export default function ThongBaoHoTro() {
             <div className="space-y-3">
                 <div>
                     <label className="block text-xs font-extrabold text-slate-600 dark:text-gray-300 uppercase mb-1">Tiêu đề thông báo</label>
-                    <input type="text" id="broadcastTitle" placeholder="Bảo trì hệ thống / Cập nhật tính năng mới..." className="w-full px-3.5 py-2 bg-white dark:bg-gray-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-bold dark:text-white" />
+                    <input type="text" id="broadcastTitle" maxLength={150} placeholder="Bảo trì hệ thống / Cập nhật tính năng mới..." className="w-full px-3.5 py-2 bg-white dark:bg-gray-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-bold dark:text-white" />
                 </div>
                 <div>
                     <label className="block text-xs font-extrabold text-slate-600 dark:text-gray-300 uppercase mb-1">Nội dung thông cáo</label>
-                    <textarea id="broadcastContent" rows="4" placeholder="Nội dung sẽ được gửi đến tất cả người dùng trong hệ thống..." className="w-full px-3.5 py-2 bg-white dark:bg-gray-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-bold dark:text-white"></textarea>
+                    <textarea id="broadcastContent" rows="4" maxLength={4000} placeholder="Nội dung thông báo gửi vào hộp thư độc giả..." className="w-full px-3.5 py-2 bg-white dark:bg-gray-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-bold dark:text-white"></textarea>
                 </div>
+                <div>
+                    <label htmlFor="broadcastTarget" className="block text-xs font-bold text-slate-600 mb-1">Người nhận</label>
+                    <select id="broadcastTarget" className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs dark:bg-gray-700 dark:text-white">
+                        <option value="all">Tất cả độc giả</option>
+                        <option value="vip">Hội viên có ưu đãi theo hạng</option>
+                        <option value="standard">Hội viên hạng cơ bản</option>
+                    </select>
+                    <p className="text-[11px] text-slate-500 mt-1">Nhóm hội viên dựa trên hạng thành viên, không phụ thuộc số dư ví hiện tại.</p>
+                </div>
+                <div>
+                    <label htmlFor="broadcastDestination" className="block text-xs font-bold text-slate-600 mb-1">Nội dung liên quan khi bấm thông báo</label>
+                    <select id="broadcastDestination" className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs dark:bg-gray-700 dark:text-white">
+                        <option value="inbox">Chỉ xem thông báo</option>
+                        <option value="home">Trang chủ</option>
+                        <option value="offers">Ưu đãi</option>
+                        <option value="categories">Thể loại sách</option>
+                        <option value="bookshelf">Tủ sách</option>
+                        <option value="profile">Trang cá nhân</option>
+                        <option value="wallet">Ví và giao dịch</option>
+                    </select>
+                </div>
+                <p className="text-[11px] text-slate-500">Thông báo được lưu trong hộp thư App/Web, kể cả khi độc giả đang ngoại tuyến.</p>
+                <p id="broadcastStatus" role="status" aria-live="polite" className="text-xs text-slate-600 whitespace-pre-wrap"></p>
             </div>
             <div className="flex justify-end space-x-2 pt-3 border-t-2 border-slate-300 dark:border-slate-600">
                 <button onClick={() => { window.closeModal('broadcastModal') }} className="px-4 py-2 bg-slate-50 dark:bg-gray-700 text-slate-700 dark:text-gray-200 rounded-xl text-xs font-bold border border-slate-300 dark:border-slate-600 cursor-pointer">Hủy</button>
-                <button onClick={() => { window.submitBroadcast() }} className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold border border-slate-300 dark:border-slate-600 cursor-pointer">Phát Thông Báo</button>
+                <button id="broadcastSubmit" onClick={() => { void window.submitBroadcast() }} className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold border border-slate-300 dark:border-slate-600 cursor-pointer disabled:opacity-50">Phát Thông Báo</button>
             </div>
         </div>
     </div>

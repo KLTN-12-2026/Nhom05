@@ -1,3 +1,7 @@
+import VoucherScopeFields from './VoucherScopeFields';
+import { rentalPlanPrice } from '@/services/commercePolicyService';
+import { getAdminCommercePolicy } from '@/services/commercePolicyService';
+import OfferTermsFields from './OfferTermsFields';
 import React, { useState, useEffect, useRef } from 'react';
 import { useLegacyAdminPage } from './legacy-runtime';
 import axiosInstance from '@/services/axiosClient';
@@ -40,6 +44,7 @@ export default function QuanLyUuDai() {
   const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false);
   const [editingVoucher, setEditingVoucher] = useState(null);
   const [voucherForm, setVoucherForm] = useState({
+    book_id: '', category_id: '', start_date: '',
     promotion_id: '',
     promotion_name: '',
     discount_percent: 20,
@@ -58,6 +63,7 @@ export default function QuanLyUuDai() {
     potato: 20,
     originalPotato: 40,
     discount: '-50%',
+    bookIds: [], planKey: '7', status: 'ACTIVE', start_date: '', end_date: '', orderIndex: 0,
     booksText: '',
     img: ''
   });
@@ -66,6 +72,7 @@ export default function QuanLyUuDai() {
   const [isDealModalOpen, setIsDealModalOpen] = useState(false);
   const [editingDeal, setEditingDeal] = useState(null);
   const [dealForm, setDealForm] = useState({
+    bookId: '', planKey: '7', status: 'ACTIVE', start_date: '', end_date: '', orderIndex: 0,
     name: '',
     author: '',
     potato: 8,
@@ -90,8 +97,17 @@ export default function QuanLyUuDai() {
     setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 3500);
   };
 
+  const [offerPlans, setOfferPlans] = useState([]);
+  const [voucherCategories, setVoucherCategories] = useState([]);
+  useEffect(() => { axiosInstance.get('/api/home/categories').then(r => setVoucherCategories(r.data)).catch(() => {}); }, []);
+  const [savingOffer, setSavingOffer] = useState(false);
+  const offerPending = useRef(false);
+  useEffect(() => { getAdminCommercePolicy().then(p => setOfferPlans(p.plans)).catch(() => {}); }, []);
   const carouselRef = useRef(null);
   const [realBooksList, setRealBooksList] = useState([]);
+  const priceForBook = (id, key) => { const book = realBooksList.find(b => b.id === id); const plan = offerPlans.find(p => p.key === (key || '7')); return plan ? rentalPlanPrice(plan, book?.price) : 0; };
+  const originalComboPrice = (comboForm.bookIds || []).reduce((sum, id) => sum + priceForBook(id, comboForm.planKey), 0);
+  const originalDealPrice = priceForBook(dealForm.bookId, dealForm.planKey);
 
   // Tải danh sách sách thực tế từ MySQL để làm nguồn dữ liệu chọn sách trong Deal/Combo
   useEffect(() => {
@@ -143,43 +159,22 @@ export default function QuanLyUuDai() {
   const fetchVouchers = async () => {
     setLoadingVouchers(true);
     try {
-      try {
-        const res = await axiosInstance.get('/api/promotions');
-        const list = Array.isArray(res.data) ? res.data : (res.data?.data || []);
-        setVouchers(list.map(v => ({
-          promotion_id: v.promotion_id || v.promotionId || v.code || v.id,
-          promotion_name: v.promotion_name || v.promotionName || v.name || '',
-          discount_percent: v.discount_percent !== undefined ? v.discount_percent : (v.discountPercent || 0),
-          discount_amount: v.discount_amount !== undefined ? v.discount_amount : (v.discountAmount || 0),
-          end_date: v.end_date || v.endDate || '',
-          description: v.description || v.desc || '',
-          status: v.status || 'ACTIVE'
-        })));
-        return;
-      } catch {}
-
-      const resHome = await axiosInstance.get('/api/home/promotions');
-      const list = Array.isArray(resHome.data) ? resHome.data : [];
-      setVouchers(list.map(v => ({
-        promotion_id: v.promotion_id || v.promotionId || v.code || v.id,
-        promotion_name: v.promotion_name || v.promotionName || v.name || '',
-        discount_percent: v.discount_percent !== undefined ? v.discount_percent : (v.discountPercent || 0),
-        discount_amount: v.discount_amount !== undefined ? v.discount_amount : (v.discountAmount || 0),
-        end_date: v.end_date || v.endDate || '',
-        description: v.description || v.desc || '',
-        status: v.status || 'ACTIVE'
+      const res = await axiosInstance.get('/api/admin/promotions');
+      const list = Array.isArray(res.data) ? res.data : [];
+      setVouchers(list.filter(v => v.status !== 'DELETED').map(v => ({ ...v,
+        book_id: v.book_id || '', category_id: v.category?.category_id || v.category_id || '',
+        start_date: v.start_date || '', end_date: v.end_date || '',
+        status: v.status === 'PAUSED' ? 'INACTIVE' : v.status || 'ACTIVE'
       })));
-    } catch {
-      setVouchers([]);
-    } finally {
-      setLoadingVouchers(false);
-    }
+    } catch (error) {
+      showToast(error?.response?.data?.message || 'Không tải được voucher từ máy chủ.', 'error');
+    } finally { setLoadingVouchers(false); }
   };
 
   // Tải danh sách Combo & Sách Lẻ Giảm Sâu từ offerService
-  const fetchOffers = () => {
-    setCombos(getCombos());
-    setSingleDeals(getSingleDeals());
+  const fetchOffers = async () => {
+    try { const [combos, deals] = await Promise.all([getCombos(true), getSingleDeals(true)]); setCombos(combos); setSingleDeals(deals); }
+    catch (error) { showToast(error?.response?.data?.message || 'Không tải được combo/deal từ máy chủ.', 'error'); }
   };
 
   useEffect(() => {
@@ -253,7 +248,7 @@ export default function QuanLyUuDai() {
       }
       await fetchPackages();
     } catch (err) {
-      showToast('Lỗi lưu gói nạp: ' + (err.response?.data?.message || err.message), 'error');
+      showToast('Lỗi lưu gói nạp: ' + (err.response?.data?.message || (err.response?.data?.message || err.response?.data?.error || err.message)), 'error');
     } finally {
       setIsPkgModalOpen(false);
     }
@@ -278,6 +273,7 @@ export default function QuanLyUuDai() {
     if (voucher) {
       setEditingVoucher(voucher);
       setVoucherForm({
+        book_id: voucher.book_id || '', category_id: voucher.category_id || '', start_date: voucher.start_date || '',
         promotion_id: voucher.promotion_id,
         promotion_name: voucher.promotion_name,
         discount_percent: voucher.discount_percent || 0,
@@ -289,6 +285,7 @@ export default function QuanLyUuDai() {
     } else {
       setEditingVoucher(null);
       setVoucherForm({
+        book_id: '', category_id: '', start_date: '',
         promotion_id: 'HALM' + Math.floor(1000 + Math.random() * 9000),
         promotion_name: '',
         discount_percent: 20,
@@ -304,6 +301,7 @@ export default function QuanLyUuDai() {
   const handleSaveVoucher = async (e) => {
     e.preventDefault();
     const payload = {
+      book_id: voucherForm.book_id || null, category_id: voucherForm.category_id ? Number(voucherForm.category_id) : null, start_date: voucherForm.start_date || null,
       promotion_id: voucherForm.promotion_id.trim().toUpperCase(),
       promotion_name: voucherForm.promotion_name.trim(),
       discount_percent: Number(voucherForm.discount_percent) || 0,
@@ -321,16 +319,14 @@ export default function QuanLyUuDai() {
         await axiosInstance.post('/api/promotions', payload);
         showToast(`Tạo voucher "${payload.promotion_id}" thành công!`, 'success');
       }
-      await fetchVouchers();
+      await fetchVouchers(); setIsVoucherModalOpen(false);
     } catch (err) {
-      showToast('Lỗi lưu voucher: ' + (err.response?.data?.message || err.message), 'error');
-    } finally {
-      setIsVoucherModalOpen(false);
+      showToast('Lỗi lưu voucher: ' + (err.response?.data?.message || err.response?.data?.error || err.message), 'error');
     }
   };
 
   const handleToggleVoucherStatus = async (voucher) => {
-    const nextStatus = voucher.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
+    const nextStatus = voucher.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
     try {
       await axiosInstance.put(`/api/promotions/${voucher.promotion_id}`, {
         ...voucher,
@@ -350,9 +346,10 @@ export default function QuanLyUuDai() {
       setComboForm({
         name: combo.name || '',
         desc: combo.desc || '',
-        potato: combo.potato || 20,
-        originalPotato: combo.originalPotato || 40,
+        potato: combo.potato ?? 20,
+        originalPotato: combo.originalPotato ?? 40,
         discount: combo.discount || '-50%',
+        bookIds: combo.bookIds || [], planKey: combo.planKey || '7', status: combo.status || 'ACTIVE', start_date: combo.start_date || '', end_date: combo.end_date || '', orderIndex: combo.orderIndex || 0,
         booksText: Array.isArray(combo.books) ? combo.books.join('\n') : '',
         img: combo.img || ''
       });
@@ -364,6 +361,7 @@ export default function QuanLyUuDai() {
         potato: 20,
         originalPotato: 40,
         discount: '-50%',
+        bookIds: [], planKey: '7', status: 'ACTIVE', start_date: '', end_date: '', orderIndex: 0,
         booksText: '',
         img: ''
       });
@@ -371,32 +369,16 @@ export default function QuanLyUuDai() {
     setIsComboModalOpen(true);
   };
 
-  const handleSaveCombo = (e) => {
-    e.preventDefault();
-    const books = comboForm.booksText
-      .split('\n')
-      .map(b => b.trim())
-      .filter(Boolean);
-
-    const payload = {
-      name: comboForm.name.trim(),
-      desc: comboForm.desc.trim(),
-      potato: Number(comboForm.potato) || 10,
-      originalPotato: Number(comboForm.originalPotato) || 20,
-      discount: comboForm.discount.trim() || '-50%',
-      books: books.length > 0 ? books : ['Tác phẩm chọn lọc trong combo'],
-      img: comboForm.img.trim() || 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=500&auto=format&fit=crop&q=60'
-    };
-
-    if (editingCombo) {
-      updateCombo(editingCombo.id, payload);
-      showToast(`Cập nhật Combo "${payload.name}" thành công!`, 'success');
-    } else {
-      addCombo(payload);
-      showToast(`Tạo mới Combo "${payload.name}" thành công!`, 'success');
-    }
-    setIsComboModalOpen(false);
-    fetchOffers();
+  const handleSaveCombo = async e => {
+    e.preventDefault(); if (offerPending.current) return;
+    if (!offerPlans.length) { showToast('Chưa tải được biểu giá. Vui lòng tải lại trang.', 'error'); return; }
+    offerPending.current = true; setSavingOffer(true);
+    try {
+      const payload = { ...comboForm, version: editingCombo?.version, potato: Number(comboForm.potato), bookIds: comboForm.bookIds };
+      if (editingCombo) await updateCombo(editingCombo.id, payload); else await addCombo(payload);
+      showToast('Đã lưu combo vào hệ thống.', 'success'); setIsComboModalOpen(false); await fetchOffers();
+    } catch (error) { showToast(error?.response?.data?.message || 'Không lưu được combo.', 'error'); }
+    finally { offerPending.current = false; setSavingOffer(false); }
   };
 
   // Single Deal Handlers
@@ -404,10 +386,11 @@ export default function QuanLyUuDai() {
     if (deal) {
       setEditingDeal(deal);
       setDealForm({
+        bookId: deal.bookIds?.[0] || '', planKey: deal.planKey || '7', status: deal.status || 'ACTIVE', start_date: deal.start_date || '', end_date: deal.end_date || '', orderIndex: deal.orderIndex || 0,
         name: deal.name || '',
         author: deal.author || '',
-        potato: deal.potato || 8,
-        originalPotato: deal.originalPotato || 16,
+        potato: deal.potato ?? 8,
+        originalPotato: deal.originalPotato ?? 16,
         discount: deal.discount || '-50%',
         category: deal.category || 'Sách Chọn Lọc',
         img: deal.img || ''
@@ -415,6 +398,7 @@ export default function QuanLyUuDai() {
     } else {
       setEditingDeal(null);
       setDealForm({
+        bookId: '', planKey: '7', status: 'ACTIVE', start_date: '', end_date: '', orderIndex: 0,
         name: '',
         author: '',
         potato: 8,
@@ -427,27 +411,15 @@ export default function QuanLyUuDai() {
     setIsDealModalOpen(true);
   };
 
-  const handleSaveDeal = (e) => {
-    e.preventDefault();
-    const payload = {
-      name: dealForm.name.trim(),
-      author: dealForm.author.trim() || 'HALM BOOK',
-      potato: Number(dealForm.potato) || 5,
-      originalPotato: Number(dealForm.originalPotato) || 10,
-      discount: dealForm.discount.trim() || '-50%',
-      category: dealForm.category.trim() || 'Sách Chọn Lọc',
-      img: dealForm.img.trim() || '/logo.png'
-    };
-
-    if (editingDeal) {
-      updateSingleDeal(editingDeal.id, payload);
-      showToast(`Cập nhật sách giảm giá "${payload.name}" thành công!`, 'success');
-    } else {
-      addSingleDeal(payload);
-      showToast(`Thêm sách giảm sâu "${payload.name}" thành công!`, 'success');
-    }
-    setIsDealModalOpen(false);
-    fetchOffers();
+  const handleSaveDeal = async e => {
+    e.preventDefault(); if (offerPending.current) return;
+    offerPending.current = true; setSavingOffer(true);
+    try {
+      const payload = { ...dealForm, version: editingDeal?.version, potato: Number(dealForm.potato), bookIds: [dealForm.bookId] };
+      if (editingDeal) await updateSingleDeal(editingDeal.id, payload); else await addSingleDeal(payload);
+      showToast('Đã lưu sách giảm giá vào hệ thống.', 'success'); setIsDealModalOpen(false); await fetchOffers();
+    } catch (error) { showToast(error?.response?.data?.message || 'Không lưu được sách giảm giá.', 'error'); }
+    finally { offerPending.current = false; setSavingOffer(false); }
   };
 
   // Xóa mục
@@ -463,11 +435,11 @@ export default function QuanLyUuDai() {
         showToast(`Đã xóa voucher "${name}" thành công!`, 'info');
         await fetchVouchers();
       } else if (type === 'combo') {
-        deleteCombo(id);
+        await deleteCombo(id);
         showToast(`Đã xóa Combo "${name}" thành công!`, 'info');
         fetchOffers();
       } else if (type === 'deal') {
-        deleteSingleDeal(id);
+        await deleteSingleDeal(id);
         showToast(`Đã xóa sách giảm sâu "${name}" thành công!`, 'info');
         fetchOffers();
       }
@@ -1109,7 +1081,7 @@ export default function QuanLyUuDai() {
                     className="w-full px-3.5 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-bold dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="ACTIVE">Kích hoạt (ACTIVE)</option>
-                    <option value="PAUSED">Tạm dừng (PAUSED)</option>
+                    <option value="INACTIVE">Tạm dừng (INACTIVE)</option>
                   </select>
                 </div>
               </div>
@@ -1135,7 +1107,7 @@ export default function QuanLyUuDai() {
                     max="100"
                     placeholder="20"
                     value={voucherForm.discount_percent}
-                    onChange={(e) => setVoucherForm({ ...voucherForm, discount_percent: e.target.value })}
+                    onChange={(e) => setVoucherForm({ ...voucherForm, discount_percent: e.target.value, discount_amount: 0 })}
                     className="w-full px-3.5 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-bold dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -1146,7 +1118,7 @@ export default function QuanLyUuDai() {
                     min="0"
                     placeholder="0"
                     value={voucherForm.discount_amount}
-                    onChange={(e) => setVoucherForm({ ...voucherForm, discount_amount: e.target.value })}
+                    onChange={(e) => setVoucherForm({ ...voucherForm, discount_amount: e.target.value, discount_percent: 0 })}
                     className="w-full px-3.5 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-bold dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -1188,7 +1160,7 @@ export default function QuanLyUuDai() {
                   {editingVoucher ? 'Lưu Thay Đổi' : 'Tạo Voucher'}
                 </button>
               </div>
-            </form>
+            <VoucherScopeFields form={voucherForm} onChange={setVoucherForm} books={realBooksList} categories={voucherCategories} /></form>
           </div>
         </div>
       )}
@@ -1214,6 +1186,7 @@ export default function QuanLyUuDai() {
             </div>
 
             <form onSubmit={handleSaveCombo} className="space-y-3.5">
+              <fieldset disabled={savingOffer} className="space-y-3.5">
               <div>
                 <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">Tên Gói Combo *</label>
                 <input
@@ -1242,7 +1215,7 @@ export default function QuanLyUuDai() {
                   <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">Giá Khoai Ưu Đãi *</label>
                   <input
                     type="number"
-                    min="1"
+                    min="0"
                     required
                     placeholder="25"
                     value={comboForm.potato}
@@ -1256,8 +1229,8 @@ export default function QuanLyUuDai() {
                     type="number"
                     min="1"
                     placeholder="45"
-                    value={comboForm.originalPotato}
-                    onChange={(e) => setComboForm({ ...comboForm, originalPotato: e.target.value })}
+                    value={originalComboPrice}
+                    readOnly
                     className="w-full px-3.5 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-bold dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
                   />
                 </div>
@@ -1266,8 +1239,8 @@ export default function QuanLyUuDai() {
                   <input
                     type="text"
                     placeholder="-45%"
-                    value={comboForm.discount}
-                    onChange={(e) => setComboForm({ ...comboForm, discount: e.target.value })}
+                    value={originalComboPrice ? '-' + Math.round((1 - Number(comboForm.potato) / originalComboPrice) * 100) + '%' : '0%'}
+                    readOnly
                     className="w-full px-3.5 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-bold dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
                   />
                 </div>
@@ -1283,13 +1256,14 @@ export default function QuanLyUuDai() {
                     const b = realBooksList.find(x => x.id === selectedId);
                     if (b) {
                       const currentBooks = comboForm.booksText ? comboForm.booksText.split('\n').filter(Boolean) : [];
-                      if (!currentBooks.includes(b.title)) {
+                      if (!comboForm.bookIds.includes(b.id)) {
                         const updatedBooks = [...currentBooks, b.title];
-                        const newOriginal = (Number(comboForm.originalPotato) || 0) + (Number(b.price) || 15);
-                        const newDiscounted = Math.max(1, Math.round(newOriginal * 0.5));
+                        const newOriginal = [...comboForm.bookIds, b.id].reduce((sum, id) => sum + priceForBook(id, comboForm.planKey), 0);
+                        const newDiscounted = Math.max(0, Math.round(newOriginal * 0.5));
                         setComboForm({
                           ...comboForm,
                           name: comboForm.name || `Combo ${updatedBooks.length} Tác Phẩm Đặc Sắc`,
+                          bookIds: [...comboForm.bookIds, b.id],
                           booksText: updatedBooks.join('\n'),
                           originalPotato: newOriginal,
                           potato: newDiscounted,
@@ -1311,13 +1285,14 @@ export default function QuanLyUuDai() {
                   ))}
                 </select>
 
-                <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">Danh Sách Tác Phẩm (Mỗi cuốn 1 dòng) *</label>
+                <button type="button" onClick={() => setComboForm({ ...comboForm, bookIds: [], booksText: '' })} className="text-xs text-red-600 mb-2">Chọn lại danh sách sách</button>
+                <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">Danh sách sách đã chọn *</label>
                 <textarea
                   rows="3"
                   required
                   placeholder="Đắc Nhân Tâm&#10;Atomic Habits&#10;Tư Duy Nhanh Và Chậm"
                   value={comboForm.booksText}
-                  onChange={(e) => setComboForm({ ...comboForm, booksText: e.target.value })}
+                  readOnly
                   className="w-full px-3.5 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-bold dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
                 ></textarea>
               </div>
@@ -1348,7 +1323,9 @@ export default function QuanLyUuDai() {
                   {editingCombo ? 'Lưu Thay Đổi' : 'Tạo Combo'}
                 </button>
               </div>
-            </form>
+                          <OfferTermsFields form={comboForm} onChange={setComboForm} plans={offerPlans} />
+              </fieldset>
+</form>
           </div>
         </div>
       )}
@@ -1374,6 +1351,7 @@ export default function QuanLyUuDai() {
             </div>
 
             <form onSubmit={handleSaveDeal} className="space-y-3.5">
+              <fieldset disabled={savingOffer} className="space-y-3.5">
               <div>
                 <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">
                   Chọn Nhanh Từ Kho Sách CSDL MySQL ({realBooksList.length} cuốn sẵn có)
@@ -1385,17 +1363,19 @@ export default function QuanLyUuDai() {
                     if (b) {
                       setDealForm({
                         ...dealForm,
+                        bookId: b.id,
                         name: b.title,
                         author: b.author,
                         category: b.category,
-                        originalPotato: b.price || 15,
-                        potato: Math.max(1, Math.round((b.price || 15) * 0.5)),
+                        originalPotato: priceForBook(b.id, dealForm.planKey),
+                        potato: Math.max(0, Math.round(priceForBook(b.id, dealForm.planKey) * 0.5)),
                         discount: '-50%',
                         img: b.img
                       });
                     }
                   }}
-                  defaultValue=""
+                  value={dealForm.bookId || ""}
+                  required
                   className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-700/80 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-bold text-slate-800 dark:text-white mb-2"
                 >
                   <option value="">-- Chọn ấn phẩm từ CSDL để tự động điền thông tin --</option>
@@ -1445,7 +1425,7 @@ export default function QuanLyUuDai() {
                   <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-1">Khoai Sau Giảm *</label>
                   <input
                     type="number"
-                    min="1"
+                    min="0"
                     required
                     placeholder="8"
                     value={dealForm.potato}
@@ -1459,8 +1439,8 @@ export default function QuanLyUuDai() {
                     type="number"
                     min="1"
                     placeholder="16"
-                    value={dealForm.originalPotato}
-                    onChange={(e) => setDealForm({ ...dealForm, originalPotato: e.target.value })}
+                    value={originalDealPrice}
+                    readOnly
                     className="w-full px-3.5 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-bold dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500"
                   />
                 </div>
@@ -1469,8 +1449,8 @@ export default function QuanLyUuDai() {
                   <input
                     type="text"
                     placeholder="-50%"
-                    value={dealForm.discount}
-                    onChange={(e) => setDealForm({ ...dealForm, discount: e.target.value })}
+                    value={originalDealPrice ? '-' + Math.round((1 - Number(dealForm.potato) / originalDealPrice) * 100) + '%' : '0%'}
+                    readOnly
                     className="w-full px-3.5 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-bold dark:text-white focus:outline-none focus:ring-2 focus:ring-rose-500"
                   />
                 </div>
@@ -1502,7 +1482,9 @@ export default function QuanLyUuDai() {
                   {editingDeal ? 'Lưu Thay Đổi' : 'Thêm Sách'}
                 </button>
               </div>
-            </form>
+                          <OfferTermsFields form={dealForm} onChange={setDealForm} plans={offerPlans} />
+              </fieldset>
+</form>
           </div>
         </div>
       )}

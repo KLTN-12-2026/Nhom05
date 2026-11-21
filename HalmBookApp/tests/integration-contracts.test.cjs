@@ -10,7 +10,7 @@ function moduleUnderTest(name, mocks, extra = {}) {
   const source = fs.readFileSync(path.join(__dirname, '../src/ux-ui/', name + '.ts'), 'utf8');
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const context = { exports: {}, URL, Blob, AbortController, TextDecoder, Uint8Array, DataView, console, process: { env: {} },
-    require: name => { if (!(name in mocks)) throw Error('Unexpected dependency: ' + name); return mocks[name]; }, ...extra };
+    require: name => { if (name === './commercePolicy') return moduleUnderTest('commercePolicy', mocks); if (!(name in mocks)) throw Error('Unexpected dependency: ' + name); return mocks[name]; }, ...extra };
   vm.runInNewContext(code, context);
   return context.exports;
 }
@@ -51,7 +51,7 @@ test('catalog PDF URLs cannot turn a catalog book into a personal document', () 
   assert.equal(api.isPersonalOrLocalBook({ id: 'catalog-1', pdf_url: 'https://example.invalid/book.pdf' }), false);
   assert.equal(api.isPersonalOrLocalBook({ id: 'catalog-1', isPersonal: true }), false);
   assert.equal(api.isPersonalOrLocalBook({ id: 'uploaded_123', isPersonal: true, fileUri: 'file:///book.pdf' }), true);
-  assert.equal(api.calculateDynamicKhoai(200, 7), 9);
+  assert.throws(() => api.calculateDynamicKhoai(200, 7), /biểu giá/);
 });
 
 test('a timed-out mutation is sent once to the configured server', async () => {

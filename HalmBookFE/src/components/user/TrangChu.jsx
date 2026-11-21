@@ -2308,6 +2308,7 @@ export default function Test() {
     fetchBanners();
 
     const handleBannersUpdated = (e) => {
+      if (e.detail?.platform !== 'WEB' || e.detail?.isAdmin) return;
       if (Array.isArray(e.detail?.banners)) {
         setBanners([...e.detail.banners]);
       } else {

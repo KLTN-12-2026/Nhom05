@@ -76,7 +76,7 @@ export async function loadCatalogContent(bookId: string, title: string, author: 
   const parsedUrl = new URL(url);
   if (parsedUrl.origin !== new URL(API_BASE_URL).origin && parsedUrl.protocol !== 'https:') throw new Error('Địa chỉ nội dung không hợp lệ.');
   const response = await fetch(url, { signal, headers: parsedUrl.origin === new URL(API_BASE_URL).origin ? authorization : undefined });
-  if (!response.ok) throw new Error('Không tải được nội dung sách (' + response.status + ').');
+  if (!response.ok) throw Object.assign(new Error('Không tải được nội dung sách (' + response.status + ').'), { status: response.status });
   const bytes = new Uint8Array(await response.arrayBuffer());
   if (signal.aborted) throw new Error('Đã hủy tải sách.');
   const format = result.data.fileFormat.toUpperCase();

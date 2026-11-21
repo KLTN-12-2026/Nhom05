@@ -22,28 +22,11 @@ export const formatCustomerId = (id) => {
  * - Cấp 2 (Cao Thủ Cày):   >= 500 Khoai HOẶC >= 10 Sách
  * - Cấp 1 (Thợ Cày):       Mặc định khởi đầu
  */
-export const getTierLevel = (tier, potatoBalance = 0, booksCount = 0) => {
-    // 1. Kiểm tra ưu tiên theo số dư Khoai hoặc số sách đã cày thực tế
-    const effectivePotato = Number(potatoBalance) || 0;
-    const effectiveBooks = Number(booksCount) || 0;
-
-    if (effectivePotato >= 10000 || effectiveBooks >= 150) return 4;
-    if (effectivePotato >= 2500 || effectiveBooks >= 50) return 3;
-    if (effectivePotato >= 500 || effectiveBooks >= 10) return 2;
-
-    // 2. Kiểm tra theo đối tượng hoặc chuỗi tier từ backend
+export const getTierLevel = (tier, _potatoBalance = 0, _booksCount = 0) => {
+    // Privileges and rank come from the server; wallet balance is not a client-side promotion rule.
     if (!tier) return 1;
     if (typeof tier === 'number') return tier;
-
-    if (typeof tier === 'object') {
-        if (tier.minPotatoRequired >= 10000 || tier.minBooksRequired >= 150) return 4;
-        if (tier.minPotatoRequired >= 2500 || tier.minBooksRequired >= 50) return 3;
-        if (tier.minPotatoRequired >= 500 || tier.minBooksRequired >= 10) return 2;
-        if (tier.discountPercent >= 20) return 4;
-        if (tier.discountPercent >= 10) return 3;
-        if (tier.discountPercent >= 5) return 2;
-    }
-
+    if (typeof tier === 'object' && Number(tier.rankOrder) > 0) return Number(tier.rankOrder);
     const raw = typeof tier === 'object' ? (tier.tierName || tier.name || '') : String(tier);
     const upper = String(raw).toUpperCase();
     if (upper.includes('ĐẠI ĐIỀN') || upper.includes('DAI DIEN') || upper.includes('DAI_DIEN') || upper.includes('TOI THUONG') || upper.includes('TỐI THƯỢNG') || upper.includes('TIER4') || upper.includes('TIER 4') || upper.includes('IV')) return 4;
@@ -53,7 +36,7 @@ export const getTierLevel = (tier, potatoBalance = 0, booksCount = 0) => {
     return 1;
 };
 
-export const getTierInfo = (tier, potatoBalance = 0, booksCount = 0) => {
+const legacyTierInfo = (tier, potatoBalance = 0, booksCount = 0) => {
     const level = getTierLevel(tier, potatoBalance, booksCount);
 
     switch (level) {
@@ -103,6 +86,14 @@ export const getTierInfo = (tier, potatoBalance = 0, booksCount = 0) => {
                 badgeText: 'Cấp I • Mầm Đọc'
             };
     }
+};
+
+export const getTierInfo = (tier, potatoBalance = 0, booksCount = 0) => {
+    const style = legacyTierInfo(tier, potatoBalance, booksCount);
+    if (tier && typeof tier === 'object') return { ...style, name: tier.tierName || style.name,
+        cleanName: tier.tierName || style.cleanName, discount: tier.discountPercent ?? 0,
+        medal: tier.badgeIcon || style.medal, badgeText: tier.badgeSubtitle || 'Cấp ' + style.level };
+    return { ...style, discount: 0 };
 };
 
 export const getTierBadgeClass = (tier, potatoBalance = 0, booksCount = 0) => {

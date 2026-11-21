@@ -110,3 +110,43 @@ test('corrupted v2 storage is preserved and reported', async () => {
   await assert.rejects(api.getNotifications()); await assert.rejects(api.addNotification(message('Never overwrite')));
   assert.equal(values.get('user_notifications_v2_alice'), '{broken');
 });
+
+test('inbox and badge share a broadcast fetch and retain the server unread state and destination', async () => {
+  let requests = 0, finish;
+  const { api, values } = setup(() => { requests++; return new Promise(resolve => { finish = resolve; }); });
+  values.set('userToken', 'token');
+  const inbox = api.getNotifications(), badge = api.getUnreadNotificationCount();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(requests, 1);
+  finish({ data: { unreadCount: 1, notifications: [{ notificationId: 42, type: 'SYSTEM', title: 'Broadcast', message: 'Full message', link: '/uudai', isRead: false, createdAt: '2026-11-20T12:00:00' }] } });
+  const [list, count] = await Promise.all([inbox, badge]);
+  assert.equal(count, 1); assert.equal(list.length, 1); assert.equal(list[0].type, 'system');
+  assert.equal(list[0].backendId, 42); assert.equal(list[0].link, '/uudai'); assert.equal(list[0].message, 'Full message');
+});
+
+test('broadcast links resolve to the matching App screen and reject unknown/external destinations', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/ux-ui/notificationDestination.ts'), 'utf8');
+  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const context = { exports: {} }; vm.runInNewContext(compiled, context);
+  const destination = context.exports.notificationDestination;
+  for (const [link, screen] of [['/', 'home'], ['/uudai', 'offers'], ['/danhmuc', 'categories'], ['/tusachcn', 'bookshelf'], ['/canhan', 'profile'], ['/canhan?tab=wallet', 'transactions']]) assert.equal(destination(link), screen);
+  for (const link of ['', 'javascript:alert(1)', '//foreign.invalid', 'https://foreign.invalid/uudai', '/admin', '__proto__']) assert.equal(destination(link), null);
+});
+
+test('badge polling runs while the App is active and cleans up listeners and timers', async () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/ux-ui/useUnreadNotificationCount.ts'), 'utf8');
+  const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  let effect, tick, onState, interval, requests = 0, cleaned = 0;
+  const states = [], appState = { currentState: 'active', addEventListener: (_event, fn) => { onState = fn; return { remove: () => cleaned++ }; } };
+  const context = { exports: {}, setInterval: (fn, ms) => { tick = fn; interval = ms; return 1; }, clearInterval: () => cleaned++,
+    require: name => name === 'react' ? { useState: () => [0, value => states.push(value)], useEffect: fn => { effect = fn; } }
+      : name === 'react-native' ? { AppState: appState }
+      : { getUnreadNotificationCount: async () => { requests++; return 2; }, subscribeNotifications: () => () => cleaned++ },
+  };
+  vm.runInNewContext(code, context); context.exports.useUnreadNotificationCount(true); const stop = effect();
+  await new Promise(resolve => setImmediate(resolve)); assert.equal(interval, 15000); assert.equal(requests, 1);
+  tick(); await new Promise(resolve => setImmediate(resolve)); assert.equal(requests, 2);
+  appState.currentState = 'background'; tick(); assert.equal(requests, 2);
+  appState.currentState = 'active'; onState('active'); await new Promise(resolve => setImmediate(resolve)); assert.equal(requests, 3);
+  stop(); assert.equal(cleaned, 3); assert.equal(states.at(-1), 2);
+});

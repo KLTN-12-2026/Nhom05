@@ -122,6 +122,7 @@ export default function UploadFile() {
 
   // [GIẢI THÍCH CODE]: Trạng thái Hạng thành viên, Số dư Ví Khoai và Lượt tải free đã dùng
   const [currentTier, setCurrentTier] = useState<string>('Thợ Cày');
+  const [currentTierRank, setCurrentTierRank] = useState<number | null>(null);
   const [potatoBalance, setPotatoBalance] = useState<number>(0);
   const [usedFreeUploads, setUsedFreeUploads] = useState<number>(0);
 
@@ -135,8 +136,8 @@ export default function UploadFile() {
   const [bookDescription, setBookDescription] = useState<string>('');
 
   // Tính toán hạn mức tải sách
-  const resolvedTier = normalizeTierName(currentTier);
-  const tierConfig = TIER_UPLOAD_CONFIG[resolvedTier] || TIER_UPLOAD_CONFIG['Thợ Cày'];
+  const resolvedTier = currentTierRank == null ? normalizeTierName(currentTier) : ['Thợ Cày', 'Cao Thủ Cày', 'Lão Nông', 'Đại Điền Chủ'][currentTierRank - 1];
+  const tierConfig = { ...(TIER_UPLOAD_CONFIG[resolvedTier] || TIER_UPLOAD_CONFIG['Thợ Cày']), name: currentTier };
   const isUnlimited = tierConfig.maxFree === Infinity;
   const freeRemaining = isUnlimited ? Infinity : Math.max(0, tierConfig.maxFree - usedFreeUploads);
   const isFree = isUnlimited || freeRemaining > 0;
@@ -161,6 +162,8 @@ export default function UploadFile() {
         ]);
 
         if (savedTier) setCurrentTier(savedTier);
+        const savedRank = Number(await getUserItem(TIER_STORAGE_KEY + '_rank'));
+        if (savedRank > 0) setCurrentTierRank(savedRank);
         if (savedPotato) setPotatoBalance(Number(savedPotato) || 0);
         if (savedUsed) setUsedFreeUploads(Number(savedUsed) || 0);
 
@@ -192,6 +195,11 @@ export default function UploadFile() {
             });
             if (res.data) {
               const bTier = res.data.currentTier?.tierName;
+              const rank = res.data.currentTier?.rankOrder;
+              if (Number.isInteger(rank) && rank > 0) {
+                setCurrentTierRank(rank);
+                setUserItem(TIER_STORAGE_KEY + '_rank', String(rank)).catch(() => {});
+              }
               const bPotato = res.data.potatoBalance;
               if (bTier) {
                 setCurrentTier(bTier);

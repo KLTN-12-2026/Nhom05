@@ -1,3 +1,5 @@
+import { useNavigate } from 'react-router-dom';
+import { useMissionVisit } from '@/hooks/useMissionTracking';
 import React, { useState, useEffect, useRef } from 'react';
 import { isDarkMode, applyTheme } from '@/utils/theme';
 import UserLayout from './layout/UserLayout';
@@ -6,7 +8,7 @@ import { getPotatoPackages } from '@/services/potatoService';
 import { isTokenValid } from '@/services/authToken';
 import { openAuthModal } from '@/components/common/AuthModal';
 import axiosInstance from '@/services/axiosClient';
-import { getCombos, getSingleDeals } from '@/services/offerService';
+import { getCombos, getSingleDeals, addOfferToCart, applyCartCoupon } from '@/services/offerService';
 
 const STATIC_STARS = Array.from({ length: 60 }, (_, i) => {
   const pseudoRand1 = ((i * 137 + 43) % 100) / 100;
@@ -24,6 +26,9 @@ const STATIC_STARS = Array.from({ length: 60 }, (_, i) => {
 });
 
 export default function OffersEnd() {
+  useMissionVisit('OFFERS');
+  const navigate = useNavigate();
+  const redeemPending = useRef(false);
   const [khoaiBalance, setKhoaiBalance] = useState(0);
   const [isDark, setIsDark] = useState(() => isDarkMode());
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -47,8 +52,8 @@ export default function OffersEnd() {
   // TODO(API): Tải danh sách các gói cước, gói upload, combo sách, sách giảm giá từ database
   const [subscriptionOffers, setSubscriptionOffers] = useState([]);
   const [uploadOffers, setUploadOffers] = useState([]);
-  const [comboOffers, setComboOffers] = useState(() => getCombos());
-  const [singleBookDeals, setSingleBookDeals] = useState(() => getSingleDeals());
+  const [comboOffers, setComboOffers] = useState([]);
+  const [singleBookDeals, setSingleBookDeals] = useState([]);
   const [challengeOffers] = useState([]);
 
   const popupHideTimeout = useRef(null);
@@ -124,14 +129,14 @@ export default function OffersEnd() {
               id: code,
               title: title,
               code: code,
-              potato: amt > 0 ? Math.max(1, Math.round(amt / 1000)) : 10,
-              cost: amt > 0 ? Math.max(1, Math.round(amt / 1000)) : 10,
+              potato: amt, discountPercent: pct, bookId: p.book_id || undefined,
+              cost: 0,
               tag: pct > 0 ? `GIẢM ${pct}%` : 'VOUCHER',
               category: 'Ưu Đãi Đặc Biệt',
               features: [
                 desc,
                 `Mã kích hoạt: ${code}`,
-                pct > 0 ? `Chiết khấu ${pct}%` : `Giảm ${Math.max(1, Math.round(amt / 1000))} Khoai`
+                pct > 0 ? `Chiết khấu ${pct}%` : `Giảm ${amt} Khoai`
               ],
               action: 'Nhận Mã'
             };
@@ -141,12 +146,11 @@ export default function OffersEnd() {
       .catch(() => {});
 
     // 2.2. Lắng nghe cập nhật Combo Sách & Sách Lẻ Giảm Sâu từ Quản Trị Hệ Thống
-    const handleOffersUpdated = () => {
-      if (isMounted) {
-        setComboOffers(getCombos());
-        setSingleBookDeals(getSingleDeals());
-      }
+    const handleOffersUpdated = async () => {
+      try { const [combos, deals] = await Promise.all([getCombos(), getSingleDeals()]); if (isMounted) { setComboOffers(combos); setSingleBookDeals(deals); } }
+      catch { if (isMounted) { setComboOffers([]); setSingleBookDeals([]); } }
     };
+    void handleOffersUpdated();
     window.addEventListener('halm-offers-updated', handleOffersUpdated);
 
     // 3. Ghi nhận hoàn thành nhiệm vụ hằng ngày: Khám phá ưu đãi
@@ -229,7 +233,17 @@ export default function OffersEnd() {
     );
   };
 
-  const triggerToast = (title, message) => {
+  const triggerToast = (title, message, type = 'info') => {
+    if (window.halmToast) {
+      const lower = (title || '').toLowerCase();
+      if (type === 'success' || lower.includes('thành công')) {
+        window.halmToast.success(title, message);
+      } else if (type === 'error' || lower.includes('chưa') || lower.includes('lỗi') || lower.includes('thất bại')) {
+        window.halmToast.error(title, message);
+      } else {
+        window.halmToast.info(title, message);
+      }
+    }
     setToast({ show: true, title, message });
     setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3800);
   };
@@ -241,22 +255,26 @@ export default function OffersEnd() {
 
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 
-  const openRedeemModal = (title, cost, successMsg) => {
+  const openRedeemModal = (title, cost, successMsg, action = {}) => {
     if (!isTokenValid()) {
       openAuthModal({ mode: 'login', message: 'Vui lòng đăng nhập để đổi gói ưu đãi và quà tặng!' });
       return;
     }
-    setModalConfig({ title, cost, successMsg });
+    setModalConfig({ title, cost, successMsg, ...action });
   };
 
   const closeRedeemModal = () => setModalConfig(null);
 
-  const handleConfirmRedeem = () => {
-    if (modalConfig && khoaiBalance >= modalConfig.cost) {
-      setKhoaiBalance(prev => prev - modalConfig.cost);
-      triggerToast('Đổi Ưu Đãi Thành Công!', modalConfig.successMsg);
-      closeRedeemModal();
-    }
+  const handleConfirmRedeem = async () => {
+    if (!modalConfig || redeemPending.current) return;
+    redeemPending.current = true;
+    try {
+      if (modalConfig.offerId) await addOfferToCart(modalConfig.offerId);
+      else if (modalConfig.couponCode) await applyCartCoupon(modalConfig.couponCode, modalConfig.bookId);
+      else { triggerToast('Ưu đãi', 'Vui lòng chọn gói nạp tại trang thanh toán.'); return; }
+      closeRedeemModal(); navigate('/giohang');
+    } catch (error) { triggerToast('Chưa áp dụng được ưu đãi', error?.response?.data?.message || 'Vui lòng thử lại.'); }
+    finally { redeemPending.current = false; }
   };
 
   const openChatbot = (initialMsg) => {
@@ -608,7 +626,7 @@ export default function OffersEnd() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => openRedeemModal(item.title, item.cost || 0, `Đổi mã ${item.code || item.title} thành công!`)}
+                        onClick={() => openRedeemModal(item.title, item.cost || 0, `Đổi mã ${item.code || item.title} thành công!`, { couponCode: item.code, bookId: item.bookId })}
                         className="w-full py-2.5 rounded-full bg-wine hover:bg-wine-dark text-white font-metadata-spec text-xs font-bold text-center transition-colors shadow-sm"
                       >
                         {item.action || 'Sử Dụng Ngay'}
@@ -694,7 +712,7 @@ export default function OffersEnd() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => openRedeemModal(item.name, item.potato || 0, `Mở khóa combo "${item.name}" thành công!`)}
+                        onClick={() => openRedeemModal(item.name, item.potato || 0, `Mở khóa combo "${item.name}" thành công!`, { offerId: item.id })}
                         className="w-full py-2 rounded-full bg-wine hover:bg-wine-dark text-white font-metadata-spec text-xs font-bold text-center transition-colors shadow-sm"
                       >
                         {item.action || 'Mở Khóa Combo'}
@@ -764,7 +782,7 @@ export default function OffersEnd() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => openRedeemModal(item.name, item.potato || 0, `Thuê sách "${item.name}" thành công!`)}
+                        onClick={() => openRedeemModal(item.name, item.potato || 0, `Thuê sách "${item.name}" thành công!`, { offerId: item.id })}
                         className="w-full py-2 rounded-full bg-wine hover:bg-wine-dark text-white font-metadata-spec text-xs font-bold text-center transition-colors shadow-sm"
                       >
                         {item.action || 'Thuê Ngay'}

@@ -26,4 +26,8 @@ public class TierDto {
     private String badgeIcon;          // '🌱', '🚜', '🌾', '👑'
     private String description;
     private List<String> benefits;     // Danh sách quyền lợi chi tiết hiển thị modal
+    private int rankOrder;
+    private int upgradeReward;
+    private String badgeSubtitle;
+    private String requirementsText;
 }

@@ -30,6 +30,8 @@ public class Cart_Item {
 
     @Column(name = "plan_key")
     private String planKey = "7";
+    @Column(length = 64)
+    private String offerId;
 
     @Column(name = "rental_days", nullable = false)
     private Integer rentalDays = 7;

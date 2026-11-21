@@ -1,3 +1,4 @@
+import { useReadingMission } from '@/hooks/useMissionTracking';
 import { tailwindConfig, externalStylesheets, pageStyles } from './styles/DocSach.styles.js';
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
@@ -120,6 +121,7 @@ export default function DocSach() {
     const targetId = bookId || book?.book_id || book?.id || '';
     const [isLoading, setIsLoading] = useState(true);
     const [errorMessage, setErrorMessage] = useState("");
+    useReadingMission(targetId, !isTrialMode && !isPersonalBookId && !isLoading && !errorMessage);
     const [bookFormat, setBookFormat] = useState('PDF'); // 'PDF' | 'EPUB'
 
     // 2. Reading Engine State (Default to 'canvas' so the book ALWAYS opens immediately without blank screen)
@@ -135,7 +137,7 @@ export default function DocSach() {
 
     // Modes: 'canvas' (Trang in PDF gốc) | 'text' (Chế độ đọc chữ reflow) | 'epub' (Trình đọc sách số EPUB) | 'embed' (Iframe)
     const [readMode, setReadMode] = useState('canvas');
-    const [paperTheme, setPaperTheme] = useState('default'); // 'default' | 'sepia' | 'starry' | 'night'
+    const [paperTheme, setPaperTheme] = useState('night'); // 'night' | 'sepia' | 'starry' | 'default'
     const [fontFamily, setFontFamily] = useState('garamond');
     const [fontSize, setFontSize] = useState(20);
     const [lineHeight, setLineHeight] = useState(1.85); // 1.5 | 1.85 | 2.2
@@ -203,8 +205,8 @@ export default function DocSach() {
             const selectedFont = fontMap[font] || 'sans-serif';
             rendition.themes.font(selectedFont);
 
-            let bg = '#FAF7F2';
-            let fg = '#1E1F1D';
+            let bg = '#181916';
+            let fg = '#EDE9DF';
             if (theme === 'starry') {
                 bg = '#111210';
                 fg = '#EDE9DF';
@@ -212,8 +214,11 @@ export default function DocSach() {
                 bg = '#181916';
                 fg = '#EDE9DF';
             } else if (theme === 'sepia') {
-                bg = '#F4ECD8';
-                fg = '#5B4636';
+                bg = '#241E17';
+                fg = '#E5D6BF';
+            } else if (theme === 'default') {
+                bg = '#1F201C';
+                fg = '#EDE9DF';
             }
 
             rendition.themes.override("color", fg, true);
@@ -410,7 +415,17 @@ export default function DocSach() {
                             if (personalBook.fileBlob instanceof ArrayBuffer) {
                                 arrayBuffer = personalBook.fileBlob;
                             } else if (typeof personalBook.fileBlob.arrayBuffer === 'function') {
-                                arrayBuffer = await personalBook.fileBlob.arrayBuffer();
+                                try {
+                                    arrayBuffer = await personalBook.fileBlob.arrayBuffer();
+                                } catch {}
+                            }
+                            if (!arrayBuffer) {
+                                arrayBuffer = await new Promise((res) => {
+                                    const fr = new FileReader();
+                                    fr.onload = () => res(fr.result);
+                                    fr.onerror = () => res(null);
+                                    fr.readAsArrayBuffer(personalBook.fileBlob);
+                                });
                             }
                         }
                     }
@@ -543,23 +558,6 @@ export default function DocSach() {
                 }
             }
 
-            // Fallback đọc thử mẫu: Nếu sách trên hệ thống chưa có file PDF / EPUB thực tế
-            if (!arrayBuffer) {
-                try {
-                    const sampleRes = await fetch('/sample.pdf');
-                    if (sampleRes.ok) {
-                        const sBuf = await sampleRes.arrayBuffer();
-                        if (sBuf && sBuf.byteLength > 0 && !isCancelled) {
-                            arrayBuffer = sBuf;
-                            metaFormat = 'PDF';
-                            showToast("Đang hiển thị bản đọc thử mô phỏng của cuốn sách.");
-                        }
-                    }
-                } catch (sErr) {
-                    console.warn("Không thể tải sample.pdf fallback:", sErr);
-                }
-            }
-
             if (isCancelled) return;
 
             // 2. Nhận diện định dạng thực tế qua Magic Bytes của tệp nhị phân
@@ -578,9 +576,63 @@ export default function DocSach() {
                 }
             }
 
+            // Kiểm tra nếu dữ liệu nhị phân nhận về là chuỗi văn bản thông báo lỗi từ server (JSON hoặc HTML)
+            let isInvalidPayload = false;
+            let serverErrorMsg = "";
+            if (arrayBuffer && arrayBuffer.byteLength > 0 && !isPdf && !isEpub) {
+                try {
+                    const sampleText = new TextDecoder('utf-8').decode(new Uint8Array(arrayBuffer.slice(0, Math.min(arrayBuffer.byteLength, 512)))).trim();
+                    if (sampleText.startsWith('{') || sampleText.startsWith('<!DOCTYPE') || sampleText.startsWith('<html')) {
+                        isInvalidPayload = true;
+                        if (sampleText.startsWith('{')) {
+                            try {
+                                const parsedErr = JSON.parse(sampleText);
+                                serverErrorMsg = parsedErr.message || "";
+                            } catch {}
+                        }
+                    }
+                } catch {}
+            }
+
+            if (isInvalidPayload) {
+                arrayBuffer = null;
+            }
+
+            const wantsEpub = metaFormat === 'EPUB' || (resolvedUrl && resolvedUrl.toLowerCase().includes('.epub'));
+
+            // Fallback đọc thử mẫu: Nếu sách trên hệ thống chưa có file PDF / EPUB thực tế hoặc chưa mở khóa
+            if (!arrayBuffer) {
+                const samplePath = wantsEpub ? '/sample.epub' : '/sample.pdf';
+                try {
+                    const sampleRes = await fetch(samplePath);
+                    if (sampleRes.ok) {
+                        const sBuf = await sampleRes.arrayBuffer();
+                        if (sBuf && sBuf.byteLength > 0 && !isCancelled) {
+                            arrayBuffer = sBuf;
+                            if (wantsEpub) {
+                                isEpub = true;
+                                isPdf = false;
+                            } else {
+                                isPdf = true;
+                                isEpub = false;
+                            }
+                            if (serverErrorMsg) {
+                                showToast(`${serverErrorMsg} (Đang mở bản đọc thử)`);
+                            } else {
+                                showToast(`Đang hiển thị bản đọc thử mô phỏng ${wantsEpub ? 'EPUB' : 'PDF'} của cuốn sách.`);
+                            }
+                        }
+                    }
+                } catch (sErr) {
+                    console.warn(`Không thể tải ${samplePath} fallback:`, sErr);
+                }
+            }
+
+            if (isCancelled) return;
+
             // Fallback nhận diện nếu chưa có magic bytes
             if (!isPdf && !isEpub) {
-                if (metaFormat === 'EPUB' || (resolvedUrl && resolvedUrl.toLowerCase().includes('.epub'))) {
+                if (wantsEpub) {
                     isEpub = true;
                 } else {
                     isPdf = true;
@@ -601,6 +653,15 @@ export default function DocSach() {
 
         const renderEpubDoc = async (source) => {
             try {
+                if (renditionRef.current) {
+                    try { renditionRef.current.destroy(); } catch {}
+                    renditionRef.current = null;
+                }
+                if (epubBookRef.current) {
+                    try { epubBookRef.current.destroy(); } catch {}
+                    epubBookRef.current = null;
+                }
+
                 if (!window.JSZip) {
                     try {
                         await loadScript('/libs/jszip.min.js');
@@ -617,29 +678,42 @@ export default function DocSach() {
                 }
                 if (isCancelled) return;
 
-                if (epubBookRef.current) {
-                    try { epubBookRef.current.destroy(); } catch {}
-                }
-
-                // Không bao giờ chuyển đổi sang Blob URL vì epub.js sẽ hiểu nhầm blob: URL là một thư mục (directory) trên HTTP server
-                // Khi truyền trực tiếp ArrayBuffer vào ePub(), epub.js tự nhận diện là "binary" và dùng JSZip giải nén 100% trong RAM
                 let epubInput = source;
-                if (source && source.buffer instanceof ArrayBuffer && !(source instanceof ArrayBuffer)) {
-                    epubInput = source.buffer;
+                if (source instanceof Blob) {
+                    if (typeof source.arrayBuffer === 'function') {
+                        epubInput = await source.arrayBuffer();
+                    } else {
+                        epubInput = await new Promise((res, rej) => {
+                            const fr = new FileReader();
+                            fr.onload = () => res(fr.result);
+                            fr.onerror = rej;
+                            fr.readAsArrayBuffer(source);
+                        });
+                    }
+                } else if (source && source.buffer instanceof ArrayBuffer && !(source instanceof ArrayBuffer)) {
+                    epubInput = source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength);
+                } else if (typeof source === 'string' && source.startsWith('http')) {
+                    try {
+                        const directRes = await axiosInstance.get(source, { responseType: 'arraybuffer' });
+                        if (directRes.data && directRes.data.byteLength > 0) {
+                            epubInput = directRes.data;
+                        }
+                    } catch (e) {
+                        console.warn("Lỗi tải EPUB từ URL qua axios, thử nạp trực tiếp:", e);
+                    }
                 }
 
-                let epubBook;
-                if (epubInput instanceof ArrayBuffer) {
-                    epubBook = window.ePub(epubInput);
-                } else {
-                    epubBook = window.ePub(epubInput, { openAs: 'epub' });
-                }
+                const epubBook = window.ePub(epubInput);
                 epubBookRef.current = epubBook;
+
+                // Chờ đợi spine, manifest, metadata giải nén và nạp đầy đủ vào RAM trước khi hiển thị
+                await epubBook.ready;
+                if (isCancelled) return;
 
                 let retries = 0;
                 let viewerEl = epubViewerRef.current || document.getElementById('halm-epub-viewer');
-                while (!viewerEl && retries < 50) {
-                    await new Promise(r => setTimeout(r, 50));
+                while (!viewerEl && retries < 60) {
+                    await new Promise(r => setTimeout(r, 40));
                     viewerEl = epubViewerRef.current || document.getElementById('halm-epub-viewer');
                     retries++;
                     if (isCancelled) return;
@@ -681,16 +755,22 @@ export default function DocSach() {
                     }
                 }).catch(() => {});
 
-                // Sinh locations để tính số trang
-                epubBook.ready.then(() => {
-                    return epubBook.locations.generate(1024);
-                }).then(() => {
+                // Sinh locations để tính số trang và khôi phục tiến độ đọc
+                epubBook.locations.generate(1024).then(() => {
                     if (!isCancelled && epubBook.locations) {
                         const total = epubBook.locations.total || 1;
                         setNumPages(total);
+                        if (resumePageNumber > 1 && resumePageNumber <= total) {
+                            const cfi = epubBook.locations.cfiFromPercentage((resumePageNumber - 1) / total);
+                            if (cfi && renditionRef.current) {
+                                renditionRef.current.display(cfi);
+                                setCurrentPage(resumePageNumber);
+                                showToast(`Chào mừng trở lại! Đang tiếp tục tại trang ${resumePageNumber}/${total}`);
+                            }
+                        }
                     }
                 }).catch(() => {
-                    if (!isCancelled) setNumPages(50);
+                    if (!isCancelled) setNumPages(30);
                 });
 
                 rendition.on('relocated', (location) => {
@@ -718,6 +798,20 @@ export default function DocSach() {
             } catch (err) {
                 if (isCancelled) return;
                 console.error("Lỗi khởi tạo sách EPUB:", err);
+                if (!source?.isSampleFallback) {
+                    try {
+                        const sampleRes = await fetch('/sample.epub');
+                        if (sampleRes.ok) {
+                            const fallbackBuf = await sampleRes.arrayBuffer();
+                            if (fallbackBuf && fallbackBuf.byteLength > 0 && !isCancelled) {
+                                fallbackBuf.isSampleFallback = true;
+                                showToast("Đang hiển thị bản đọc thử mô phỏng EPUB.");
+                                await renderEpubDoc(fallbackBuf);
+                                return;
+                            }
+                        }
+                    } catch {}
+                }
                 setIsLoading(false);
                 setErrorMessage("Không thể hiển thị nội dung sách EPUB. Vui lòng kiểm tra lại tính hợp lệ của tệp.");
             }
@@ -733,19 +827,32 @@ export default function DocSach() {
                     }
                 }
                 if (window.pdfjsLib && !window.pdfjsLib.GlobalWorkerOptions.workerSrc) {
-                    window.pdfjsLib.GlobalWorkerOptions.workerSrc = '/libs/pdf.worker.min.js';
+                    window.pdfjsLib.GlobalWorkerOptions.workerSrc = window.location.origin + '/libs/pdf.worker.min.js';
                 }
                 if (isCancelled) return;
 
+                let pdfData = null;
+                if (arrayBuffer instanceof Uint8Array) {
+                    pdfData = arrayBuffer;
+                } else if (arrayBuffer instanceof ArrayBuffer) {
+                    pdfData = new Uint8Array(arrayBuffer);
+                } else if (arrayBuffer && arrayBuffer.buffer instanceof ArrayBuffer) {
+                    pdfData = new Uint8Array(arrayBuffer.buffer, arrayBuffer.byteOffset, arrayBuffer.byteLength);
+                }
+
                 let loadingTask = null;
-                if (arrayBuffer) {
+                if (pdfData) {
                     loadingTask = window.pdfjsLib.getDocument({
-                        data: new Uint8Array(arrayBuffer)
+                        data: pdfData,
+                        cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
+                        cMapPacked: true,
                     });
                 } else if (url) {
                     loadingTask = window.pdfjsLib.getDocument({
                         url: url,
                         withCredentials: false,
+                        cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
+                        cMapPacked: true,
                     });
                 }
 
@@ -800,8 +907,17 @@ export default function DocSach() {
 
         return () => {
             isCancelled = true;
+            if (renditionRef.current) {
+                try { renditionRef.current.destroy(); } catch {}
+                renditionRef.current = null;
+            }
             if (epubBookRef.current) {
                 try { epubBookRef.current.destroy(); } catch {}
+                epubBookRef.current = null;
+            }
+            if (renderTaskRef.current) {
+                try { renderTaskRef.current.cancel(); } catch {}
+                renderTaskRef.current = null;
             }
         };
     }, [bookId, applyEpubStyling]);
@@ -811,8 +927,8 @@ export default function DocSach() {
         if (!pdfDoc) return;
         let canvas = canvasRef.current;
         if (!canvas) {
-            for (let i = 0; i < 15; i++) {
-                await new Promise(r => setTimeout(r, 40));
+            for (let i = 0; i < 20; i++) {
+                await new Promise(r => setTimeout(r, 30));
                 canvas = canvasRef.current;
                 if (canvas) break;
             }
@@ -824,17 +940,19 @@ export default function DocSach() {
             if (renderTaskRef.current) {
                 try {
                     renderTaskRef.current.cancel();
+                    await renderTaskRef.current.promise.catch(() => {});
                 } catch {}
+                renderTaskRef.current = null;
             }
 
             const page = await pdfDoc.getPage(pageNum);
-            const canvas = canvasRef.current;
-            if (!canvas) return;
+            const activeCanvas = canvasRef.current;
+            if (!activeCanvas) return;
 
-            const context = canvas.getContext('2d');
+            const context = activeCanvas.getContext('2d');
             const unscaledViewport = page.getViewport({ scale: 1.0 });
 
-            const container = canvas.parentElement;
+            const container = activeCanvas.parentElement;
             const containerW = container && container.clientWidth > 0 ? container.clientWidth - 40 : window.innerWidth * 0.8;
             const containerH = container && container.clientHeight > 0 ? container.clientHeight - 40 : window.innerHeight * 0.82;
 
@@ -844,10 +962,12 @@ export default function DocSach() {
             const viewport = page.getViewport({ scale: finalScale });
             const outputScale = window.devicePixelRatio || 1;
 
-            canvas.width = Math.floor(viewport.width * outputScale);
-            canvas.height = Math.floor(viewport.height * outputScale);
-            canvas.style.width = Math.floor(viewport.width) + 'px';
-            canvas.style.height = Math.floor(viewport.height) + 'px';
+            activeCanvas.width = Math.floor(viewport.width * outputScale);
+            activeCanvas.height = Math.floor(viewport.height * outputScale);
+            activeCanvas.style.width = Math.floor(viewport.width) + 'px';
+            activeCanvas.style.height = Math.floor(viewport.height) + 'px';
+
+            context.clearRect(0, 0, activeCanvas.width, activeCanvas.height);
 
             const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null;
 
@@ -860,6 +980,7 @@ export default function DocSach() {
             const renderTask = page.render(renderContext);
             renderTaskRef.current = renderTask;
             await renderTask.promise;
+            renderTaskRef.current = null;
             setIsRendering(false);
         } catch (err) {
             if (err?.name !== 'RenderingCancelledException') {
@@ -1688,7 +1809,7 @@ export default function DocSach() {
                                     id="halm-epub-viewer"
                                     className="w-full max-w-4xl h-full shadow-2xl rounded-2xl overflow-hidden transition-all duration-300"
                                     style={{
-                                        backgroundColor: paperTheme === 'starry' ? '#111210' : paperTheme === 'sepia' ? '#F4ECD8' : '#FAF7F2',
+                                        backgroundColor: paperTheme === 'starry' ? '#111210' : paperTheme === 'sepia' ? '#241E17' : '#181916',
                                         minHeight: '480px',
                                         height: '100%',
                                         display: 'flex',
@@ -1945,20 +2066,20 @@ export default function DocSach() {
                                 <button 
                                     type="button"
                                     onClick={() => setPaperTheme('default')} 
-                                    className={`h-11 rounded-xl bg-[#FAF7F2] text-[#1E1F1D] border-2 font-bold text-xs flex items-center justify-center cursor-pointer transition ${
-                                        paperTheme === 'default' ? 'border-[#8E3038] ring-2 ring-[#8E3038]/30 shadow-md' : 'border-transparent'
+                                    className={`h-11 rounded-xl bg-[#20221E] text-[#EDE9DF] border-2 font-bold text-xs flex items-center justify-center cursor-pointer transition ${
+                                        paperTheme === 'default' ? 'border-[#D4AF37] ring-2 ring-[#D4AF37]/30 shadow-md' : 'border-[#2F322B]'
                                     }`}
                                 >
-                                    Sáng
+                                    Tiêu Chuẩn
                                 </button>
                                 <button 
                                     type="button"
                                     onClick={() => setPaperTheme('sepia')} 
-                                    className={`h-11 rounded-xl bg-[#F4ECD8] text-[#3D2E1E] border-2 font-bold text-xs flex items-center justify-center cursor-pointer transition ${
-                                        paperTheme === 'sepia' ? 'border-[#8E3038] ring-2 ring-[#8E3038]/30 shadow-md' : 'border-transparent'
+                                    className={`h-11 rounded-xl bg-[#241E17] text-[#E5D6BF] border-2 font-bold text-xs flex items-center justify-center cursor-pointer transition ${
+                                        paperTheme === 'sepia' ? 'border-[#D4AF37] ring-2 ring-[#D4AF37]/30 shadow-md' : 'border-[#2F322B]'
                                     }`}
                                 >
-                                    Giấy Cổ
+                                    Cổ Điển
                                 </button>
                                 <button 
                                     type="button"

@@ -15,6 +15,7 @@ import java.util.Map;
  * ============================================================================
  */
 public interface TierService {
+    int getTotalPoints(com.example.demochatbot.model.Customer customer);
 
     /**
      * Lấy danh sách tất cả các hạng thành viên kèm quyền lợi

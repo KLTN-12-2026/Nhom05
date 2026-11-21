@@ -1,4 +1,5 @@
 import CatalogReader from './CatalogReader';
+import { useReadingAccess } from './useReadingAccess';
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   ActivityIndicator,
@@ -46,8 +47,6 @@ import {
 import { getBookRealChapters, Chapter } from './bookContentService';
 import { useAppNavigation } from './navigation';
 import {
-  BookAccessDetail,
-  checkBookAccessDetailApi,
   isPersonalOrLocalBook,
   syncReadingProgressApi,
 } from './rentalService';
@@ -392,46 +391,22 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
 
   // 2. Dữ liệu chương sách từ tác phẩm thực tế & kiểm tra quyền thuê sách
   const isPersonalBook = useMemo(() => isPersonalOrLocalBook(book), [book]);
-  const [accessInfo, setAccessInfo] = useState<BookAccessDetail>({
-    hasAccess: false,
-    currentPage: 1,
-    readingPercentage: 0,
-    remainingDays: 0,
-    isForever: false,
-    status: 'NONE',
-    checkedFromServer: false,
-  });
+  const { accessInfo, retryAccess } = useReadingAccess(String(book?.id || ''), isPersonalBook, isLoggedIn);
+  const restoredPosition = useRef('');
   const chapters = useMemo(() => getBookRealChapters(book), [book]);
   const [currentChapterIndex, setCurrentChapterIndex] = useState(
     typeof book?.initialChapterIndex === 'number' ? book.initialChapterIndex : 0
   );
 
   useEffect(() => {
-    let isMounted = true;
-    const bookIdStr = String(book?.id || '');
-    if (!bookIdStr || isPersonalBook) return;
-
-    checkBookAccessDetailApi(bookIdStr)
-      .then((detail) => {
-        if (!isMounted) return;
-        setAccessInfo(detail);
-        if (
-          typeof book?.initialChapterIndex !== 'number' &&
-          detail.hasAccess &&
-          detail.currentPage > 1 &&
-          detail.currentPage <= chapters.length
-        ) {
-          setCurrentChapterIndex(detail.currentPage - 1);
-        } else if (detail.checkedFromServer && !detail.hasAccess) {
-          setCurrentChapterIndex((prev: number) => Math.min(prev, 2));
-        }
-      })
-      .catch(() => {});
-
-    return () => {
-      isMounted = false;
-    };
-  }, [book?.id, book?.initialChapterIndex, chapters.length, isPersonalBook]);
+    const id = String(book?.id || '');
+    if (!accessInfo.hasAccess || !id || restoredPosition.current === id || chapters.length === 0) return;
+    restoredPosition.current = id;
+    if (typeof book?.initialChapterIndex !== 'number' && accessInfo.currentPage > 1 && accessInfo.currentPage <= chapters.length) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Restore the initial server reading position once per book.
+      setCurrentChapterIndex(accessInfo.currentPage - 1);
+    }
+  }, [accessInfo.hasAccess, accessInfo.currentPage, book?.id, book?.initialChapterIndex, chapters.length]);
 
   const isTrialRestricted = !isPersonalBook && !accessInfo.hasAccess;
   const trialChapterLimit = 3;
@@ -489,7 +464,7 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
     [accessInfo.hasAccess, chapters.length, isLoggedIn, isPersonalBook, isTrialRestricted, onBack, showLoginAlert]
   );
 
-  const activeChapter: Chapter = chapters[currentChapterIndex] || chapters[0] || {
+  const activeChapter: Chapter = chapters[isTrialRestricted ? Math.min(currentChapterIndex, 2) : currentChapterIndex] || chapters[0] || {
     id: 1,
     title: 'Đang tải tác phẩm...',
     subtitle: '',
@@ -1253,7 +1228,26 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
   };
 
   if (!isPersonalBook && accessInfo.hasAccess && book?.id) {
-    return <CatalogReader key={book.id} bookId={String(book.id)} title={book.title || book.bookName || 'Sách'} author={book.author || 'HALM BOOK'} onBack={onBack} />;
+    return <CatalogReader key={book.id} bookId={String(book.id)} title={book.title || book.bookName || 'Sách'} author={book.author || 'HALM BOOK'} initialPage={accessInfo.currentPage} onBack={onBack} onAccessDenied={retryAccess} />;
+  }
+
+  if (!isPersonalBook && !['NONE', 'GUEST'].includes(accessInfo.status)) {
+    const checking = ['CHECKING', 'PAUSED'].includes(accessInfo.status);
+    const revoked = ['REVOKED', 'REJECTED'].includes(accessInfo.status);
+    return <View style={{ flex: 1, justifyContent: 'center', padding: 28, backgroundColor: currentTheme.bg }}>
+      {checking && <ActivityIndicator size="large" color="#4B8176" />}
+      <Text accessibilityRole="header" style={{ fontSize: 22, fontWeight: '700', color: currentTheme.text, marginVertical: 16 }}>
+        {checking ? 'Đang xác minh quyền đọc' : revoked ? 'Quyền đọc đã bị thu hồi' : accessInfo.status === 'EXPIRED' ? 'Thời hạn đọc đã kết thúc' : 'Chưa xác minh được quyền đọc'}
+      </Text>
+      <Text style={{ color: currentTheme.text, lineHeight: 23 }}>
+        {revoked ? 'Quản trị viên đã dừng quyền đọc cuốn sách này. Bạn có thể liên hệ hỗ trợ để được giải đáp.'
+          : checking ? 'Vui lòng chờ máy chủ xác nhận trước khi tiếp tục đọc.'
+          : accessInfo.status === 'EXPIRED' ? 'Vui lòng thuê lại sách nếu muốn tiếp tục đọc.'
+          : 'Kiểm tra kết nối và thử lại. Nội dung sách thuê được tạm đóng cho đến khi quyền đọc được xác nhận.'}
+      </Text>
+      {!checking && <TouchableOpacity onPress={retryAccess} style={{ paddingVertical: 18 }} accessibilityRole="button"><Text style={{ color: '#4B8176', fontWeight: '700' }}>Kiểm tra lại</Text></TouchableOpacity>}
+      <TouchableOpacity onPress={onBack} style={{ paddingVertical: 18 }} accessibilityRole="button"><Text style={{ color: currentTheme.text }}>← Quay lại</Text></TouchableOpacity>
+    </View>;
   }
 
   return (

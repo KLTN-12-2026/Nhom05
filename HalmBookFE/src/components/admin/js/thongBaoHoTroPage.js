@@ -7,6 +7,13 @@ let pendingReplyRequest = null;
 
 // Custom Toast Notification System
 function showAdminToast(title, message, type = 'success') {
+    if (window.halmToast) {
+        if (type === 'success') window.halmToast.success(title, message);
+        else if (type === 'error') window.halmToast.error(title, message);
+        else if (type === 'warning') window.halmToast.warning(title, message);
+        else window.halmToast.info(title, message);
+        return;
+    }
     let container = document.getElementById('adminToastContainer');
     if (!container) {
         container = document.createElement('div');
@@ -494,36 +501,46 @@ function openBroadcastModal() {
     document.getElementById('broadcastModal').classList.remove('hidden');
 }
 
-function submitBroadcast() {
+let broadcastSending = false;
+async function submitBroadcast() {
+    if (broadcastSending) return;
     const title = document.getElementById('broadcastTitle').value.trim();
-    const content = document.getElementById('broadcastContent').value.trim();
-    if (!title || !content) {
-        showAdminToast('Thiếu Thông Tin', 'Vui lòng nhập đầy đủ tiêu đề và nội dung thông cáo!', 'warning');
+    const message = document.getElementById('broadcastContent').value.trim();
+    const target = document.getElementById('broadcastTarget').value;
+    const destination = document.getElementById('broadcastDestination').value;
+    const status = document.getElementById('broadcastStatus');
+    if (!title || !message || title.length > 150 || message.length > 4000) {
+        showAdminToast('Thiếu hoặc vượt giới hạn nội dung', 'Tiêu đề tối đa 150 ký tự, nội dung tối đa 4.000 ký tự và không được để trống.', 'warning');
         return;
     }
-
-    if (window.DB && typeof window.DB.getUsers === 'function') {
-        const users = window.DB.getUsers();
-        users.forEach(u => {
-            if (!u.notifications) u.notifications = [];
-            u.notifications.unshift({
-                id: 'N_' + Date.now() + '_' + Math.random(),
-                title: '📢 ' + title,
-                message: content,
-                date: new Date().toLocaleString('vi-VN'),
-                read: false,
-                type: 'broadcast'
-            });
-        });
-        localStorage.setItem('halm_db_users', JSON.stringify(users));
-        if (typeof window.DB.emitChange === 'function') window.DB.emitChange();
+    broadcastSending = true;
+    const controls = document.getElementById('broadcastModal').querySelectorAll('input, textarea, select, button');
+    controls.forEach(control => { control.disabled = true; });
+    const button = document.getElementById('broadcastSubmit');
+    button.textContent = 'Đang gửi…';
+    status.textContent = 'Đang ghi thông báo vào hộp thư độc giả. Vui lòng chờ xác nhận.';
+    try {
+        if (typeof window.AdminSupportAPI?.broadcast !== 'function') throw new Error('API quản trị chưa sẵn sàng. Vui lòng tải lại trang.');
+        const result = await window.AdminSupportAPI.broadcast({ title, message, target, destination });
+        if (result?.success !== true || !Number.isSafeInteger(result.sentCount)) throw new Error('Chưa xác nhận được kết quả gửi từ máy chủ.');
+        status.textContent = (result.replayed ? 'Đợt gửi đã được ghi nhận trước đó. ' : '') + 'Đã lưu thông báo cho ' + result.sentCount + ' độc giả.';
+        showAdminToast('Đã xác nhận đợt thông báo', status.textContent, 'success');
+        document.getElementById('broadcastTitle').value = '';
+        document.getElementById('broadcastContent').value = '';
+        window.dispatchEvent(new CustomEvent('halm-notification-refresh'));
+    } catch (error) {
+        status.textContent = error.response?.data?.message || error.message || 'Chưa gửi được thông báo. Vui lòng thử lại.';
+        if (!error.response || error.response.status >= 500) status.textContent += ' Nếu chưa rõ kết quả, thử lại cùng nội dung để kiểm tra đợt gửi và tránh gửi trùng.';
+        showAdminToast('Chưa xác nhận gửi thành công', status.textContent, 'error');
+    } finally {
+        broadcastSending = false;
+        controls.forEach(control => { control.disabled = false; });
+        button.textContent = 'Phát Thông Báo';
     }
-
-    closeModal('broadcastModal');
-    showAdminToast('Phát Thông Báo Thành Công', 'Đã gửi thông báo hệ thống tới toàn bộ độc giả!', 'success');
 }
 
 function closeModal(id) {
+    if (id === 'broadcastModal' && broadcastSending) return;
     const modal = document.getElementById(id);
     if (modal) modal.classList.add('hidden');
     if (id === 'replyTicketModal') {

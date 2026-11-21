@@ -1,3 +1,4 @@
+import MissionPanel from './MissionPanel';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios, { AxiosRequestConfig } from 'axios';
@@ -1555,7 +1556,7 @@ export default function Toi() {
         {/* [GIẢI THÍCH CODE]: Thanh Hạng Thành Viên Tương Tác - Chạm vào để xem chi tiết lộ trình & đặc quyền */}
         <TouchableOpacity
           style={themeStyles.tierCardEnhanced}
-          onPress={() => setShowTierModal(true)}
+          onPress={() => { void fetchUserData(false); setShowTierModal(true); }}
           activeOpacity={0.82}
         >
           <View style={themeStyles.tierCardTopRow}>
@@ -2134,7 +2135,7 @@ export default function Toi() {
                           <TouchableOpacity
                             style={themeStyles.faqSecondaryBtn}
                             activeOpacity={0.8}
-                            onPress={() => transitionFromHelp(() => setShowTierModal(true))}
+                            onPress={() => transitionFromHelp(() => { void fetchUserData(false); setShowTierModal(true); })}
                           >
                             <Ionicons
                               name="ribbon-outline"
@@ -2810,112 +2811,7 @@ export default function Toi() {
               </TouchableOpacity>
             </View>
 
-            <Text style={themeStyles.sectionHeading}>{t.dailyTaskHeading}</Text>
-
-            {/* Nhiệm vụ 1: Đọc sách 20 phút */}
-            <View style={themeStyles.dailyTaskItemCard}>
-              <View style={themeStyles.dailyTaskIconRow}>
-                <View style={themeStyles.dailyTaskIconBadge}>
-                  <Ionicons name="book-outline" size={20} color={isDarkMode ? '#CBD5E1' : '#374151'} />
-                </View>
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={themeStyles.dailyTaskItemTitle}>{t.dailyTask1Title}</Text>
-                  <Text style={[themeStyles.dailyTaskItemReward, { color: isDarkMode ? '#FBBF24' : '#B45309' }]}>{t.dailyTask1Reward}</Text>
-                  <Text style={themeStyles.dailyTaskItemDesc}>{t.dailyTask1Desc}</Text>
-                </View>
-              </View>
-              <TouchableOpacity
-                style={themeStyles.dailyTaskActionBtn}
-                onPress={() => {
-                  setShowDailyTasks(false);
-                  navigate('bookshelf');
-                }}
-              >
-                <Text style={themeStyles.dailyTaskActionBtnText}>{t.dailyTask1Btn}</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Nhiệm vụ 2: Đánh giá sách */}
-            <View style={themeStyles.dailyTaskItemCard}>
-              <View style={themeStyles.dailyTaskIconRow}>
-                <View style={themeStyles.dailyTaskIconBadge}>
-                  <Ionicons name="star-outline" size={20} color={isDarkMode ? '#CBD5E1' : '#374151'} />
-                </View>
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={themeStyles.dailyTaskItemTitle}>{t.dailyTask2Title}</Text>
-                  <Text style={[themeStyles.dailyTaskItemReward, { color: isDarkMode ? '#FBBF24' : '#B45309' }]}>{t.dailyTask2Reward}</Text>
-                  <Text style={themeStyles.dailyTaskItemDesc}>{t.dailyTask2Desc}</Text>
-                </View>
-              </View>
-              <TouchableOpacity
-                style={themeStyles.dailyTaskActionBtn}
-                onPress={() => {
-                  setShowDailyTasks(false);
-                  navigate('bookshelf');
-                }}
-              >
-                <Text style={themeStyles.dailyTaskActionBtnText}>{t.dailyTask2Btn}</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Nhiệm vụ 3: Chuỗi đọc 7 ngày */}
-            <View style={themeStyles.dailyTaskItemCard}>
-              <View style={themeStyles.dailyTaskIconRow}>
-                <View style={themeStyles.dailyTaskIconBadge}>
-                  <Ionicons name="flame-outline" size={20} color={isDarkMode ? '#FB923C' : '#B45309'} />
-                </View>
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={themeStyles.dailyTaskItemTitle}>{t.dailyTask3Title}</Text>
-                  <Text style={[themeStyles.dailyTaskItemReward, { color: isDarkMode ? '#FBBF24' : '#B45309' }]}>{t.dailyTask3Reward}</Text>
-                  <Text style={themeStyles.dailyTaskItemDesc}>{t.dailyTask3Desc}</Text>
-                </View>
-              </View>
-              <TouchableOpacity
-                style={[
-                  themeStyles.dailyTaskActionBtn,
-                  tierSummary?.hasCheckedInToday && {
-                    backgroundColor: isDarkMode ? '#1F2F2B' : '#EFF4F2',
-                  },
-                ]}
-                onPress={handleDailyCheckin}
-                disabled={tierSummary?.hasCheckedInToday}
-              >
-                <Text
-                  style={[
-                    themeStyles.dailyTaskActionBtnText,
-                    tierSummary?.hasCheckedInToday && { color: isDarkMode ? '#34D399' : '#2F6B5F' },
-                  ]}
-                >
-                  {tierSummary?.hasCheckedInToday ? t.dailyTask3Done : t.dailyTask3Btn}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Nhiệm vụ 4: Mời bạn bè */}
-            <View style={themeStyles.dailyTaskItemCard}>
-              <View style={themeStyles.dailyTaskIconRow}>
-                <View style={themeStyles.dailyTaskIconBadge}>
-                  <Ionicons name="people-outline" size={20} color={isDarkMode ? '#CBD5E1' : '#374151'} />
-                </View>
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={themeStyles.dailyTaskItemTitle}>{t.dailyTask4Title}</Text>
-                  <Text style={[themeStyles.dailyTaskItemReward, { color: isDarkMode ? '#FBBF24' : '#B45309' }]}>{t.dailyTask4Reward}</Text>
-                  <Text style={themeStyles.dailyTaskItemDesc}>{t.dailyTask4Desc}</Text>
-                </View>
-              </View>
-              <TouchableOpacity
-                style={themeStyles.dailyTaskActionBtn}
-                onPress={() => {
-                  Alert.alert(
-                    t.referralAlertTitle,
-                    t.referralAlertPrefix + (userInfo.name ? userInfo.name.replace(/\s+/g, '').toUpperCase() : 'USER') + t.referralAlertSuffix,
-                    [{ text: t.referralAlertBtn }]
-                  );
-                }}
-              >
-                <Text style={themeStyles.dailyTaskActionBtnText}>{t.dailyTask4Btn}</Text>
-              </TouchableOpacity>
-            </View>
+            {showDailyTasks && <MissionPanel dark={isDarkMode} checkedIn={tierSummary?.hasCheckedInToday} onCheckin={handleDailyCheckin} onReward={fetchUserData} onNavigate={screen => { setShowDailyTasks(false); navigate(screen); }} />}
 
             <View style={{ height: 40 }} />
           </ScrollView>

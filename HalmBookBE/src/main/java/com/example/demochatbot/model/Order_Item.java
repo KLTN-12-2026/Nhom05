@@ -12,6 +12,8 @@ import lombok.NoArgsConstructor;
 @Entity
 @Table(name = "order_item")
 public class Order_Item {
+    @Column(length = 64)
+    private String offerId;
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private int order_item_id;

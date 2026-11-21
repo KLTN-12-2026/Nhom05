@@ -1,3 +1,7 @@
+import ComboOfferRow from './ComboOfferRow';
+import { BookOffer, fetchOffers, promotionRows, offerRow, addOfferToCart, applyPromotionToCart } from './offersService';
+import type { CommercePolicy } from './commercePolicy';
+import { useMissionVisit } from './useMissionTracking';
 import { API_BASE_URL, CANDIDATE_API_URLS as CANDIDATE_URLS } from './apiService';
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -9,6 +13,7 @@ import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  AppState,
   Alert,
   Animated,
   Image,
@@ -26,11 +31,8 @@ import { getBookCoverSource } from "./bookCovers";
 import { useAppNavigation, useAutoHideFooter } from "./navigation";
 import ScallopDiscountBadge from "./ScallopDiscountBadge";
 import {
-  calculateDynamicKhoai,
-  checkoutBooksApi,
+  addToCartApi,
   fetchWalletBalanceApi,
-  RENTAL_DURATION_OPTIONS,
-  RentalDurationDays,
 } from "./rentalService";
 
 // ==============================================================
@@ -197,7 +199,7 @@ const sectionHeaderStyles = StyleSheet.create({
 // MAIN OFFERS SCREEN
 // ==============================================================
 export default function OffersScreen() {
-  const { navigate, navigateTab, isDarkMode, isLoggedIn, showLoginAlert, lang } =
+  const { navigate, isDarkMode, isLoggedIn, showLoginAlert, lang } =
     useAppNavigation();
   const { onScroll: handleFooterScroll, showFooter } = useAutoHideFooter();
   const insets = useSafeAreaInsets();
@@ -225,6 +227,8 @@ export default function OffersScreen() {
 
   // State: Chương trình khuyến mãi từ bảng promotion
   const [promotions, setPromotions] = useState<PromotionItem[]>([]);
+  const [bookOffers, setBookOffers] = useState<BookOffer[]>([]);
+  const [offerPolicy, setOfferPolicy] = useState<CommercePolicy | null>(null);
 
   // State: Sách từ CSDL
   const [realBooks, setRealBooks] = useState<RealBook[]>([]);
@@ -240,8 +244,10 @@ export default function OffersScreen() {
     actionText: string;
     bookId?: string;
     basePrice?: number;
+    offerId?: string;
+    couponCode?: string;
+    planKey?: string;
   } | null>(null);
-  const [selectedRentalDays, setSelectedRentalDays] = useState<RentalDurationDays>(7);
   const [isSubmittingModal, setIsSubmittingModal] = useState(false);
 
   // Toast State
@@ -300,6 +306,7 @@ export default function OffersScreen() {
       isMounted = false;
     };
   }, [isLoggedIn]);
+  useMissionVisit('OFFERS', isLoggedIn);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -321,35 +328,25 @@ export default function OffersScreen() {
     }
   };
 
-  // 2. Fetch Promotions từ CSDL qua endpoint public /api/home/promotions
-  const fetchPromotions = async (signal?: AbortSignal) => {
-    for (const baseUrl of CANDIDATE_URLS) {
+  // Refresh only public offer APIs, including empty lists after admin disables the last offer.
+  useEffect(() => {
+    const controller = new AbortController(); let pending = false, shown = false; let toastTimer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = async () => {
+      if (pending || AppState.currentState !== 'active') return; pending = true;
       try {
-        const res = await axios.get(`${baseUrl}/api/home/promotions`, {
-          timeout: 5000,
-          signal,
-        });
-        if (Array.isArray(res.data) && res.data.length > 0) {
-          setPromotions(res.data);
-          return;
-        }
+        const data = await fetchOffers(controller.signal);
+        if (!controller.signal.aborted) { setPromotions(data.promotions as PromotionItem[]); setBookOffers(data.offers); setOfferPolicy(data.policy); shown = false; }
       } catch {
-        // Thử tiếp endpoint fallback
-      }
-      try {
-        const res = await axios.get(`${baseUrl}/api/promotions`, {
-          timeout: 5000,
-          signal,
-        });
-        if (Array.isArray(res.data) && res.data.length > 0) {
-          setPromotions(res.data);
-          return;
+        if (!controller.signal.aborted) {
+          setPromotions([]); setBookOffers([]); setOfferPolicy(null);
+          if (!shown) { shown = true; setToast({ visible: true, title: 'Chưa tải được ưu đãi', message: 'Vui lòng kiểm tra kết nối và mở lại trang.' }); toastTimer = setTimeout(() => setToast(p => ({ ...p, visible: false })), 3500); }
         }
-      } catch {
-        // Thử candidate URL tiếp theo
-      }
-    }
-  };
+      } finally { pending = false; }
+    };
+    void refresh(); const timer = setInterval(() => { void refresh(); }, 30000);
+    const listener = AppState.addEventListener('change', state => { if (state === 'active') void refresh(); });
+    return () => { controller.abort(); clearInterval(timer); if (toastTimer) clearTimeout(toastTimer); listener.remove(); };
+  }, []);
 
   // 3. Fetch Real Books từ GET /api/home/books
   const fetchBooks = async (signal?: AbortSignal) => {
@@ -918,7 +915,6 @@ export default function OffersScreen() {
 
   const handleOpenBookModal = (book: any) => {
     const rentPrice = book.rent_price ?? 11;
-    setSelectedRentalDays(7);
     if (isLoggedIn) {
       fetchWalletBalanceApi().then((bal) => {
         if (bal !== null) setKhoaiBalance(bal);
@@ -927,10 +923,11 @@ export default function OffersScreen() {
     setModalItem({
       title: book.bookName,
       description: book.description || "Sách đọc trực tuyến ưu đãi tại HalmBook.",
-      price: `${rentPrice} 🥔`,
+      price: book.priceLabel || `${rentPrice} 🥔`,
       priceNumeric: rentPrice,
       actionText: "Thuê Sách",
       bookId: book.book_id,
+      offerId: book.offerId, couponCode: book.couponCode, planKey: book.planKey,
       basePrice: rentPrice,
     });
   };
@@ -942,76 +939,22 @@ export default function OffersScreen() {
   const handleConfirmAction = async () => {
     if (!modalItem || isSubmittingModal) return;
 
-    if (modalItem.bookId) {
+    if (modalItem.bookId || modalItem.offerId || modalItem.couponCode) {
       if (!isLoggedIn) {
         setModalItem(null);
         showLoginAlert("Bạn phải đăng nhập để thuê sách và đồng bộ vào Tủ sách!");
         return;
       }
 
-      const base = modalItem.basePrice ?? modalItem.priceNumeric;
-      const finalPrice = calculateDynamicKhoai(base, selectedRentalDays);
-      const balance = khoaiBalance ?? 0;
-
-      if (balance < finalPrice) {
-        Alert.alert(
-          "Số dư Khoai không đủ",
-          `Bạn cần ${finalPrice} 🥔 cho gói ${selectedRentalDays} ngày (hiện có ${balance} 🥔). Bạn có muốn nạp thêm Khoai không?`,
-          [
-            { text: "Đóng", style: "cancel" },
-            {
-              text: "Nạp Khoai",
-              onPress: () => {
-                setModalItem(null);
-                navigate("payment");
-              },
-            },
-          ]
-        );
-        return;
-      }
-
       setIsSubmittingModal(true);
       try {
-        const res = await checkoutBooksApi([
-          {
-            bookId: modalItem.bookId,
-            durationDays: selectedRentalDays,
-            price: finalPrice,
-          },
-        ]);
-
-        if (res.requireLogin) {
-          setModalItem(null);
-          showLoginAlert(res.message);
-          return;
-        }
-        if (!res.success) {
-          Alert.alert("Không thể thuê sách", res.message);
-          return;
-        }
-
-        if (typeof res.remainingPotatoBalance === "number") {
-          setKhoaiBalance(res.remainingPotatoBalance);
-        } else {
-          const freshBal = await fetchWalletBalanceApi();
-          if (freshBal !== null) setKhoaiBalance(freshBal);
-        }
-
-        const bookTitle = modalItem.title;
-        setModalItem(null);
-        showToast("Thuê Sách Thành Công!", `Đã thêm "${bookTitle}" (${selectedRentalDays} ngày) vào Tủ sách.`);
-        Alert.alert(
-          "Thuê sách thành công!",
-          `Đã thanh toán ${res.totalKhoaiPaid ?? finalPrice} 🥔 để thuê "${bookTitle}" trong ${selectedRentalDays} ngày.`,
-          [
-            { text: "Xem Tủ sách", onPress: () => navigateTab("bookshelf") },
-            { text: "Đóng", style: "cancel" },
-          ]
-        );
-      } finally {
-        setIsSubmittingModal(false);
-      }
+        const result = modalItem.offerId ? await addOfferToCart(modalItem.offerId)
+          : modalItem.couponCode ? await applyPromotionToCart(modalItem.couponCode, modalItem.bookId, modalItem.planKey)
+          : await addToCartApi(modalItem.bookId!, undefined, modalItem.basePrice);
+        if (!result.success) { Alert.alert('Thuê sách', result.message); return; }
+        setModalItem(null); navigate('cart');
+      } catch (error: any) { Alert.alert('Thuê sách', error?.response?.data?.message || error?.message || 'Chưa tải được biểu giá. Vui lòng thử lại.'); }
+      finally { setIsSubmittingModal(false); }
       return;
     }
 
@@ -1293,23 +1236,7 @@ export default function OffersScreen() {
             borderColor: colors.cardBorder,
           },
         ]}
-        onPress={async () => {
-          setSelectedRentalDays(7);
-          if (isLoggedIn) {
-            fetchWalletBalanceApi().then((bal) => {
-              if (bal !== null) setKhoaiBalance(bal);
-            });
-          }
-          setModalItem({
-            title: book.bookName,
-            description: book.description || "Sách đọc trực tuyến ưu đãi tại HalmBook.",
-            price: `${rentPrice} 🥔`,
-            priceNumeric: rentPrice,
-            actionText: "Thuê Sách",
-            bookId: book.book_id,
-            basePrice: rentPrice,
-          });
-        }}
+        onPress={() => handleOpenBookModal(book)}
         activeOpacity={0.85}
       >
         <View style={styles.bookCoverFrame}>
@@ -1342,10 +1269,10 @@ export default function OffersScreen() {
         <View style={styles.bookFooterRow}>
           <View style={styles.bookPriceWrap}>
             <Text style={[styles.bookOldPrice, { color: colors.textSecondary }]}>
-              {originalPrice} 🥔
+              {book.couponOnly ? '' : originalPrice + ' 🥔'}
             </Text>
             <Text style={[styles.bookPrice, { color: colors.promoBookColor }]}>
-              {rentPrice} 🥔
+              {book.priceLabel || rentPrice + ' 🥔'}
             </Text>
           </View>
           <View style={[styles.bookRentBtn, { backgroundColor: colors.promoBookColor }]}>
@@ -1634,6 +1561,8 @@ export default function OffersScreen() {
           </View>
         )}
 
+        <ComboOfferRow offers={bookOffers.filter(offer => offer.kind === 'COMBO')} styles={styles} colors={colors} SectionHeader={CleanSectionHeader} renderCard={renderDiscountBookCard} />
+
         {/* MỤC 1: GÓI NẠP KHOAI ƯU ĐÃI (HIỂN THỊ HÀNG DỌC) */}
         <View style={styles.sectionWrap}>
           <CleanSectionHeader
@@ -1768,8 +1697,7 @@ export default function OffersScreen() {
                 </View>
 
                 {(() => {
-                  const effectiveCost = modalItem.priceNumeric;
-                  const effectivePriceLabel = modalItem.price;
+                  const effectivePriceLabel = modalItem.bookId ? "Xem tại giỏ hàng" : modalItem.price;
                   return (
                     <View style={styles.modalMetaRow}>
                       <View style={[styles.modalMetaCol, { backgroundColor: colors.chipBg, borderColor: colors.cardBorder }]}>
@@ -1789,8 +1717,6 @@ export default function OffersScreen() {
                 })()}
 
                 {(() => {
-                  const effectiveCost = modalItem.priceNumeric;
-                  const canAfford = !modalItem.bookId || !isLoggedIn || (khoaiBalance ?? 0) >= effectiveCost;
                   return (
                     <View style={styles.modalBtnRow}>
                       <TouchableOpacity
@@ -1815,9 +1741,7 @@ export default function OffersScreen() {
                           <ActivityIndicator size="small" color={colors.accentText} />
                         ) : (
                           <Text style={[styles.modalConfirmText, { color: colors.accentText }]}>
-                            {modalItem.bookId && isLoggedIn && !canAfford
-                              ? `Nạp Khoai`
-                              : `Thuê ngay (${modalItem.price})`}
+                            {modalItem.couponCode && !modalItem.bookId ? 'Áp dụng mã vào giỏ hàng' : 'Tiếp tục tới giỏ hàng'}
                           </Text>
                         )}
                       </TouchableOpacity>

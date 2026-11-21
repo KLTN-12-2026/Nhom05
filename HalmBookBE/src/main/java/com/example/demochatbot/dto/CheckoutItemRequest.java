@@ -17,6 +17,7 @@ import lombok.NoArgsConstructor;
 public class CheckoutItemRequest {
     @NotBlank(message = "Mã sách (bookId) không được để trống!")
     private String bookId;           // Mã sách
+    private String offerId;
 
     private Integer cartItemId;      // ID mục giỏ hàng (nếu có, để xóa sau khi thuê)
     private String planKey;          // Gói thuê: '7', '14', '30', 'forever'

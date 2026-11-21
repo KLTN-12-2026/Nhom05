@@ -93,6 +93,8 @@ class FinancialRegressionTests {
                 "potatoTransactionRepository", mock(PotatoTransactionRepository.class), "checkoutCoordinator", coordinator,
                 "promotionRepository", mock(PromotionRepository.class));
         dependencies.forEach((name, value) -> ReflectionTestUtils.setField(service, name, value));
+        ReflectionTestUtils.setField(service, "commercePolicy", com.example.demochatbot.support.TestCommercePolicies.defaults((TierService) dependencies.get("tierService")));
+        ReflectionTestUtils.setField(service, "offerPricing", com.example.demochatbot.support.TestCommercePolicies.pricing(books, (PromotionRepository) dependencies.get("promotionRepository"), (com.example.demochatbot.service.policy.CommercePolicyService) ReflectionTestUtils.getField(service, "commercePolicy")));
         Customer customer = new Customer(); customer.setCustomer_id("fixture"); customer.setPotatoBalance(100);
         Cart cart = new Cart(); cart.setCart_id(1); cart.setCustomer(customer); customer.setCart(cart);
         Book book = new Book(); book.setBook_id("fixture-book"); book.setRent_price(200.0);

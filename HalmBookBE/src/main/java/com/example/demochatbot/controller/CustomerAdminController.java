@@ -68,8 +68,8 @@ public class CustomerAdminController {
                 int potato = c.getPotatoBalance() != null ? c.getPotatoBalance() : 0;
                 int totalEarned = c.getTotalPotatoEarned() != null ? c.getTotalPotatoEarned() : 0;
 
-                // Đếm VIP: Hạng cao hơn hạng 1 hoặc có tích lũy từ 100 Khoai trở lên
-                boolean isVip = (c.getMembershipTier() != null && c.getMembershipTier().getTierId() > 1) || totalEarned >= 100;
+                // VIP follows the configured membership benefit, as in broadcast targeting.
+                boolean isVip = c.getMembershipTier() != null && c.getMembershipTier().getDiscountPercent() != null && c.getMembershipTier().getDiscountPercent() > 0;
                 if (isVip) vipCount++;
 
                 // Đếm Locked

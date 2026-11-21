@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { BlurTargetView } from 'expo-blur';
 import { ComponentRef, ComponentType, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Animated, BackHandler, Easing, Modal, Platform, View } from 'react-native';
+import { Alert, Animated, AppState, BackHandler, Easing, Modal, Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import ChatBotScreen, { ChatMessage } from './src/ux-ui/chatbot';
 import ReaderLeaderboard from './src/ux-ui/ReaderLeaderboard';
@@ -29,6 +29,7 @@ import AuthRequiredModal from './src/ux-ui/AuthRequiredModal';
 import { API_BASE_URL } from './src/ux-ui/apiService';
 import { addToReadingList } from './src/ux-ui/readingHistory';
 import { clearLegacyBookshelfKeys } from './src/ux-ui/userStorage';
+import { installSessionSecurity } from './src/ux-ui/sessionSecurity';
 
 interface ScreenRoute extends NavigationOptions {
   name: AppScreen;
@@ -80,6 +81,8 @@ export default function App() {
   const [isFooterVisible, setIsFooterVisible] = useState(true);
   const [homeRefreshKey, setHomeRefreshKey] = useState(0);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(isSessionActive());
+  const sessionEnding = useRef(false);
+  const sessionEpoch = useRef(0);
   // [GIẢI THÍCH CODE]: Quản lý ảnh đại diện & chữ cái đầu đồng bộ cho các màn được chỉ định
   const [userAvatarUrl, setUserAvatarUrl] = useState<string>('');
   const [userInitial, setUserInitial] = useState<string>('H');
@@ -166,6 +169,7 @@ export default function App() {
   useEffect(() => {
     let isMounted = true;
     const restoreSession = async () => {
+      const epoch = sessionEpoch.current;
       try {
         const sessionActive = isSessionActive();
 
@@ -189,6 +193,7 @@ export default function App() {
 
         const token = await AsyncStorage.getItem('userToken');
         const profileStr = await AsyncStorage.getItem('userProfile');
+        if (epoch !== sessionEpoch.current) return;
         if (profileStr && isMounted) {
           try {
             const profile = JSON.parse(profileStr);
@@ -205,6 +210,7 @@ export default function App() {
           setSessionActive(true);
           setIsLoggedIn(true);
           const savedRoutesStr = await AsyncStorage.getItem('savedRoutes');
+          if (epoch !== sessionEpoch.current) return;
           if (savedRoutesStr) {
             const parsed = JSON.parse(savedRoutesStr);
             if (Array.isArray(parsed) && parsed.length > 0) {
@@ -378,6 +384,8 @@ export default function App() {
   }, []);
 
   const finishLogin = useCallback(() => {
+    sessionEpoch.current++;
+    sessionEnding.current = false;
     setSessionActive(true);
     setIsLoggedIn(true);
     setAuthModal({ visible: false, message: '', showForm: false });
@@ -400,20 +408,19 @@ export default function App() {
     return () => subscription.remove();
   }, [routes.length]);
 
-  const logout = useCallback(async () => {
-    try {
+  const clearLocalSession = useCallback(async () => {
+      sessionEpoch.current++;
       chatRequest.current?.abort();
       chatRequest.current = null;
       setIsChatLoading(false);
       setChatMessages(current => current.filter(message => message.id === 'welcome'));
       setSessionActive(false);
       setIsLoggedIn(false);
-      const token = await AsyncStorage.getItem('userToken');
-      try {
-        if (token) await axios.post(API_BASE_URL + '/api/auth/logout', {}, {
-          headers: { Authorization: 'Bearer ' + token }, timeout: 5000,
-        });
-      } catch { /* Local logout must complete even when the server is unreachable. */ }
+      pendingAuthAction.current = null;
+      setAuthModal({ visible: false, message: '', showForm: false });
+      setUserAvatarUrl('');
+      setUserInitial('H');
+      setRoutes([{ name: 'home' }]);
       await AsyncStorage.multiRemove([
         'userToken',
         'accessToken',
@@ -426,13 +433,57 @@ export default function App() {
         'currentUsername',
       ]);
       await clearLegacyBookshelfKeys();
-      setUserAvatarUrl('');
-      setUserInitial('H');
-      setRoutes([{ name: 'home' }]);
+  }, []);
+
+  const logout = useCallback(async () => {
+    sessionEnding.current = true;
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      await clearLocalSession();
+      try {
+        if (token) await axios.post(API_BASE_URL + '/api/auth/logout', {}, {
+          headers: { Authorization: 'Bearer ' + token }, timeout: 5000,
+        });
+      } catch { /* Local logout also completes when the server is unavailable. */ }
     } catch {
       Alert.alert('Không thể đăng xuất', 'Đã xảy ra lỗi khi xóa thông tin đăng nhập.');
     }
-  }, []);
+  }, [clearLocalSession]);
+
+  useEffect(() => installSessionSecurity(API_BASE_URL, async failure => {
+    if (sessionEnding.current) return;
+    sessionEnding.current = true;
+    await clearLocalSession();
+    Alert.alert(failure.reason === 'locked' ? 'Tài khoản đã bị khóa' : 'Phiên đăng nhập đã hết hạn', failure.message);
+  }), [clearLocalSession]);
+
+  useEffect(() => {
+    if (!isReady || !isLoggedIn) return;
+    let controller: AbortController | null = null;
+    let disposed = false;
+    let pending = false;
+    const checkSession = async (fresh = false) => {
+      if (disposed || sessionEnding.current || (pending && !fresh)) return;
+      if (fresh) controller?.abort();
+      const request = new AbortController();
+      controller = request;
+      pending = true;
+      try {
+        const token = await AsyncStorage.getItem('userToken');
+        if (token && !request.signal.aborted) await axios.get(API_BASE_URL + '/api/auth/me', {
+          headers: { Authorization: 'Bearer ' + token }, signal: request.signal, timeout: 5000,
+        });
+      } catch { /* The interceptor handles confirmed auth failures; network failures preserve the session. */ }
+      finally { if (controller === request) pending = false; }
+    };
+    if (AppState.currentState === 'active' || AppState.currentState === null) void checkSession();
+    const timer = setInterval(() => { if (AppState.currentState === 'active') void checkSession(); }, 15000);
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') void checkSession(true);
+      else { controller?.abort(); pending = false; }
+    });
+    return () => { disposed = true; controller?.abort(); clearInterval(timer); subscription.remove(); };
+  }, [isReady, isLoggedIn]);
 
   // ============================================================================
   // [GIẢI THÍCH CODE]: Tích hợp Trợ lý AI (HALM.AI) qua API Backend: POST /api/chat

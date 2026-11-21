@@ -1,3 +1,4 @@
+import { fetchCommercePolicy, getCachedCommercePolicy, rentalPlanPrice } from './commercePolicy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL, fetchApiWithFallback, normalizeAssetUrl } from './apiService';
 import {
@@ -12,52 +13,10 @@ import {
 // - Sử dụng fetchApiWithFallback để tự động dò URL Backend khả dụng
 // ============================================================================
 
-export type RentalDurationDays = 7 | 14 | 30 | 90;
+export type RentalDurationDays = 1 | 3 | 7 | 14 | 15 | 30 | 90 | 36500;
 
 export const KEY_RENTED_BOOKS_CACHE = '@halm_rented_books_v1';
 export const KEY_EXPIRED_RENTED_BOOKS_CACHE = '@halm_expired_rented_books_v1';
-
-export const RENTAL_DURATION_OPTIONS: Array<{
-  days: RentalDurationDays;
-  label: string;
-  labelEn: string;
-  multiplier: number;
-  subtitle: string;
-  subtitleEn: string;
-}> = [
-  {
-    days: 7,
-    label: '7 ngày',
-    labelEn: '7 days',
-    multiplier: 1.0,
-    subtitle: '9 Khoai',
-    subtitleEn: '9 Potatoes',
-  },
-  {
-    days: 14,
-    label: '14 ngày',
-    labelEn: '14 days',
-    multiplier: 1.8,
-    subtitle: '15 Khoai',
-    subtitleEn: '15 Potatoes',
-  },
-  {
-    days: 30,
-    label: '30 ngày',
-    labelEn: '30 days',
-    multiplier: 3.5,
-    subtitle: '25 Khoai',
-    subtitleEn: '25 Potatoes',
-  },
-  {
-    days: 90,
-    label: '90 ngày',
-    labelEn: '90 days',
-    multiplier: 9.0,
-    subtitle: '50 Khoai',
-    subtitleEn: '50 Potatoes',
-  },
-];
 
 const FALLBACK_BASE_PRICE_MAP: Record<string, number> = {
   KD001: 25,
@@ -90,7 +49,7 @@ const FALLBACK_BASE_PRICE_MAP: Record<string, number> = {
 };
 
 export const normalizeRentalDays = (days?: number | null): RentalDurationDays => {
-  if (days === 14 || days === 30 || days === 90 || days === 7) {
+  if (days === 1 || days === 3 || days === 15 || days === 36500 || days === 14 || days === 30 || days === 90 || days === 7) {
     return days;
   }
   if (days && days > 60) return 90;
@@ -100,7 +59,9 @@ export const normalizeRentalDays = (days?: number | null): RentalDurationDays =>
 };
 
 export const calculateDynamicKhoai = (baseKhoai: number, days: number): number => {
-  return ({ 7: 9, 14: 15, 30: 25, 90: 50 } as Record<number, number>)[days] ?? 9;
+  const plan = getCachedCommercePolicy()?.plans.find(p => p.durationDays === days && p.active);
+  if (!plan) throw new Error('Chưa tải được biểu giá hoặc gói thuê đã tạm ngừng.');
+  return rentalPlanPrice(plan, baseKhoai);
 };
 
 export const resolveBaseKhoaiForBook = (bookId: string, rawRentPrice?: number | null): number => {
@@ -267,7 +228,7 @@ export const fetchBookshelfFromApi = async (): Promise<BookshelfFetchResult> => 
         Boolean(item.isForever ?? item.forever) || remainingDays > 1000;
       const statusStr = String(item.status || 'ACTIVE').toUpperCase();
       const expired =
-        statusStr === 'EXPIRED' || (!isForever && remainingDays <= 0);
+        statusStr !== 'ACTIVE' || (!isForever && remainingDays <= 0);
       const resolvedCover = resolveCoverUrlWithBase(
         item.imgUrl || item.img_url,
         bookId,
@@ -276,7 +237,7 @@ export const fetchBookshelfFromApi = async (): Promise<BookshelfFetchResult> => 
 
       let durationLabel = `Còn ${Math.max(1, remainingDays)} ngày`;
       if (expired) {
-        durationLabel = 'Đã hết hạn';
+        durationLabel = statusStr === 'REVOKED' ? 'Đã thu hồi quyền đọc' : statusStr === 'REJECTED' ? 'Đã từ chối' : 'Đã hết hạn';
       } else if (isForever) {
         durationLabel = 'Sở hữu vĩnh viễn';
       }
@@ -293,7 +254,7 @@ export const fetchBookshelfFromApi = async (): Promise<BookshelfFetchResult> => 
         remainingDays,
         isForever,
         expired,
-        status: expired ? 'EXPIRED' : statusStr,
+        status: statusStr === 'ACTIVE' && expired ? 'EXPIRED' : statusStr,
         currentPage: Number(item.currentPage || 1),
         readingPercentage: Number(item.readingPercentage || 0),
         lastReadAt: item.lastReadAt,
@@ -317,7 +278,7 @@ export const fetchBookshelfFromApi = async (): Promise<BookshelfFetchResult> => 
       expiredBooks,
     };
   } catch (err: any) {
-    if (err?.response?.status === 401) {
+    if ([401, 403, 423].includes(err?.response?.status)) {
       return {
         success: false,
         books: [],
@@ -359,88 +320,37 @@ export const fetchBookshelfFromApi = async (): Promise<BookshelfFetchResult> => 
 /**
  * Kiểm tra quyền đọc sách chi tiết (GET /api/home/bookshelf/check-detail/{bookId})
  */
-export const checkBookAccessDetailApi = async (bookId: string): Promise<BookAccessDetail> => {
-  const defaultDenied: BookAccessDetail = {
-    hasAccess: false,
-    currentPage: 1,
-    readingPercentage: 0,
-    remainingDays: 0,
-    isForever: false,
-    status: 'NONE',
-    checkedFromServer: false,
-  };
-
-  if (!bookId || bookId.startsWith('upload') || bookId.startsWith('tmp')) {
-    return defaultDenied;
-  }
-
+export const checkBookAccessDetailApi = async (bookId: string, signal?: AbortSignal): Promise<BookAccessDetail> => {
+  const denied = (status: string, checkedFromServer = false): BookAccessDetail => ({
+    hasAccess: false, currentPage: 1, readingPercentage: 0, remainingDays: 0,
+    isForever: false, status, checkedFromServer,
+  });
+  if (!bookId || bookId.startsWith('upload') || bookId.startsWith('tmp')) return denied('NONE');
   const token = await AsyncStorage.getItem('userToken');
-  if (!token) {
-    return { ...defaultDenied, status: 'GUEST', checkedFromServer: true };
-  }
-
-  const headers = { Authorization: `Bearer ${token}` };
+  if (!token) return denied('GUEST', true);
   try {
     const res = await fetchApiWithFallback(
-      `/api/home/bookshelf/check-detail/${encodeURIComponent(bookId)}`,
-      { method: 'GET', headers, timeout: 4500 }
+      '/api/home/bookshelf/check-detail/' + encodeURIComponent(bookId),
+      { method: 'GET', headers: { Authorization: 'Bearer ' + token }, timeout: 5000, signal }
     );
-    const data = res.data || {};
+    const data = res.data;
+    if (!data || typeof data.hasAccess !== 'boolean') return denied('NETWORK_ERROR');
+    const status = String(data.status || (data.hasAccess ? 'ACTIVE' : 'NONE')).toUpperCase();
     const remainingDays = Number(data.remainingDays || 0);
-    const isForever =
-      Boolean(data.isForever ?? data.forever) || remainingDays > 1000;
     return {
-      hasAccess: Boolean(data.hasAccess),
-      currentPage: Number(data.currentPage || 1),
-      readingPercentage: Number(data.readingPercentage || 0),
-      remainingDays,
-      isForever,
-      status: String(data.status || (data.hasAccess ? 'ACTIVE' : 'NONE')),
-      checkedFromServer: true,
+      hasAccess: data.hasAccess === true && status === 'ACTIVE',
+      currentPage: Number(data.currentPage || 1), readingPercentage: Number(data.readingPercentage || 0),
+      remainingDays, isForever: Boolean(data.isForever ?? data.forever) || remainingDays > 1000,
+      status, checkedFromServer: true,
     };
   } catch (err: any) {
-    // Fallback endpoint đơn giản nếu endpoint chi tiết chưa phản hồi
-    try {
-      const checkRes = await fetchApiWithFallback(
-        `/api/home/bookshelf/check/${encodeURIComponent(bookId)}`,
-        { method: 'GET', headers, timeout: 4000 }
-      );
-      return {
-        ...defaultDenied,
-        hasAccess: Boolean(checkRes.data?.hasAccess),
-        status: checkRes.data?.hasAccess ? 'ACTIVE' : 'NONE',
-        checkedFromServer: true,
-      };
-    } catch {
-      // Nếu mất mạng, kiểm tra cache sách đang thuê để không chặn nhầm người đã thuê
-      try {
-        const cachedRaw = await getUserItem(KEY_RENTED_BOOKS_CACHE);
-        if (cachedRaw) {
-          const cached = JSON.parse(cachedRaw);
-          if (Array.isArray(cached)) {
-            const matched = cached.find(
-              (b: any) => String(b.bookId || b.id) === String(bookId) && !b.expired
-            );
-            if (matched) {
-              return {
-                hasAccess: true,
-                currentPage: Number(matched.currentPage || 1),
-                readingPercentage: Number(matched.readingPercentage || 0),
-                remainingDays: Number(matched.remainingDays || 1),
-                isForever: Boolean(matched.isForever),
-                status: 'ACTIVE',
-                checkedFromServer: false,
-              };
-            }
-          }
-        }
-      } catch {}
-
-      if (err?.response?.status === 401) {
-        return { ...defaultDenied, status: 'UNAUTHORIZED', checkedFromServer: true };
-      }
-      return defaultDenied;
-    }
+    if (signal?.aborted) throw err;
+    const status = err?.response?.status;
+    if (status === 423 || err?.response?.data?.error === 'ACCOUNT_LOCKED') return denied('LOCKED', true);
+    if (status === 401) return denied('UNAUTHORIZED', true);
+    if (status === 403) return denied('REVOKED', true);
+    // Cached bookshelf entries are display data, never a source of permission to read.
+    return denied('NETWORK_ERROR');
   }
 };
 
@@ -486,7 +396,7 @@ export const fetchWalletBalanceApi = async (): Promise<number | null> => {
  */
 export const addToCartApi = async (
   bookId: string,
-  durationDays: RentalDurationDays = 7,
+  durationDays?: RentalDurationDays,
   rawRentPrice?: number | null
 ): Promise<RentalActionResult> => {
   const token = await AsyncStorage.getItem('userToken');
@@ -498,10 +408,14 @@ export const addToCartApi = async (
     };
   }
 
-  const baseKhoai = resolveBaseKhoaiForBook(bookId, rawRentPrice);
-  const price = calculateDynamicKhoai(baseKhoai, durationDays);
+  const policy = await fetchCommercePolicy();
+  const plan = durationDays == null
+    ? policy.plans.find(p => p.durationDays === 7 && p.active) || policy.plans.find(p => p.active)
+    : policy.plans.find(p => p.durationDays === durationDays && p.active);
+  if (!plan) return { success: false, message: 'Gói thuê đã tạm ngừng. Vui lòng chọn kỳ hạn khác trong giỏ hàng.' };
+  const price = rentalPlanPrice(plan, rawRentPrice);
   const headers = { Authorization: `Bearer ${token}` };
-  const body = { bookId, planKey: String(durationDays), price };
+  const body = { bookId, planKey: plan.key, price };
 
   try {
     const res = await fetchApiWithFallback('/api/cart/add', {
@@ -515,7 +429,7 @@ export const addToCartApi = async (
       message: res.data?.message || 'Đã thêm sách vào giỏ hàng!',
     };
   } catch (err: any) {
-    if (err?.response?.status === 400) {
+    if (![404, 405].includes(err?.response?.status)) {
       return {
         success: false,
         message: extractServerErrorMessage(err, 'Không thể thêm sách vào giỏ hàng.'),

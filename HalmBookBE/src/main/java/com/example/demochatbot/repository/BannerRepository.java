@@ -8,6 +8,6 @@ import java.util.List;
 
 @Repository
 public interface BannerRepository extends JpaRepository<Banner, String> {
-    List<Banner> findByIsActiveTrueOrderByOrderIndexAsc();
-    List<Banner> findAllByOrderByOrderIndexAsc();
+    List<Banner> findByPlatformAndIsActiveTrueOrderByOrderIndexAscIdAsc(String platform);
+    List<Banner> findByPlatformOrderByOrderIndexAscIdAsc(String platform);
 }

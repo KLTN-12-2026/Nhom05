@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { API_BASE_URL, CANDIDATE_API_URLS } from '../config/api';
 
-import { ComponentRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ComponentRef,Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Constants from 'expo-constants';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import {
@@ -28,6 +28,7 @@ import { BookData, useAppNavigation } from './navigation';
 import { fetchApiWithFallback } from './apiService';
 import HomeCover from './home/HomeBookCover';
 import ContinueReading from './home/ContinueReading';
+import HomeBannerCarousel from './home/HomeBannerCarousel';
 import { formatHomeBookDate, getRankedHomeBooks, getRecentHomeBooks, HomeBookItem, readHomePage } from './home/homeData';
 export type { HomeBookItem };
 import { getBookCoverSource } from './bookCovers';

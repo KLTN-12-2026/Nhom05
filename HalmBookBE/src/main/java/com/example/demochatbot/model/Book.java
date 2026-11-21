@@ -1,12 +1,16 @@
 package com.example.demochatbot.model;
 
 import jakarta.persistence.*;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.ArrayList;
 
 @Data
 @AllArgsConstructor
@@ -71,6 +75,12 @@ public class Book {
 
     @OneToMany(mappedBy = "book")
     private List<ReadingNoteBookmark> bookmarks;
+
+    @JsonIgnore
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    @OneToMany(mappedBy = "book")
+    private List<Promotion> promotions = new ArrayList<>();
 
     @ManyToOne
     @JoinColumn(name = "category_id" , referencedColumnName = "category_id")
