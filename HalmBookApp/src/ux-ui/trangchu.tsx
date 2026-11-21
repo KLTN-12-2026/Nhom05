@@ -1043,6 +1043,40 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
         <View
           style={styles.section}
           onLayout={(e) => {
+            sectionPositions.current['recent'] = e.nativeEvent.layout.y;
+          }}
+        >
+          <View style={styles.sectionTitleBox}>
+            <View style={styles.sectionAccent} />
+            <Text style={styles.sectionTitleText}>Mới Cập Nhật</Text>
+            <TouchableOpacity onPress={() => setShowAllRecentBooks(value => !value)} style={styles.sectionMoreButton} accessibilityRole="button" accessibilityLabel={showAllRecentBooks ? 'Thu gọn sách mới cập nhật' : 'Xem danh sách sách mới cập nhật'}>
+              <Text style={styles.shelfMoreText}>{showAllRecentBooks ? 'Thu gọn' : 'Xem thêm'}</Text>
+              <Ionicons name={showAllRecentBooks ? 'arrow-up' : 'arrow-forward'} size={14} color={isDarkMode ? '#E5A93C' : '#4B8176'} />
+            </TouchableOpacity>
+          </View>
+          {isLoading && books.length === 0 ? (
+            <View style={styles.statusBox}>
+              <ActivityIndicator size="small" color={isDarkMode ? '#8FC3B5' : '#5a8b82'} />
+              <Text style={styles.statusText}>Đang tải dữ liệu sách...</Text>
+            </View>
+          ) : errorMessage && books.length === 0 ? (
+            <View style={styles.statusBox}>
+              <Text style={styles.statusErrorText}>{errorMessage}</Text>
+            </View>
+          ) : recentBooks.length === 0 ? (
+            <View style={styles.statusBox}>
+              <Text style={styles.statusEmptyText}>Chưa có ngày cập nhật hoặc ngày thêm sách hợp lệ để hiển thị.</Text>
+            </View>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList}>
+              {(showAllRecentBooks ? recentBooks : recentBooks.slice(0, 5)).map(n => renderNovelCard(n, homeCardWidth, true))}
+            </ScrollView>
+          )}
+        </View>
+
+        <View
+          style={styles.section}
+          onLayout={(e) => {
             sectionPositions.current['ranking'] = e.nativeEvent.layout.y;
           }}
         >
@@ -1073,40 +1107,6 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
                 {rankedBooks.map((novel, index) => renderRankItem(novel, index))}
               </View>
             </View>
-          )}
-        </View>
-
-        <View
-          style={styles.section}
-          onLayout={(e) => {
-            sectionPositions.current['recent'] = e.nativeEvent.layout.y;
-          }}
-        >
-          <View style={styles.sectionTitleBox}>
-            <View style={styles.sectionAccent} />
-            <Text style={styles.sectionTitleText}>Mới Cập Nhật</Text>
-            <TouchableOpacity onPress={() => setShowAllRecentBooks(value => !value)} style={styles.sectionMoreButton} accessibilityRole="button" accessibilityLabel={showAllRecentBooks ? 'Thu gọn sách mới cập nhật' : 'Xem danh sách sách mới cập nhật'}>
-              <Text style={styles.shelfMoreText}>{showAllRecentBooks ? 'Thu gọn' : 'Xem thêm'}</Text>
-              <Ionicons name={showAllRecentBooks ? 'arrow-up' : 'arrow-forward'} size={14} color={isDarkMode ? '#E5A93C' : '#4B8176'} />
-            </TouchableOpacity>
-          </View>
-          {isLoading && books.length === 0 ? (
-            <View style={styles.statusBox}>
-              <ActivityIndicator size="small" color={isDarkMode ? '#8FC3B5' : '#5a8b82'} />
-              <Text style={styles.statusText}>Đang tải dữ liệu sách...</Text>
-            </View>
-          ) : errorMessage && books.length === 0 ? (
-            <View style={styles.statusBox}>
-              <Text style={styles.statusErrorText}>{errorMessage}</Text>
-            </View>
-          ) : recentBooks.length === 0 ? (
-            <View style={styles.statusBox}>
-              <Text style={styles.statusEmptyText}>Chưa có ngày cập nhật hoặc ngày thêm sách hợp lệ để hiển thị.</Text>
-            </View>
-          ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList}>
-              {(showAllRecentBooks ? recentBooks : recentBooks.slice(0, 5)).map(n => renderNovelCard(n, homeCardWidth, true))}
-            </ScrollView>
           )}
         </View>
 
