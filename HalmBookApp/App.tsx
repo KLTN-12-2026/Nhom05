@@ -840,10 +840,10 @@ export default function App() {
                 {screen}
               </Animated.View>
             </BlurTargetView>
-            {!['auth', 'reader', 'chatbot', 'notifications', 'payment', 'transactions'].includes(currentRoute.name) && (
+            {!['auth', 'reader', 'chatbot', 'notifications', 'payment', 'transactions', 'genreBooks'].includes(currentRoute.name) && (
               <Footer
                 activeNav={activeNav}
-                floating={['home', 'categories', 'genreBooks', 'bookDetail', 'offers', 'upload', 'bookshelf', 'profile'].includes(currentRoute.name)}
+                floating={['home', 'categories', 'bookDetail', 'offers', 'upload', 'bookshelf', 'profile'].includes(currentRoute.name)}
                 visible={isFooterVisible}
               />
             )}

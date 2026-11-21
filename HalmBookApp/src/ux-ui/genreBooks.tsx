@@ -6,7 +6,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { fetchApiWithFallback } from './apiService';
 import { getBookCoverSource } from './bookCovers';
 import { getBookChapterLabel } from './bookContentService';
-import { BookData, GenreBooksParams, useAppNavigation, useAutoHideFooter } from './navigation';
+import { BookData, GenreBooksParams, useAppNavigation } from './navigation';
 
 interface GenreBookDto {
   book_id: string;
@@ -26,19 +26,21 @@ interface BookPage {
 }
 
 const PAGE_SIZE = 12;
+const CARD_WIDTH = 115;
+const GRID_GAP = 18;
+const GRID_COLUMNS = 3;
 
 export default function GenreBooksScreen({ genre }: { genre?: GenreBooksParams }) {
   const { navigate, goBack, isDarkMode, lang } = useAppNavigation();
-  const { onScroll, showFooter } = useAutoHideFooter();
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const [page, setPage] = useState(0);
   const [retry, setRetry] = useState(0);
   const [books, setBooks] = useState<BookData[]>([]);
   const [totalPages, setTotalPages] = useState(0);
-  const [totalElements, setTotalElements] = useState(0);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [gridWidth, setGridWidth] = useState(0);
   const categoryId = genre?.categoryId;
   const validGenre = Number.isInteger(categoryId) && Number(categoryId) > 0;
   const textColor = isDarkMode ? '#F5F1E8' : '#242321';
@@ -81,7 +83,6 @@ export default function GenreBooksScreen({ genre }: { genre?: GenreBooksParams }
           return { ...book, chapter: getBookChapterLabel(book) };
         }));
         setTotalPages(data.totalPages);
-        setTotalElements(data.totalElements);
       } catch {
         if (!controller.signal.aborted) setFailed(true);
       } finally {
@@ -97,13 +98,20 @@ export default function GenreBooksScreen({ genre }: { genre?: GenreBooksParams }
     setLoading(true);
     setPage(next);
     scrollRef.current?.scrollTo({ y: 0, animated: false });
-    showFooter();
   };
   const firstPage = Math.max(0, Math.min(page - 1, totalPages - 3));
   const visiblePages = Array.from({ length: Math.min(3, totalPages) }, (_, index) => firstPage + index);
+  const cardWidth = gridWidth > 0
+    ? Math.min(CARD_WIDTH, Math.max(0, (gridWidth - GRID_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS))
+    : CARD_WIDTH;
+  const bookRows = Array.from({ length: Math.ceil(books.length / GRID_COLUMNS) }, (_, index) =>
+    books.slice(index * GRID_COLUMNS, (index + 1) * GRID_COLUMNS));
 
   return (
-    <SafeAreaView edges={['top', 'left', 'right']} style={[styles.container, { backgroundColor: isDarkMode ? '#101319' : '#FFFFFF' }]}>
+    <SafeAreaView edges={['top', 'left', 'right']} style={[styles.container, {
+      backgroundColor: isDarkMode ? '#101319' : '#FFFFFF',
+      paddingBottom: insets.bottom,
+    }]}>
       <StatusBar style={isDarkMode ? 'light' : 'dark'} />
       <View style={styles.header}>
         <TouchableOpacity onPress={goBack} style={styles.back} accessibilityRole="button" accessibilityLabel={lang === 'en' ? 'Go back' : 'Quay lại'}>
@@ -114,7 +122,7 @@ export default function GenreBooksScreen({ genre }: { genre?: GenreBooksParams }
           <Text style={[styles.title, { color: textColor }]}>{genre?.categoryName || (lang === 'en' ? 'Genre' : 'Thể loại')}</Text>
         </View>
       </View>
-      <ScrollView ref={scrollRef} onScroll={onScroll} scrollEventThrottle={16} contentContainerStyle={[styles.content, { paddingBottom: 120 + insets.bottom }]}>
+      <ScrollView ref={scrollRef} style={styles.list} contentContainerStyle={styles.content}>
         {!validGenre ? (
           <Text style={[styles.message, { color: mutedColor }]}>{lang === 'en' ? 'Select a genre from the homepage.' : 'Vui lòng chọn thể loại từ trang chủ.'}</Text>
         ) : loading ? (
@@ -130,30 +138,31 @@ export default function GenreBooksScreen({ genre }: { genre?: GenreBooksParams }
             </TouchableOpacity>
           </View>
         ) : (
-          <>
-            <Text style={[styles.count, { color: mutedColor }]} accessibilityLiveRegion="polite">
-              {lang === 'en' ? `${totalElements} books` : `${totalElements} tác phẩm`}
-              {totalPages > 0 ? ` · ${lang === 'en' ? 'Page' : 'Trang'} ${page + 1}/${totalPages}` : ''}
-            </Text>
+          <View style={styles.results}>
             {books.length === 0 ? (
               <Text style={[styles.message, { color: mutedColor }]}>{lang === 'en' ? 'No books in this genre yet.' : 'Thể loại này chưa có sách.'}</Text>
             ) : (
-              <View style={styles.grid}>
-                {books.map((book) => (
-                  <TouchableOpacity key={book.id} style={styles.card} activeOpacity={0.88} onPress={() => navigate('bookDetail', book)} accessibilityRole="button" accessibilityLabel={book.title}>
-                    <View style={[styles.cover, { backgroundColor: isDarkMode ? '#2B303B' : '#F2EFE9', borderColor: isDarkMode ? '#3D4452' : '#E8E4DC' }]}>
-                      <Image source={getBookCoverSource(book.id, book.img_url)} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                    </View>
-                    <Text style={[styles.bookTitle, { color: textColor }]} numberOfLines={2}>{book.title}</Text>
-                    <Text style={[styles.author, { color: mutedColor }]} numberOfLines={1}>{book.author}</Text>
-                  </TouchableOpacity>
+              <View style={styles.grid} onLayout={({ nativeEvent }) => setGridWidth(nativeEvent.layout.width)}>
+                {bookRows.map((row) => (
+                  <View key={row[0].id} style={styles.bookRow}>
+                    {row.map((book) => (
+                      <TouchableOpacity key={book.id} style={[styles.card, { width: cardWidth }]} activeOpacity={0.88} onPress={() => navigate('bookDetail', book)} accessibilityRole="button" accessibilityLabel={book.title}>
+                        <View style={[styles.cover, { backgroundColor: isDarkMode ? '#2B303B' : '#F2EFE9', borderColor: isDarkMode ? '#3D4452' : '#E8E4DC' }]}>
+                          <Image source={getBookCoverSource(book.id, book.img_url)} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                        </View>
+                        <Text style={[styles.bookTitle, { color: textColor }]} numberOfLines={2}>{book.title}</Text>
+                        <Text style={[styles.author, { color: mutedColor }]} numberOfLines={1}>{book.author}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 ))}
               </View>
             )}
-          </>
+          </View>
         )}
-        {validGenre && totalPages > 0 && !failed && (
-          <View>
+      </ScrollView>
+      {validGenre && totalPages > 0 && !failed && (
+        <View style={styles.paginationArea}>
           <View style={styles.pagination}>
             {[page - 1, ...visiblePages, page + 1].map((target, index) => {
               const previous = index === 0;
@@ -170,10 +179,9 @@ export default function GenreBooksScreen({ genre }: { genre?: GenreBooksParams }
               );
             })}
           </View>
-          <Text style={[styles.message, { color: mutedColor }]}>{lang === 'en' ? 'Page' : 'Trang'} {page + 1} / {totalPages}</Text>
-          </View>
-        )}
-      </ScrollView>
+          <Text style={[styles.pageLabel, { color: mutedColor }]}>{lang === 'en' ? 'Page' : 'Trang'} {page + 1} / {totalPages}</Text>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -185,16 +193,20 @@ const styles = StyleSheet.create({
   heading: { flex: 1 },
   eyebrow: { fontSize: 10, fontWeight: '800', letterSpacing: 1.5, marginBottom: 4 },
   title: { fontSize: 21, fontWeight: '800' },
-  content: { paddingHorizontal: 16, width: '100%', maxWidth: 1000, alignSelf: 'center' },
-  count: { fontSize: 13, marginVertical: 16 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 18 },
-  card: { width: 115, marginBottom: 8 },
-  cover: { width: 115, height: 155, borderWidth: 1, borderRadius: 10, overflow: 'hidden' },
+  list: { flex: 1 },
+  content: { paddingHorizontal: 16, paddingVertical: 16, width: '100%' },
+  results: { flexGrow: 0, flexShrink: 0 },
+  grid: { gap: GRID_GAP },
+  bookRow: { flexDirection: 'row', justifyContent: 'flex-start', gap: GRID_GAP },
+  card: { flexShrink: 0, marginBottom: 8 },
+  cover: { width: '100%', aspectRatio: CARD_WIDTH / 155, borderWidth: 1, borderRadius: 10, overflow: 'hidden' },
   bookTitle: { fontSize: 13, lineHeight: 18, fontWeight: '700', marginTop: 8 },
   author: { fontSize: 11, marginTop: 4 },
   status: { paddingVertical: 45, alignItems: 'center' },
   message: { textAlign: 'center', marginVertical: 24, lineHeight: 22 },
   retry: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 22, paddingVertical: 12 },
-  pagination: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginTop: 24 },
+  paginationArea: { flexShrink: 0, paddingTop: 12, paddingBottom: 12 },
+  pagination: { flexDirection: 'row', justifyContent: 'center', gap: 8 },
+  pageLabel: { textAlign: 'center', marginTop: 8, lineHeight: 22 },
   pageButton: { width: 44, height: 44, borderWidth: 1, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
 });
