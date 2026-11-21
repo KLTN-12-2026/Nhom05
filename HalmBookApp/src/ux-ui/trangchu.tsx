@@ -35,9 +35,6 @@ import { getBookChapterLabel } from './bookContentService';
 import { useUnreadNotificationCount } from './useUnreadNotificationCount';
 import { DARK_MODE_PRIMARY, DARK_MODE_SECONDARY } from './CosmicBackground';
 
-const DARK_MODE_PRIMARY = '#9A8BC2';
-const DARK_MODE_SECONDARY = '#D8B36A';
-
 const { width, height } = Dimensions.get('window');
 const FLOATING_MENU_SIZE = 40;
 
@@ -65,56 +62,10 @@ const CANDIDATE_API_URLS_OLD = [
 ];
 */
 
-export interface HomeBookItem extends BookData {
-  id: string;
-  book_id?: string;
-  bookName?: string;
-  img_url?: string;
-  description?: string;
-  price?: number;
-  category_id?: number;
-  category_name?: string;
-  updatedAt?: string;
-  createdAt?: string;
-}
-
-const mapBookDtoToItem = (item: any, index: number): HomeBookItem => {
-  const id = String(item.book_id || item.id || `book-${index}`);
-  const title = String(item.bookName || item.title || 'Chưa có tiêu đề');
-  const author = item.author || 'HALM BOOK';
-  let img_url = item.img_url || item.img || undefined;
-  if (img_url && typeof img_url === 'string' && img_url.startsWith('/')) {
-    img_url = API_BASE_URL + img_url;
-  }
-  const tag = item.category_name || item.tag || 'Sách hay';
-  const description = item.description || item.desc || '';
-  const price = item.rent_price !== undefined ? item.rent_price : item.price;
-  const rating = item.rating ? String(item.rating) : '5.0';
-  const reads = item.read_count ? `${item.read_count}` : '1.2K';
-  const chapter = getBookChapterLabel({ ...item, id, book_id: item.book_id || id, title, author });
-
-  return {
-    id,
-    title,
-    author,
-    chapter,
-    tag,
-    rating,
-    reads,
-    img_url,
-    description,
-    price,
-    category_id: item.category_id,
-    category_name: item.category_name,
-  };
-};
-
 // Fallback Banner khi chưa có dữ liệu từ backend
 const CAROUSEL: any[] = [];
 
 // --- COMPONENT HIỆU ỨNG SAO VÀ VŨ TRỤ (copy từ uudai.tsx, đổi prefix Offers → Home) ---
-const DARK_MODE_PRIMARY = '#9A8BC2';
-const DARK_MODE_SECONDARY = '#D8B36A';
 
 function HomeNebula() {
   const animation = useRef(new Animated.Value(0)).current;
@@ -570,6 +521,8 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
   ?? nativeEvent.changedTouches?.[0]?.pageY
     ?? nativeEvent.pageY;
 
+  const bgAnim = useRef(new Animated.Value(isDarkMode ? 1 : 0)).current;
+
   const drawerTranslateX = drawerAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [-DRAWER_WIDTH, 0],
@@ -598,7 +551,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
   const textColor = isDarkMode ? '#F7F5F0' : '#242321';
   const homeCardWidth = width < 380 ? 116 : 132;
   // Use real catalog books; there is no Featured API or synthetic fallback content.
-  const featuredItems = books.length > 0
+  const featuredItems = useMemo(() => (books.length > 0
     ? books.slice(0, 3).map((book) => ({
       id: `book-${book.id}`,
       eyebrow: 'GIỚI THIỆU SÁCH',
@@ -606,11 +559,14 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
       description: book.description?.replace(/<[^>]*>/g, '').trim() || `Tác phẩm của ${book.author || 'tác giả HALMBOOK'}.`,
       book,
     }))
-    : [];
-  const featuredTrackItems = featuredItems.map(item => ({ item, isClone: false }));
-  if (featuredItems.length > 1) {
-    featuredTrackItems.push({ item: featuredItems[0], isClone: true });
-  }
+    : []), [books]);
+  const featuredTrackItems = useMemo(() => {
+    const items = featuredItems.map(item => ({ item, isClone: false }));
+    if (featuredItems.length > 1) {
+      items.push({ item: featuredItems[0], isClone: true });
+    }
+    return items;
+  }, [featuredItems]);
   const activeFeatured = Math.min(featuredIndex, Math.max(0, featuredItems.length - 1));
   const clearFeaturedAutoAdvance = useCallback(() => {
     if (featuredAutoAdvanceRef.current) clearTimeout(featuredAutoAdvanceRef.current);

@@ -11,6 +11,7 @@ module.exports = defineConfig([
       'react-hooks/purity': 'off',
       'react-hooks/refs': 'off',
       'react-hooks/static-components': 'off',
+      'react-hooks/preserve-manual-memoization': 'off',
     },
   },
 ]);

@@ -407,12 +407,29 @@ export default function OffersScreen() {
     }
   };
 
+  const [singleDeals, setSingleDeals] = useState<any[]>([]);
+
+  // 4. Fetch danh mục Sách Lẻ Giảm Sâu từ Cache cục bộ nếu có
+  const fetchSingleDeals = async (_signal?: AbortSignal) => {
+    try {
+      const cached = await AsyncStorage.getItem("halm_offer_single_deals_v1");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setSingleDeals(parsed);
+        }
+      }
+    } catch {}
+  };
+
   // Nạp dữ liệu lần đầu khi vào màn hình
   useEffect(() => {
     const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Hydrate promotions, packages, and books on mount.
     fetchPackages(controller.signal);
     fetchPromotions(controller.signal);
     fetchBooks(controller.signal);
+    fetchSingleDeals(controller.signal);
     return () => controller.abort();
   }, []);
 
@@ -424,6 +441,7 @@ export default function OffersScreen() {
         fetchPackages(),
         fetchPromotions(),
         fetchBooks(),
+        fetchSingleDeals(),
         isLoggedIn
           ? fetchWalletBalanceApi().then((bal) => {
               if (bal !== null) setKhoaiBalance(bal);
@@ -479,19 +497,132 @@ export default function OffersScreen() {
   };
 
   // ==============================================================
-  // 1. SÁCH ƯU ĐÃI CHO HERO BANNER CÁNH QUẠT (Các cuốn sách được gán khuyến mãi theo book_id)
+  // 1. SÁCH LẺ GIẢM SÂU TỪ ADMIN (DÀNH CHO HERO BANNER CÁNH QUẠT)
+  // Chỉ hiển thị đúng các cuốn sách được Admin thêm vào mục "Sách Lẻ Giảm Sâu"
+  // Nếu Admin chưa thêm cuốn nào thì danh sách sẽ rỗng (không tự động lấy sách khác đắp vào)
   // ==============================================================
-  const promotionalBooks = useMemo(() => {
-    if (promotions.length === 0 || realBooks.length === 0) return [];
+  const adminSingleDeals = useMemo(() => {
+    const result: any[] = [];
+    const addedBookIds = new Set<string>();
 
-    const activePromos = promotions.filter(
-      (p) => !p.status || p.status.toUpperCase() === "ACTIVE"
+    // 1. Thu thập tất cả các Deal "Sách lẻ giảm sâu" từ CSDL MySQL (promotions) và Cache
+    const allDeals: any[] = [];
+    const seenDealKeys = new Set<string>();
+
+    // A. Lấy từ bảng promotions trong CSDL (do Admin vừa thêm hoặc đã lưu)
+    promotions.forEach((p) => {
+      const pid = String(p.promotion_id || "").trim();
+      const isDeal = pid.startsWith("DEAL_") || (p.description && String(p.description).includes('"isSingleDeal"'));
+      if (isDeal) {
+        let meta: any = {};
+        try {
+          if (p.description && p.description.trim().startsWith("{")) {
+            meta = JSON.parse(p.description);
+          }
+        } catch {}
+
+        const bId = meta.book_id || (pid.startsWith("DEAL_") ? pid.replace(/^DEAL_/, "") : "");
+        const pct = p.discount_percent > 0 ? p.discount_percent : (parseInt(String(meta.discount || "50").replace(/[^0-9]/g, ""), 10) || 50);
+
+        const dealObj = {
+          id: pid,
+          book_id: bId,
+          name: meta.name || p.promotion_name || "Sách Giảm Sâu",
+          author: meta.author || "HALM BOOK",
+          potato: meta.potato !== undefined ? Number(meta.potato) : Math.max(1, Math.round(15 * (1 - pct / 100))),
+          originalPotato: meta.originalPotato !== undefined ? Number(meta.originalPotato) : 15,
+          discount: meta.discount || `-${pct}%`,
+          category: meta.category || "Sách Chọn Lọc",
+          img: meta.img || null,
+        };
+
+        const key = String(bId || pid).toUpperCase();
+        if (!seenDealKeys.has(key)) {
+          seenDealKeys.add(key);
+          allDeals.push(dealObj);
+        }
+      }
+    });
+
+    // B. Bổ sung từ cache local singleDeals nếu có
+    singleDeals.forEach((d) => {
+      if (!d) return;
+      const key = String(d.book_id || d.id || "").toUpperCase();
+      if (key && !seenDealKeys.has(key)) {
+        seenDealKeys.add(key);
+        allDeals.push(d);
+      }
+    });
+
+    // C. Xử lý từng deal: Khớp với realBooks hoặc tạo item hiển thị
+    allDeals.forEach((deal, idx) => {
+      const dealBookId = String(deal.book_id || deal.id || "").trim().toUpperCase();
+      const dealNameNorm = (deal.name || "").trim().toLowerCase();
+
+      // Khớp trong realBooks theo book_id hoặc theo tên tác phẩm
+      const matched = realBooks.find((b) => {
+        const bid = String(b.book_id || "").trim().toUpperCase();
+        if (dealBookId && bid === dealBookId) return true;
+        const bTitle = (b.bookName || "").trim().toLowerCase();
+        return dealNameNorm && bTitle === dealNameNorm;
+      });
+
+      const pct = parseInt(String(deal.discount || "50").replace(/[^0-9]/g, ""), 10) || 50;
+
+      if (matched) {
+        const mBid = String(matched.book_id || "").trim().toUpperCase();
+        addedBookIds.add(mBid);
+        const base = matched.rent_price ?? (deal.originalPotato || 15);
+        const discPrice = deal.potato !== undefined ? Number(deal.potato) : Math.max(1, Math.round((base * (100 - pct)) / 100));
+        result.push({
+          ...matched,
+          rent_price: discPrice,
+          original_price: base,
+          discount_percent: pct,
+          promo_name: deal.discount ? `Giảm ${pct}% - ${deal.name}` : (deal.name || `Giảm ${pct}%`),
+        });
+      } else if (deal.name) {
+        const id = deal.book_id || deal.id || `deal-${idx}`;
+        addedBookIds.add(String(id).toUpperCase());
+        let imgUrl = deal.img || null;
+        if (imgUrl && typeof imgUrl === "string" && !/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(imgUrl)) {
+          const imagePath = imgUrl.startsWith("/") ? imgUrl : `/${imgUrl}`;
+          imgUrl = API_BASE_URL + imagePath;
+        }
+        result.push({
+          book_id: id,
+          bookName: deal.name,
+          author: deal.author || "HALM BOOK",
+          img_url: imgUrl,
+          rent_price: Number(deal.potato) || 8,
+          original_price: Number(deal.originalPotato) || 16,
+          discount_percent: pct,
+          promo_name: deal.discount ? `Giảm ${pct}% - ${deal.name}` : deal.name,
+          category_name: deal.category || "Sách Chọn Lọc",
+          description: null,
+          category_id: null,
+          readCount: 0,
+        });
+      }
+    });
+
+    return result;
+  }, [realBooks, promotions, singleDeals]);
+
+  // Sách ưu đãi từ mã khuyến mãi database thông thường (P003, P005...)
+  const dbPromotionalBooks = useMemo(() => {
+    const result: any[] = [];
+    const activeNormalPromos = promotions.filter(
+      (p) =>
+        (!p.status || p.status.toUpperCase() === "ACTIVE") &&
+        !String(p.promotion_id || "").startsWith("DEAL_") &&
+        !(p.description && String(p.description).includes('"isSingleDeal"'))
     );
-    if (activePromos.length === 0) return [];
 
-    // 1. Bản đồ book_id trực tiếp
+    if (activeNormalPromos.length === 0 || realBooks.length === 0) return [];
+
     const promoByBookId = new Map<string, PromotionItem>();
-    activePromos.forEach((p) => {
+    activeNormalPromos.forEach((p) => {
       if (p.book_id) {
         promoByBookId.set(String(p.book_id).trim().toUpperCase(), p);
       }
@@ -505,10 +636,20 @@ export default function OffersScreen() {
       }
     });
 
-    const result: any[] = [];
     realBooks.forEach((book) => {
       const bid = String(book.book_id || "").trim().toUpperCase();
-      const promo = promoByBookId.get(bid);
+      let promo = promoByBookId.get(bid);
+      if (!promo) {
+        const bTitleNorm = (book.bookName || "").trim().toLowerCase();
+        if (bTitleNorm) {
+          promo = activeNormalPromos.find((p) => {
+            const pName = (p.promotion_name || "").toLowerCase();
+            const pDesc = (p.description || "").toLowerCase();
+            return pName.includes(bTitleNorm) || pDesc.includes(bTitleNorm);
+          });
+        }
+      }
+
       if (promo) {
         const pct = promo.discount_percent > 0 ? promo.discount_percent : 20;
         const base = book.rent_price ?? 15;
@@ -525,6 +666,9 @@ export default function OffersScreen() {
 
     return result;
   }, [realBooks, promotions]);
+
+  // Backward compatibility alias
+  const promotionalBooks = adminSingleDeals;
 
   // ==============================================================
   // 2. SÁCH ƯU ĐÃI THEO THỂ LOẠI (Cho mục "Sách ưu đãi" phía dưới)
@@ -576,21 +720,29 @@ export default function OffersScreen() {
 
   // ==============================================================
   // 3. TOÀN BỘ SÁCH ƯU ĐÃI (DÀNH CHO MỤC "SÁCH ƯU ĐÃI")
-  // Tổng hợp tất cả các sách được giảm giá: theo từng sách (book_id)
-  // và theo thể loại (category_id), lọc trùng lặp và lấy % giảm tốt nhất.
+  // Tổng hợp tất cả các sách được giảm giá: sách giảm sâu từ Admin,
+  // sách khuyến mãi theo ID trong DB và sách giảm giá theo thể loại.
   // ==============================================================
   const displayDiscountBooks = useMemo(() => {
     const map = new Map<string, any>();
 
-    // 1. Thêm từ promotionalBooks (sách được gán khuyến mãi trực tiếp qua book_id)
-    promotionalBooks.forEach((book) => {
+    // 1. Thêm từ adminSingleDeals (Sách lẻ giảm sâu do Admin cấu hình)
+    adminSingleDeals.forEach((book) => {
       const bid = String(book.book_id || "").trim();
       if (bid) {
         map.set(bid, book);
       }
     });
 
-    // 2. Thêm từ categoryPromotionalBooks (sách được giảm giá theo thể loại)
+    // 2. Thêm từ dbPromotionalBooks (Sách khuyến mãi thông thường từ DB)
+    dbPromotionalBooks.forEach((book) => {
+      const bid = String(book.book_id || "").trim();
+      if (bid && !map.has(bid)) {
+        map.set(bid, book);
+      }
+    });
+
+    // 3. Thêm từ categoryPromotionalBooks (Sách được giảm giá theo thể loại)
     categoryPromotionalBooks.forEach((book) => {
       const bid = String(book.book_id || "").trim();
       if (bid) {
@@ -606,7 +758,7 @@ export default function OffersScreen() {
     });
 
     return Array.from(map.values());
-  }, [promotionalBooks, categoryPromotionalBooks]);
+  }, [adminSingleDeals, dbPromotionalBooks, categoryPromotionalBooks]);
 
   // Chia danh sách sách ưu đãi thành các line (mỗi line hiển thị tối đa 10 cuốn sách, hết 10 cuốn tự động xuống line 2)
   const discountBookRows = useMemo(() => {
@@ -621,10 +773,16 @@ export default function OffersScreen() {
   // ==============================================================
   // VOUCHER & TIỆN ÍCH ĐỘC QUYỀN (ĐỒNG BỘ TỪ PROMOTION TABLE TRONG CSDL)
   // Khi admin thêm voucher/khuyến mãi trên Web thì sẽ tự động hiện ở đây
+  // (Lọc bỏ các deal sách lẻ giảm sâu để chỉ hiển thị các Voucher thực thụ)
   // ==============================================================
   const voucherOffers = useMemo(() => {
     if (promotions.length === 0) return [];
-    return promotions.map((p) => {
+    const normalPromos = promotions.filter(
+      (p) =>
+        !String(p.promotion_id || "").startsWith("DEAL_") &&
+        !(p.description && String(p.description).includes('"isSingleDeal"'))
+    );
+    return normalPromos.map((p) => {
       const code = String(p.promotion_id || "VOUCHER").trim().toUpperCase();
       const title =
         p.promotion_name && p.promotion_name.trim().length > 0
@@ -665,19 +823,19 @@ export default function OffersScreen() {
     });
   }, [promotions]);
 
-  // Sách hiển thị trên Hero Banner: Ưu tiên promotionalBooks (theo book_id), nếu ít thì lấy thêm từ displayDiscountBooks
+  // Sách hiển thị trên Hero Banner Cánh Quạt:
+  // CHỈ hiển thị đúng các cuốn sách mà Admin cấu hình từ mục "Sách Lẻ Giảm Sâu" (adminSingleDeals)
+  // Nếu Admin chưa thêm cuốn nào trong mục này thì banner sẽ không hiển thị sách (rỗng)
   const heroBannerBooks = useMemo(() => {
-    if (promotionalBooks.length >= 3) return promotionalBooks;
-    if (displayDiscountBooks.length > 0) return displayDiscountBooks.slice(0, 10);
-    return promotionalBooks;
-  }, [promotionalBooks, displayDiscountBooks]);
+    return adminSingleDeals;
+  }, [adminSingleDeals]);
 
   // ==============================================================
   // CẤU HÌNH CAROUSEL CÁNH QUẠT & VÒNG LẶP VÔ TẬN TỪ SÁCH DATABASE
   // ==============================================================
   const promoCount = heroBannerBooks.length;
-  const loopCopies = 7;
-  const middleCopyIdx = 3;
+  const loopCopies = promoCount >= 3 ? 7 : (promoCount === 2 ? 6 : (promoCount === 1 ? 5 : 0));
+  const middleCopyIdx = Math.floor(loopCopies / 2);
   const startIndex = promoCount > 0 ? middleCopyIdx * promoCount : 0;
 
   const loopBooks = useMemo(() => {
