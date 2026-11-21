@@ -84,7 +84,7 @@ class LiveDemoTests {
 
     @Test @Transactional void userAndAdminAppendAndRetryAgainstRealMysql() {
         SecurityContextHolder.clearContext();
-        SupportTicket ticket = tickets.saveAndFlush(SupportTicket.builder().code("TEST-" + UUID.randomUUID())
+        SupportTicket ticket = tickets.saveAndFlush(SupportTicket.builder().code("TK-" + UUID.randomUUID())
                 .senderName("Kiểm thử").senderEmail("test@example.invalid").subject("Live test")
                 .message("Tin ban đầu").build());
         Map<String, String> one = Map.of("message", "Nhờ hỗ trợ", "requestId", "one", "code", ticket.getCode());

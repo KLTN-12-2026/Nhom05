@@ -82,37 +82,17 @@ async function deletedKey(username?: string) {
 }
 
 async function getDeletedIds(username?: string): Promise<Set<string>> {
-  try {
-    const key = await deletedKey(username);
-    const raw = await AsyncStorage.getItem(key);
-    if (!raw) return new Set();
-    const arr = JSON.parse(raw);
-    return new Set(Array.isArray(arr) ? arr.map(String) : []);
-  } catch {
-    return new Set();
-  }
-}
-
-async function addDeletedId(id: string, username?: string) {
-  try {
-    const key = await deletedKey(username);
-    const set = await getDeletedIds(username);
-    set.add(String(id));
-    await AsyncStorage.setItem(key, JSON.stringify(Array.from(set)));
-  } catch {
-    // Ignore storage error
-  }
+  const raw = await AsyncStorage.getItem(await deletedKey(username));
+  if (!raw) return new Set();
+  const values: unknown = JSON.parse(raw);
+  if (!Array.isArray(values)) throw new Error('Dữ liệu thông báo đã xóa không hợp lệ.');
+  return new Set(values.map(String));
 }
 
 async function addDeletedIds(ids: string[], username?: string) {
-  try {
-    const key = await deletedKey(username);
-    const set = await getDeletedIds(username);
-    ids.forEach((id) => set.add(String(id)));
-    await AsyncStorage.setItem(key, JSON.stringify(Array.from(set)));
-  } catch {
-    // Ignore storage error
-  }
+  const current = await getDeletedIds(username);
+  ids.forEach(id => current.add(id));
+  await AsyncStorage.setItem(await deletedKey(username), JSON.stringify([...current]));
 }
 
 function parseTimestamp(rawDate: unknown): number {
@@ -181,113 +161,63 @@ function mapBackendItem(item: BackendNotificationItem): AppNotification {
 }
 
 async function readLocal(key: string): Promise<AppNotification[]> {
-  try {
-    const raw = await AsyncStorage.getItem(key);
-    if (!raw) return [];
-    const list: unknown = JSON.parse(raw);
-    if (!Array.isArray(list)) return [];
-    return list
-      .filter(
-        (item): item is AppNotification =>
-          Boolean(item && typeof item.id === 'string' && typeof item.title === 'string' && Number.isFinite(item.timestamp))
-      )
-      .sort((a, b) => b.timestamp - a.timestamp);
-  } catch {
-    return [];
+  const raw = await AsyncStorage.getItem(key) ?? await AsyncStorage.getItem(key.replace(PREFIX, 'user_notifications_v1_'));
+  if (!raw) return [];
+  const list: unknown = JSON.parse(raw);
+  if (!Array.isArray(list) || list.some(item => !item || typeof item.id !== 'string'
+      || typeof item.title !== 'string' || !Number.isFinite(item.timestamp))) {
+    throw new Error('Dữ liệu thông báo không hợp lệ; lịch sử được giữ nguyên.');
   }
+  return list.sort((a, b) => b.timestamp - a.timestamp);
 }
 
 async function writeLocal(key: string, list: AppNotification[]) {
-  try {
-    await AsyncStorage.setItem(key, JSON.stringify(list));
-  } catch {
-    // Ignore storage write error
-  }
+  await AsyncStorage.setItem(key, JSON.stringify(list));
 }
 
-/**
- * Lấy danh sách thông báo:
- * 1. Đọc cache cục bộ để UI hiển thị ngay lập tức (Zero-latency).
- * 2. Nếu đã đăng nhập, gọi API backend GET /api/home/notifications để đồng bộ.
- * 3. Hợp nhất (merge) dữ liệu từ BE và các thông báo cục bộ (như sự kiện điểm danh, tải sách).
- * 4. Loại bỏ các thông báo người dùng đã bấm xóa.
- */
-export async function getNotifications(username?: string): Promise<AppNotification[]> {
-  const key = await storageKey(username);
-  const localItems = await readLocal(key);
-  const deletedSet = await getDeletedIds(username);
-
-  let mergedItems = localItems.filter((item) => !deletedSet.has(item.id) && (!item.backendId || !deletedSet.has(`be_${item.backendId}`)));
-
-  try {
-    const token = await AsyncStorage.getItem('userToken');
-    if (token) {
-      const response = await fetchApiWithFallback<BackendNotificationResponse>('/api/home/notifications', {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${token}` },
-        timeout: 5000,
-      });
-
-      if (response && response.data && Array.isArray(response.data.notifications)) {
-        const beList = response.data.notifications;
-        const beMapped = beList
-          .map(mapBackendItem)
-          .filter((item) => !deletedSet.has(item.id) && (!item.backendId || !deletedSet.has(`be_${item.backendId}`)));
-
-        // Merge BE notifications with local-only notifications (e.g. ones without backendId)
-        const beIdSet = new Set(beMapped.map((b) => b.id));
-        const localOnly = mergedItems.filter((loc) => !loc.backendId && !beIdSet.has(loc.id));
-
-        // Preserve local isRead state if local is already read
-        const localReadMap = new Map<string, boolean>();
-        mergedItems.forEach((m) => {
-          if (m.isRead) localReadMap.set(m.id, true);
-        });
-
-        const updatedBeList = beMapped.map((item) => {
-          if (localReadMap.has(item.id)) {
-            return { ...item, isRead: true };
-          }
-          return item;
-        });
-
-        mergedItems = [...updatedBeList, ...localOnly].sort((a, b) => b.timestamp - a.timestamp);
-
-        // Lưu vào cache cục bộ
-        await writeLocal(key, mergedItems);
-      }
-    }
-  } catch (error) {
-    // Nếu mất mạng hoặc server tạm thời bận, tiếp tục dùng cached data
-  }
-
-  return mergedItems;
-}
-
-// Serialize writes per account
+// Every cache merge, read-state update and deletion shares the same per-account queue.
 async function updateLocal(
   username: string | undefined,
-  change: (list: AppNotification[]) => AppNotification[]
+  change: (list: AppNotification[], owner: string) => AppNotification[] | Promise<AppNotification[]>,
+  notify = true
 ): Promise<AppNotification[]> {
-  const key = await storageKey(username);
+  const owner = username?.trim().toLowerCase() || await getCurrentUsername();
+  const key = await storageKey(owner);
   const previous = pending.get(key) ?? Promise.resolve();
-  let updatedList: AppNotification[] = [];
-
   const operation = previous.catch(() => {}).then(async () => {
-    const current = await readLocal(key);
-    updatedList = change(current);
-    await writeLocal(key, updatedList);
+    const updated = await change(await readLocal(key), owner);
+    await writeLocal(key, updated);
+    if (notify) notifyListeners();
+    return updated;
   });
-
   pending.set(key, operation);
-  try {
-    await operation;
-    notifyListeners();
-  } finally {
-    if (pending.get(key) === operation) pending.delete(key);
-  }
+  try { return await operation; }
+  finally { if (pending.get(key) === operation) pending.delete(key); }
+}
 
-  return updatedList;
+export async function getNotifications(username?: string): Promise<AppNotification[]> {
+  const owner = username?.trim().toLowerCase() || await getCurrentUsername();
+  // Validate local history before a network result can overwrite it.
+  await readLocal(await storageKey(owner));
+  let remote: AppNotification[] | undefined;
+  const token = await AsyncStorage.getItem('userToken');
+  if (token && owner === await getCurrentUsername()) {
+    try {
+      const response = await fetchApiWithFallback<BackendNotificationResponse>('/api/home/notifications', {
+        method: 'GET', headers: { Authorization: 'Bearer ' + token }, timeout: 5000,
+      });
+      if (Array.isArray(response.data?.notifications)) remote = response.data.notifications.map(mapBackendItem);
+    } catch { /* Network failure uses the last committed local inbox. */ }
+  }
+  return updateLocal(owner, async local => {
+    const deleted = await getDeletedIds(owner);
+    const localRead = new Set(local.filter(item => item.isRead).map(item => item.id));
+    const remoteIds = new Set(remote?.map(item => item.id));
+    const combined = remote ? [...remote.map(item => ({ ...item, isRead: item.isRead || localRead.has(item.id) })),
+      ...local.filter(item => !item.backendId && !remoteIds.has(item.id))] : local;
+    return combined.filter(item => !deleted.has(item.id) && (!item.backendId || !deleted.has(String(item.backendId))))
+      .sort((a, b) => b.timestamp - a.timestamp);
+  }, false);
 }
 
 export async function addNotification(
@@ -368,20 +298,17 @@ export async function markAllNotificationsAsRead(username?: string): Promise<voi
 }
 
 export async function deleteNotification(id: string, username?: string): Promise<void> {
-  await addDeletedId(id, username);
-  if (id.startsWith('be_')) {
-    const num = id.replace(/^be_/, '');
-    await addDeletedId(num, username);
-  }
-  await updateLocal(username, (list) => list.filter((item) => item.id !== id && `be_${item.backendId}` !== id));
+  await updateLocal(username, async (list, owner) => {
+    await addDeletedIds([id, ...(id.startsWith('be_') ? [id.slice(3)] : [])], owner);
+    return list.filter(item => item.id !== id && 'be_' + item.backendId !== id);
+  });
 }
 
 export async function clearAllNotifications(username?: string): Promise<void> {
-  const key = await storageKey(username);
-  const current = await readLocal(key);
-  const idsToDelete = current.flatMap((item) => [item.id, ...(item.backendId ? [`be_${item.backendId}`, String(item.backendId)] : [])]);
-  await addDeletedIds(idsToDelete, username);
-  await updateLocal(username, () => []);
+  await updateLocal(username, async (list, owner) => {
+    await addDeletedIds(list.flatMap(item => [item.id, ...(item.backendId ? [String(item.backendId)] : [])]), owner);
+    return [];
+  });
 }
 
 export async function getUnreadNotificationCount(username?: string): Promise<number> {

@@ -278,7 +278,7 @@ export default function App() {
     return activeTabRoute?.name ?? 'home';
   }, [routes]);
 
-  const navigate: AppNavigate = useCallback((name: AppScreen, params?: BookData | GenreBooksParams) => {
+  const navigate: AppNavigate = useCallback((name: AppScreen, params?: BookData | GenreBooksParams, options?: NavigationOptions) => {
     const book = name === 'genreBooks' ? undefined : params as BookData | undefined;
     const genre = name === 'genreBooks' ? params as GenreBooksParams : undefined;
     if (name === 'auth') {
@@ -290,41 +290,41 @@ export default function App() {
       if (name === 'upload') {
         showLoginAlert(lang === 'en' ? 'Please log in to use upload file feature' : 'Bạn phải đăng nhập mới dùng được chức năng uploadfile', () => {
           setIsFooterVisible(true);
-          setRoutes((current) => [...current, { name, book }]);
+          setRoutes((current) => [...current, { name, book, ...options }]);
         });
         return;
       }
       if (name === 'bookshelf') {
         showLoginAlert(lang === 'en' ? 'Please log in to use bookshelf feature' : 'Bạn phải đăng nhập để dùng chức năng tủ sách', () => {
           setIsFooterVisible(true);
-          setRoutes((current) => [...current, { name, book }]);
+          setRoutes((current) => [...current, { name, book, ...options }]);
         });
         return;
       }
       if (name === 'profile') {
         showLoginAlert(lang === 'en' ? 'Please log in to use profile feature' : 'Bạn phải đăng nhập để dùng chức năng trang cá nhân', () => {
           setIsFooterVisible(true);
-          setRoutes((current) => [...current, { name, book }]);
+          setRoutes((current) => [...current, { name, book, ...options }]);
         });
         return;
       }
       if (name === 'cart') {
         showLoginAlert(lang === 'en' ? 'Please log in to use cart feature' : 'Bạn phải đăng nhập để dùng chức năng giỏ hàng', () => {
           setIsFooterVisible(true);
-          setRoutes((current) => [...current, { name, book }]);
+          setRoutes((current) => [...current, { name, book, ...options }]);
         });
         return;
       }
       if (name === 'payment') {
         showLoginAlert(lang === 'en' ? 'Please log in to proceed to payment' : 'Bạn phải đăng nhập để thanh toán', () => {
           setIsFooterVisible(true);
-          setRoutes((current) => [...current, { name, book }]);
+          setRoutes((current) => [...current, { name, book, ...options }]);
         });
         return;
       }
     }
     setIsFooterVisible(true);
-    setRoutes((current) => [...current, { name, book, genre }]);
+    setRoutes((current) => [...current, { name, book, genre, ...options }]);
   }, [isLoggedIn, lang, showLoginAlert]);
 
   const handleModalLoginPress = useCallback(() => {
@@ -406,6 +406,12 @@ export default function App() {
       setChatMessages(current => current.filter(message => message.id === 'welcome'));
       setSessionActive(false);
       setIsLoggedIn(false);
+      const token = await AsyncStorage.getItem('userToken');
+      try {
+        if (token) await axios.post(API_BASE_URL + '/api/auth/logout', {}, {
+          headers: { Authorization: 'Bearer ' + token }, timeout: 5000,
+        });
+      } catch { /* Local logout must complete even when the server is unreachable. */ }
       await AsyncStorage.multiRemove([
         'userToken',
         'accessToken',
@@ -467,7 +473,7 @@ export default function App() {
       const response = await axios.post<{ reply: string }>(
         `${API_BASE_URL}/api/chat`,
         { message: text },
-        { headers, timeout: 45000, signal: controller.signal }
+        { headers, timeout: 120000, signal: controller.signal }
       );
       if (controller.signal.aborted || chatRequest.current !== controller) return;
 
@@ -516,18 +522,55 @@ export default function App() {
     }
   };
 
-  const clearChatMessages = () => {
-    setChatMessages([
-      {
-        id: 'welcome',
-        sender: 'bot',
-        text: lang === 'en'
-          ? 'Hello! I am HALM.AI - the smart virtual assistant of HALM BOOK. How can I help you today?'
-          : 'Xin chào! Mình là HALM.AI - trợ lý ảo của HALM BOOK. Bạn có thể hỏi mình tìm sách, tư vấn tác phẩm hoặc giải đáp thắc mắc!',
-        time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
-      },
-    ]);
+  const clearChatMessages = async () => {
+    if (chatRequest.current) return;
+    const controller = new AbortController();
+    chatRequest.current = controller;
+    setIsChatLoading(true);
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) { showLoginAlert('Vui lòng đăng nhập lại để xóa lịch sử.'); return; }
+      await axios.delete(API_BASE_URL + '/api/chat/history', {
+        headers: { Authorization: 'Bearer ' + token }, signal: controller.signal, timeout: 10000,
+      });
+      if (!controller.signal.aborted && chatRequest.current === controller) {
+        setChatMessages(current => current.filter(message => message.id === 'welcome'));
+      }
+    } catch {
+      if (!controller.signal.aborted) Alert.alert('Chưa xóa được lịch sử', 'Vui lòng thử lại khi kết nối ổn định.');
+    } finally {
+      if (chatRequest.current === controller) { chatRequest.current = null; setIsChatLoading(false); }
+    }
   };
+
+  useEffect(() => {
+    if (!isLoggedIn || currentRoute.name !== 'chatbot' || chatRequest.current) return;
+    const controller = new AbortController();
+    chatRequest.current = controller;
+    setIsChatLoading(true);
+    void (async () => {
+      try {
+        const token = await AsyncStorage.getItem('userToken');
+        if (!token || controller.signal.aborted) return;
+        const response = await axios.get<{ id: number; sender: 'user' | 'bot'; content: string; sentAt?: string }[]>(API_BASE_URL + '/api/chat/history', {
+          headers: { Authorization: 'Bearer ' + token }, signal: controller.signal, timeout: 10000,
+        });
+        if (controller.signal.aborted || chatRequest.current !== controller) return;
+        setChatMessages(current => [...current.filter(message => message.id === 'welcome'), ...response.data.map(row => ({
+          id: String(row.id), sender: row.sender, text: row.content,
+          time: row.sentAt ? new Date(row.sentAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '',
+        }))]);
+      } catch {
+        if (!controller.signal.aborted) Alert.alert('Chưa tải được lịch sử', 'Vui lòng thử mở lại hội thoại.');
+      } finally {
+        if (chatRequest.current === controller) { chatRequest.current = null; setIsChatLoading(false); }
+      }
+    })();
+    return () => {
+      controller.abort();
+      if (chatRequest.current === controller) { chatRequest.current = null; setIsChatLoading(false); }
+    };
+  }, [isLoggedIn, currentRoute.name]);
 
   const toggleDarkMode = useCallback(() => {
     setIsDarkMode((current) => {
@@ -629,7 +672,7 @@ export default function App() {
       screen = <HalmBookHistory />;
       break;
     case 'reader':
-      screen = <ManHinhDoc onBack={goBack} book={currentRoute.book} />;
+      screen = <ManHinhDoc key={currentRoute.book?.id} onBack={goBack} book={currentRoute.book} />;
       break;
     case 'payment':
       screen = <ThanhToan />;

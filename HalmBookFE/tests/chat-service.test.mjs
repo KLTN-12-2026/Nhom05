@@ -2,7 +2,7 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import axiosClient from '../src/services/axiosClient.js';
 import { saveAuthSession } from '../src/services/authToken.js';
-import { sendChatMessage, getChatHistory, clearChatHistory, getGuestConversationId, formatChatTime } from '../src/services/chatService.js';
+import { getChatErrorMessage, sendChatMessage, getChatHistory, clearChatHistory, getGuestConversationId, formatChatTime } from '../src/services/chatService.js';
 import { sendTicketMessage } from '../src/services/userSupportService.js';
 import { replyAdminTicket } from '../src/services/adminSupportService.js';
 import { readFileSync } from 'node:fs';
@@ -92,4 +92,12 @@ test('an older admin polling response cannot overwrite a newer transcript', asyn
     context.window.AdminSupportAPI.getTickets = async () => { throw new Error('offline'); };
     await context.loadTickets(true);
     assert.equal(vm.runInContext('allTickets[0].chatHistory.length', context), 2);
+});
+
+test('provider overload is shown as an error without saving a fake guest answer', async () => {
+    const error = { response: { status: 503, data: { error: 'AI_UNAVAILABLE', message: 'Gemini đang quá tải.' } } };
+    axiosClient.defaults.adapter = async () => { throw error; };
+    await assert.rejects(sendChatMessage('hello'), reason => reason === error);
+    assert.equal(getChatErrorMessage(error), 'Gemini đang quá tải.');
+    assert.deepEqual(await getChatHistory(), []);
 });

@@ -28,7 +28,8 @@ import { BookData, useAppNavigation } from './navigation';
 import { fetchApiWithFallback } from './apiService';
 import HomeCover from './home/HomeBookCover';
 import ContinueReading from './home/ContinueReading';
-import { formatHomeBookDate, getRankedHomeBooks, getRecentHomeBooks, readHomePage } from './home/homeData';
+import { formatHomeBookDate, getRankedHomeBooks, getRecentHomeBooks, HomeBookItem, readHomePage } from './home/homeData';
+export type { HomeBookItem };
 import { getBookCoverSource } from './bookCovers';
 import { getBookChapterLabel } from './bookContentService';
 import { useUnreadNotificationCount } from './useUnreadNotificationCount';
@@ -109,6 +110,8 @@ const mapBookDtoToItem = (item: any, index: number): HomeBookItem => {
 const CAROUSEL: any[] = [];
 
 // --- COMPONENT HIỆU ỨNG SAO VÀ VŨ TRỤ (copy từ uudai.tsx, đổi prefix Offers → Home) ---
+const DARK_MODE_PRIMARY = '#9A8BC2';
+const DARK_MODE_SECONDARY = '#D8B36A';
 
 function HomeNebula() {
   const animation = useRef(new Animated.Value(0)).current;
@@ -551,6 +554,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Start cancellable HTTP catalogue hydration on mount.
     void fetchBooks();
     return () => catalogRequest.current?.abort();
   }, [fetchBooks]);
@@ -572,8 +576,6 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
     inputRange: [0, 1],
     outputRange: [0, 0.55],
   });
-
-  const bgAnim = useRef(new Animated.Value(isDarkMode ? 1 : 0)).current;
 
   useEffect(() => {
     Animated.timing(bgAnim, {
@@ -674,6 +676,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
     featuredOffsetRef.current = 0;
     featuredIndexRef.current = 0;
     featuredRef.current?.scrollTo({ x: 0, animated: false });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Synchronize the carousel indicator with its imperative scroll reset.
     setFeaturedIndex(0);
   }, [featuredWidth, featuredItems.length]);
   useEffect(() => {

@@ -34,14 +34,12 @@ public class CartController {
     private CustomerService customerService;
 
     private int resolveCurrentUserId(Integer requestUserId) {
-        if (requestUserId != null && requestUserId > 0) {
-            return requestUserId;
+        int currentId = customerService.getCurrentAccountId();
+        if (currentId <= 0) throw new org.springframework.web.server.ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        if (requestUserId != null && requestUserId > 0 && requestUserId != currentId) {
+            throw new org.springframework.security.access.AccessDeniedException("Giỏ hàng không thuộc tài khoản hiện tại.");
         }
-        try {
-            return customerService.getCurrentAccountId();
-        } catch (Exception ignored) {
-            return 0;
-        }
+        return currentId;
     }
 
     /**
@@ -53,6 +51,8 @@ public class CartController {
             int resolvedUserId = resolveCurrentUserId(userId);
             List<CartItemDto> items = cartService.getCart(resolvedUserId);
             return ResponseEntity.ok(items);
+        } catch (org.springframework.security.access.AccessDeniedException | org.springframework.web.server.ResponseStatusException e) {
+            throw e;
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(Map.of("message", e.getMessage()));
@@ -72,6 +72,8 @@ public class CartController {
                     "message", "Thêm sách vào giỏ hàng thành công!",
                     "cartCount", count
             ));
+        } catch (org.springframework.security.access.AccessDeniedException | org.springframework.web.server.ResponseStatusException e) {
+            throw e;
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(Map.of("success", false, "message", e.getMessage()));
@@ -95,6 +97,8 @@ public class CartController {
             int resolvedUserId = resolveCurrentUserId(userId);
             CartItemDto updated = cartService.updateDuration(resolvedUserId, cartItemId, days);
             return ResponseEntity.ok(updated);
+        } catch (org.springframework.security.access.AccessDeniedException | org.springframework.web.server.ResponseStatusException e) {
+            throw e;
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(Map.of("success", false, "message", e.getMessage()));
@@ -117,6 +121,8 @@ public class CartController {
                     "message", "Đã xóa sách khỏi giỏ hàng!",
                     "cartItemId", cartItemId
             ));
+        } catch (org.springframework.security.access.AccessDeniedException | org.springframework.web.server.ResponseStatusException e) {
+            throw e;
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(Map.of("success", false, "message", e.getMessage()));
@@ -141,8 +147,10 @@ public class CartController {
                 }
             }
             int resolvedUserId = resolveCurrentUserId(userId);
-            CheckoutResponse response = cartService.checkout(resolvedUserId, cartItemIds);
+            CheckoutResponse response = cartService.checkout(resolvedUserId, cartItemIds, body == null ? null : (String) body.get("idempotencyKey"));
             return ResponseEntity.ok(response);
+        } catch (org.springframework.security.access.AccessDeniedException | org.springframework.web.server.ResponseStatusException e) {
+            throw e;
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(Map.of("success", false, "message", e.getMessage()));

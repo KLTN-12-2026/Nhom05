@@ -20,6 +20,13 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import org.mockito.ArgumentCaptor;
+import com.example.demochatbot.config.GlobalExceptionHandler;
+import com.openai.errors.InternalServerException;
+import com.openai.errors.OpenAIServiceException;
+import com.openai.core.http.Headers;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 class ChatRegressionTests {
     private final Customer customer = new Customer();
@@ -64,6 +71,67 @@ class ChatRegressionTests {
         doThrow(new IllegalStateException("DB unavailable")).when(history).saveTurn(any(), anyString(), anyString());
         assertThrows(IllegalStateException.class, () -> ai.chat(new ChatRequest("Chào"), "reader@example.test"));
         verify(response, times(1)).content();
+    }
+
+    private InternalServerException unavailable() {
+        return InternalServerException.builder().statusCode(503).headers(Headers.builder().build()).build();
+    }
+
+    @Test void provider503DoesNotSaveAnErrorAsAnAssistantReply() {
+        when(response.content()).thenThrow(unavailable());
+        AiChatException error = assertThrows(AiChatException.class,
+                () -> ai.chat(new ChatRequest("Gợi ý sách"), "reader@example.test"));
+        assertEquals(503, error.status().value());
+        assertEquals("AI_UNAVAILABLE", error.errorCode());
+        verify(history, never()).saveTurn(any(), anyString(), anyString());
+    }
+
+    @Test void guestProviderFailureDoesNotPolluteContextOnRetry() {
+        String conversation = UUID.randomUUID().toString();
+        when(response.content()).thenThrow(unavailable()).thenReturn("Đã hoạt động lại");
+        assertThrows(AiChatException.class, () -> ai.chat(new ChatRequest("Chào", conversation), "guest_session"));
+        assertEquals("Đã hoạt động lại", ai.chat(new ChatRequest("Chào", conversation), "guest_session"));
+        ArgumentCaptor<List<Message>> context = ArgumentCaptor.captor();
+        verify(prompt, times(2)).messages(context.capture());
+        assertTrue(context.getAllValues().stream().allMatch(List::isEmpty));
+        verifyNoInteractions(history);
+    }
+
+    @Test void provider503ReachesClientsAsRetryableHttp503() throws Exception {
+        when(response.content()).thenThrow(unavailable());
+        MockMvcBuilders.standaloneSetup(new ChatController(ai)).setControllerAdvice(new GlobalExceptionHandler()).build()
+                .perform(post("/api/chat").contentType("application/json").content("{\"message\":\"Hello\"}"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(header().string("Retry-After", "20"))
+                .andExpect(jsonPath("$.error").value("AI_UNAVAILABLE"))
+                .andExpect(jsonPath("$.retryable").value(true))
+                .andExpect(jsonPath("$.reply").isNotEmpty());
+    }
+
+    @Test void upstreamCredentialFailureDoesNotExpireTheReadersLogin() {
+        OpenAIServiceException provider = mock(OpenAIServiceException.class);
+        when(provider.statusCode()).thenReturn(401);
+        AiChatException error = AiChatException.from(provider);
+        assertEquals(503, error.status().value());
+        assertEquals("AI_CONFIGURATION_ERROR", error.errorCode());
+        assertEquals(0, error.retryAfterSeconds());
+    }
+
+    @Test void wrappedRateLimitAndTimeoutUseDifferentErrorCodes() {
+        OpenAIServiceException provider = mock(OpenAIServiceException.class);
+        when(provider.statusCode()).thenReturn(429);
+        AiChatException quota = AiChatException.from(new RuntimeException("wrapped", provider));
+        assertEquals(429, quota.status().value());
+        assertEquals("AI_RATE_LIMITED", quota.errorCode());
+        AiChatException timeout = AiChatException.from(new RuntimeException(new java.net.SocketTimeoutException()));
+        assertEquals(504, timeout.status().value());
+        assertEquals("AI_TIMEOUT", timeout.errorCode());
+    }
+
+    @Test void emptyReplyFailsWithoutCreatingHistory() {
+        when(response.content()).thenReturn(" ");
+        assertThrows(AiChatException.class, () -> ai.chat(new ChatRequest("Chào"), "reader@example.test"));
+        verify(history, never()).saveTurn(any(), anyString(), anyString());
     }
 
     @Test void guestsHaveSeparateContextsAndClearForgetsConversation() {

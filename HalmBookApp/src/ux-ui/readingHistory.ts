@@ -13,6 +13,7 @@ export interface ReadingBookRecord {
   img_url?: string;
   coverImage?: string | null;
   coverUri?: string | null;
+  isPersonal?: boolean;
   fileUri?: string;
   lastReadAt?: string;
 }
@@ -60,6 +61,7 @@ export const addToReadingList = async (book: Partial<ReadingBookRecord>): Promis
       coverImage: resolvedCover,
       coverUri: resolvedCover,
       fileUri: book.fileUri || existing?.fileUri || '',
+      isPersonal: book.isPersonal ?? existing?.isPersonal,
       lastReadAt: new Date().toISOString(),
     });
 

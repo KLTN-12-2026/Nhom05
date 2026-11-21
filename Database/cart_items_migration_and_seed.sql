@@ -5,23 +5,19 @@
 
 USE halmbook;
 
--- 1. Tạo bảng cart_items chuẩn theo đặc tả (kèm UNIQUE(user_id, book_id))
-CREATE TABLE IF NOT EXISTS cart_items (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    user_id VARCHAR(50) NOT NULL,
-    book_id VARCHAR(50) NOT NULL,
-    rental_days INT NOT NULL DEFAULT 7,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    CONSTRAINT uk_user_book UNIQUE (user_id, book_id),
-    CONSTRAINT fk_cart_items_user FOREIGN KEY (user_id) REFERENCES customer(customer_id) ON DELETE CASCADE,
-    CONSTRAINT fk_cart_items_book FOREIGN KEY (book_id) REFERENCES book(book_id) ON DELETE CASCADE
-) ENGINE=InnoDB CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+-- 1. Active persistence uses cart_item. Existing legacy cart_items data is left untouched.
 
 -- 2. Đồng bộ cột created_at, updated_at và ràng buộc UNIQUE(cart_id, book_id) cho bảng cart_item
-ALTER TABLE cart_item
-    ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+SET @halm_schema_sql = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='cart_item' AND COLUMN_NAME='created_at'), 'SELECT 1', 'ALTER TABLE cart_item ADD COLUMN created_at DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6)');
+PREPARE halm_schema_stmt FROM @halm_schema_sql;
+EXECUTE halm_schema_stmt;
+DEALLOCATE PREPARE halm_schema_stmt;
+
+SET @halm_schema_sql = IF(EXISTS(SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='cart_item' AND COLUMN_NAME='updated_at'), 'SELECT 1', 'ALTER TABLE cart_item ADD COLUMN updated_at DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)');
+PREPARE halm_schema_stmt FROM @halm_schema_sql;
+EXECUTE halm_schema_stmt;
+DEALLOCATE PREPARE halm_schema_stmt;
+
 
 -- 3. Cập nhật giá thuê gốc (rent_price - đơn vị Khoai) và tóm tắt nội dung (description) cho sách thật
 UPDATE book SET

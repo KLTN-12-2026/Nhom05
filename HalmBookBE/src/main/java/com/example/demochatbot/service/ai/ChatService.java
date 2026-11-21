@@ -253,12 +253,12 @@ public class ChatService {
                 throw new IllegalStateException("AI returned an empty response");
             }
         } catch (Exception e) {
-            if (e.getMessage() != null && e.getMessage().contains("429")) {
-                aiResponse = "Khoai Nhỏ đang nhận nhiều câu hỏi. Bạn đọc đợi khoảng 20-30 giây rồi thử lại nhé! 🥔🌱";
-            } else {
-                org.slf4j.LoggerFactory.getLogger(ChatService.class).warn("AI chat failed", e);
-                aiResponse = "Khoai Nhỏ đang gặp chút trục trặc kết nối. Bạn đọc vui lòng thử lại sau giây lát nhé! 🥔";
-            }
+            AiChatException failure = AiChatException.from(e);
+            org.slf4j.LoggerFactory.getLogger(ChatService.class).warn(
+                    "AI request failed: code={}, upstreamStatus={}, type={}",
+                    failure.errorCode(), failure.upstreamStatus(), e.getClass().getSimpleName());
+            // An unsuccessful generation must not become a saved BOT message or HTTP 200.
+            throw failure;
         }
         // Persistence failures propagate, instead of claiming that an unsaved message succeeded.
         if (customer != null) {

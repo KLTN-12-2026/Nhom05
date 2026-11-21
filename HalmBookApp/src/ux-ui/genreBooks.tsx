@@ -46,13 +46,8 @@ export default function GenreBooksScreen({ genre }: { genre?: GenreBooksParams }
   const accent = isDarkMode ? '#D8B36A' : '#8B4A3C';
 
   useEffect(() => {
-    if (!validGenre) {
-      setLoading(false);
-      return;
-    }
+    if (!validGenre) return;
     const controller = new AbortController();
-    setLoading(true);
-    setFailed(false);
     const load = async () => {
       try {
         const { data, baseUrl } = await fetchApiWithFallback<BookPage>('/api/home/books', {
@@ -130,7 +125,7 @@ export default function GenreBooksScreen({ genre }: { genre?: GenreBooksParams }
         ) : failed ? (
           <View style={styles.status}>
             <Text style={[styles.message, { color: mutedColor }]}>{lang === 'en' ? 'Unable to load books. Please try again.' : 'Không thể tải sách. Vui lòng thử lại.'}</Text>
-            <TouchableOpacity onPress={() => setRetry((value) => value + 1)} style={[styles.retry, { borderColor: accent }]} accessibilityRole="button">
+            <TouchableOpacity onPress={() => { setLoading(true); setFailed(false); setRetry((value) => value + 1); }} style={[styles.retry, { borderColor: accent }]} accessibilityRole="button">
               <Text style={{ color: accent }}>{lang === 'en' ? 'Retry' : 'Thử lại'}</Text>
             </TouchableOpacity>
           </View>

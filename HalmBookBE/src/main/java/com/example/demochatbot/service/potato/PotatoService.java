@@ -1,5 +1,6 @@
 package com.example.demochatbot.service.potato;
 
+import com.example.demochatbot.dto.TopupRequest;
 import com.example.demochatbot.dto.TransferRequest;
 import com.example.demochatbot.dto.WalletResponseDto;
 import com.example.demochatbot.model.PotatoPackage;
@@ -16,6 +17,7 @@ import java.util.List;
  */
 public interface PotatoService {
 
+
     /**
      * Lấy thông tin ví và số dư Khoai thực tế của tài khoản đăng nhập
      */
@@ -30,6 +32,11 @@ public interface PotatoService {
      * Lấy toàn bộ lịch sử giao dịch (sổ cái biến động số dư) của khách hàng
      */
     List<PotatoTransaction> getTransactionHistory(int accountId);
+
+    /**
+     * Thực hiện nạp Khoai theo gói hoặc theo số tiền chuyển khoản VietQR
+     */
+    PotatoTransaction topupPotato(int accountId, TopupRequest request);
 
     /**
      * Cộng Khoai cho giao dịch nạp đã được cổng thanh toán xác nhận.

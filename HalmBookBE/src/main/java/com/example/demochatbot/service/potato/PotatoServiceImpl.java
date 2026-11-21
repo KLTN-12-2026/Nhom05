@@ -1,5 +1,6 @@
 package com.example.demochatbot.service.potato;
 
+import com.example.demochatbot.dto.TopupRequest;
 import com.example.demochatbot.dto.TransferRequest;
 import com.example.demochatbot.dto.WalletResponseDto;
 import com.example.demochatbot.model.Customer;
@@ -226,6 +227,15 @@ public PotatoTransaction creditVerifiedTopup(
 
     return potatoTransactionRepository.save(transaction);
 }
+
+    /**
+     * Xử lý nạp Khoai Tây vào ví (VietQR 24/7) - Khóa bản ghi tránh race condition (IMP-03)
+     */
+    @Override
+    @Transactional
+    public PotatoTransaction topupPotato(int accountId, TopupRequest request) {
+        Customer initial = customerRepository.findCustomerById(accountId);
+        if (initial == null) {
             throw new RuntimeException("Không tìm thấy thông tin khách hàng!");
         }
         Customer customer = customerRepository.findByIdForUpdate(initial.getCustomer_id())
@@ -234,22 +244,43 @@ public PotatoTransaction creditVerifiedTopup(
             entityManager.refresh(customer, jakarta.persistence.LockModeType.PESSIMISTIC_WRITE);
         }
 
+        int totalKhoaiToAdd = 0;
+        String packageName = "Nạp Khoai Siêu Tốc";
+
+        if (request.getPackageId() != null && request.getPackageId() > 0) {
+            Optional<PotatoPackage> pkgOpt = potatoPackageRepository.findById(request.getPackageId());
+            if (pkgOpt.isPresent()) {
+                PotatoPackage pkg = pkgOpt.get();
+                totalKhoaiToAdd = pkg.getPotatoAmount() + pkg.getBonusPotato();
+                packageName = pkg.getPackageName();
+            }
+        }
+
+        if (totalKhoaiToAdd == 0) {
+            double money = (request.getAmountMoney() != null && request.getAmountMoney() > 0) ? request.getAmountMoney() : 50000.0;
+            totalKhoaiToAdd = (int) (money / 1000.0);
+        }
+
         int currentBalance = customer.getPotatoBalance() != null ? customer.getPotatoBalance() : 0;
-        int newBalance = Math.addExact(currentBalance, amount);
-        int currentEarned = customer.getTotalPotatoEarned() != null
-                ? customer.getTotalPotatoEarned()
-                : currentBalance;
+        int newBalance = currentBalance + totalKhoaiToAdd;
         customer.setPotatoBalance(newBalance);
-        customer.setTotalPotatoEarned(Math.addExact(currentEarned, amount));
+
+        int currentEarned = customer.getTotalPotatoEarned() != null ? customer.getTotalPotatoEarned() : currentBalance;
+        customer.setTotalPotatoEarned(currentEarned + totalKhoaiToAdd);
         customerRepository.save(customer);
-        tierService.calculateAndUpdateCustomerTier(customer);
+
+        try {
+            tierService.calculateAndUpdateCustomerTier(customer);
+        } catch (Exception e) {
+            System.err.println("Lỗi kiểm tra thăng hạng khi nạp khoai: " + e.getMessage());
+        }
 
         PotatoTransaction transaction = new PotatoTransaction();
         transaction.setCustomer(customer);
-        transaction.setAmount(amount);
+        transaction.setAmount(totalKhoaiToAdd);
         transaction.setBalanceAfter(newBalance);
         transaction.setType("TOPUP");
-        transaction.setDescription(description);
+        transaction.setDescription("Nạp " + packageName + " thành công qua VietQR 24/7");
         transaction.setCreatedAt(LocalDateTime.now());
 
         return potatoTransactionRepository.save(transaction);
@@ -268,19 +299,28 @@ public PotatoTransaction creditVerifiedTopup(
         }
 
         Double amountMoney = request.getAmountMoney();
+        PotatoPackage selectedPackage = null;
         if (request.getPackageId() != null) {
-            PotatoPackage selectedPackage = potatoPackageRepository.findById(request.getPackageId())
-                    .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy gói nạp đã chọn!"));
-            if (Boolean.FALSE.equals(selectedPackage.getIsActive())) {
-                throw new IllegalArgumentException("Gói nạp này hiện không còn khả dụng!");
-            }
+            selectedPackage = potatoPackageRepository.findById(request.getPackageId())
+                    .filter(pkg -> Boolean.TRUE.equals(pkg.getIsActive()))
+                    .orElseThrow(() -> new IllegalArgumentException("Gói nạp không còn khả dụng!"));
             amountMoney = selectedPackage.getPriceVnd();
         }
-        if (amountMoney == null || amountMoney <= 0) {
-            throw new IllegalArgumentException("Số tiền nạp phải lớn hơn 0!");
+        if (amountMoney == null || !Double.isFinite(amountMoney) || amountMoney < 1000
+                || amountMoney != Math.rint(amountMoney) || amountMoney / 1000 > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("Số tiền nạp không hợp lệ (tối thiểu 1.000đ)!");
+        }
+        int potatoAmount = selectedPackage == null ? (int) Math.round(amountMoney / 1000)
+                : Math.addExact(selectedPackage.getPotatoAmount(), selectedPackage.getBonusPotato() == null ? 0 : selectedPackage.getBonusPotato());
+        if (potatoAmount <= 0 || (selectedPackage != null && (selectedPackage.getPotatoAmount() <= 0
+                || (selectedPackage.getBonusPotato() != null && selectedPackage.getBonusPotato() < 0)))) {
+            throw new IllegalArgumentException("Số Khoai của gói nạp không hợp lệ.");
         }
 
         Orders order = new Orders();
+        order.setTopupPackageId(selectedPackage == null ? null : selectedPackage.getPackageId());
+        order.setTopupPackageName(selectedPackage == null ? "Nạp tùy chọn" : selectedPackage.getPackageName());
+        order.setTopupPotatoAmount(potatoAmount);
         order.setCustomer(customer);
         order.setTotal_amount(amountMoney);
         order.setPaymentCurrency("VND");

@@ -22,4 +22,6 @@ public interface CartService {
     void removeFromCart(int userId, int cartItemId);
 
     CheckoutResponse checkout(int userId, List<Integer> cartItemIds);
+
+    CheckoutResponse checkout(int userId, List<Integer> cartItemIds, String idempotencyKey);
 }

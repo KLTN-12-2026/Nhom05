@@ -906,6 +906,7 @@ export default function Toi() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Hydrate the account from AsyncStorage and HTTP, including the loading indicator.
     fetchUserData(true);
   }, [fetchUserData]);
 

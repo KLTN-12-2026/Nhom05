@@ -353,18 +353,12 @@ public class BookRentalAdminController {
                 List<Order_Item> orderItems = orderItemRepository.findLatestByCustomerAndBook(c, b);
                 if (orderItems != null && !orderItems.isEmpty()) {
                     Order_Item latestItem = orderItems.get(0);
-                    if (latestItem.getPrice() != null) {
-                        refundPotatoes = Math.max(0, Math.round(latestItem.getPrice()));
-                    }
-                } else if (b.getRent_price() != null) {
-                    refundPotatoes = Math.round(b.getRent_price());
-                } else {
-                    refundPotatoes = 10;
+                    refundPotatoes = com.example.demochatbot.service.order.CheckoutPricing.refundableAmount(latestItem);
                 }
 
                 if (refundPotatoes > 0) {
                     int curBalance = c.getPotatoBalance() != null ? c.getPotatoBalance() : 0;
-                    int newBalance = curBalance + (int) refundPotatoes;
+                    int newBalance = Math.addExact(curBalance, (int) refundPotatoes);
                     c.setPotatoBalance(newBalance);
                     customerRepository.save(c);
 
@@ -398,6 +392,9 @@ public class BookRentalAdminController {
             res.put("userName", c != null ? c.getCustomerName() : "");
             return ResponseEntity.ok(res);
         } catch (Exception e) {
+            if (org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()) {
+                org.springframework.transaction.interceptor.TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+            }
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("message", "Lỗi khi từ chối đơn thuê: " + e.getMessage()));

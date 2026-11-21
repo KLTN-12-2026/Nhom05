@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import { CANDIDATE_API_URLS } from './apiService';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -14,7 +15,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
-import Constants from 'expo-constants';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { useAppNavigation } from './navigation';
 import { getBookCoverSource } from './bookCovers';
@@ -25,21 +25,11 @@ const MAX_RECENT_SEARCHES = 8;
 const RECENT_BOOKS_KEY = '@halmbook_recent_search_books';
 const MAX_RECENT_BOOKS = 4;
 
-const debuggerHost = Constants.expoConfig?.hostUri;
-const localhost = debuggerHost ? debuggerHost.split(':')[0] : 'localhost';
-const API_BASE_URL = `http://${localhost}:8082`;
 
-const CANDIDATE_API_URLS = Array.from(
-  new Set([
-    API_BASE_URL,
-    'http://172.26.41.174:8082',
-    'http://192.168.1.7:8082',
-    'http://192.168.1.165:8082',
-    'http://localhost:8082',
-    'http://127.0.0.1:8082',
-    'http://10.0.2.2:8082',
-  ])
-);
+
+
+
+
 
 type SearchBookItem = {
   id: string;
@@ -153,7 +143,7 @@ export default function SearchScreen() {
   const [recent, setRecent] = useState<string[]>([]);
   const [recentBooks, setRecentBooks] = useState<SearchBookItem[]>([]);
   const [allBooks, setAllBooks] = useState<SearchBookItem[]>([]);
-  const [results, setResults] = useState<SearchBookItem[]>([]);
+  const results = useMemo(() => filterBooksByKeyword(allBooks, keyword), [allBooks, keyword]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [failedCovers, setFailedCovers] = useState<Record<string, boolean>>({});
@@ -339,7 +329,6 @@ export default function SearchScreen() {
       if (fetchedRawList) {
         const mappedBooks = fetchedRawList.map(mapApiBookToSearchItem);
         setAllBooks(mappedBooks);
-        setResults(filterBooksByKeyword(mappedBooks, trimmedQuery));
         setIsLoading(false);
       } else {
         setErrorMessage(
@@ -356,14 +345,11 @@ export default function SearchScreen() {
   // Tải danh sách sách thật từ MySQL ngay khi mở màn hình Tìm kiếm
   useEffect(() => {
     const controller = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Initial HTTP search hydration; subsequent filtering is derived with useMemo.
     searchBooksFromApi('', controller.signal);
     return () => controller.abort();
   }, [searchBooksFromApi]);
 
-  // Lọc kết quả tức thì trên dữ liệu thật từ MySQL khi người dùng nhập từ khóa
-  useEffect(() => {
-    setResults(filterBooksByKeyword(allBooks, keyword));
-  }, [keyword, allBooks]);
 
   // Khi người dùng nhấn Submit (Enter / Search) trên bàn phím
   const handleSubmitSearch = useCallback(

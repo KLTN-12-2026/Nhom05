@@ -75,6 +75,7 @@ export interface BookshelfItem {
   img_url?: string;
   coverImage?: string | null;
   coverUri?: string | null;
+  isPersonal?: boolean;
   fileUri?: string;
   pdf_url?: string;
   beBookId?: string;
@@ -408,6 +409,7 @@ export default function TuSach({ initialTab = 'dangdoc' }: { initialTab?: Booksh
   }, [loadBookshelfData]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Hydrate account-scoped AsyncStorage and rental API data on mount.
     loadBookshelfData();
   }, [loadBookshelfData]);
 
@@ -561,6 +563,7 @@ export default function TuSach({ initialTab = 'dangdoc' }: { initialTab?: Booksh
         title: item.title,
         author: item.author,
         fileUri: effectiveFileUri,
+        isPersonal: item.isPersonal === true || (/^(uploaded|upload|personal)[_-]/i.test(item.id) && /^(file:|content:|blob:|data:)/i.test(effectiveFileUri)),
         coverImage: rawCover,
         coverUri: rawCover,
         chapters: item.chapters,
