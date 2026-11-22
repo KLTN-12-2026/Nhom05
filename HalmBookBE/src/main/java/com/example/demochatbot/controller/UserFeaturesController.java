@@ -140,11 +140,14 @@ public class UserFeaturesController {
         }
 
         boolean hasAccess = !isExpired && "ACTIVE".equalsIgnoreCase(ar.getStatus());
+        double resolvedPct = com.example.demochatbot.service.evaluate.EvaluateServiceImpl.resolveReadingPercentage(ar.getBook(), ar);
 
         return ResponseEntity.ok().header("Cache-Control", "private, no-store").body(Map.of(
                 "hasAccess", hasAccess,
                 "currentPage", ar.getCurrentPage() != null && ar.getCurrentPage() > 0 ? ar.getCurrentPage() : 1,
-                "readingPercentage", ar.getReadingPercentage() != null ? ar.getReadingPercentage() : 0.0,
+                "readingPercentage", resolvedPct,
+                "canEvaluate", resolvedPct >= 50.0,
+                "requiredPercentage", 50.0,
                 "remainingDays", remainingDays,
                 "status", ar.getStatus() != null ? ar.getStatus() : "ACTIVE",
                 "lastReadAt", ar.getLastReadAt() != null ? ar.getLastReadAt().toString() : ""
@@ -189,9 +192,15 @@ public class UserFeaturesController {
 
         if (request.getReadingPercentage() != null) {
             ar.setReadingPercentage(Math.min(100.0, Math.max(0.0, request.getReadingPercentage())));
-        } else if (request.getTotalPages() != null && request.getTotalPages() > 0) {
-            double calcPercent = ((double) request.getCurrentPage() / request.getTotalPages()) * 100.0;
-            ar.setReadingPercentage(Math.min(100.0, Math.round(calcPercent * 10.0) / 10.0));
+        } else {
+            Integer totalPages = request.getTotalPages();
+            if ((totalPages == null || totalPages <= 0) && ar.getBook() != null) {
+                totalPages = ar.getBook().getTotalPages();
+            }
+            if (totalPages != null && totalPages > 0) {
+                double calcPercent = ((double) request.getCurrentPage() / totalPages) * 100.0;
+                ar.setReadingPercentage(Math.min(100.0, Math.max(0.0, Math.round(calcPercent * 10.0) / 10.0)));
+            }
         }
 
         ar.setLastReadAt(LocalDateTime.now());

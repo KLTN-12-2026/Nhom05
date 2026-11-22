@@ -430,20 +430,63 @@ function mapRawTransaction(
   };
 }
 
-function isWithinTimeRange(timestampMs: number, range: TimeRangeFilter): boolean {
-  if (range === 'all' || !timestampMs) return range === 'all';
-  const now = new Date();
-  if (range === 'today') {
-    const d = new Date(timestampMs);
-    return (
-      d.getFullYear() === now.getFullYear() &&
-      d.getMonth() === now.getMonth() &&
-      d.getDate() === now.getDate()
-    );
+function parseInputDateRangeMs(dateStr: string, isEndOfDay: boolean): number | null {
+  const clean = dateStr.trim();
+  if (!clean) return null;
+
+  let year = 0;
+  let month = 0;
+  let day = 0;
+
+  // Hỗ trợ DD/MM/YYYY hoặc DD-MM-YYYY
+  const dmyMatch = clean.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  // Hỗ trợ YYYY-MM-DD hoặc YYYY/MM/DD
+  const ymdMatch = clean.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/);
+
+  if (dmyMatch) {
+    day = Number(dmyMatch[1]);
+    month = Number(dmyMatch[2]);
+    year = Number(dmyMatch[3]);
+  } else if (ymdMatch) {
+    year = Number(ymdMatch[1]);
+    month = Number(ymdMatch[2]);
+    day = Number(ymdMatch[3]);
+  } else {
+    return null;
   }
-  const days = range === '7d' ? 7 : 30;
-  return Date.now() - timestampMs <= days * 24 * 60 * 60 * 1000;
+
+  if (month < 1 || month > 12 || day < 1 || day > 31 || year < 1970) {
+    return null;
+  }
+
+  const dt = isEndOfDay
+    ? new Date(year, month - 1, day, 23, 59, 59, 999)
+    : new Date(year, month - 1, day, 0, 0, 0, 0);
+
+  return Number.isNaN(dt.getTime()) ? null : dt.getTime();
 }
+
+function formatDmyDate(d: Date): string {
+  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
+function buildCalendarMonthCells(year: number, monthIndex: number): Array<number | null> {
+  // Thứ 2 là cột đầu tiên (0..6: T2..CN)
+  const firstDayOfWeek = new Date(year, monthIndex, 1).getDay(); // 0=CN, 1=T2...
+  const leadingBlanks = (firstDayOfWeek + 6) % 7;
+  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+  const cells: Array<number | null> = [];
+  for (let i = 0; i < leadingBlanks; i++) {
+    cells.push(null);
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    cells.push(d);
+  }
+  return cells;
+}
+
+const WEEKDAY_LABELS_VI = ['Hai', 'Ba', 'Tư', 'Năm', 'Sáu', 'Bảy', 'CN'];
+const WEEKDAY_LABELS_EN = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export default function HalmBookHistory() {
   const insets = useSafeAreaInsets();
@@ -479,8 +522,16 @@ export default function HalmBookHistory() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<TransactionCategoryFilter>('all');
-  const [timeRange, setTimeRange] = useState<TimeRangeFilter>('all');
-  const [rangePickerOpen, setRangePickerOpen] = useState(false);
+  const [fromDateInput, setFromDateInput] = useState('');
+  const [toDateInput, setToDateInput] = useState('');
+  const [appliedFromDate, setAppliedFromDate] = useState('');
+  const [appliedToDate, setAppliedToDate] = useState('');
+  const [hasQueried, setHasQueried] = useState(true);
+  const [calendarPickerTarget, setCalendarPickerTarget] = useState<'from' | 'to' | null>(null);
+  const [calendarMonthDate, setCalendarMonthDate] = useState<Date>(() => new Date());
+  const [draftFromDate, setDraftFromDate] = useState('');
+  const [draftToDate, setDraftToDate] = useState('');
+  const [selectedQuickPreset, setSelectedQuickPreset] = useState<7 | 15 | 30 | null>(null);
   const [selectedDetailTx, setSelectedDetailTx] = useState<TransactionItem | null>(null);
 
   const isMountedRef = useRef(true);
@@ -622,11 +673,25 @@ export default function HalmBookHistory() {
 
   const filteredTransactions = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
+    const rawFromMs = parseInputDateRangeMs(appliedFromDate, false);
+    const rawToMs = parseInputDateRangeMs(appliedToDate, true);
+
+    // Nếu người dùng chọn Từ ngày > Đến ngày thì tự động đảo mốc để luôn truy vấn đúng khoảng
+    let fromMs = rawFromMs;
+    let toMs = rawToMs;
+    if (rawFromMs !== null && rawToMs !== null && rawFromMs > rawToMs) {
+      fromMs = parseInputDateRangeMs(appliedToDate, false);
+      toMs = parseInputDateRangeMs(appliedFromDate, true);
+    }
+
     return transactions.filter((tx) => {
       if (filterType !== 'all' && tx.category !== filterType) {
         return false;
       }
-      if (!isWithinTimeRange(tx.timestampMs, timeRange)) {
+      if (fromMs !== null && (!tx.timestampMs || tx.timestampMs < fromMs)) {
+        return false;
+      }
+      if (toMs !== null && (!tx.timestampMs || tx.timestampMs > toMs)) {
         return false;
       }
       if (!query) return true;
@@ -645,14 +710,18 @@ export default function HalmBookHistory() {
         .toLowerCase();
       return searchable.includes(query);
     });
-  }, [transactions, filterType, timeRange, searchTerm, t, isDarkMode]);
+  }, [transactions, filterType, appliedFromDate, appliedToDate, searchTerm, t, isDarkMode]);
 
   const groupedSections = useMemo(
     () => groupTransactionsByDate(filteredTransactions, t),
     [filteredTransactions, t]
   );
 
-  const hasActiveFilter = filterType !== 'all' || timeRange !== 'all' || searchTerm.trim().length > 0;
+  const hasActiveFilter =
+    filterType !== 'all' ||
+    appliedFromDate.trim().length > 0 ||
+    appliedToDate.trim().length > 0 ||
+    searchTerm.trim().length > 0;
 
   const toggleSearch = () => {
     if (searchOpen) {
@@ -663,12 +732,91 @@ export default function HalmBookHistory() {
     }
   };
 
+  const openCalendarFor = (target: 'from' | 'to') => {
+    const now = new Date();
+    const todayFormatted = formatDmyDate(now);
+    const nextFrom = fromDateInput || todayFormatted;
+    const nextTo = toDateInput || todayFormatted;
+
+    setDraftFromDate(nextFrom);
+    setDraftToDate(nextTo);
+    setSelectedQuickPreset(null);
+
+    const currentStr = target === 'from' ? nextFrom : nextTo;
+    const parsedMs = parseInputDateRangeMs(currentStr, false);
+    if (parsedMs) {
+      setCalendarMonthDate(new Date(parsedMs));
+    } else {
+      setCalendarMonthDate(now);
+    }
+    setCalendarPickerTarget(target);
+  };
+
+  const handleSelectCalendarDay = (day: number) => {
+    const chosen = new Date(
+      calendarMonthDate.getFullYear(),
+      calendarMonthDate.getMonth(),
+      day
+    );
+    const formatted = formatDmyDate(chosen);
+    setSelectedQuickPreset(null);
+
+    if (calendarPickerTarget === 'from') {
+      const toMs = parseInputDateRangeMs(draftToDate, false);
+      if (toMs !== null && chosen.getTime() > toMs) {
+        setDraftFromDate(draftToDate);
+        setDraftToDate(formatted);
+      } else {
+        setDraftFromDate(formatted);
+      }
+      setCalendarPickerTarget('to');
+    } else {
+      const fromMs = parseInputDateRangeMs(draftFromDate, false);
+      if (fromMs !== null && chosen.getTime() < fromMs) {
+        setDraftToDate(draftFromDate);
+        setDraftFromDate(formatted);
+      } else {
+        setDraftToDate(formatted);
+      }
+      setCalendarPickerTarget('from');
+    }
+  };
+
+  const handleApplyQuickPreset = (days: 7 | 15 | 30) => {
+    setSelectedQuickPreset(days);
+    const endMs = parseInputDateRangeMs(draftToDate, false);
+    const endDate = endMs ? new Date(endMs) : new Date();
+    const startDate = new Date(
+      endDate.getFullYear(),
+      endDate.getMonth(),
+      endDate.getDate() - (days - 1)
+    );
+    setDraftFromDate(formatDmyDate(startDate));
+    setDraftToDate(formatDmyDate(endDate));
+    setCalendarMonthDate(new Date(endDate.getFullYear(), endDate.getMonth(), 1));
+  };
+
+  const handleConfirmCalendarPicker = () => {
+    if (draftFromDate) setFromDateInput(draftFromDate);
+    if (draftToDate) setToDateInput(draftToDate);
+    setCalendarPickerTarget(null);
+  };
+
+  const handleQueryByDateRange = () => {
+    setAppliedFromDate(fromDateInput.trim());
+    setAppliedToDate(toDateInput.trim());
+    setHasQueried(true);
+    void loadTransactionData('refresh');
+  };
+
   const resetFilters = () => {
     setFilterType('all');
-    setTimeRange('all');
+    setFromDateInput('');
+    setToDateInput('');
+    setAppliedFromDate('');
+    setAppliedToDate('');
     setSearchTerm('');
     setSearchOpen(false);
-    setRangePickerOpen(false);
   };
 
   const selectedDetailMeta = selectedDetailTx
@@ -707,7 +855,7 @@ export default function HalmBookHistory() {
           />
         }
       >
-        {/* Page Title Row (sits naturally beneath SharedHeader from App.tsx) */}
+        {/* Page Title Row */}
         <View style={styles.pageTitleBar}>
           <View style={styles.pageTitleLeft}>
             <TouchableOpacity
@@ -725,76 +873,7 @@ export default function HalmBookHistory() {
               {t.screenTitle}
             </Text>
           </View>
-
-          {!needsLogin ? (
-            <View style={styles.pageTitleActions}>
-              <TouchableOpacity
-                onPress={toggleSearch}
-                style={[
-                  styles.circleIconBtn,
-                  {
-                    backgroundColor: searchOpen ? palette.accentSoftBg : palette.cardBg,
-                    borderColor: searchOpen ? palette.accentSoftBorder : palette.border,
-                  },
-                ]}
-                activeOpacity={0.75}
-                accessibilityLabel={lang === 'en' ? 'Search' : 'Tìm kiếm'}
-              >
-                <Ionicons
-                  name={searchOpen ? 'close-outline' : 'search-outline'}
-                  size={18}
-                  color={searchOpen ? palette.accent : palette.textPrimary}
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() => loadTransactionData('refresh')}
-                style={[
-                  styles.circleIconBtn,
-                  { backgroundColor: palette.cardBg, borderColor: palette.border },
-                ]}
-                activeOpacity={0.75}
-                disabled={loading || refreshing}
-                accessibilityLabel={lang === 'en' ? 'Refresh' : 'Làm mới'}
-              >
-                {refreshing ? (
-                  <ActivityIndicator size="small" color={palette.accent} />
-                ) : (
-                  <Ionicons name="refresh-outline" size={18} color={palette.textPrimary} />
-                )}
-              </TouchableOpacity>
-            </View>
-          ) : null}
         </View>
-
-        {/* Collapsible Search Input */}
-        {!needsLogin && (searchOpen || searchTerm.length > 0) ? (
-          <View
-            style={[
-              styles.searchBox,
-              { backgroundColor: palette.cardBg, borderColor: palette.border },
-            ]}
-          >
-            <Ionicons name="search-outline" size={16} color={palette.textMuted} />
-            <TextInput
-              autoFocus={searchOpen}
-              style={[styles.searchInput, { color: palette.textPrimary }]}
-              placeholder={t.searchPlaceholder}
-              placeholderTextColor={palette.textMuted}
-              value={searchTerm}
-              onChangeText={setSearchTerm}
-              autoCapitalize="none"
-            />
-            {searchTerm.length > 0 ? (
-              <TouchableOpacity
-                onPress={() => setSearchTerm('')}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-              >
-                <Ionicons name="close-circle" size={17} color={palette.textMuted} />
-              </TouchableOpacity>
-            ) : null}
-          </View>
-        ) : null}
 
         {needsLogin ? (
           <View
@@ -918,79 +997,123 @@ export default function HalmBookHistory() {
               )}
             </ScrollView>
 
-            {/* Count + Time Range Trigger */}
-            <View style={styles.listMetaBar}>
-              <Text style={[styles.listCountText, { color: palette.textSecondary }]}>
-                {filteredTransactions.length} {t.countSuffix}
-              </Text>
-
-              <TouchableOpacity
-                style={[
-                  styles.rangeTriggerBtn,
-                  {
-                    backgroundColor: timeRange !== 'all' ? palette.accentSoftBg : palette.cardBg,
-                    borderColor: timeRange !== 'all' ? palette.accentSoftBorder : palette.border,
-                  },
-                ]}
-                onPress={() => setRangePickerOpen((prev) => !prev)}
-                activeOpacity={0.8}
-              >
-                <Ionicons
-                  name="calendar-outline"
-                  size={13}
-                  color={timeRange !== 'all' ? palette.accent : palette.textSecondary}
-                />
-                <Text
-                  style={[
-                    styles.rangeTriggerText,
-                    { color: timeRange !== 'all' ? palette.accent : palette.textSecondary },
-                    timeRange !== 'all' && styles.filterChipTextActive,
-                  ]}
-                >
-                  {t.ranges[timeRange]}
-                </Text>
-                <Ionicons
-                  name={rangePickerOpen ? 'chevron-up' : 'chevron-down'}
-                  size={13}
-                  color={timeRange !== 'all' ? palette.accent : palette.textSecondary}
-                />
-              </TouchableOpacity>
-            </View>
-
-            {rangePickerOpen ? (
-              <View style={styles.rangeRow}>
-                {(['all', 'today', '7d', '30d'] as TimeRangeFilter[]).map((rangeKey) => {
-                  const active = timeRange === rangeKey;
-                  return (
-                    <TouchableOpacity
-                      key={rangeKey}
+            {/* Khung Truy Vấn Theo Khoảng Ngày: Nhấn Từ ngày / Đến ngày mở Lịch & Nút Truy vấn không icon */}
+            <View
+              style={[
+                styles.dateQueryCard,
+                { backgroundColor: palette.cardBg, borderColor: palette.border },
+              ]}
+            >
+              <View style={styles.dateInputsRow}>
+                {/* Ô Từ ngày (Nhấn để mở Lịch chọn ngày) */}
+                <View style={styles.dateFieldCol}>
+                  <Text style={[styles.dateFieldLabel, { color: palette.textSecondary }]}>
+                    {lang === 'en' ? 'From date' : 'Từ ngày'}
+                  </Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.dateInputWrap,
+                      {
+                        backgroundColor: palette.subtleBg,
+                        borderColor:
+                          calendarPickerTarget === 'from'
+                            ? palette.accent
+                            : palette.border,
+                      },
+                    ]}
+                    onPress={() => openCalendarFor('from')}
+                    activeOpacity={0.78}
+                  >
+                    <Ionicons name="calendar-outline" size={14} color={palette.textSecondary} />
+                    <Text
                       style={[
-                        styles.rangePill,
+                        styles.dateInput,
                         {
-                          backgroundColor: active ? '#2F6B5F' : palette.cardBg,
-                          borderColor: active ? '#2F6B5F' : palette.border,
+                          color: fromDateInput
+                            ? palette.textPrimary
+                            : palette.textMuted,
                         },
                       ]}
-                      onPress={() => {
-                        setTimeRange(rangeKey);
-                        setRangePickerOpen(false);
-                      }}
-                      activeOpacity={0.8}
+                      numberOfLines={1}
                     >
-                      <Text
-                        style={[
-                          styles.rangePillText,
-                          { color: active ? '#FFFFFF' : palette.textSecondary },
-                          active && styles.filterChipTextActive,
-                        ]}
+                      {fromDateInput || (lang === 'en' ? 'Select date' : 'Chọn ngày')}
+                    </Text>
+                    {fromDateInput.length > 0 ? (
+                      <TouchableOpacity
+                        onPress={() => {
+                          setFromDateInput('');
+                          setAppliedFromDate('');
+                        }}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       >
-                        {t.ranges[rangeKey]}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                        <Ionicons name="close-circle" size={15} color={palette.textMuted} />
+                      </TouchableOpacity>
+                    ) : (
+                      <Ionicons name="chevron-down" size={13} color={palette.textMuted} />
+                    )}
+                  </TouchableOpacity>
+                </View>
+
+                {/* Ô Đến ngày (Nhấn để mở Lịch chọn ngày) */}
+                <View style={styles.dateFieldCol}>
+                  <Text style={[styles.dateFieldLabel, { color: palette.textSecondary }]}>
+                    {lang === 'en' ? 'To date' : 'Đến ngày'}
+                  </Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.dateInputWrap,
+                      {
+                        backgroundColor: palette.subtleBg,
+                        borderColor:
+                          calendarPickerTarget === 'to'
+                            ? palette.accent
+                            : palette.border,
+                      },
+                    ]}
+                    onPress={() => openCalendarFor('to')}
+                    activeOpacity={0.78}
+                  >
+                    <Ionicons name="calendar-outline" size={14} color={palette.textSecondary} />
+                    <Text
+                      style={[
+                        styles.dateInput,
+                        {
+                          color: toDateInput
+                            ? palette.textPrimary
+                            : palette.textMuted,
+                        },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {toDateInput || (lang === 'en' ? 'Select date' : 'Chọn ngày')}
+                    </Text>
+                    {toDateInput.length > 0 ? (
+                      <TouchableOpacity
+                        onPress={() => {
+                          setToDateInput('');
+                          setAppliedToDate('');
+                        }}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Ionicons name="close-circle" size={15} color={palette.textMuted} />
+                      </TouchableOpacity>
+                    ) : (
+                      <Ionicons name="chevron-down" size={13} color={palette.textMuted} />
+                    )}
+                  </TouchableOpacity>
+                </View>
               </View>
-            ) : null}
+
+              <TouchableOpacity
+                style={styles.querySubmitBtn}
+                onPress={handleQueryByDateRange}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.querySubmitBtnText}>
+                  {lang === 'en' ? 'Query' : 'Truy vấn'}
+                </Text>
+              </TouchableOpacity>
+            </View>
 
             {/* States / Grouped History List */}
             {loading && transactions.length === 0 ? (
@@ -1333,6 +1456,308 @@ export default function HalmBookHistory() {
           </View>
         </View>
       </Modal>
+
+      {/* Modal Lịch Chọn Khoảng Ngày (Giao diện chuẩn theo mẫu ảnh) */}
+      <Modal
+        visible={calendarPickerTarget !== null}
+        transparent
+        statusBarTranslucent
+        animationType="fade"
+        onRequestClose={() => setCalendarPickerTarget(null)}
+      >
+        <TouchableOpacity
+          style={styles.modalBackdrop}
+          activeOpacity={1}
+          onPress={() => setCalendarPickerTarget(null)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => {}}
+            style={[
+              styles.calendarModalCard,
+              { backgroundColor: palette.cardBg, borderColor: palette.border },
+            ]}
+          >
+            {/* Header 2 Cột: Từ ngày (Trái) — Đến ngày (Phải) */}
+            <View
+              style={[
+                styles.calendarRangeHeader,
+                { borderBottomColor: palette.divider },
+              ]}
+            >
+              <TouchableOpacity
+                style={styles.calendarRangeHeaderColLeft}
+                onPress={() => setCalendarPickerTarget('from')}
+                activeOpacity={0.75}
+              >
+                <Text
+                  style={[
+                    styles.calendarRangeHeaderLabel,
+                    {
+                      color:
+                        calendarPickerTarget === 'from'
+                          ? palette.accent
+                          : palette.textSecondary,
+                      fontWeight: calendarPickerTarget === 'from' ? '800' : '600',
+                    },
+                  ]}
+                >
+                  {lang === 'en' ? 'From date' : 'Từ ngày'}
+                </Text>
+                <Text
+                  style={[
+                    styles.calendarRangeHeaderDate,
+                    {
+                      color:
+                        calendarPickerTarget === 'from'
+                          ? palette.textPrimary
+                          : palette.textSecondary,
+                    },
+                  ]}
+                >
+                  {draftFromDate || '--/--/----'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.calendarRangeHeaderColRight}
+                onPress={() => setCalendarPickerTarget('to')}
+                activeOpacity={0.75}
+              >
+                <Text
+                  style={[
+                    styles.calendarRangeHeaderLabel,
+                    {
+                      color:
+                        calendarPickerTarget === 'to'
+                          ? palette.accent
+                          : palette.textSecondary,
+                      fontWeight: calendarPickerTarget === 'to' ? '800' : '600',
+                    },
+                  ]}
+                >
+                  {lang === 'en' ? 'To date' : 'Đến ngày'}
+                </Text>
+                <Text
+                  style={[
+                    styles.calendarRangeHeaderDate,
+                    {
+                      color:
+                        calendarPickerTarget === 'to'
+                          ? palette.textPrimary
+                          : palette.textSecondary,
+                    },
+                  ]}
+                >
+                  {draftToDate || '--/--/----'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Thanh điều hướng Tháng/Năm: Pill xanh bên trái + 2 mũi tên < > bên phải */}
+            <View style={styles.calendarMonthNavRow}>
+              <View style={styles.calendarMonthPill}>
+                <Ionicons name="calendar-outline" size={16} color="#FFFFFF" />
+                <Text style={styles.calendarMonthPillText}>
+                  {`${pad2(calendarMonthDate.getMonth() + 1)}/${calendarMonthDate.getFullYear()}`}
+                </Text>
+              </View>
+
+              <View style={styles.calendarArrowsWrap}>
+                <TouchableOpacity
+                  style={styles.calendarMonthArrowBtn}
+                  onPress={() =>
+                    setCalendarMonthDate(
+                      (prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1)
+                    )
+                  }
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="chevron-back" size={18} color={palette.textPrimary} />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.calendarMonthArrowBtn}
+                  onPress={() =>
+                    setCalendarMonthDate(
+                      (prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1)
+                    )
+                  }
+                  activeOpacity={0.7}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons name="chevron-forward" size={18} color={palette.textPrimary} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Hàng Thứ trong tuần: Hai Ba Tư Năm Sáu Bảy CN */}
+            <View style={styles.calendarWeekdaysRow}>
+              {(lang === 'en' ? WEEKDAY_LABELS_EN : WEEKDAY_LABELS_VI).map((wd) => (
+                <Text
+                  key={wd}
+                  style={[styles.calendarWeekdayText, { color: palette.accent }]}
+                >
+                  {wd}
+                </Text>
+              ))}
+            </View>
+
+            {/* Lưới các ngày trong tháng với dải nối khoảng Từ ngày -> Đến ngày */}
+            <View style={styles.calendarDaysGrid}>
+              {(() => {
+                const startMs = parseInputDateRangeMs(draftFromDate, false);
+                const endMs = parseInputDateRangeMs(draftToDate, false);
+                const minMs =
+                  startMs !== null && endMs !== null
+                    ? Math.min(startMs, endMs)
+                    : startMs;
+                const maxMs =
+                  startMs !== null && endMs !== null
+                    ? Math.max(startMs, endMs)
+                    : endMs;
+
+                return buildCalendarMonthCells(
+                  calendarMonthDate.getFullYear(),
+                  calendarMonthDate.getMonth()
+                ).map((dayNum, idx) => {
+                  if (dayNum === null) {
+                    return <View key={`blank_${idx}`} style={styles.calendarDayCell} />;
+                  }
+
+                  const cellDate = new Date(
+                    calendarMonthDate.getFullYear(),
+                    calendarMonthDate.getMonth(),
+                    dayNum,
+                    0,
+                    0,
+                    0,
+                    0
+                  );
+                  const cellMs = cellDate.getTime();
+                  const isStart = minMs !== null && cellMs === minMs;
+                  const isEnd = maxMs !== null && cellMs === maxMs;
+                  const isEndpoint = isStart || isEnd;
+                  const isBetween =
+                    minMs !== null &&
+                    maxMs !== null &&
+                    cellMs > minMs &&
+                    cellMs < maxMs;
+                  const hasRangeSpan =
+                    minMs !== null && maxMs !== null && minMs < maxMs;
+                  const isAfterRange =
+                    hasRangeSpan && maxMs !== null && cellMs > maxMs;
+
+                  return (
+                    <TouchableOpacity
+                      key={`day_${dayNum}`}
+                      style={styles.calendarDayCell}
+                      onPress={() => handleSelectCalendarDay(dayNum)}
+                      activeOpacity={0.75}
+                    >
+                      {/* Dải nền xanh nhạt nối giữa ngày bắt đầu và ngày kết thúc */}
+                      {hasRangeSpan && isBetween && (
+                        <View
+                          style={[
+                            styles.calendarRangeStripFull,
+                            { backgroundColor: palette.accentSoftBg },
+                          ]}
+                        />
+                      )}
+                      {hasRangeSpan && isStart && !isEnd && (
+                        <View
+                          style={[
+                            styles.calendarRangeStripRightHalf,
+                            { backgroundColor: palette.accentSoftBg },
+                          ]}
+                        />
+                      )}
+                      {hasRangeSpan && isEnd && !isStart && (
+                        <View
+                          style={[
+                            styles.calendarRangeStripLeftHalf,
+                            { backgroundColor: palette.accentSoftBg },
+                          ]}
+                        />
+                      )}
+
+                      <View
+                        style={[
+                          styles.calendarDayCircle,
+                          isEndpoint && styles.calendarDayCircleEndpoint,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.calendarDayText,
+                            { color: palette.textPrimary },
+                            isEndpoint && styles.calendarDayTextEndpoint,
+                            !isEndpoint &&
+                              isAfterRange && {
+                                color: palette.textMuted,
+                              },
+                          ]}
+                        >
+                          {pad2(dayNum)}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                });
+              })()}
+            </View>
+
+            {/* Hàng 3 nút chọn nhanh: 7 Ngày | 15 Ngày | 30 Ngày */}
+            <View style={styles.calendarPresetRow}>
+              {([7, 15, 30] as const).map((days) => {
+                const active = selectedQuickPreset === days;
+                return (
+                  <TouchableOpacity
+                    key={days}
+                    style={[
+                      styles.calendarPresetChip,
+                      active
+                        ? styles.calendarPresetChipActive
+                        : [
+                            styles.calendarPresetChipInactive,
+                            {
+                              backgroundColor: palette.cardBg,
+                              borderColor: palette.accent,
+                            },
+                          ],
+                    ]}
+                    onPress={() => handleApplyQuickPreset(days)}
+                    activeOpacity={0.8}
+                  >
+                    <Text
+                      style={[
+                        styles.calendarPresetChipText,
+                        active
+                          ? styles.calendarPresetChipTextActive
+                          : { color: palette.accent },
+                      ]}
+                    >
+                      {lang === 'en' ? `${days} Days` : `${days} Ngày`}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Nút Chọn ngày màu xanh đồng bộ màn hình */}
+            <TouchableOpacity
+              style={styles.calendarConfirmBtn}
+              onPress={handleConfirmCalendarPicker}
+              activeOpacity={0.88}
+            >
+              <Text style={styles.calendarConfirmBtnText}>
+                {lang === 'en' ? 'Select Date' : 'Chọn ngày'}
+              </Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -1442,34 +1867,237 @@ const styles = StyleSheet.create({
   filterChipText: { fontSize: 12.5, fontWeight: '600' },
   filterChipTextActive: { fontWeight: '700' },
 
-  listMetaBar: {
+  dateQueryCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 13,
+    marginBottom: 14,
+    gap: 11,
+  },
+  dateInputsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  dateFieldCol: {
+    flex: 1,
+    gap: 5,
+  },
+  dateFieldLabel: {
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
+  dateInputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 38,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    gap: 6,
+  },
+  dateInput: {
+    flex: 1,
+    fontSize: 12.5,
+    fontWeight: '600',
+    paddingVertical: 0,
+  },
+  querySubmitBtn: {
+    height: 40,
+    borderRadius: 11,
+    backgroundColor: '#2F6B5F',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  querySubmitBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13.5,
+    fontWeight: '700',
+  },
+  queryStatusRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
-    paddingHorizontal: 2,
+    paddingTop: 2,
   },
-  listCountText: { fontSize: 12.5, fontWeight: '600' },
-  rangeTriggerBtn: {
+  queryStatusText: {
+    fontSize: 11.5,
+    fontWeight: '600',
+  },
+  queryResetLink: {
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
+  calendarModalCard: {
+    width: '100%',
+    maxWidth: 365,
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 18,
+    paddingTop: 16,
+    paddingBottom: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.22,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  calendarRangeHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
-    borderWidth: 1,
+    justifyContent: 'space-between',
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    marginBottom: 16,
   },
-  rangeTriggerText: { fontSize: 12, fontWeight: '600' },
-
-  rangeRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
-  rangePill: {
-    flex: 1,
+  calendarRangeHeaderColLeft: {
+    alignItems: 'flex-start',
+  },
+  calendarRangeHeaderColRight: {
+    alignItems: 'flex-end',
+  },
+  calendarRangeHeaderLabel: {
+    fontSize: 12.5,
+    marginBottom: 4,
+  },
+  calendarRangeHeaderDate: {
+    fontSize: 16.5,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  calendarMonthNavRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 18,
+  },
+  calendarMonthPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2F6B5F',
+    paddingHorizontal: 14,
     paddingVertical: 7,
-    borderRadius: 10,
+    borderRadius: 999,
+    gap: 8,
+  },
+  calendarMonthPillText: {
+    color: '#FFFFFF',
+    fontSize: 13.5,
+    fontWeight: '700',
+  },
+  calendarArrowsWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 18,
+    paddingRight: 4,
+  },
+  calendarMonthArrowBtn: {
+    padding: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarWeekdaysRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  calendarWeekdayText: {
+    width: '14.2857%',
+    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  calendarDaysGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 14,
+  },
+  calendarDayCell: {
+    width: '14.2857%',
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    marginVertical: 2,
+  },
+  calendarRangeStripFull: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 38,
+  },
+  calendarRangeStripRightHalf: {
+    position: 'absolute',
+    left: '50%',
+    right: 0,
+    height: 38,
+  },
+  calendarRangeStripLeftHalf: {
+    position: 'absolute',
+    left: 0,
+    right: '50%',
+    height: 38,
+  },
+  calendarDayCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  calendarDayCircleEndpoint: {
+    backgroundColor: '#2F6B5F',
+  },
+  calendarDayText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  calendarDayTextEndpoint: {
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  calendarPresetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 16,
+  },
+  calendarPresetChip: {
+    flex: 1,
+    height: 36,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarPresetChipActive: {
+    backgroundColor: '#2F6B5F',
+  },
+  calendarPresetChipInactive: {
     borderWidth: 1,
   },
-  rangePillText: { fontSize: 12, fontWeight: '600' },
+  calendarPresetChipText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
+  calendarPresetChipTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+  },
+  calendarConfirmBtn: {
+    height: 46,
+    borderRadius: 10,
+    backgroundColor: '#2F6B5F',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarConfirmBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15.5,
+    fontWeight: '700',
+  },
 
   centerLoading: { paddingVertical: 52, alignItems: 'center', gap: 12 },
   centerLoadingText: { fontSize: 13.5 },

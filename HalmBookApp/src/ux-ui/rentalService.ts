@@ -143,19 +143,41 @@ export interface BookAccessDetail {
   isForever: boolean;
   status: string;
   checkedFromServer: boolean;
+  canEvaluate?: boolean;
+  requiredPercentage?: number;
+}
+
+export interface EvaluateEligibilityResult {
+  status: 'ELIGIBLE' | 'INSUFFICIENT_PROGRESS' | 'AUTH_REQUIRED' | 'NETWORK_ERROR';
+  canEvaluate: boolean;
+  readingPercentage: number;
+  requiredPercentage: number;
+  hasReadRecord: boolean;
+  currentPage: number;
+  totalPages: number;
+  checkedFromServer: boolean;
+  message?: string;
 }
 
 export interface CheckoutLineItem {
   bookId: string;
   cartItemId?: number | null;
   durationDays: number;
+  planKey?: string;
+  offerId?: string | null;
   price: number;
+}
+
+export interface CheckoutRequestOptions {
+  policyRevision?: number;
+  couponCode?: string;
 }
 
 export interface RentalActionResult {
   success: boolean;
   message: string;
   requireLogin?: boolean;
+  statusCode?: number;
   totalKhoaiPaid?: number;
   remainingPotatoBalance?: number;
 }
@@ -337,11 +359,18 @@ export const checkBookAccessDetailApi = async (bookId: string, signal?: AbortSig
     if (!data || typeof data.hasAccess !== 'boolean') return denied('NETWORK_ERROR');
     const status = String(data.status || (data.hasAccess ? 'ACTIVE' : 'NONE')).toUpperCase();
     const remainingDays = Number(data.remainingDays || 0);
+    const readingPercentage = Number(data.readingPercentage || 0);
+    const requiredPercentage = Number(data.requiredPercentage || 50);
     return {
       hasAccess: data.hasAccess === true && status === 'ACTIVE',
-      currentPage: Number(data.currentPage || 1), readingPercentage: Number(data.readingPercentage || 0),
-      remainingDays, isForever: Boolean(data.isForever ?? data.forever) || remainingDays > 1000,
-      status, checkedFromServer: true,
+      currentPage: Number(data.currentPage || 1),
+      readingPercentage,
+      remainingDays,
+      isForever: Boolean(data.isForever ?? data.forever) || remainingDays > 1000,
+      status,
+      checkedFromServer: true,
+      canEvaluate: typeof data.canEvaluate === 'boolean' ? data.canEvaluate : readingPercentage >= requiredPercentage,
+      requiredPercentage,
     };
   } catch (err: any) {
     if (signal?.aborted) throw err;
@@ -351,6 +380,111 @@ export const checkBookAccessDetailApi = async (bookId: string, signal?: AbortSig
     if (status === 403) return denied('REVOKED', true);
     // Cached bookshelf entries are display data, never a source of permission to read.
     return denied('NETWORK_ERROR');
+  }
+};
+
+/**
+ * Kiểm tra tiến độ đọc thực tế và điều kiện đánh giá sách (>= 50%) từ Backend
+ * (GET /api/home/books/{bookId}/reading-progress)
+ */
+export const checkEvaluateEligibilityApi = async (
+  bookId: string,
+  signal?: AbortSignal
+): Promise<EvaluateEligibilityResult> => {
+  const baseResult = (
+    status: EvaluateEligibilityResult['status'],
+    checkedFromServer: boolean,
+    message?: string
+  ): EvaluateEligibilityResult => ({
+    status,
+    canEvaluate: false,
+    readingPercentage: 0,
+    requiredPercentage: 50,
+    hasReadRecord: false,
+    currentPage: 0,
+    totalPages: 0,
+    checkedFromServer,
+    message,
+  });
+
+  if (!bookId || !bookId.trim()) {
+    return baseResult('NETWORK_ERROR', false, 'Mã sách không hợp lệ.');
+  }
+
+  const token = await AsyncStorage.getItem('userToken');
+  if (!token) {
+    return baseResult('AUTH_REQUIRED', true, 'Bạn cần đăng nhập tài khoản HALMBOOK để có thể đánh giá sách.');
+  }
+
+  try {
+    const res = await fetchApiWithFallback(
+      `/api/home/books/${encodeURIComponent(bookId.trim())}/reading-progress`,
+      {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 5000,
+        signal,
+      }
+    );
+    const data = res.data;
+    if (!data || typeof data !== 'object') {
+      return baseResult('NETWORK_ERROR', false, 'Dữ liệu tiến độ đọc từ máy chủ không hợp lệ.');
+    }
+    if (data.authenticated === false || data.code === 'AUTH_REQUIRED') {
+      return baseResult('AUTH_REQUIRED', true, data.message || 'Vui lòng đăng nhập để đánh giá sách.');
+    }
+
+    const rawPct = Number(data.readingPercentage ?? 0);
+    const readingPercentage = Number.isFinite(rawPct) ? Math.min(100, Math.max(0, rawPct)) : 0;
+    const rawReq = Number(data.requiredPercentage ?? 50);
+    const requiredPercentage = Number.isFinite(rawReq) && rawReq > 0 ? rawReq : 50;
+    const canEvaluate =
+      typeof data.canEvaluate === 'boolean'
+        ? data.canEvaluate && readingPercentage >= requiredPercentage
+        : readingPercentage >= requiredPercentage;
+
+    return {
+      status: canEvaluate ? 'ELIGIBLE' : 'INSUFFICIENT_PROGRESS',
+      canEvaluate,
+      readingPercentage,
+      requiredPercentage,
+      hasReadRecord: Boolean(data.hasReadRecord),
+      currentPage: Number(data.currentPage || 0),
+      totalPages: Number(data.totalPages || 0),
+      checkedFromServer: true,
+    };
+  } catch (err: any) {
+    if (signal?.aborted) throw err;
+    const httpStatus = err?.response?.status;
+    if (httpStatus === 401) {
+      return baseResult(
+        'AUTH_REQUIRED',
+        true,
+        extractServerErrorMessage(err, 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')
+      );
+    }
+    if (httpStatus === 403 && err?.response?.data?.code === 'INSUFFICIENT_READING_PROGRESS') {
+      const pct = Number(err?.response?.data?.readingPercentage ?? 0);
+      return {
+        status: 'INSUFFICIENT_PROGRESS',
+        canEvaluate: false,
+        readingPercentage: Number.isFinite(pct) ? Math.min(100, Math.max(0, pct)) : 0,
+        requiredPercentage: Number(err?.response?.data?.requiredPercentage ?? 50) || 50,
+        hasReadRecord: pct > 0,
+        currentPage: 0,
+        totalPages: 0,
+        checkedFromServer: true,
+        message: extractServerErrorMessage(err, ''),
+      };
+    }
+    return baseResult(
+      'NETWORK_ERROR',
+      false,
+      extractServerErrorMessage(
+        err,
+        'Không thể kết nối máy chủ để xác minh tiến độ đọc. Vui lòng kiểm tra kết nối mạng và thử lại.'
+      )
+    );
   }
 };
 
@@ -463,7 +597,8 @@ export const addToCartApi = async (
  */
 const executeCheckout = async (
   items: CheckoutLineItem[],
-  cartItemIds?: number[]
+  cartItemIds?: number[],
+  options?: CheckoutRequestOptions
 ): Promise<RentalActionResult> => {
   const token = await AsyncStorage.getItem('userToken');
   if (!token) {
@@ -481,16 +616,23 @@ const executeCheckout = async (
   const headers = { Authorization: `Bearer ${token}` };
 
   try {
-    const payload = {
+    const payload: Record<string, any> = {
       paymentMethod: 'POTATO_WALLET',
       discountAmount: 0,
       items: items.map((item, index) => ({
         bookId: item.bookId,
         cartItemId: item.cartItemId ?? cartItemIds?.[index] ?? null,
-        planKey: String(item.durationDays),
+        planKey: item.planKey || (item.durationDays === 36500 ? 'forever' : String(item.durationDays)),
         durationDays: item.durationDays,
+        ...(item.offerId ? { offerId: item.offerId } : {}),
       })).sort((a, b) => a.bookId.localeCompare(b.bookId)),
     };
+    if (typeof options?.policyRevision === 'number') {
+      payload.policyRevision = options.policyRevision;
+    }
+    if (options?.couponCode !== undefined) {
+      payload.couponCode = options.couponCode;
+    }
 
     const identity = JSON.stringify(payload);
     const pendingKey = 'checkout_pending_' + (await AsyncStorage.getItem('currentUsername') || 'unknown');
@@ -516,15 +658,18 @@ const executeCheckout = async (
       remainingPotatoBalance: remaining,
     };
   } catch (err: any) {
-    if (err?.response?.status === 401) {
+    const statusCode = err?.response?.status;
+    if (statusCode === 401) {
       return {
         success: false,
         requireLogin: true,
+        statusCode,
         message: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
       };
     }
     return {
       success: false,
+      statusCode,
       message: extractServerErrorMessage(
         err,
         'Không thể thực hiện giao dịch thuê sách. Vui lòng kiểm tra số dư Khoai.'
@@ -571,12 +716,16 @@ export const syncReadingProgressApi = async (
 
 
 const activeCheckouts = new Map<string, { identity: string; promise: Promise<RentalActionResult> }>();
-export const checkoutBooksApi = async (items: CheckoutLineItem[], cartItemIds?: number[]): Promise<RentalActionResult> => {
+export const checkoutBooksApi = async (
+  items: CheckoutLineItem[],
+  cartItemIds?: number[],
+  options?: CheckoutRequestOptions
+): Promise<RentalActionResult> => {
   const owner = await AsyncStorage.getItem('currentUsername') || 'guest';
-  const identity = JSON.stringify({ items, cartItemIds });
+  const identity = JSON.stringify({ items, cartItemIds, options });
   const active = activeCheckouts.get(owner);
   if (active) return active.identity === identity ? active.promise : { success: false, message: 'Một giao dịch khác đang được xử lý. Vui lòng chờ.' };
-  const promise = executeCheckout(items, cartItemIds);
+  const promise = executeCheckout(items, cartItemIds, options);
   activeCheckouts.set(owner, { identity, promise });
   try { return await promise; } finally { if (activeCheckouts.get(owner)?.promise === promise) activeCheckouts.delete(owner); }
 };

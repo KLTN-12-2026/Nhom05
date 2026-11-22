@@ -510,8 +510,75 @@ public class HomeController {
     }
 
     /**
+     * API kiểm tra tiến độ đọc thực tế và điều kiện đánh giá sách (>= 50%)
+     */
+    @GetMapping({"/books/{bookId}/reading-progress", "/books/{bookId}/evaluate-eligibility"})
+    public ResponseEntity<?> getBookReadingProgressAndEligibility(@PathVariable("bookId") String bookId) {
+        try {
+            Integer accountId = null;
+            try {
+                int resolved = customerService.getCurrentAccountId();
+                if (resolved > 0) {
+                    accountId = resolved;
+                }
+            } catch (Exception ignored) {}
+
+            if (accountId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
+                        .body(Map.of(
+                                "code", "AUTH_REQUIRED",
+                                "authenticated", false,
+                                "canEvaluate", false,
+                                "readingPercentage", 0.0,
+                                "requiredPercentage", 50.0,
+                                "message", "Vui lòng đăng nhập để kiểm tra tiến độ đọc và đánh giá sách."
+                        ));
+            }
+
+            EvaluateService.EvaluateEligibility eligibility = evaluateService.checkEvaluateEligibility(bookId, accountId);
+            if (!eligibility.authenticated()) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
+                        .body(Map.of(
+                                "code", "AUTH_REQUIRED",
+                                "authenticated", false,
+                                "canEvaluate", false,
+                                "readingPercentage", 0.0,
+                                "requiredPercentage", 50.0,
+                                "message", "Vui lòng đăng nhập để kiểm tra tiến độ đọc và đánh giá sách."
+                        ));
+            }
+
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
+                    .body(Map.of(
+                            "authenticated", true,
+                            "bookId", eligibility.bookId(),
+                            "bookTitle", eligibility.bookTitle(),
+                            "hasReadRecord", eligibility.hasReadRecord(),
+                            "currentPage", eligibility.currentPage(),
+                            "totalPages", eligibility.totalPages(),
+                            "readingPercentage", eligibility.readingPercentage(),
+                            "requiredPercentage", eligibility.requiredPercentage(),
+                            "canEvaluate", eligibility.canEvaluate()
+                    ));
+        } catch (org.springframework.web.server.ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode())
+                    .body(Map.of("message", e.getReason() != null ? e.getReason() : "Không thể kiểm tra tiến độ đọc."));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Lỗi kiểm tra tiến độ đọc: " + e.getMessage()));
+        }
+    }
+
+    /**
      * API gửi đánh giá sách mới (kèm số sao 1-5 và nội dung cảm nhận)
-     * Thưởng +5 Khoai cho người đọc khi đánh giá thành công
+     * Chỉ chấp nhận khi người dùng đã đăng nhập và tiến độ đọc đạt từ 50% trở lên.
+     * Thưởng +5 Khoai cho người đọc khi đánh giá thành công.
      */
     @PostMapping("/books/{bookId}/evaluates")
     public ResponseEntity<?> createBookEvaluate(
@@ -525,13 +592,42 @@ public class HomeController {
 
             Integer accountId = null;
             try {
-                accountId = customerService.getCurrentAccountId();
-            } catch (Exception ignored) {
-                // Cho phép khách vãng lai gửi đánh giá ẩn danh
+                int resolved = customerService.getCurrentAccountId();
+                if (resolved > 0) {
+                    accountId = resolved;
+                }
+            } catch (Exception ignored) {}
+
+            if (accountId == null) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of(
+                                "code", "AUTH_REQUIRED",
+                                "canEvaluate", false,
+                                "message", "Vui lòng đăng nhập để đánh giá sách."
+                        ));
+            }
+
+            EvaluateService.EvaluateEligibility eligibility = evaluateService.checkEvaluateEligibility(bookId, accountId);
+            if (!eligibility.canEvaluate()) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(Map.of(
+                                "code", "INSUFFICIENT_READING_PROGRESS",
+                                "canEvaluate", false,
+                                "readingPercentage", eligibility.readingPercentage(),
+                                "requiredPercentage", eligibility.requiredPercentage(),
+                                "message", "Quý khách chưa thể đánh giá sách \"" + eligibility.bookTitle() + "\" vào thời điểm hiện tại."
+                        ));
             }
 
             EvaluateDto created = evaluateService.createEvaluate(request, accountId);
             return ResponseEntity.status(HttpStatus.CREATED).body(created);
+        } catch (org.springframework.web.server.ResponseStatusException e) {
+            return ResponseEntity.status(e.getStatusCode())
+                    .body(Map.of(
+                            "code", e.getStatusCode().value() == 403 ? "INSUFFICIENT_READING_PROGRESS" : "EVALUATE_REJECTED",
+                            "canEvaluate", false,
+                            "message", e.getReason() != null ? e.getReason() : "Không thể gửi đánh giá."
+                    ));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", e.getMessage()));
         } catch (Exception e) {

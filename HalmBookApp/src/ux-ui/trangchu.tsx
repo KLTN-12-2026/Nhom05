@@ -890,13 +890,44 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
               <Ionicons name="cart-outline" size={21} color={textColor} />
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.darkModeToggle, { marginLeft: 4 }]}
+              style={[
+                styles.notifBellBtn,
+                unreadNotifications > 0 && styles.notifBellBtnActive,
+              ]}
               onPress={() => navigate('notifications')}
+              activeOpacity={0.78}
               accessibilityRole="button"
               accessibilityLabel={`Thông báo${unreadNotifications ? `, ${unreadNotifications} chưa đọc` : ''}`}
             >
-              <Ionicons name="notifications-outline" size={21} color={isDarkMode ? '#F7F5F0' : '#242321'} />
-              {unreadNotifications > 0 && <View style={{ position: 'absolute', top: 3, right: 2, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 3, backgroundColor: '#D5AC56', alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 9, fontWeight: '800', color: '#382F23' }}>{unreadNotifications > 99 ? '99+' : unreadNotifications}</Text></View>}
+              <View
+                style={[
+                  styles.notifBellInnerHalo,
+                  unreadNotifications > 0 && styles.notifBellInnerHaloActive,
+                ]}
+              >
+                <Ionicons
+                  name={unreadNotifications > 0 ? 'notifications' : 'notifications-outline'}
+                  size={19}
+                  color={
+                    unreadNotifications > 0
+                      ? isDarkMode
+                        ? '#FBBF24'
+                        : '#D97706'
+                      : isDarkMode
+                        ? '#F7F5F0'
+                        : '#242321'
+                  }
+                />
+              </View>
+              {unreadNotifications > 0 ? (
+                <View style={styles.notifBellBadge}>
+                  <Text style={styles.notifBellBadgeText}>
+                    {unreadNotifications > 99 ? '99+' : unreadNotifications}
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.notifBellIdleAccent} />
+              )}
             </TouchableOpacity>
           </View>
           {featuredItems.length > 0 ? <>
@@ -1043,42 +1074,6 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
         <View
           style={styles.section}
           onLayout={(e) => {
-            sectionPositions.current['ranking'] = e.nativeEvent.layout.y;
-          }}
-        >
-          <View style={styles.sectionTitleBox}>
-            <View style={styles.sectionAccent} />
-            <Text style={styles.sectionTitleText}>Bảng Xếp Hạng</Text>
-          </View>
-
-          {isLoading && books.length === 0 ? (
-            <View style={styles.statusBox}>
-              <ActivityIndicator size="small" color={isDarkMode ? '#8FC3B5' : '#5a8b82'} />
-              <Text style={styles.statusText}>Đang tải bảng xếp hạng...</Text>
-            </View>
-          ) : errorMessage && books.length === 0 ? (
-            <View style={styles.statusBox}>
-              <Text style={styles.statusErrorText}>{errorMessage}</Text>
-            </View>
-          ) : rankedBooks.length === 0 ? (
-            <View style={styles.statusBox}>
-              <Text style={styles.statusEmptyText}>Chưa có lượt đọc thực tế để xếp hạng.</Text>
-            </View>
-          ) : (
-            <View style={{ paddingHorizontal: 16 }}>
-              <View style={styles.rankPage}>
-                <View style={styles.rankPageHeader}>
-                  <Text style={styles.rankPageTitle}>Được đọc nhiều trong danh sách đang tải</Text>
-                </View>
-                {rankedBooks.map((novel, index) => renderRankItem(novel, index))}
-              </View>
-            </View>
-          )}
-        </View>
-
-        <View
-          style={styles.section}
-          onLayout={(e) => {
             sectionPositions.current['recent'] = e.nativeEvent.layout.y;
           }}
         >
@@ -1107,6 +1102,42 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList}>
               {(showAllRecentBooks ? recentBooks : recentBooks.slice(0, 5)).map(n => renderNovelCard(n, homeCardWidth, true))}
             </ScrollView>
+          )}
+        </View>
+
+        <View
+          style={styles.section}
+          onLayout={(e) => {
+            sectionPositions.current['ranking'] = e.nativeEvent.layout.y;
+          }}
+        >
+          <View style={styles.sectionTitleBox}>
+            <View style={styles.sectionAccent} />
+            <Text style={styles.sectionTitleText}>Bảng Xếp Hạng</Text>
+          </View>
+
+          {isLoading && books.length === 0 ? (
+            <View style={styles.statusBox}>
+              <ActivityIndicator size="small" color={isDarkMode ? '#8FC3B5' : '#5a8b82'} />
+              <Text style={styles.statusText}>Đang tải bảng xếp hạng...</Text>
+            </View>
+          ) : errorMessage && books.length === 0 ? (
+            <View style={styles.statusBox}>
+              <Text style={styles.statusErrorText}>{errorMessage}</Text>
+            </View>
+          ) : rankedBooks.length === 0 ? (
+            <View style={styles.statusBox}>
+              <Text style={styles.statusEmptyText}>Chưa có lượt đọc thực tế để xếp hạng.</Text>
+            </View>
+          ) : (
+            <View style={{ paddingHorizontal: 16 }}>
+              <View style={styles.rankPage}>
+                <View style={styles.rankPageHeader}>
+                  <Text style={styles.rankPageTitle} numberOfLines={1}>Top những sách được độc giả yêu thích và lựa chọn</Text>
+                </View>
+                {rankedBooks.map((novel, index) => renderRankItem(novel, index))}
+              </View>
+            </View>
           )}
         </View>
 
@@ -1607,6 +1638,73 @@ const getStyles = (isDark: boolean, width: number) => {
       justifyContent: 'center',
       alignItems: 'center',
     },
+    notifBellBtn: {
+      width: 40,
+      height: 40,
+      marginLeft: 4,
+      backgroundColor: isDark ? '#242321' : '#EAE6DF',
+      borderWidth: 1,
+      borderColor: isDark ? '#383633' : '#D2C8BA',
+      borderRadius: 12,
+      justifyContent: 'center',
+      alignItems: 'center',
+      position: 'relative',
+    },
+    notifBellBtnActive: {
+      backgroundColor: isDark ? '#2C261E' : '#FFF9EB',
+      borderColor: isDark ? 'rgba(251, 191, 36, 0.45)' : '#F59E0B',
+      shadowColor: '#F59E0B',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: isDark ? 0.28 : 0.16,
+      shadowRadius: 5,
+      elevation: 3,
+    },
+    notifBellInnerHalo: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(139, 74, 60, 0.06)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    notifBellInnerHaloActive: {
+      backgroundColor: isDark ? 'rgba(251, 191, 36, 0.16)' : 'rgba(245, 158, 11, 0.15)',
+    },
+    notifBellBadge: {
+      position: 'absolute',
+      top: -5,
+      right: -5,
+      minWidth: 19,
+      height: 19,
+      borderRadius: 9.5,
+      paddingHorizontal: 4,
+      backgroundColor: '#EF4444',
+      borderWidth: 2,
+      borderColor: isDark ? '#181716' : '#F7F5F0',
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: '#EF4444',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.35,
+      shadowRadius: 3,
+      elevation: 4,
+    },
+    notifBellBadgeText: {
+      fontSize: 9.5,
+      fontWeight: '900',
+      color: '#FFFFFF',
+      letterSpacing: -0.2,
+    },
+    notifBellIdleAccent: {
+      position: 'absolute',
+      top: 7,
+      right: 8,
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: isDark ? '#E5A93C' : '#8B4A3C',
+      opacity: 0.75,
+    },
 
     carouselContainer: { paddingLeft: 16, paddingRight: 4 },
     paginationDots: { flexDirection: 'row', justifyContent: 'center', marginTop: -2, marginBottom: -2 },
@@ -1874,7 +1972,7 @@ const getStyles = (isDark: boolean, width: number) => {
       width: '100%', backgroundColor: cardBg, borderRadius: 8, borderWidth: 1, borderColor: isDark ? '#383633' : '#E6E1D8', padding: 16,
     },
     rankPageHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, borderBottomWidth: 1, borderBottomColor: isDark ? '#383633' : '#E6E1D8', paddingBottom: 10 },
-    rankPageTitle: { fontSize: 16, fontWeight: '900', color: textMain },
+    rankPageTitle: { fontSize: 14, fontWeight: '900', color: textMain },
     rankPageMore: { fontSize: 12, fontWeight: '700', color: isDark ? '#E5A93C' : textSub },
 
     rankItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },

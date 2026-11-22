@@ -60,13 +60,55 @@ function SharedHeaderComponent({
           )}
           <View style={styles.actions}>
             <TouchableOpacity
-              style={styles.actionButton}
+              style={[
+                styles.notifBellButton,
+                {
+                  backgroundColor: unreadCount > 0
+                    ? isDarkMode
+                      ? 'rgba(251, 191, 36, 0.14)'
+                      : '#FFF9EB'
+                    : isDarkMode
+                      ? 'rgba(255, 255, 255, 0.06)'
+                      : 'rgba(145, 71, 223, 0.07)',
+                  borderColor: unreadCount > 0
+                    ? isDarkMode
+                      ? 'rgba(251, 191, 36, 0.45)'
+                      : '#F59E0B'
+                    : isDarkMode
+                      ? 'rgba(255, 255, 255, 0.12)'
+                      : 'rgba(145, 71, 223, 0.18)',
+                },
+              ]}
               onPress={() => navigate('notifications')}
+              activeOpacity={0.78}
               accessibilityRole="button"
               accessibilityLabel={lang === 'en' ? 'Notifications' : 'Thông báo'}
             >
-              <MaterialCommunityIcons name="bell-outline" size={23} color={foreground} />
-              {unreadCount > 0 && <View style={styles.notice} />}
+              <Ionicons
+                name={unreadCount > 0 ? 'notifications' : 'notifications-outline'}
+                size={19}
+                color={
+                  unreadCount > 0
+                    ? isDarkMode
+                      ? '#FBBF24'
+                      : '#D97706'
+                    : foreground
+                }
+              />
+              {unreadCount > 0 ? (
+                <View
+                  style={[
+                    styles.noticeBadge,
+                    { borderColor: isDarkMode ? '#101319' : '#FFFFFF' },
+                  ]}
+                >
+                  <Text style={styles.noticeBadgeText}>
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.noticeIdleDot} />
+              )}
             </TouchableOpacity>
             {/* ============================================================================
                 [GIẢI THÍCH CODE]: Nút tìm kiếm (khi ở Tủ Sách) hoặc Giỏ hàng (màn hình khác)
@@ -204,6 +246,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  notifBellButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
   notice: {
     position: 'absolute',
     right: 5,
@@ -212,6 +263,34 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: '#FF4E55',
+  },
+  noticeBadge: {
+    position: 'absolute',
+    right: -5,
+    top: -5,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    backgroundColor: '#EF4444',
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noticeBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '900',
+  },
+  noticeIdleDot: {
+    position: 'absolute',
+    right: 7,
+    top: 6,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#9147DF',
+    opacity: 0.75,
   },
   avatar: {
     width: 36,

@@ -1779,7 +1779,7 @@ export default function Toi() {
           </TouchableOpacity>
         </View>
 
-        {/* Nút Đăng xuất / Thay đổi tài khoản */}
+        {/* Nút Đăng xuất căn giữa */}
         <View style={themeStyles.bottomActionsRow}>
           <TouchableOpacity
             style={[
@@ -1794,11 +1794,6 @@ export default function Toi() {
           >
             <Ionicons name="log-out-outline" size={17} color="#DC2626" />
             <Text style={themeStyles.logoutBtnText}>{t.logoutBtn}</Text>
-          </TouchableOpacity>
-          <View style={{ width: 12 }} />
-          <TouchableOpacity style={themeStyles.secondaryBtn} onPress={logout} activeOpacity={0.82}>
-            <Ionicons name="swap-horizontal-outline" size={17} color={isDarkMode ? '#E4E6EB' : '#111827'} />
-            <Text style={themeStyles.secondaryBtnText}>{lang === 'en' ? 'Switch Account' : 'Thay đổi tài khoản'}</Text>
           </TouchableOpacity>
         </View>
         <View style={{ height: 115 }} />
@@ -3329,21 +3324,16 @@ const styles = StyleSheet.create({
   menuItemText: { flex: 1, fontSize: 14.5, fontWeight: '500', color: '#111827' },
 
   // Bottom Actions
-  bottomActionsRow: { flexDirection: 'row', paddingHorizontal: 18, marginTop: 22 },
-  secondaryBtn: {
-    flex: 1,
+  bottomActionsRow: {
     flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 13.5,
-    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
+    paddingHorizontal: 18,
+    marginTop: 22,
   },
-  secondaryBtnText: { color: '#111827', fontSize: 14, fontWeight: '600', marginLeft: 7 },
   logoutBtn: {
-    flex: 1,
+    minWidth: 200,
+    paddingHorizontal: 32,
     flexDirection: 'row',
     paddingVertical: 13.5,
     borderRadius: 12,
