@@ -39,7 +39,6 @@ interface ScreenRoute extends NavigationOptions {
 }
 
 const SCREENS_WITH_SHARED_HEADER: AppScreen[] = [
-  'categories',
   'transactions',
 ];
 
