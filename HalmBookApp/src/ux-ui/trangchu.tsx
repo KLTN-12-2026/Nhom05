@@ -1102,7 +1102,7 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
             <View style={{ paddingHorizontal: 16 }}>
               <View style={styles.rankPage}>
                 <View style={styles.rankPageHeader}>
-                  <Text style={styles.rankPageTitle}>Được đọc nhiều trong danh sách đang tải</Text>
+                  <Text style={styles.rankPageTitle} numberOfLines={1}>Top những sách được độc giả yêu thích và lựa chọn</Text>
                 </View>
                 {rankedBooks.map((novel, index) => renderRankItem(novel, index))}
               </View>
@@ -1874,7 +1874,7 @@ const getStyles = (isDark: boolean, width: number) => {
       width: '100%', backgroundColor: cardBg, borderRadius: 8, borderWidth: 1, borderColor: isDark ? '#383633' : '#E6E1D8', padding: 16,
     },
     rankPageHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, borderBottomWidth: 1, borderBottomColor: isDark ? '#383633' : '#E6E1D8', paddingBottom: 10 },
-    rankPageTitle: { fontSize: 16, fontWeight: '900', color: textMain },
+    rankPageTitle: { fontSize: 14, fontWeight: '900', color: textMain },
     rankPageMore: { fontSize: 12, fontWeight: '700', color: isDark ? '#E5A93C' : textSub },
 
     rankItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
