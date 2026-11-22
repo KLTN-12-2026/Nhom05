@@ -50,6 +50,26 @@ export async function fetchApiWithFallback<T = any>(
   endpoint: string,
   config: AxiosRequestConfig = {}
 ): Promise<{ data: T; baseUrl: string }> {
-  const response = await axios({ ...config, url: API_BASE_URL + endpoint, timeout: config.timeout ?? 10000 });
-  return { data: response.data, baseUrl: API_BASE_URL };
+  const method = (config.method ?? 'GET').toUpperCase();
+  const isMutation = method !== 'GET' && method !== 'HEAD';
+  const urlsToTry = isMutation ? [API_BASE_URL] : CANDIDATE_API_URLS;
+
+  let lastError: any = null;
+  for (const baseUrl of urlsToTry) {
+    try {
+      const response = await axios({
+        ...config,
+        url: baseUrl + endpoint,
+        timeout: config.timeout ?? 6000,
+      });
+      return { data: response.data, baseUrl };
+    } catch (err: any) {
+      lastError = err;
+      const status = err?.response?.status;
+      if (status === 401 || status === 403 || status === 400 || isMutation) {
+        throw err;
+      }
+    }
+  }
+  throw lastError ?? new Error(`Không thể kết nối đến máy chủ tại endpoint ${endpoint}`);
 }

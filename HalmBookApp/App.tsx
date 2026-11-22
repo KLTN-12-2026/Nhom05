@@ -40,6 +40,7 @@ interface ScreenRoute extends NavigationOptions {
 
 const SCREENS_WITH_SHARED_HEADER: AppScreen[] = [
   'categories',
+  'transactions',
 ];
 
 // Cấu hình hiệu ứng chuyển trang mượt mà (Navigation Transition Options)
@@ -751,12 +752,14 @@ export default function App() {
         <BookDetailScreen
           book={currentRoute.book}
           onBack={goBack}
-          onStartReading={(initialChapterIndex) => {
+          onStartReading={(initialChapterIndex, options) => {
             const requestedChapterIndex = typeof initialChapterIndex === 'number' ? initialChapterIndex : 0;
-            const safeChapterIndex = (!isLoggedIn && !isSessionActive())
+            const isTrialMode = Boolean(options?.isTrialMode);
+            const startFromBeginning = Boolean(options?.startFromBeginning);
+            const safeChapterIndex = (!isLoggedIn && !isSessionActive()) || isTrialMode
               ? Math.min(Math.max(0, requestedChapterIndex), 2)
               : requestedChapterIndex;
-            if (!isLoggedIn && !isSessionActive() && requestedChapterIndex > 2) {
+            if (!isTrialMode && !isLoggedIn && !isSessionActive() && requestedChapterIndex > 2) {
               showLoginAlert(
                 'Đăng nhập để tiếp tục đến chương này. Khách có thể đọc thử 3 chương đầu.',
                 () => setRoutes((current) => [
@@ -789,6 +792,8 @@ export default function App() {
               id: currentRoute.book?.id || 'book-1',
               title: currentRoute.book?.title || 'Đọc sách',
               initialChapterIndex: typeof safeChapterIndex === 'number' ? safeChapterIndex : 0,
+              startFromBeginning,
+              isTrialMode,
             } as any);
           }}
         />
@@ -839,10 +844,10 @@ export default function App() {
                 {screen}
               </Animated.View>
             </BlurTargetView>
-            {!['auth', 'reader', 'chatbot', 'notifications', 'payment', 'transactions'].includes(currentRoute.name) && (
+            {!['auth', 'reader', 'chatbot', 'notifications', 'payment', 'transactions', 'genreBooks'].includes(currentRoute.name) && (
               <Footer
                 activeNav={activeNav}
-                floating={['home', 'categories', 'genreBooks', 'bookDetail', 'offers', 'upload', 'bookshelf', 'profile'].includes(currentRoute.name)}
+                floating={['home', 'categories', 'bookDetail', 'offers', 'upload', 'bookshelf', 'profile'].includes(currentRoute.name)}
                 visible={isFooterVisible}
               />
             )}

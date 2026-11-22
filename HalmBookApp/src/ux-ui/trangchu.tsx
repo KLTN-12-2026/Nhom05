@@ -1074,42 +1074,6 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
         <View
           style={styles.section}
           onLayout={(e) => {
-            sectionPositions.current['ranking'] = e.nativeEvent.layout.y;
-          }}
-        >
-          <View style={styles.sectionTitleBox}>
-            <View style={styles.sectionAccent} />
-            <Text style={styles.sectionTitleText}>Bảng Xếp Hạng</Text>
-          </View>
-
-          {isLoading && books.length === 0 ? (
-            <View style={styles.statusBox}>
-              <ActivityIndicator size="small" color={isDarkMode ? '#8FC3B5' : '#5a8b82'} />
-              <Text style={styles.statusText}>Đang tải bảng xếp hạng...</Text>
-            </View>
-          ) : errorMessage && books.length === 0 ? (
-            <View style={styles.statusBox}>
-              <Text style={styles.statusErrorText}>{errorMessage}</Text>
-            </View>
-          ) : rankedBooks.length === 0 ? (
-            <View style={styles.statusBox}>
-              <Text style={styles.statusEmptyText}>Chưa có lượt đọc thực tế để xếp hạng.</Text>
-            </View>
-          ) : (
-            <View style={{ paddingHorizontal: 16 }}>
-              <View style={styles.rankPage}>
-                <View style={styles.rankPageHeader}>
-                  <Text style={styles.rankPageTitle}>Được đọc nhiều trong danh sách đang tải</Text>
-                </View>
-                {rankedBooks.map((novel, index) => renderRankItem(novel, index))}
-              </View>
-            </View>
-          )}
-        </View>
-
-        <View
-          style={styles.section}
-          onLayout={(e) => {
             sectionPositions.current['recent'] = e.nativeEvent.layout.y;
           }}
         >
@@ -1138,6 +1102,42 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollList}>
               {(showAllRecentBooks ? recentBooks : recentBooks.slice(0, 5)).map(n => renderNovelCard(n, homeCardWidth, true))}
             </ScrollView>
+          )}
+        </View>
+
+        <View
+          style={styles.section}
+          onLayout={(e) => {
+            sectionPositions.current['ranking'] = e.nativeEvent.layout.y;
+          }}
+        >
+          <View style={styles.sectionTitleBox}>
+            <View style={styles.sectionAccent} />
+            <Text style={styles.sectionTitleText}>Bảng Xếp Hạng</Text>
+          </View>
+
+          {isLoading && books.length === 0 ? (
+            <View style={styles.statusBox}>
+              <ActivityIndicator size="small" color={isDarkMode ? '#8FC3B5' : '#5a8b82'} />
+              <Text style={styles.statusText}>Đang tải bảng xếp hạng...</Text>
+            </View>
+          ) : errorMessage && books.length === 0 ? (
+            <View style={styles.statusBox}>
+              <Text style={styles.statusErrorText}>{errorMessage}</Text>
+            </View>
+          ) : rankedBooks.length === 0 ? (
+            <View style={styles.statusBox}>
+              <Text style={styles.statusEmptyText}>Chưa có lượt đọc thực tế để xếp hạng.</Text>
+            </View>
+          ) : (
+            <View style={{ paddingHorizontal: 16 }}>
+              <View style={styles.rankPage}>
+                <View style={styles.rankPageHeader}>
+                  <Text style={styles.rankPageTitle} numberOfLines={1}>Top những sách được độc giả yêu thích và lựa chọn</Text>
+                </View>
+                {rankedBooks.map((novel, index) => renderRankItem(novel, index))}
+              </View>
+            </View>
           )}
         </View>
 
@@ -1972,7 +1972,7 @@ const getStyles = (isDark: boolean, width: number) => {
       width: '100%', backgroundColor: cardBg, borderRadius: 8, borderWidth: 1, borderColor: isDark ? '#383633' : '#E6E1D8', padding: 16,
     },
     rankPageHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, borderBottomWidth: 1, borderBottomColor: isDark ? '#383633' : '#E6E1D8', paddingBottom: 10 },
-    rankPageTitle: { fontSize: 16, fontWeight: '900', color: textMain },
+    rankPageTitle: { fontSize: 14, fontWeight: '900', color: textMain },
     rankPageMore: { fontSize: 12, fontWeight: '700', color: isDark ? '#E5A93C' : textSub },
 
     rankItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },

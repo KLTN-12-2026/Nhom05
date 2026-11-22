@@ -6,12 +6,13 @@ import { PdfEmbedViewer } from './PdfEmbedViewer';
 import { checkBookAccessDetailApi, syncReadingProgressApi } from './rentalService';
 
 /** Mounted only after server entitlement is checked; each book has a separate lifetime. */
-export default function CatalogReader({ bookId, title, author, initialPage = 1, onBack, onAccessDenied }: { bookId: string; title: string; author: string; initialPage?: number; onBack: () => void; onAccessDenied: () => void }) {
+export default function CatalogReader({ bookId, title, author, initialPage = 1, preserveInitialProgress = false, onBack, onAccessDenied }: { bookId: string; title: string; author: string; initialPage?: number; preserveInitialProgress?: boolean; onBack: () => void; onAccessDenied: () => void }) {
   const [content, setContent] = useState<CatalogContent | null>(null);
   const [error, setError] = useState('');
   const [page, setPage] = useState(() => Math.max(0, initialPage - 1));
   const [attempt, setAttempt] = useState(0);
   const openRequest = useRef<AbortController | null>(null);
+  const canSyncProgress = useRef(!preserveInitialProgress);
   useEffect(() => {
     const controller = new AbortController();
     let loaded: CatalogContent | undefined;
@@ -27,7 +28,7 @@ export default function CatalogReader({ bookId, title, author, initialPage = 1, 
     return () => { controller.abort(); openRequest.current?.abort(); loaded?.dispose(); };
   }, [bookId, title, author, attempt, onAccessDenied]);
   useEffect(() => {
-    if (content && content.chapters.length) void syncReadingProgressApi(bookId, page + 1, content.chapters.length);
+    if (content && content.chapters.length && canSyncProgress.current) void syncReadingProgressApi(bookId, page + 1, content.chapters.length);
   }, [bookId, page, content]);
   useReadingMission(bookId, !!content && !error);
   const chapter = content?.chapters[page];
@@ -56,9 +57,9 @@ export default function CatalogReader({ bookId, title, author, initialPage = 1, 
           {!chapter && <Text>Chọn “Mở tệp gốc” để đọc tài liệu này.</Text>}
         </ScrollView>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 20, paddingBottom: 36 }}>
-          <TouchableOpacity disabled={page <= 0} onPress={() => setPage(value => value - 1)}><Text>← Trang trước</Text></TouchableOpacity>
+          <TouchableOpacity disabled={page <= 0} onPress={() => { canSyncProgress.current = true; setPage(value => value - 1); }}><Text>← Trang trước</Text></TouchableOpacity>
           <Text>{page + 1} / {content.chapters.length || 1}</Text>
-          <TouchableOpacity disabled={page >= content.chapters.length - 1} onPress={() => setPage(value => value + 1)}><Text>Trang sau →</Text></TouchableOpacity>
+          <TouchableOpacity disabled={page >= content.chapters.length - 1} onPress={() => { canSyncProgress.current = true; setPage(value => value + 1); }}><Text>Trang sau →</Text></TouchableOpacity>
         </View>
       </>}
   </View>;

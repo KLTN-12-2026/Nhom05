@@ -42,7 +42,9 @@ export interface BookData {
   fileName?: string;
   chapters?: any[];
   initialChapterIndex?: number;
-totalChapters?: number;
+  startFromBeginning?: boolean;
+  isTrialMode?: boolean;
+  totalChapters?: number;
 }
 
 export type AppLanguage = 'vi' | 'en';
