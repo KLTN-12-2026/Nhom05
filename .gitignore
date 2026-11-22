@@ -38,3 +38,6 @@ uploads/
 
 # Expo / Mobile cache
 .expo/
+
+# Local Cloudflare process state and generated connection details
+.local-demo/
