@@ -10,6 +10,23 @@ import java.util.List;
  */
 public interface EvaluateService {
 
+    record EvaluateEligibility(
+            boolean authenticated,
+            String bookId,
+            String bookTitle,
+            boolean hasReadRecord,
+            int currentPage,
+            int totalPages,
+            double readingPercentage,
+            double requiredPercentage,
+            boolean canEvaluate
+    ) {}
+
+    /**
+     * Kiểm tra tiến độ đọc thực tế và điều kiện đánh giá sách (>= 50%) của độc giả
+     */
+    EvaluateEligibility checkEvaluateEligibility(String bookId, Integer accountId);
+
     /**
      * Lấy danh sách đánh giá của một cuốn sách
      */

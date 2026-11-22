@@ -408,20 +408,21 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
     }
   }, [accessInfo.hasAccess, accessInfo.currentPage, book?.id, book?.initialChapterIndex, chapters.length]);
 
-  const isTrialRestricted = !isPersonalBook && !accessInfo.hasAccess;
+  const isTrialRestricted = !isPersonalBook && (!accessInfo.hasAccess || Boolean(book?.isTrialMode));
   const trialChapterLimit = 3;
+  const shouldPersistProgressRef = useRef(!book?.startFromBeginning);
 
   // Đồng bộ tiến độ đọc lên Backend khi người dùng có quyền thuê hợp lệ
   useEffect(() => {
     const bookIdStr = String(book?.id || '');
-    if (!bookIdStr || isPersonalBook || !accessInfo.hasAccess || chapters.length === 0) {
+    if (!bookIdStr || isPersonalBook || !accessInfo.hasAccess || Boolean(book?.isTrialMode) || !shouldPersistProgressRef.current || chapters.length === 0) {
       return;
     }
     const timer = setTimeout(() => {
       syncReadingProgressApi(bookIdStr, currentChapterIndex + 1, chapters.length);
     }, 500);
     return () => clearTimeout(timer);
-  }, [accessInfo.hasAccess, book?.id, chapters.length, currentChapterIndex, isPersonalBook]);
+  }, [accessInfo.hasAccess, book?.id, book?.isTrialMode, chapters.length, currentChapterIndex, isPersonalBook]);
 
   const handleSelectChapterIndex = useCallback(
     (targetIdx: number) => {
@@ -432,6 +433,7 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
             'Đăng nhập để tiếp tục đọc. Sau khi đăng nhập, bạn sẽ được quay lại đúng cuốn sách và chương đang chọn.',
             () => {
               if (isPersonalBook || accessInfo.hasAccess) {
+                shouldPersistProgressRef.current = true;
                 setCurrentChapterIndex(bounded);
               } else {
                 Alert.alert(
@@ -459,9 +461,12 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
         );
         return;
       }
+      if (bounded !== currentChapterIndex) {
+        shouldPersistProgressRef.current = true;
+      }
       setCurrentChapterIndex(bounded);
     },
-    [accessInfo.hasAccess, chapters.length, isLoggedIn, isPersonalBook, isTrialRestricted, onBack, showLoginAlert]
+    [accessInfo.hasAccess, chapters.length, currentChapterIndex, isLoggedIn, isPersonalBook, isTrialRestricted, onBack, showLoginAlert]
   );
 
   const activeChapter: Chapter = chapters[isTrialRestricted ? Math.min(currentChapterIndex, 2) : currentChapterIndex] || chapters[0] || {
@@ -1154,9 +1159,9 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
     scrollViewRef.current?.scrollTo({ y: 0, animated: false });
   }, [currentChapterIndex]);
 
-  // Lưu tiến độ đọc riêng biệt (Không can thiệp vào vị trí cuộn trang của người dùng)
+  // Lưu tiến độ đọc riêng biệt (Không ghi đè tiến độ đã lưu khi người dùng chỉ chọn Đọc từ đầu)
   useEffect(() => {
-    if (book?.id) {
+    if (book?.id && shouldPersistProgressRef.current) {
       AsyncStorage.setItem(
         `@halm_reading_progress_${book.id}`,
         JSON.stringify({
@@ -1227,11 +1232,23 @@ export default function ManHinhDoc({ onBack, book }: ReaderProps) {
     } catch {}
   };
 
-  if (!isPersonalBook && accessInfo.hasAccess && book?.id) {
-    return <CatalogReader key={book.id} bookId={String(book.id)} title={book.title || book.bookName || 'Sách'} author={book.author || 'HALM BOOK'} initialPage={accessInfo.currentPage} onBack={onBack} onAccessDenied={retryAccess} />;
+  if (!isPersonalBook && accessInfo.hasAccess && book?.id && !book?.isTrialMode) {
+    return (
+      <CatalogReader
+        key={book.id}
+        bookId={String(book.id)}
+        title={book.title || book.bookName || 'Sách'}
+        author={book.author || 'HALM BOOK'}
+        initialPage={book?.startFromBeginning ? 1 : accessInfo.currentPage}
+        preserveInitialProgress={Boolean(book?.startFromBeginning)}
+        onBack={onBack}
+        onAccessDenied={retryAccess}
+      />
+    );
   }
 
-  if (!isPersonalBook && !['NONE', 'GUEST'].includes(accessInfo.status)) {
+  const allowedTrialStatuses = book?.isTrialMode ? ['NONE', 'GUEST', 'EXPIRED'] : ['NONE', 'GUEST'];
+  if (!isPersonalBook && !allowedTrialStatuses.includes(accessInfo.status)) {
     const checking = ['CHECKING', 'PAUSED'].includes(accessInfo.status);
     const revoked = ['REVOKED', 'REJECTED'].includes(accessInfo.status);
     return <View style={{ flex: 1, justifyContent: 'center', padding: 28, backgroundColor: currentTheme.bg }}>

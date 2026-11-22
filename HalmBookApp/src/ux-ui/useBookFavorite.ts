@@ -8,6 +8,7 @@ export function useBookFavorite(book: FavoriteBook, isLoggedIn: boolean) {
   const pending = useRef(false);
   const revision = useRef(0);
   const active = useRef(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     active.current = true;
@@ -19,13 +20,23 @@ export function useBookFavorite(book: FavoriteBook, isLoggedIn: boolean) {
       }
     };
     void load();
-    return () => { active.current = false; };
+    return () => {
+      active.current = false;
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
   }, [book.id, isLoggedIn]);
 
   const toggle = useCallback(async () => {
     if (pending.current || !isLoggedIn || !book.id) return;
     pending.current = true;
     const ticket = ++revision.current;
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
     setState(previous => ({ ...previous, saving: true, message: '' }));
     try {
       const result = await toggleFavoriteBook(book);
@@ -38,10 +49,22 @@ export function useBookFavorite(book: FavoriteBook, isLoggedIn: boolean) {
           saving: false,
           message: result.message,
         }));
+        if (result.message) {
+          timerRef.current = setTimeout(() => {
+            if (active.current && revision.current === ticket) {
+              setState(previous => ({ ...previous, message: '' }));
+            }
+          }, 3000);
+        }
       }
     } catch {
       if (active.current && revision.current === ticket) {
         setState(previous => ({ ...previous, saving: false, message: 'Chưa lưu được sách yêu thích. Vui lòng thử lại.' }));
+        timerRef.current = setTimeout(() => {
+          if (active.current && revision.current === ticket) {
+            setState(previous => ({ ...previous, message: '' }));
+          }
+        }, 3000);
       }
     } finally { pending.current = false; }
   }, [book, isLoggedIn]);
