@@ -11,6 +11,8 @@ import { isDarkMode, applyTheme } from "@/utils/theme";
 import { openAuthModal } from "@/components/common/AuthModal";
 import { getTierInfo, getTierBadgeClass } from "@/utils/tierUtils";
 import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead } from "@/services/userFeatureService";
+import { checkinDailyStreak } from "@/services/tierService";
+import { prefetchUserRoutes } from "@/utils/routePrefetch";
 
 const SECTIONS = [
   ["chapter-0-broadcast", "Trang chủ"],
@@ -84,6 +86,29 @@ export default function UserHeader({ onOpenChatbot, onThemeChange }) {
           localStorage.removeItem("halm_customer_cache");
         } catch (_) {}
       } else {
+        // Tự động kiểm tra điểm danh khi đăng nhập hằng ngày (Daily Login Checkin)
+        const todayKey = new Date().toISOString().slice(0, 10);
+        const autoCheckinKey = `halm_login_checkin_${todayKey}`;
+        if (!sessionStorage.getItem(autoCheckinKey)) {
+          sessionStorage.setItem(autoCheckinKey, "true");
+          checkinDailyStreak()
+            .then((res) => {
+              if (res && res.success) {
+                if (window.halmToast) {
+                  window.halmToast.success(
+                    "Đăng Nhập Điểm Danh 🎉",
+                    `Chào mừng bạn quay lại! Nhận +${res.earnedPotato || 5} Khoai Tây hôm nay (Chuỗi ${res.streakDays} ngày 🔥)`
+                  );
+                }
+                window.dispatchEvent(new CustomEvent("halm-potato-updated", {
+                  detail: { potatoBalance: res.potatoBalance }
+                }));
+                window.dispatchEvent(new CustomEvent("halm-daily-task-completed", { detail: { task: "checkin" } }));
+              }
+            })
+            .catch(() => {});
+        }
+
         setCustomer((prev) => {
           if (prev) return prev;
           try {
@@ -249,6 +274,10 @@ export default function UserHeader({ onOpenChatbot, onThemeChange }) {
     };
 
     window.addEventListener("halm-potato-updated", handlePotatoUpdated);
+
+    if (isLoggedIn) {
+      prefetchUserRoutes();
+    }
 
     return () => {
       isMounted = false;
@@ -1197,7 +1226,7 @@ export default function UserHeader({ onOpenChatbot, onThemeChange }) {
             >
               <span className="vietnam-flag-icon flex h-[22px] w-[30px] items-center justify-center rounded-[2px] text-[15px] leading-none"><span className="vietnam-flag-star">★</span></span>
             </button>
-            <div id="avatar-menu-wrapper" className="relative hidden items-center lg:flex">
+            <div id="avatar-menu-wrapper" onMouseEnter={prefetchUserRoutes} onFocus={prefetchUserRoutes} className="relative hidden items-center lg:flex">
               {isLoggedIn ? (
                 <>
                   <button id="avatar-menu-button" type="button" onClick={() => setIsAccountMenuOpen((current) => !current)} className="home-header-control flex h-11 items-center gap-2 rounded-full px-2 transition-colors" aria-label="Mở menu tài khoản" aria-expanded={isAccountMenuOpen}>
@@ -1223,6 +1252,7 @@ export default function UserHeader({ onOpenChatbot, onThemeChange }) {
                       </span>
                     </div>
                     <Link to="/canhan?tab=wallet" onClick={() => handleNavClick("/canhan?tab=wallet")} className="avatar-dropdown-item flex items-center justify-between rounded-xl px-3 py-2.5 font-bold text-[#D4AF37] transition-colors"><span className="flex items-center gap-2"><i className="ph-fill ph-wallet text-base"></i>Ví Khoai Tây</span><span className="rounded-full bg-[#D4AF37]/20 px-2 py-0.5 text-[11px] font-black text-[#D4AF37]">{(customer?.potatoBalance ?? 0).toLocaleString()} 🥔</span></Link>
+                    <Link to="/canhan?tab=vouchers" onClick={() => handleNavClick("/canhan?tab=vouchers")} className="avatar-dropdown-item flex items-center gap-2 rounded-xl px-3 py-2.5 font-semibold transition-colors"><i className="ph-bold ph-ticket text-base text-amber-500"></i>Kho Voucher của tôi</Link>
                     <Link to="/canhan?tab=history" onClick={() => handleNavClick("/canhan?tab=history")} className="avatar-dropdown-item flex items-center gap-2 rounded-xl px-3 py-2.5 font-semibold transition-colors"><i className="ph-bold ph-clock-counter-clockwise text-base text-amber-500"></i>Lịch sử giao dịch</Link>
                     <Link to="/nhiemvu" onClick={() => handleNavClick("/nhiemvu")} className="avatar-dropdown-item flex items-center justify-between rounded-xl px-3 py-2.5 font-semibold transition-colors"><span className="flex items-center gap-2"><i className="ph-bold ph-target text-base text-amber-500"></i>Nhiệm vụ & Điểm danh</span><span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">Streak 🔥</span></Link>
                     <Link to="/canhan" onClick={() => handleNavClick("/canhan")} className="avatar-dropdown-item flex items-center gap-2 rounded-xl px-3 py-2.5 font-semibold transition-colors"><i className="ph-bold ph-user-circle text-base"></i>Thông tin cá nhân</Link>
@@ -1395,6 +1425,14 @@ export default function UserHeader({ onOpenChatbot, onThemeChange }) {
             >
               <span>Ví Khoai Tây</span>
               <span>{isLoggedIn ? `${(customer?.potatoBalance ?? 0).toLocaleString()} 🥔` : 'Đăng nhập để xem'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleNavClick("/canhan?tab=vouchers", undefined, true)}
+              className="col-span-2 rounded-lg px-2 py-2 font-bold text-amber-500 hover:bg-amber-500/10 flex items-center gap-2 border border-amber-500/30 bg-[#111210] text-left cursor-pointer"
+            >
+              <i className="ph-bold ph-ticket text-sm"></i>
+              <span>Kho Voucher Của Tôi</span>
             </button>
             <button
               type="button"

@@ -58,6 +58,7 @@ export default function CartEnd() {
         let userTierDiscountPercent = 0; // Chiết khấu theo hạng hội viên (5%, 10%, 20%)
         let userTierName = 'Thợ Cày';
         let appliedCouponName = '';
+        let ownedForeverBookIds = new Set();
 
         // Cart items data state
         let cartItems = [];
@@ -132,13 +133,15 @@ export default function CartEnd() {
             if (tierLabelEl) {
                 tierLabelEl.textContent = `Ưu đãi ${userTierName} (-${userTierDiscountPercent}%):`;
             }
+            const roundedTierDiscount = Math.round(tierDiscount);
+            const roundedDiscount = Math.round(discount);
             const tierValEl = document.getElementById('summary-tier-val');
             if (tierValEl) {
-                tierValEl.textContent = tierDiscount > 0 ? `-${tierDiscount} Khoai` : (userTierDiscountPercent > 0 ? `-${userTierDiscountPercent}%` : 'Đã kích hoạt');
+                tierValEl.textContent = roundedTierDiscount > 0 ? `-${roundedTierDiscount} Khoai` : (userTierDiscountPercent > 0 ? `-${userTierDiscountPercent}%` : 'Đã kích hoạt');
             }
 
             const discountEl = document.getElementById('summary-discount');
-            if (discountEl) discountEl.textContent = discount > 0 ? `-${discount}` : '0';
+            if (discountEl) discountEl.textContent = roundedDiscount > 0 ? `-${roundedDiscount}` : '0';
 
             const totalEl = document.getElementById('summary-total');
             if (totalEl) totalEl.textContent = currentQuote ? total : '—';
@@ -591,8 +594,13 @@ export default function CartEnd() {
                 const paidEl = document.getElementById('checkout-receipt-paid');
                 if (paidEl) paidEl.textContent = `${result.totalKhoaiPaid} Khoai`;
 
+                const rawTx = result.transactionNo || '';
+                const formattedTx = rawTx.length > 25 ? (rawTx.startsWith('IDEM-') ? 'HLM-' + rawTx.slice(-8).toUpperCase() : rawTx.slice(0, 18) + '...') : rawTx;
                 const txCodeEl = document.getElementById('checkout-tx-code');
-                if (txCodeEl) txCodeEl.textContent = result.transactionNo;
+                if (txCodeEl) {
+                    txCodeEl.textContent = formattedTx;
+                    txCodeEl.title = rawTx;
+                }
 
                 const finalBalanceEl = document.getElementById('checkout-final-balance');
                 if (finalBalanceEl) finalBalanceEl.textContent = `${userWalletBalance.toLocaleString()} Khoai`;
@@ -726,18 +734,6 @@ export default function CartEnd() {
                     window.halmToast.info(title, message);
                 }
             }
-
-            const toast = document.getElementById('toast-notification');
-            const toastTitle = document.getElementById('toast-title');
-            const toastMsg = document.getElementById('toast-message');
-            if (!toast) return;
-
-            toastTitle.textContent = title;
-            toastMsg.textContent = message;
-            toast.classList.add('show');
-            setTimeout(() => {
-                toast.classList.remove('show');
-            }, 3500);
         }
 
         // --- 11. CHATBOT WIDGET ---
@@ -1105,29 +1101,16 @@ export default function CartEnd() {
                 const rating = book.rating || '5.0';
                 const readCount = book.readCount || (120 - idx * 7);
                 const isInCart = cartBookIds.has(bookId);
-
-                // Rank Badge Styling
-                let rankBadge = '';
-                let rankBorder = 'border-paper-border dark:border-night-border';
-                let rankGlow = '';
-                if (idx === 0) {
-                    rankBadge = `<div class="absolute -top-2.5 -left-2 z-20 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 text-slate-950 font-metadata font-black text-[10px] tracking-wider shadow-lg shadow-amber-500/40 border border-yellow-100"><span>👑</span><span>TOP 1</span></div>`;
-                    rankBorder = 'border-amber-400/80 ring-1 ring-amber-400/30';
-                    rankGlow = 'shadow-[0_4px_20px_rgba(245,158,11,0.18)]';
-                } else if (idx === 1) {
-                    rankBadge = `<div class="absolute -top-2.5 -left-2 z-20 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-slate-200 via-gray-100 to-slate-300 text-slate-900 font-metadata font-black text-[10px] tracking-wider shadow-lg shadow-slate-400/30 border border-white"><span>🥈</span><span>TOP 2</span></div>`;
-                    rankBorder = 'border-slate-300 dark:border-slate-400/60 ring-1 ring-slate-300/30';
-                } else if (idx === 2) {
-                    rankBadge = `<div class="absolute -top-2.5 -left-2 z-20 flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-700 via-amber-600 to-orange-700 text-white font-metadata font-black text-[10px] tracking-wider shadow-lg shadow-orange-900/30 border border-amber-300/50"><span>🥉</span><span>TOP 3</span></div>`;
-                    rankBorder = 'border-amber-600/60 dark:border-amber-600/60 ring-1 ring-amber-600/30';
-                } else {
-                    rankBadge = `<div class="absolute -top-2 -left-1.5 z-20 flex items-center gap-0.5 px-2 py-0.5 rounded-lg bg-black/80 dark:bg-black/90 backdrop-blur-md text-amber-300 font-metadata font-black text-[9px] border border-amber-500/40 shadow"><span>🔥</span><span>#${idx + 1}</span></div>`;
-                }
+                const isOwnedForever = ownedForeverBookIds.has(bookId);
 
                 // Button CTA state
                 const actionButtonHTML = isInCart ? `
                     <button type="button" disabled class="w-full py-1.5 px-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 font-metadata font-bold text-[11px] flex items-center justify-center gap-1.5 cursor-default transition-all">
                         <i class="ph-bold ph-check-circle text-xs"></i> <span>Đã Trong Giỏ</span>
+                    </button>
+                ` : isOwnedForever ? `
+                    <button type="button" disabled class="w-full py-1.5 px-2 rounded-xl bg-amber-500/10 dark:bg-amber-400/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 font-metadata font-bold text-[11px] flex items-center justify-center gap-1.5 cursor-default transition-all" title="Bạn đã sở hữu vĩnh viễn sách này trong Tủ sách cá nhân">
+                        <i class="ph-bold ph-seal-check text-xs"></i> <span>Đã Sở Hữu</span>
                     </button>
                 ` : `
                     <button type="button" onclick="window.handleQuickRentTogether('${bookId}')" id="btn-rent-${bookId}" class="w-full py-1.5 px-2 rounded-xl bg-wine hover:bg-wine-light text-white dark:bg-gold dark:hover:bg-gold-light dark:text-night-bg font-metadata font-bold text-[11px] flex items-center justify-center gap-1.5 shadow-sm hover:shadow-md transition-all active:scale-95 cursor-pointer">
@@ -1188,6 +1171,17 @@ export default function CartEnd() {
             const shelfContainer = document.getElementById('trending-cart-shelf');
             if (!shelfContainer) return;
 
+            // Nạp danh sách sách đã sở hữu vĩnh viễn để loại trừ khỏi gợi ý
+            if (localStorage.getItem('token') || sessionStorage.getItem('token')) {
+                try {
+                    const shelfRes = await axiosInstance.get('/api/home/bookshelf');
+                    const shelfData = Array.isArray(shelfRes.data) ? shelfRes.data : [];
+                    ownedForeverBookIds = new Set(
+                        shelfData.filter(b => b.isForever && !b.expired).map(b => String(b.bookId || b.id))
+                    );
+                } catch {}
+            }
+
             const cartBookIds = cartItems.map(i => i.bookId || i.id).filter(Boolean);
             const cartSet = new Set(cartBookIds.map(String));
             const limit = 6;
@@ -1217,35 +1211,38 @@ export default function CartEnd() {
                         params: { page: 0, size: 10 }
                     });
                     const allBooks = Array.isArray(fallbackRes.data?.content) ? fallbackRes.data.content : (Array.isArray(fallbackRes.data) ? fallbackRes.data : []);
-                    fetchedBooks = allBooks.filter(b => !cartSet.has(String(b.book_id || b.id)));
+                    fetchedBooks = allBooks.filter(b => !cartSet.has(String(b.book_id || b.id)) && !ownedForeverBookIds.has(String(b.book_id || b.id)));
                 } catch {}
             }
 
-            // Chuẩn hóa và làm sạch dữ liệu từ API
-            let combinedBooks = (fetchedBooks || []).filter(b => !cartSet.has(String(b.book_id || b.id))).map((b, idx) => {
-                let rawPrice = (b.rent_price !== undefined && b.rent_price !== null) ? Number(b.rent_price) : 9;
-                let normalizedPrice = (rawPrice > 0 && rawPrice <= 50) ? Math.round(rawPrice) : 9;
-                return {
-                    book_id: b.book_id || b.id || `rec-${idx}`,
-                    bookName: b.bookName || b.title || 'Tác phẩm HALM',
-                    author: b.author || 'HALM BOOK',
-                    img_url: b.img_url || b.cover || b.img || '/logo.png',
-                    rent_price: normalizedPrice,
-                    category_name: b.category_name || b.category?.category_name || 'Văn học',
-                    readCount: b.readCount || (120 - idx * 7),
-                    rating: b.rating || '5.0',
-                    description: b.description || 'Tác phẩm xuất sắc được chọn lọc trong tuần trên HALM Book.'
-                };
-            });
+            // Chuẩn hóa và làm sạch dữ liệu từ API (loại bỏ sách trong giỏ và sách đã sở hữu vĩnh viễn)
+            let combinedBooks = (fetchedBooks || [])
+                .filter(b => !cartSet.has(String(b.book_id || b.id)) && !ownedForeverBookIds.has(String(b.book_id || b.id)))
+                .map((b, idx) => {
+                    let rawPrice = (b.rent_price !== undefined && b.rent_price !== null) ? Number(b.rent_price) : 9;
+                    let normalizedPrice = (rawPrice > 0 && rawPrice <= 50) ? Math.round(rawPrice) : 9;
+                    return {
+                        book_id: b.book_id || b.id || `rec-${idx}`,
+                        bookName: b.bookName || b.title || 'Tác phẩm HALM',
+                        author: b.author || 'HALM BOOK',
+                        img_url: b.img_url || b.cover || b.img || '/logo.png',
+                        rent_price: normalizedPrice,
+                        category_name: b.category_name || b.category?.category_name || 'Văn học',
+                        readCount: b.readCount || (120 - idx * 7),
+                        rating: b.rating || '5.0',
+                        description: b.description || 'Tác phẩm xuất sắc được chọn lọc trong tuần trên HALM Book.'
+                    };
+                });
 
-            // Nếu số lượng sách chưa đủ 6 cuốn, bổ sung từ kho sách CURATED_TRENDING_BOOKS
+            // Nếu số lượng sách chưa đủ 6 cuốn, bổ sung từ kho sách CURATED_TRENDING_BOOKS (không lấy sách vĩnh viễn)
             if (combinedBooks.length < 6) {
                 const existingIds = new Set(combinedBooks.map(b => String(b.book_id)));
                 for (const fallbackBook of CURATED_TRENDING_BOOKS) {
                     if (combinedBooks.length >= 6) break;
-                    if (!existingIds.has(String(fallbackBook.book_id)) && !cartSet.has(String(fallbackBook.book_id))) {
+                    const fId = String(fallbackBook.book_id);
+                    if (!existingIds.has(fId) && !cartSet.has(fId) && !ownedForeverBookIds.has(fId)) {
                         combinedBooks.push(fallbackBook);
-                        existingIds.add(String(fallbackBook.book_id));
+                        existingIds.add(fId);
                     }
                 }
             }
@@ -1265,6 +1262,12 @@ export default function CartEnd() {
             const category = book.category_name || 'Văn học';
             const planKey = '7';
             const rentalDays = 7;
+
+            // Chặn thêm sách đã sở hữu vĩnh viễn
+            if (ownedForeverBookIds.has(String(bookId))) {
+                showToast('Thông báo', `Tác phẩm "${title}" đã được bạn sở hữu vĩnh viễn trong Tủ Sách Cá Nhân.`, 'info');
+                return;
+            }
 
             const existing = cartItems.find(i => String(i.bookId) === String(bookId) || i.title === title);
             if (existing) {
@@ -1305,11 +1308,11 @@ export default function CartEnd() {
 
                 window.dispatchEvent(new Event('halm-cart-updated'));
                 updateRecommendationShelfStatus();
-                showToast('Đã thêm vào giỏ hàng', `Đã thêm cuốn "${title}" vào giỏ hàng của bạn thành công!`, 'success');
             } catch (err) {
                 console.error('Lỗi khi thêm sách gợi ý vào giỏ:', err);
                 updateRecommendationShelfStatus();
-                showToast('Lỗi', 'Không thể thêm sách vào giỏ hàng. Vui lòng thử lại!');
+                const errorMsg = err.response?.data?.message || err.message || 'Không thể thêm sách vào giỏ hàng. Vui lòng thử lại!';
+                showToast('Lỗi', errorMsg);
             }
         }
 
@@ -1450,17 +1453,6 @@ export default function CartEnd() {
             <div className="paper-grain relative min-h-screen flex flex-col">
                 {/* Starry background in Dark Mode */}
                     <div id="starry-background"></div>
-                
-                    {/* Toast Notification */}
-                    <div id="toast-notification" className="flex items-center gap-3 px-5 py-3.5 rounded-xl bg-paper-surface dark:bg-night-card border border-wine/30 dark:border-gold/40 shadow-2xl text-ink dark:text-night-text">
-                        <div className="w-8 h-8 rounded-full bg-wine/10 dark:bg-gold/20 flex items-center justify-center text-wine dark:text-gold shrink-0">
-                            <i className="ph-bold ph-check text-base"></i>
-                        </div>
-                        <div>
-                            <div className="font-display font-bold text-xs" id="toast-title">Giỏ Hàng HALM BOOK</div>
-                            <div className="font-editorial text-xs text-ink-muted dark:text-night-muted" id="toast-message">Đã cập nhật giỏ hàng thành công.</div>
-                        </div>
-                    </div>
                 
                     {/* ========================================================
                          MAIN CONTENT: TIÊU CHUẨN MAX-W 1520PX, ĐỒNG BỘ FONT INTER

@@ -1,6 +1,6 @@
 import { useMissionVisit } from '@/hooks/useMissionTracking';
 import { myBooksTailwindConfig, inlinePageStyle1 } from './styles/TuSachCn.styles.js';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import UserLayout from './layout/UserLayout';
 import { isDarkMode, applyTheme } from '@/utils/theme';
@@ -9,12 +9,13 @@ import { getCustomerBookshelf, checkoutWithPotato } from '@/services/orderServic
 import { formatCustomerId, getTierInfo, getTierBadgeClass } from '@/utils/tierUtils';
 import AvatarWithFrame from '@/components/common/AvatarWithFrame';
 import { getPersonalBooksMetadata, deletePersonalBook } from '@/services/personalBookService';
-import { getFavoriteBooks, removeFavorite } from '@/services/userFeatureService';
+import { getFavoriteBooks, removeFavorite, returnRentedBook, getGiftsSent, getGiftsReceived } from '@/services/userFeatureService';
 import { logoutUser } from '@/services/authToken';
 import { confirmDialog } from '@/components/common/CustomConfirmModal';
+import { prefetchUserRoutes } from '@/utils/routePrefetch';
 
 const ASSETS = { fonts: 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Open+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,600&family=Roboto:wght@300;400;500;700;900&display=swap', bold: 'https://unpkg.com/@phosphor-icons/web@2.1.1/src/bold/style.css', regular: 'https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css', fill: 'https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css', duotone: 'https://unpkg.com/@phosphor-icons/web@2.1.1/src/duotone/style.css', tailwind: 'https://cdn.tailwindcss.com' };
-function createStars() { return Array.from({ length: 80 }, (_, id) => ({ id, size: Math.random() * 2.5 + .5, top: Math.random() * 100, left: Math.random() * 100, duration: Math.random() * 3 + 2, delay: Math.random() * 3 })); }
+function createStars() { return Array.from({ length: 25 }, (_, id) => ({ id, size: Math.random() * 2.5 + .5, top: Math.random() * 100, left: Math.random() * 100, duration: Math.random() * 3 + 2, delay: Math.random() * 3 })); }
 function handleImageError(event, fallback = '/logo.png') { const image = event.currentTarget; if (image.dataset.fallbackAttempted) return; image.dataset.fallbackAttempted = 'true'; image.src = fallback; }
 
 const RENEW_PRICING = {
@@ -35,11 +36,87 @@ function getBotReply(input, bookshelf = [], potatoBalance = 0) {
     }
     return "Tôi có thể hỗ trợ bạn tóm tắt nội dung sách đang đọc, kiểm tra thời hạn mượn hoặc gợi ý tác phẩm mới phù hợp!";
 }
+const CURATED_AI_QUOTES = [
+    {
+        book: "Có Hai Con Mèo Ngồi Bên Cửa Sổ",
+        page: "Trang 42",
+        quote: "Tình yêu có vị ngọt ngào của tình bạn và vị đắng chát của chia ly... Nhưng ngay cả nỗi buồn cũng đẹp nếu nó xuất phát từ một trái tim chân thành.",
+        insight: "Đoạn trích phản ánh tư tưởng chủ đạo của tác phẩm về lòng trắc ẩn và sự gắn kết thuần khiết giữa muôn loài.",
+        color: "text-wine dark:text-gold",
+        borderColor: "border-wine dark:border-gold",
+        iconColor: "text-wine dark:text-gold"
+    },
+    {
+        book: "Atomic Habits",
+        page: "Trang 78",
+        quote: "Bạn không vươn lên tới tầm của các mục tiêu mà bạn đặt ra. Bạn tụt xuống ngang tầm với các hệ thống mà bạn xây dựng.",
+        insight: "Nguyên lý cốt lõi về việc tập trung xây dựng thói quen vi mô thay vì chỉ kỳ vọng vào kết quả cuối cùng.",
+        color: "text-blue-600 dark:text-blue-400",
+        borderColor: "border-blue-500",
+        iconColor: "text-blue-500"
+    },
+    {
+        book: "Nhà Giả Kim",
+        page: "Trang 104",
+        quote: "Khi bạn khao khát một điều gì đó, cả vũ trụ sẽ hợp lực giúp bạn đạt được điều đó.",
+        insight: "Sức mạnh của trực giác và đức tin vào vận mệnh cá nhân khi con người dám dấn thân theo đuổi ước mơ.",
+        color: "text-amber-600 dark:text-amber-400",
+        borderColor: "border-amber-500",
+        iconColor: "text-amber-500"
+    },
+    {
+        book: "Hoàng Tử Bé",
+        page: "Trang 65",
+        quote: "Người ta chỉ nhìn thấy thật rõ ràng bằng trái tim. Những điều cốt yếu thì mắt trần không thể thấy được.",
+        insight: "Bài học triết học về tình yêu thương, sự gắn kết trách nhiệm và những giá trị vô hình nuôi dưỡng tâm hồn con người.",
+        color: "text-emerald-600 dark:text-emerald-400",
+        borderColor: "border-emerald-500",
+        iconColor: "text-emerald-500"
+    },
+    {
+        book: "Muôn Kiếp Nhân Sinh",
+        page: "Trang 156",
+        quote: "Nhân quả đừng đợi kiếp sau mới thấy, nó đang vận hành trong từng suy nghĩ, lời nói và hành động của bạn mỗi ngày.",
+        insight: "Quy luật bảo toàn năng lượng tâm linh và trách nhiệm của mỗi cá nhân trước mọi rung động ý thức của chính mình.",
+        color: "text-purple-600 dark:text-purple-400",
+        borderColor: "border-purple-500",
+        iconColor: "text-purple-500"
+    },
+    {
+        book: "Tư Duy Nhanh Và Chậm",
+        page: "Trang 112",
+        quote: "Ảo tưởng rằng ta hiểu được quá khứ nuôi dưỡng sự tự tin thái quá vào khả năng tiên đoán tương lai của chúng ta.",
+        insight: "Cảnh báo sâu sắc của Daniel Kahneman về thiên kiến nhận thức và sự cần thiết của tư duy phản biện cởi mở.",
+        color: "text-rose-600 dark:text-rose-400",
+        borderColor: "border-rose-500",
+        iconColor: "text-rose-500"
+    },
+    {
+        book: "Cây Cam Ngọt Của Tôi",
+        page: "Trang 89",
+        quote: "Tại sao người ta lại phải giải thích mọi chuyện cho lũ trẻ con biết cơ chứ? Sự thật là người ta thích làm cho mọi thứ trở nên phức tạp.",
+        insight: "Tâm hồn trong trẻo, dễ tổn thương của tuổi thơ và nỗi khao khát được lắng nghe, thấu cảm bằng sự chân thành nguyên sơ.",
+        color: "text-orange-600 dark:text-orange-400",
+        borderColor: "border-orange-500",
+        iconColor: "text-orange-500"
+    },
+    {
+        book: "Đắc Nhân Tâm",
+        page: "Trang 54",
+        quote: "Hãy khen ngợi sự tiến bộ dù là nhỏ nhất của người khác. Sự chân thành trong lời khen sẽ chắp cánh cho tiềm năng nở rộ.",
+        insight: "Nghệ thuật thấu hiểu và khích lệ tâm lý con người: tôn trọng giá trị tự thân của đối phương để kiến tạo sự tin cậy lâu dài.",
+        color: "text-teal-600 dark:text-teal-400",
+        borderColor: "border-teal-500",
+        iconColor: "text-teal-500"
+    }
+];
+
 export default function MyBooks() {
     useMissionVisit('BOOKSHELF');
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
-    const initialCategory = searchParams.get('tab') === 'personal' ? 'personal' : 'reading';
+    const tabParam = searchParams.get('tab');
+    const initialCategory = ['personal', 'gifts', 'favorites', 'completed', 'all'].includes(tabParam) ? tabParam : 'reading';
     const [isDark, setIsDark] = useState(() => isDarkMode());
     const [stars, setStars] = useState([]);
     const [toast, setToast] = useState({ title: "Tủ Sách HALM BOOK", message: "Đã cập nhật trạng thái tủ sách." });
@@ -47,6 +124,8 @@ export default function MyBooks() {
     const [activeCategory, setActiveCategory] = useState(initialCategory);
     const [renewBook, setRenewBook] = useState(null);
     const [expiredBook, setExpiredBook] = useState(null);
+    const [returnModalBook, setReturnModalBook] = useState(null);
+    const [isReturningBook, setIsReturningBook] = useState(false);
     const [selectedPlan, setSelectedPlan] = useState('7');
     const [searchQuery, setSearchQuery] = useState('');
 
@@ -55,6 +134,9 @@ export default function MyBooks() {
     const [bookshelf, setBookshelf] = useState([]);
     const [personalBooks, setPersonalBooks] = useState(() => getPersonalBooksMetadata());
     const [favoriteBooks, setFavoriteBooks] = useState([]);
+    const [giftsSent, setGiftsSent] = useState([]);
+    const [giftsReceived, setGiftsReceived] = useState([]);
+    const [giftSubTab, setGiftSubTab] = useState('received'); // 'received' | 'sent'
     const [isLoadingBooks, setIsLoadingBooks] = useState(true);
     const [isRenewing, setIsRenewing] = useState(false);
 
@@ -76,7 +158,7 @@ export default function MyBooks() {
     const normalizeBookshelfItem = (b) => {
         const isForever = Boolean(b.isForever || (b.remainingDays && b.remainingDays > 1000));
         const remDays = b.remainingDays !== undefined && b.remainingDays !== null ? Number(b.remainingDays) : 0;
-        const isExpired = b.status === 'EXPIRED' || (!isForever && remDays <= 0 && b.endDate && new Date(b.endDate) <= new Date());
+        const isExpired = b.status === 'EXPIRED' || b.status === 'RETURNED' || b.status === 'REVOKED' || (!isForever && remDays <= 0 && b.endDate && new Date(b.endDate) <= new Date());
         return {
             ...b,
             accessId: b.accessRecordId || b.access_record_id || b.id || b.accessId,
@@ -90,7 +172,7 @@ export default function MyBooks() {
             remainingDays: remDays,
             isForever,
             expired: isExpired,
-            status: isExpired ? 'EXPIRED' : (b.status || 'ACTIVE')
+            status: b.status || (isExpired ? 'EXPIRED' : 'ACTIVE')
         };
     };
 
@@ -124,6 +206,23 @@ export default function MyBooks() {
         }
     };
 
+    const fetchGifts = async () => {
+        try {
+            const [sent, recv] = await Promise.allSettled([getGiftsSent(), getGiftsReceived()]);
+            if (sent.status === 'fulfilled' && Array.isArray(sent.value)) setGiftsSent(sent.value);
+            if (recv.status === 'fulfilled' && Array.isArray(recv.value)) setGiftsReceived(recv.value);
+        } catch (e) {
+            console.error("Lỗi khi tải quà tặng sách:", e);
+        }
+    };
+
+    useEffect(() => {
+        const tab = searchParams.get('tab');
+        if (tab && ['personal', 'gifts', 'favorites', 'completed', 'all', 'reading'].includes(tab)) {
+            setActiveCategory(tab);
+        }
+    }, [searchParams]);
+
     const handleRemoveFavorite = async (bookId, title) => {
         try {
             await removeFavorite(bookId);
@@ -144,9 +243,11 @@ export default function MyBooks() {
         document.documentElement.style.height = '';
         window.dispatchEvent(new Event('resize'));
 
+        prefetchUserRoutes();
         fetchCustomer();
         fetchBookshelf();
         fetchFavorites();
+        fetchGifts();
 
         const handlePageShow = () => {
             document.body.style.overflow = '';
@@ -158,6 +259,7 @@ export default function MyBooks() {
             fetchCustomer();
             fetchBookshelf();
             fetchFavorites();
+            fetchGifts();
             window.dispatchEvent(new Event('resize'));
         };
         window.addEventListener('pageshow', handlePageShow);
@@ -179,6 +281,7 @@ export default function MyBooks() {
         const handleBookshelfUpdated = () => {
             fetchBookshelf();
             fetchCustomer();
+            fetchGifts();
             setPersonalBooks(getPersonalBooksMetadata());
         };
         const handlePotatoUpdated = (e) => {
@@ -210,6 +313,40 @@ export default function MyBooks() {
     useEffect(() => { document.title = "HALM BOOK — Tủ Sách Của Tôi & Không Gian Đọc Cá Nhân"; let d = document.querySelector('meta[name="description"]'); if (!d) { d = document.createElement('meta'); d.name = 'description'; document.head.appendChild(d); } d.content = "Quản lý tủ sách cá nhân HALM BOOK: Sách đang thuê, tiến trình đọc số, gia hạn bằng Khoai và lịch sử đọc sách bản quyền."; }, []);
     useEffect(() => () => { if (toastTimer.current) window.clearTimeout(toastTimer.current); }, []);
     useEffect(() => { if (!document.querySelector('link[data-my-books-fonts]')) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = ASSETS.fonts; l.dataset.myBooksFonts = 'true'; document.head.appendChild(l); } Object.entries({ bold: ASSETS.bold, regular: ASSETS.regular, fill: ASSETS.fill, duotone: ASSETS.duotone }).forEach(([k, href]) => { if (document.querySelector(`link[data-my-books-icons="${k}"]`)) return; const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = href; l.dataset.myBooksIcons = k; document.head.appendChild(l); }); window.tailwind = window.tailwind || {}; window.tailwind.config = myBooksTailwindConfig; if (!document.querySelector('script[src*="cdn.tailwindcss.com"]')) { const s = document.createElement('script'); s.src = ASSETS.tailwind; s.async = true; document.head.appendChild(s); } }, []);
+    // Xoay vòng trích dẫn AI theo ngày (Daily Rotation) + Đổi gợi ý
+    const [quoteOffset, setQuoteOffset] = useState(() => {
+        const today = new Date();
+        const dayNumber = Math.floor(today.getTime() / (1000 * 60 * 60 * 24));
+        return (dayNumber * 2) % CURATED_AI_QUOTES.length;
+    });
+
+    const currentQuotes = useMemo(() => {
+        const q1 = CURATED_AI_QUOTES[quoteOffset % CURATED_AI_QUOTES.length];
+        const q2 = CURATED_AI_QUOTES[(quoteOffset + 1) % CURATED_AI_QUOTES.length];
+        return [q1, q2];
+    }, [quoteOffset]);
+
+    const handleRefreshQuotes = () => {
+        setQuoteOffset(prev => (prev + 2) % CURATED_AI_QUOTES.length);
+        if (window.halmToast) window.halmToast.info("Gợi Ý AI", "Đã cập nhật góc nhìn & trích dẫn mới!");
+    };
+
+    const handleExportNotes = () => {
+        const textToCopy = currentQuotes.map(q => 
+            `📖 [${q.book} • ${q.page}]\n"${q.quote}"\n✨ Nhận xét AI: ${q.insight}`
+        ).join("\n\n---\n\n");
+        
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                if (window.halmToast) window.halmToast.success("Xuất Ghi Chú", "Đã sao chép các trích dẫn & phân tích AI vào bộ nhớ tạm!");
+            }).catch(() => {
+                if (window.halmToast) window.halmToast.info("Xuất Ghi Chú", "Đã sao chép ghi chú vào clipboard!");
+            });
+        } else {
+            if (window.halmToast) window.halmToast.info("Xuất Ghi Chú", "Đã sao chép ghi chú vào clipboard!");
+        }
+    };
+
     const showToast = (title, message, type = 'info') => {
         if (window.halmToast) {
             const lower = (title || '').toLowerCase();
@@ -221,15 +358,16 @@ export default function MyBooks() {
                 window.halmToast.info(title, message);
             }
         }
-        setToast({ title, message });
-        setToastVisible(true);
-        if (toastTimer.current) window.clearTimeout(toastTimer.current);
-        toastTimer.current = window.setTimeout(() => setToastVisible(false), 3500);
     };
     const filterBooks = category => {
         setActiveCategory(category);
         setCurrentPage(1);
-        if (category === 'favorites' || category === 'notes') showToast("Bộ Lọc Tủ Sách", `Đang hiển thị mục: ${{ favorites: "Yêu Thích", notes: "Ghi Chú AI" }[category]}`);
+        setCurrentHistoryPage(1);
+        if (category === 'favorites' || category === 'notes' || category === 'gifts') {
+            const mapName = { favorites: 'Yeu Thich', notes: 'Ghi Chu AI', gifts: 'Qua Tang Sach' };
+            showToast('Bộ Lọc Tủ Sách', `Đang hiển thị mục: ${mapName[category] || category}`);
+            return;
+        }
     };
     const openRenewModal = (title, remainingDays, bookId) => { setSelectedPlan('7'); setRenewBook({ title, remainingDays, bookId }); };
     const closeRenewModal = () => setRenewBook(null);
@@ -299,9 +437,49 @@ export default function MyBooks() {
         window.dispatchEvent(new CustomEvent('halm-open-chatbot', { detail: { message: text || 'Xin chào, tôi cần tư vấn về tủ sách!' } }));
     };
 
+    const handleConfirmReturnBook = async () => {
+        if (!returnModalBook || isReturningBook) return;
+        const targetId = returnModalBook.bookId || returnModalBook.accessId;
+        if (!targetId) {
+            showToast("Lỗi", "Không xác định được mã sách cần trả!", "error");
+            return;
+        }
+        try {
+            setIsReturningBook(true);
+            const res = await returnRentedBook(targetId);
+            showToast("Trả Sách Thành Công", res?.message || `Đã hoàn trả tác phẩm "${returnModalBook.bookTitle}" về thư viện.`, "success");
+
+            // Cập nhật ngay tại chỗ trên state bookshelf để UI phản hồi tức thì
+            const returnedBookId = returnModalBook.bookId;
+            const returnedAccessId = returnModalBook.accessId;
+            setBookshelf(prev => prev.map(b => {
+                const matchBook = returnedBookId && b.bookId === returnedBookId;
+                const matchAccess = returnedAccessId && b.accessId === returnedAccessId;
+                if (matchBook || matchAccess) {
+                    return { ...b, status: 'RETURNED', expired: true, remainingDays: 0 };
+                }
+                return b;
+            }));
+
+            setReturnModalBook(null);
+
+            // Bắn event toàn cục để Header và các trang khác cập nhật
+            window.dispatchEvent(new CustomEvent('halm-bookshelf-updated'));
+
+            // Tải lại toàn bộ dữ liệu mới nhất từ server
+            await fetchBookshelf();
+        } catch (err) {
+            console.error("Lỗi khi trả sách:", err);
+            const msg = err.response?.data?.message || err.message || "Không thể trả sách vào lúc này. Vui lòng thử lại sau.";
+            showToast("Lỗi Trả Sách", msg, "error");
+        } finally {
+            setIsReturningBook(false);
+        }
+    };
+
     // Phân loại danh sách sách
-    const activeBooks = bookshelf.filter(b => !b.expired && (b.remainingDays > 0 || b.isForever));
-    const historyBooks = bookshelf.filter(b => b.expired || (b.remainingDays <= 0 && !b.isForever));
+    const activeBooks = bookshelf.filter(b => !b.expired && b.status !== 'RETURNED' && b.status !== 'REVOKED' && (b.remainingDays > 0 || b.isForever));
+    const historyBooks = bookshelf.filter(b => b.expired || b.status === 'RETURNED' || b.status === 'REVOKED' || (b.remainingDays <= 0 && !b.isForever));
 
     const normalizeSearchStr = (str) => String(str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 
@@ -325,8 +503,28 @@ export default function MyBooks() {
         return titleNorm.includes(normQ) || authorNorm.includes(normQ) || catNorm.includes(normQ);
     });
 
-    // Phân trang 4 sách / trang theo yêu cầu
-    const BOOKS_PER_PAGE = 4;
+    const filteredGiftsReceived = giftsReceived.filter(g => {
+        if (!searchQuery) return true;
+        const normQ = normalizeSearchStr(searchQuery);
+        const titleNorm = normalizeSearchStr(g.bookTitle || '');
+        const senderNorm = normalizeSearchStr(g.senderName || '');
+        const authorNorm = normalizeSearchStr(g.bookAuthor || '');
+        const msgNorm = normalizeSearchStr(g.message || '');
+        return titleNorm.includes(normQ) || senderNorm.includes(normQ) || authorNorm.includes(normQ) || msgNorm.includes(normQ);
+    });
+
+    const filteredGiftsSent = giftsSent.filter(g => {
+        if (!searchQuery) return true;
+        const normQ = normalizeSearchStr(searchQuery);
+        const titleNorm = normalizeSearchStr(g.bookTitle || '');
+        const receiverNorm = normalizeSearchStr(g.receiverName || '');
+        const authorNorm = normalizeSearchStr(g.bookAuthor || '');
+        const msgNorm = normalizeSearchStr(g.message || '');
+        return titleNorm.includes(normQ) || receiverNorm.includes(normQ) || authorNorm.includes(normQ) || msgNorm.includes(normQ);
+    });
+
+    // Phân trang 3 sách / trang theo yêu cầu
+    const BOOKS_PER_PAGE = 3;
     const [currentPage, setCurrentPage] = useState(1);
     const [currentHistoryPage, setCurrentHistoryPage] = useState(1);
     const totalActivePages = Math.max(1, Math.ceil(filteredActiveBooks.length / BOOKS_PER_PAGE));
@@ -348,16 +546,7 @@ export default function MyBooks() {
             <div id="starry-background" aria-hidden="true">
                 {stars.map((star) => <div key={star.id} className="star" style={{ width: `${star.size}px`, height: `${star.size}px`, top: `${star.top}%`, left: `${star.left}%`, animation: `starTwinkle ${star.duration}s infinite ease-in-out ${star.delay}s` }} />)}</div>
 
-            {/* Toast Notification */}
-            <div id="toast-notification" className={`flex items-center gap-3 px-5 py-4 rounded-xl bg-paper-surface dark:bg-night-card border border-wine/30 dark:border-gold/40 shadow-2xl text-ink dark:text-night-text ${toastVisible ? 'show' : ''}`}>
-                <div className="w-8 h-8 rounded-full bg-wine/10 dark:bg-gold/20 flex items-center justify-center text-wine dark:text-gold shrink-0">
-                    <i className="ph-bold ph-check text-lg"></i>
-                </div>
-                <div>
-                    <div className="font-display font-bold text-xs" id="toast-title">{toast.title}</div>
-                    <div className="font-editorial-body text-xs text-ink-muted dark:text-night-muted" id="toast-message">{toast.message}</div>
-                </div>
-            </div>
+
 
 
             {/* ========================================================
@@ -370,7 +559,7 @@ export default function MyBooks() {
                  SIDEBAR TRÁI: HỒ SƠ & ĐIỀU HƯỚNG TÀI KHOẢN (ĐỒNG BỘ)
                  ==================================================== */}
                     {/* LEFT SIDEBAR - FIXED/STICKY CONTAINER */}
-                    <aside className="w-full lg:w-80 shrink-0 space-y-4 lg:sticky lg:top-24 lg:self-start">
+                    <aside onMouseEnter={prefetchUserRoutes} onFocus={prefetchUserRoutes} className="w-full lg:w-80 shrink-0 space-y-4 lg:sticky lg:top-24 lg:self-start">
 
                         {/* 1. Profile Avatar Card */}
                         <div className="rounded-3xl user-sidebar-card bg-paper-surface dark:bg-night-surface border border-paper-border dark:border-night-border p-6 shadow-sm flex flex-col items-center text-center relative overflow-hidden group">
@@ -405,15 +594,19 @@ export default function MyBooks() {
                             <div className="w-full h-px bg-paper-border dark:bg-night-border my-5"></div>
 
                             {/* Quick Reader Stats */}
-                            <div className="grid grid-cols-2 gap-3 w-full text-center">
-                                <Link to="/canhan?tab=wallet" className="py-4 px-3 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-gold transition-colors flex flex-col justify-center">
-                                    <span className="block font-metadata-spec text-2xl font-black text-[#EDE9DF]">{potatoBalance.toLocaleString()}</span>
-                                    <span className="font-metadata-spec text-xs text-[#96938B] mt-1">Khoai Tích Lũy</span>
+                            <div className="grid grid-cols-3 gap-2 w-full text-center">
+                                <Link to="/canhan?tab=wallet" className="py-3 px-2 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-gold transition-colors flex flex-col justify-center">
+                                    <span className="block font-metadata-spec text-base sm:text-lg font-black text-[#EDE9DF]">{potatoBalance.toLocaleString()}</span>
+                                    <span className="font-metadata-spec text-[10px] text-[#96938B] mt-0.5 font-bold">Khoai</span>
                                 </Link>
-                                <div className="py-4 px-3 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border flex flex-col justify-center">
-                                    <span className="block font-metadata-spec text-2xl font-black text-[#EDE9DF]">{activeBooks.length}</span>
-                                    <span className="font-metadata-spec text-xs text-[#96938B] mt-1">Sách Trong Tủ</span>
+                                <div className="py-3 px-2 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border flex flex-col justify-center">
+                                    <span className="block font-metadata-spec text-base sm:text-lg font-black text-[#EDE9DF]">{activeBooks.length}</span>
+                                    <span className="font-metadata-spec text-[10px] text-[#96938B] mt-0.5 font-bold">Tủ Sách</span>
                                 </div>
+                                <Link to="/canhan?tab=vouchers" className="py-3 px-2 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-gold transition-colors flex flex-col justify-center items-center">
+                                    <i className="ph-bold ph-ticket text-lg text-amber-500 dark:text-gold mb-0.5"></i>
+                                    <span className="font-metadata-spec text-[10px] text-[#96938B] font-bold">Voucher</span>
+                                </Link>
                             </div>
                         </div>
 
@@ -473,6 +666,15 @@ export default function MyBooks() {
                                     <span>Ví Khoai Tây</span>
                                 </div>
                                 <span className="px-3 py-1 rounded-full bg-paper-200 dark:bg-[#242116] border border-paper-border dark:border-[#52441D] text-amber-600 dark:text-[#D8B44A] text-xs font-bold font-metadata-spec">{potatoBalance.toLocaleString()} 🥔</span>
+                            </Link>
+
+                            {/* 4.5. Kho Voucher Của Tôi */}
+                            <Link
+                                to="/canhan?tab=vouchers"
+                                className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-stone-300 hover:bg-paper-200 dark:hover:bg-stone-800/40 hover:text-ink dark:hover:text-white transition-colors"
+                            >
+                                <i className="ph-bold ph-ticket text-lg text-stone-400"></i>
+                                <span>Kho Voucher Của Tôi</span>
                             </Link>
 
                             {/* 5. Lịch Sử Giao Dịch */}
@@ -571,11 +773,11 @@ export default function MyBooks() {
                                     <span className="font-display font-black text-xl text-ink dark:text-night-text">{historyBooks.length} <span className="text-xs font-normal text-ink-muted">cuốn</span></span>
                                 </div>
                             </div>
-                            <div className="rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-4 shadow-sm text-center">
-                                <span className="font-metadata-spec text-[10px] font-bold uppercase text-ink-muted dark:text-night-muted block">Thời Gian Đọc Tuần Này</span>
+                            <div className="rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-4 shadow-sm text-center cursor-pointer hover:border-rose-500/40 transition-colors" onClick={() => filterBooks("gifts")} title="Bấm để xem danh sách sách được tặng & đã gửi">
+                                <span className="font-metadata-spec text-[10px] font-bold uppercase text-ink-muted dark:text-night-muted block">Quà Tặng Sách</span>
                                 <div className="flex items-center justify-center gap-1.5 mt-1">
-                                    <i className="ph-bold ph-timer text-blue-500 text-lg"></i>
-                                    <span className="font-display font-black text-xl text-ink dark:text-night-text">8.5 <span className="text-xs font-normal text-ink-muted">giờ</span></span>
+                                    <i className="ph-bold ph-gift text-rose-500 text-lg"></i>
+                                    <span className="font-display font-black text-xl text-ink dark:text-night-text">{giftsReceived.length} <span className="text-xs font-normal text-ink-muted">món quà</span></span>
                                 </div>
                             </div>
                             <div className="rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-4 shadow-sm text-center">
@@ -609,6 +811,10 @@ export default function MyBooks() {
                                 </button>
                                 <button type="button" onClick={() => filterBooks("completed")} className={"library-tab px-3.5 py-2 rounded-xl border border-paper-border dark:border-night-border text-ink dark:text-night-text hover:border-wine dark:hover:border-gold transition-colors whitespace-nowrap " + (activeCategory === "completed" ? "active" : "")}>
                                     Lịch Sử ({historyBooks.length})
+                                </button>
+                                <button type="button" onClick={() => filterBooks("gifts")} className={"library-tab px-3.5 py-2 rounded-xl border border-paper-border dark:border-night-border text-ink dark:text-night-text hover:border-rose-500 dark:hover:border-rose-400 transition-colors whitespace-nowrap flex items-center gap-1.5 " + (activeCategory === "gifts" ? "active text-rose-500 border-rose-500" : "")}>
+                                    <i className="ph-fill ph-gift text-rose-500"></i>
+                                    <span>Quà Tặng ({giftsReceived.length + giftsSent.length})</span>
                                 </button>
                             </div>
 
@@ -648,7 +854,7 @@ export default function MyBooks() {
                         {/* ====================================================
                      SECTION 1: SÁCH ĐANG ĐỌC & THUÊ (ACTIVE LOANS)
                      ==================================================== */}
-                        <div className={"space-y-4 " + (activeCategory === 'completed' || activeCategory === 'personal' || activeCategory === 'favorites' ? 'hidden' : '')} id="section-reading">
+                        <div className={"space-y-4 " + (activeCategory === 'completed' || activeCategory === 'personal' || activeCategory === 'favorites' || activeCategory === 'gifts' ? 'hidden' : '')} id="section-reading">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2.5">
                                     <span className="w-8 h-8 rounded-xl bg-wine/10 dark:bg-gold/15 text-wine dark:text-gold flex items-center justify-center text-lg">
@@ -784,15 +990,32 @@ export default function MyBooks() {
                                                             <i className="ph-bold ph-arrow-right"></i>
                                                         </button>
 
-                                                        <button type="button" onClick={() => openRenewModal(book.bookTitle, book.remainingDays, book.bookId)} className="px-3.5 py-2 rounded-xl bg-paper-200 dark:bg-night-surface hover:bg-paper-border dark:hover:bg-night-border text-ink dark:text-night-text border border-paper-border dark:border-night-border text-xs font-metadata-spec font-bold transition-colors flex items-center gap-1.5">
-                                                            <i className="ph-bold ph-arrows-clockwise text-wine dark:text-gold"></i>
-                                                            <span>Thêm thời gian đọc</span>
-                                                        </button>
+                                                        {!isForever && (
+                                                            <button type="button" onClick={() => openRenewModal(book.bookTitle, book.remainingDays, book.bookId)} className="px-3.5 py-2 rounded-xl bg-paper-200 dark:bg-night-surface hover:bg-paper-border dark:hover:bg-night-border text-ink dark:text-night-text border border-paper-border dark:border-night-border text-xs font-metadata-spec font-bold transition-colors flex items-center gap-1.5">
+                                                                <i className="ph-bold ph-arrows-clockwise text-wine dark:text-gold"></i>
+                                                                <span>Thêm thời gian đọc</span>
+                                                            </button>
+                                                        )}
 
                                                         <button type="button" onClick={() => openChatbot(`Tóm tắt ý chính của cuốn sách "${book.bookTitle}"`)} className="px-3.5 py-2 rounded-xl bg-paper-200 dark:bg-night-surface hover:bg-paper-border dark:hover:bg-night-border text-ink dark:text-night-text border border-paper-border dark:border-night-border text-xs font-metadata-spec font-bold transition-colors flex items-center gap-1.5">
                                                             <i className="ph-bold ph-sparkle text-gold"></i>
                                                             <span>Hỏi Đáp AI</span>
                                                         </button>
+
+                                                        {!isForever && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setReturnModalBook(book);
+                                                                }}
+                                                                className="px-3.5 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 text-xs font-metadata-spec font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                                                                title="Trả lại cuốn sách trước hạn thuê"
+                                                            >
+                                                                <i className="ph-bold ph-arrow-u-up-left text-sm"></i>
+                                                                <span>Trả Sách</span>
+                                                            </button>
+                                                        )}
 
                                                         <Link to={`/chitietsach/${book.bookId}`} className="px-3.5 py-2 rounded-xl text-ink-muted dark:text-night-muted hover:text-ink dark:hover:text-white text-xs font-metadata-spec font-bold transition-colors ml-auto">
                                                             Chi Tiết Sách
@@ -1091,7 +1314,7 @@ export default function MyBooks() {
                         {/* ====================================================
                      SECTION 2: SÁCH ĐÃ THUÊ & LỊCH SỬ HOÀN THÀNH (HISTORY GRID)
                      ==================================================== */}
-                        <div className={"space-y-4 pt-2 " + (activeCategory === 'reading' || activeCategory === 'personal' || activeCategory === 'favorites' ? 'hidden' : '')} id="section-completed">
+                        <div className={"space-y-4 pt-2 " + (activeCategory === 'reading' || activeCategory === 'personal' || activeCategory === 'favorites' || activeCategory === 'gifts' ? 'hidden' : '')} id="section-completed">
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                 <div className="flex items-center gap-2.5">
                                     <span className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center text-lg">
@@ -1127,7 +1350,7 @@ export default function MyBooks() {
                                                     <div className="w-full h-52 rounded-xl overflow-hidden bg-paper-200 dark:bg-night-surface book-cover-elevated relative mb-3">
                                                         <img src={coverUrl} alt={book.bookTitle} className="w-full h-full object-cover p-2" onError={(event) => handleImageError(event, "/logo.png")} />
                                                         <span className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-slate-700/90 text-white text-[9px] font-metadata-spec font-black backdrop-blur-sm">
-                                                            {book.expired ? 'Hết hạn thuê' : 'Đã đọc'}
+                                                            {book.status === 'RETURNED' ? 'Đã trả sách' : (book.expired ? 'Hết hạn thuê' : 'Đã đọc')}
                                                         </span>
                                                     </div>
                                                     <h4 className="font-display font-bold text-sm text-ink dark:text-night-text line-clamp-1 hover:text-wine dark:hover:text-gold cursor-pointer" onClick={() => navigate(`/chitietsach/${book.bookId}`)}>
@@ -1135,8 +1358,10 @@ export default function MyBooks() {
                                                     </h4>
                                                     <p className="font-metadata-spec text-xs text-ink-muted dark:text-night-muted mt-0.5">{book.authorName || 'Tác giả'}</p>
                                                     <div className="text-[10px] font-metadata-spec text-ink-muted dark:text-night-muted mt-2 pt-2 border-t border-paper-border dark:border-night-border flex justify-between">
-                                                        <span>Hết hạn: {book.endDate ? book.endDate.substring(0, 10) : '—'}</span>
-                                                        <span className="text-amber-600 font-bold">Cần gia hạn</span>
+                                                        <span>{book.status === 'RETURNED' ? 'Ngày trả: ' : 'Hết hạn: '}{book.endDate ? book.endDate.substring(0, 10) : '—'}</span>
+                                                        <span className={book.status === 'RETURNED' ? 'text-rose-500 font-bold' : 'text-amber-600 font-bold'}>
+                                                            {book.status === 'RETURNED' ? 'Đã hoàn trả' : 'Cần gia hạn'}
+                                                        </span>
                                                     </div>
                                                 </div>
 
@@ -1203,11 +1428,205 @@ export default function MyBooks() {
                             )}
                         </div>
 
+                        {/* ====================================================
+                            SECTION: QUÀ TẶNG SÁCH (BOOK GIFTS - RECEIVED & SENT)
+                            ==================================================== */}
+                        <div className={"space-y-4 pt-2 " + (activeCategory !== 'gifts' && activeCategory !== 'all' ? 'hidden' : '')} id="section-gifts">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-paper-border/70 dark:border-night-border/70">
+                                <div className="flex items-center gap-2.5">
+                                    <span className="w-8 h-8 rounded-xl bg-rose-500/15 text-rose-500 flex items-center justify-center text-lg shadow-2xs">
+                                        <i className="ph-bold ph-gift"></i>
+                                    </span>
+                                    <div>
+                                        <h2 className="font-display font-black text-xl text-ink dark:text-night-text">
+                                            Quà Tặng Sách
+                                        </h2>
+                                        <p className="font-editorial-body text-xs text-ink-muted dark:text-night-muted">
+                                            Tác phẩm bạn bè đã gửi tặng hoặc bạn đã gửi trao tri thức đến độc giả khác
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Subtabs: Đã Nhận & Đã Gửi */}
+                                <div className="flex items-center gap-1.5 bg-paper-100 dark:bg-night-surface p-1 rounded-xl border border-paper-border dark:border-night-border self-start sm:self-auto shadow-2xs">
+                                    <button
+                                        type="button"
+                                        onClick={() => setGiftSubTab('received')}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold font-metadata-spec transition-all flex items-center gap-1.5 cursor-pointer ${
+                                            giftSubTab === 'received'
+                                                ? 'bg-wine text-white dark:bg-gold dark:text-night-bg shadow-sm'
+                                                : 'text-ink-muted dark:text-stone-400 hover:text-ink dark:hover:text-white'
+                                        }`}
+                                    >
+                                        <i className="ph-bold ph-envelope-open"></i>
+                                        <span>Sách Được Tặng ({giftsReceived.length})</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setGiftSubTab('sent')}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold font-metadata-spec transition-all flex items-center gap-1.5 cursor-pointer ${
+                                            giftSubTab === 'sent'
+                                                ? 'bg-wine text-white dark:bg-gold dark:text-night-bg shadow-sm'
+                                                : 'text-ink-muted dark:text-stone-400 hover:text-ink dark:hover:text-white'
+                                        }`}
+                                    >
+                                        <i className="ph-bold ph-paper-plane-tilt"></i>
+                                        <span>Sách Đã Gửi Đi ({giftsSent.length})</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Danh sách hiển thị theo Subtab */}
+                            {giftSubTab === 'received' ? (
+                                filteredGiftsReceived.length === 0 ? (
+                                    <div className="py-14 text-center rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-6 shadow-sm">
+                                        <div className="w-14 h-14 mx-auto mb-3 rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center text-3xl">
+                                            <i className="ph-bold ph-gift"></i>
+                                        </div>
+                                        <h3 className="font-display font-bold text-base text-ink dark:text-night-text mb-1">
+                                            {searchQuery ? 'Không tìm thấy quà tặng phù hợp' : 'Chưa có món quà sách nào'}
+                                        </h3>
+                                        <p className="font-editorial-body text-xs text-ink-muted dark:text-stone-400 max-w-sm mx-auto">
+                                            {searchQuery ? 'Hãy thử tìm kiếm với từ khóa khác.' : 'Khi bạn bè hoặc độc giả khác gửi tặng bạn tác phẩm, thông tin quà tặng và lời chúc sẽ hiển thị đầy đủ tại đây.'}
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {filteredGiftsReceived.map((g) => (
+                                            <div
+                                                key={g.giftId}
+                                                className="p-5 rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border hover:border-gold/50 shadow-sm transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+                                            >
+                                                <div className="flex items-start gap-4 flex-1 min-w-0">
+                                                    <img
+                                                        src={g.bookCover || '/logo.png'}
+                                                        alt={g.bookTitle}
+                                                        onError={(e) => handleImageError(e, '/logo.png')}
+                                                        className="w-20 h-28 object-cover rounded-xl shadow-md border border-paper-border dark:border-night-border shrink-0"
+                                                    />
+                                                    <div className="space-y-2 flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-500 border border-rose-500/30 flex items-center gap-1">
+                                                                <i className="ph-fill ph-gift text-xs"></i> Quà Tặng
+                                                            </span>
+                                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-gold border border-amber-500/30">
+                                                                {g.rentalDays > 1000 ? 'Vĩnh viễn' : `Thuê ${g.rentalDays} ngày`}
+                                                            </span>
+                                                            <span className="text-[11px] text-ink-muted dark:text-stone-400">
+                                                                {new Date(g.createdAt).toLocaleDateString('vi-VN')}
+                                                            </span>
+                                                        </div>
+                                                        <h4 className="font-display font-black text-base text-ink dark:text-night-text truncate">
+                                                            {g.bookTitle}
+                                                        </h4>
+                                                        <p className="text-xs text-ink-muted dark:text-stone-400">
+                                                            Tác giả: <strong className="font-semibold text-ink dark:text-night-text">{g.bookAuthor || 'HALM BOOK'}</strong>
+                                                        </p>
+                                                        <div className="p-3 rounded-xl bg-paper-100 dark:bg-night-surface border border-paper-border/60 dark:border-night-border/60 text-xs italic text-ink-muted dark:text-stone-300 flex items-start gap-2">
+                                                            <i className="ph-fill ph-quotes text-amber-500 text-sm shrink-0 mt-0.5"></i>
+                                                            <span className="flex-1">"{g.message || 'Chúc bạn đọc sách vui vẻ và nhiều cảm hứng!'}"</span>
+                                                            <span className="not-italic font-bold text-wine dark:text-gold shrink-0">
+                                                                — {g.senderName}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="flex sm:flex-col items-center gap-2 w-full sm:w-auto shrink-0">
+                                                    <Link
+                                                        to={`/docsach/${g.bookId}?mode=full`}
+                                                        className="flex-1 sm:flex-none w-full px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-metadata-spec font-bold text-xs flex items-center justify-center gap-2 transition-colors shadow-sm"
+                                                    >
+                                                        <i className="ph-bold ph-book-open"></i>
+                                                        <span>Đọc Sách Ngay</span>
+                                                    </Link>
+                                                    <Link
+                                                        to={`/chitietsach/${g.bookId}`}
+                                                        className="flex-1 sm:flex-none w-full px-4 py-2 rounded-xl border border-paper-border dark:border-night-border hover:border-gold text-ink dark:text-night-text font-metadata-spec font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
+                                                    >
+                                                        <i className="ph-bold ph-info"></i>
+                                                        <span>Chi Tiết</span>
+                                                    </Link>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )
+                            ) : (
+                                filteredGiftsSent.length === 0 ? (
+                                    <div className="py-14 text-center rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-6 shadow-sm">
+                                        <div className="w-14 h-14 mx-auto mb-3 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center text-3xl">
+                                            <i className="ph-bold ph-paper-plane-tilt"></i>
+                                        </div>
+                                        <h3 className="font-display font-bold text-base text-ink dark:text-night-text mb-1">
+                                            {searchQuery ? 'Không tìm thấy quà tặng đã gửi phù hợp' : 'Bạn chưa gửi tặng cuốn sách nào'}
+                                        </h3>
+                                        <p className="font-editorial-body text-xs text-ink-muted dark:text-stone-400 max-w-sm mx-auto mb-4">
+                                            {searchQuery ? 'Hãy thử tìm kiếm với từ khóa khác.' : 'Tặng sách là cách tuyệt vời để lan tỏa tri thức đến những người bạn yêu quý.'}
+                                        </p>
+                                        <Link
+                                            to="/#trending-section"
+                                            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-wine hover:bg-wine-dark text-white dark:bg-gold dark:hover:bg-gold-light dark:text-night-bg text-xs font-bold font-metadata-spec shadow-sm transition-all"
+                                        >
+                                            <i className="ph-bold ph-magnifying-glass"></i>
+                                            <span>Tìm Sách Để Tặng Ngay</span>
+                                        </Link>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {filteredGiftsSent.map((g) => (
+                                            <div
+                                                key={g.giftId}
+                                                className="p-5 rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border hover:border-gold/50 shadow-sm transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+                                            >
+                                                <div className="flex items-start gap-4 flex-1 min-w-0">
+                                                    <img
+                                                        src={g.bookCover || '/logo.png'}
+                                                        alt={g.bookTitle}
+                                                        onError={(e) => handleImageError(e, '/logo.png')}
+                                                        className="w-20 h-28 object-cover rounded-xl shadow-md border border-paper-border dark:border-night-border shrink-0"
+                                                    />
+                                                    <div className="space-y-2 flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-gold border border-amber-500/30 flex items-center gap-1">
+                                                                <i className="ph-bold ph-arrow-up-right text-xs"></i> Đã tặng cho {g.receiverName}
+                                                            </span>
+                                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-paper-200 dark:bg-night-surface text-ink-muted dark:text-stone-400">
+                                                                {g.rentalDays > 1000 ? 'Vĩnh viễn' : `Kỳ hạn ${g.rentalDays} ngày`}
+                                                            </span>
+                                                            <span className="text-[11px] text-ink-muted dark:text-stone-400">
+                                                                {new Date(g.createdAt).toLocaleDateString('vi-VN')}
+                                                            </span>
+                                                        </div>
+                                                        <h4 className="font-display font-black text-base text-ink dark:text-night-text truncate">
+                                                            {g.bookTitle}
+                                                        </h4>
+                                                        <p className="text-xs text-ink-muted dark:text-stone-400">
+                                                            Chi phí quà tặng: <span className="font-black text-amber-600 dark:text-gold">-{g.potatoPrice} Khoai 🥔</span>
+                                                        </p>
+                                                        <div className="p-3 rounded-xl bg-paper-100 dark:bg-night-surface border border-paper-border/60 dark:border-night-border/60 text-xs italic text-ink-muted dark:text-stone-300 flex items-start gap-2">
+                                                            <i className="ph-fill ph-quotes text-amber-500 text-sm shrink-0 mt-0.5"></i>
+                                                            <span className="flex-1">"{g.message || 'Chúc bạn đọc sách vui vẻ!'}"</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <Link
+                                                    to={`/chitietsach/${g.bookId}`}
+                                                    className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-paper-border dark:border-night-border hover:border-gold text-ink dark:text-night-text font-metadata-spec font-bold text-xs flex items-center justify-center gap-2 transition-colors shrink-0"
+                                                >
+                                                    <i className="ph-bold ph-info"></i>
+                                                    <span>Xem Tác Phẩm</span>
+                                                </Link>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )
+                            )}
+                        </div>
 
                         {/* ====================================================
                      SECTION 3: TRÍCH DẪN TÂM ĐẮC & GHI CHÚ TRỢ LÝ AI (SMART HIGHLIGHTS)
                      ==================================================== */}
-                        <div className="rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-6 shadow-sm space-y-4">
+                        <div className={"rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border p-6 shadow-sm space-y-4 " + (activeCategory === 'gifts' ? 'hidden' : '')}>
                             <div className="flex items-center justify-between pb-3 border-b border-paper-border dark:border-night-border">
                                 <div className="flex items-center gap-2.5">
                                     <span className="w-8 h-8 rounded-xl bg-gold/15 text-gold flex items-center justify-center text-lg">
@@ -1223,44 +1642,46 @@ export default function MyBooks() {
                                     </div>
                                 </div>
 
-                                <button type="button" onClick={() => showToast("Trích Dẫn", "Đã sao chép trích dẫn vào clipboard!")} className="px-3 py-1.5 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border text-xs font-metadata-spec font-bold text-ink dark:text-night-text hover:text-wine dark:hover:text-gold transition-colors flex items-center gap-1.5">
-                                    <i className="ph-bold ph-export"></i>
-                                    <span>Xuất Ghi Chú</span>
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={handleRefreshQuotes}
+                                        className="px-3 py-1.5 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border text-xs font-metadata-spec font-bold text-ink dark:text-night-text hover:text-wine dark:hover:text-gold transition-colors flex items-center gap-1.5"
+                                        title="Khám phá góc nhìn và trích dẫn mới từ AI"
+                                    >
+                                        <i className="ph-bold ph-arrows-clockwise text-xs"></i>
+                                        <span>Đổi Gợi Ý</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleExportNotes}
+                                        className="px-3 py-1.5 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border text-xs font-metadata-spec font-bold text-ink dark:text-night-text hover:text-wine dark:hover:text-gold transition-colors flex items-center gap-1.5"
+                                        title="Sao chép toàn bộ trích dẫn và phân tích vào bộ nhớ tạm"
+                                    >
+                                        <i className="ph-bold ph-export text-xs"></i>
+                                        <span>Xuất Ghi Chú</span>
+                                    </button>
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-                                {/* Highlight 1 */}
-                                <div className="p-4 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border space-y-2.5">
-                                    <div className="flex items-center justify-between">
-                                        <span className="font-metadata-spec text-[10px] font-bold text-wine dark:text-gold">Có Hai Con Mèo Ngồi Bên Cửa Sổ • Trang 42</span>
-                                        <i className="ph-bold ph-bookmark-simple text-wine dark:text-gold text-sm"></i>
+                                {currentQuotes.map((q, idx) => (
+                                    <div key={idx} className="p-4 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border space-y-2.5 transition-all hover:border-wine/40 dark:hover:border-gold/40">
+                                        <div className="flex items-center justify-between">
+                                            <span className={`font-metadata-spec text-[10px] font-bold ${q.color}`}>
+                                                {q.book} • {q.page}
+                                            </span>
+                                            <i className={`ph-bold ph-bookmark-simple ${q.iconColor} text-sm`}></i>
+                                        </div>
+                                        <blockquote className={`font-editorial-body text-xs text-ink dark:text-night-text italic border-l-2 ${q.borderColor} pl-3 leading-relaxed`}>
+                                            "{q.quote}"
+                                        </blockquote>
+                                        <div className="pt-2 border-t border-paper-border dark:border-night-border flex items-start gap-2 text-[11px] font-editorial-body text-ink-muted dark:text-night-muted">
+                                            <i className="ph-bold ph-sparkle text-gold shrink-0 mt-0.5"></i>
+                                            <span><strong>Nhận xét AI:</strong> {q.insight}</span>
+                                        </div>
                                     </div>
-                                    <blockquote className="font-editorial-body text-xs text-ink dark:text-night-text italic border-l-2 border-wine dark:border-gold pl-3 leading-relaxed">
-                                        "Tình yêu có vị ngọt ngào của tình bạn và vị đắng chát của chia ly... Nhưng ngay cả nỗi buồn cũng đẹp nếu nó xuất phát từ một trái tim chân thành."
-                                    </blockquote>
-                                    <div className="pt-2 border-t border-paper-border dark:border-night-border flex items-start gap-2 text-[11px] font-editorial-body text-ink-muted dark:text-night-muted">
-                                        <i className="ph-bold ph-sparkle text-gold shrink-0 mt-0.5"></i>
-                                        <span><strong>Nhận xét AI:</strong> Đoạn trích phản ánh tư tưởng chủ đạo của tác phẩm về lòng trắc ẩn và sự gắn kết thuần khiết giữa muôn loài.</span>
-                                    </div>
-                                </div>
-
-                                {/* Highlight 2 */}
-                                <div className="p-4 rounded-xl bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border space-y-2.5">
-                                    <div className="flex items-center justify-between">
-                                        <span className="font-metadata-spec text-[10px] font-bold text-blue-600 dark:text-blue-400">Atomic Habits • Trang 78</span>
-                                        <i className="ph-bold ph-bookmark-simple text-blue-500 text-sm"></i>
-                                    </div>
-                                    <blockquote className="font-editorial-body text-xs text-ink dark:text-night-text italic border-l-2 border-blue-500 pl-3 leading-relaxed">
-                                        "Bạn không vươn lên tới tầm của các mục tiêu mà bạn đặt ra. Bạn tụt xuống ngang tầm với các hệ thống mà bạn xây dựng."
-                                    </blockquote>
-                                    <div className="pt-2 border-t border-paper-border dark:border-night-border flex items-start gap-2 text-[11px] font-editorial-body text-ink-muted dark:text-night-muted">
-                                        <i className="ph-bold ph-sparkle text-gold shrink-0 mt-0.5"></i>
-                                        <span><strong>Nhận xét AI:</strong> Nguyên lý cốt lõi về việc tập trung xây dựng thói quen vi mô thay vì chỉ kỳ vọng vào kết quả cuối cùng.</span>
-                                    </div>
-                                </div>
-
+                                ))}
                             </div>
                         </div>
 
@@ -1400,6 +1821,73 @@ export default function MyBooks() {
                     </div>
                 </div>
             </div>
+
+            {/* ========================================================
+             MODAL: XÁC NHẬN TRẢ SÁCH CÓ HẠN THUÊ
+             ======================================================== */}
+            {returnModalBook && (
+                <div
+                    id="returnBookModal"
+                    onClick={(event) => { if (event.target === event.currentTarget && !isReturningBook) setReturnModalBook(null); }}
+                    className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
+                >
+                    <div className="bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border rounded-2xl max-w-md w-full p-6 shadow-2xl relative my-auto transform transition-all text-center">
+                        <button
+                            type="button"
+                            disabled={isReturningBook}
+                            onClick={() => setReturnModalBook(null)}
+                            className="absolute top-4 right-4 text-ink-muted hover:text-ink dark:hover:text-white p-1 rounded-full hover:bg-paper-200 dark:hover:bg-night-border transition-colors disabled:opacity-50"
+                        >
+                            <i className="ph-bold ph-x text-lg"></i>
+                        </button>
+
+                        <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center text-3xl mb-3.5">
+                            <i className="ph-bold ph-arrow-u-up-left"></i>
+                        </div>
+
+                        <h3 className="font-display font-black text-lg text-ink dark:text-night-text mb-1.5">
+                            Xác Nhận Trả Sách
+                        </h3>
+                        <p className="font-editorial-body text-xs text-ink-muted dark:text-night-muted leading-relaxed mb-4">
+                            Bạn có chắc chắn muốn trả lại cuốn sách <strong className="text-ink dark:text-night-text">"{returnModalBook.bookTitle}"</strong> trước thời hạn không?
+                        </p>
+
+                        <div className="p-3 mb-5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 text-[11px] text-left flex items-start gap-2">
+                            <i className="ph-bold ph-info text-base shrink-0 mt-0.5"></i>
+                            <span>Sau khi hoàn trả, tác phẩm sẽ được chuyển sang mục <strong>Lịch Sử Thuê</strong> và quyền đọc sách sẽ kết thúc.</span>
+                        </div>
+
+                        <div className="flex items-center justify-center gap-3 font-metadata-spec text-xs">
+                            <button
+                                type="button"
+                                disabled={isReturningBook}
+                                onClick={() => setReturnModalBook(null)}
+                                className="w-1/2 py-2.5 rounded-xl bg-paper-200 dark:bg-night-surface text-ink dark:text-night-text hover:bg-paper-border dark:hover:bg-night-border font-bold transition-colors disabled:opacity-50"
+                            >
+                                Giữ Lại Đọc
+                            </button>
+                            <button
+                                type="button"
+                                disabled={isReturningBook}
+                                onClick={handleConfirmReturnBook}
+                                className="w-1/2 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black transition-all flex items-center justify-center gap-1.5 shadow-sm disabled:opacity-60"
+                            >
+                                {isReturningBook ? (
+                                    <>
+                                        <i className="ph-bold ph-spinner animate-spin text-sm"></i>
+                                        <span>Đang Trả Sách...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <i className="ph-bold ph-check"></i>
+                                        <span>Xác Nhận Trả</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
 
         </UserLayout></>;

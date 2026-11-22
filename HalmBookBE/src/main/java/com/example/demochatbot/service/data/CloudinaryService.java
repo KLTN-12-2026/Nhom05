@@ -32,31 +32,20 @@ public class CloudinaryService {
     public CloudinaryResultDto uploadFile(MultipartFile file, boolean isPdf) throws IOException {
         long fileSize = file.getSize();
 
-        // 1. Nếu là file PDF có dung lượng > 10MB (vượt quá gói miễn phí của Cloudinary),
-        // tự động chuyển hướng lưu trữ cục bộ vào thư mục máy chủ (Hybrid Storage)
-        if (isPdf && fileSize > CLOUDINARY_MAX_RAW_SIZE) {
+        // 1. Luôn lưu các file tài liệu sách (PDF / EPUB) vào bộ nhớ cục bộ máy chủ (uploads/pdfs)
+        // để đảm bảo khả năng đọc ổn định, không giới hạn dung lượng và tránh lỗi phân quyền ACL của Cloudinary
+        if (isPdf) {
             return saveLocalFile(file, "pdfs");
         }
 
         try {
-            String folder = isPdf ? "halmbook/pdfs" : "halmbook/images";
-            String resourceType = isPdf ? "raw" : "image";
+            String folder = "halmbook/images";
+            String resourceType = "image";
 
             Map<String, Object> options = ObjectUtils.asMap(
                     "folder", folder,
                     "resource_type", resourceType
             );
-            if (isPdf) {
-                options.put("type", "authenticated");
-                String origName = file.getOriginalFilename();
-                if (origName != null && !origName.trim().isEmpty()) {
-                    String ext = origName.contains(".") ? origName.substring(origName.lastIndexOf(".")).toLowerCase() : ".pdf";
-                    String baseName = origName.contains(".") ? origName.substring(0, origName.lastIndexOf(".")) : origName;
-                    String safeBase = baseName.replaceAll("[^a-zA-Z0-9_-]", "_");
-                    options.put("public_id", safeBase + "_" + System.currentTimeMillis() + ext);
-                    options.put("use_filename", true);
-                }
-            }
 
             Map uploadResult = cloudinary.uploader().upload(file.getBytes(), options);
 
@@ -66,12 +55,7 @@ public class CloudinaryService {
 
             return new CloudinaryResultDto(secureUrl, publicId, returnedResourceType);
         } catch (Exception e) {
-            String errorMsg = e.getMessage() != null ? e.getMessage().toLowerCase() : "";
-            // Nếu Cloudinary từ chối vì dung lượng file quá lớn đối với tài khoản
-            if (isPdf || errorMsg.contains("exceeds maximum allowed file size") || errorMsg.contains("file size")) {
-                return saveLocalFile(file, isPdf ? "pdfs" : "images");
-            }
-            throw e;
+            return saveLocalFile(file, "images");
         }
     }
 
@@ -139,24 +123,22 @@ public class CloudinaryService {
         }
 
         try {
-            // Ưu tiên dùng signed url inline để trình duyệt có thể render trực tiếp thay vì tự động download file
-            return cloudinary.url()
-                    .resourceType("raw")
-                    .type("authenticated")
-                    .signed(true)
-                    .secure(true)
-                    .generate(publicId);
-        } catch (Exception e) {
             long duration = expireSeconds > 0 ? expireSeconds : 3600L;
             long expiresAt = (System.currentTimeMillis() / 1000L) + duration;
-            String format = publicId.toLowerCase().endsWith(".epub") ? "epub" : "pdf";
             Map<String, Object> options = ObjectUtils.asMap(
                     "resource_type", "raw",
                     "type", "authenticated",
                     "expires_at", expiresAt
             );
+            return cloudinary.privateDownload(publicId, "", options);
+        } catch (Exception e) {
             try {
-                return cloudinary.privateDownload(publicId, format, options);
+                return cloudinary.url()
+                        .resourceType("raw")
+                        .type("authenticated")
+                        .signed(true)
+                        .secure(true)
+                        .generate(publicId);
             } catch (Exception ex) {
                 return null;
             }
@@ -176,11 +158,6 @@ public class CloudinaryService {
             return "/uploads/" + relativePath;
         }
 
-        return cloudinary.url()
-                .resourceType("raw")
-                .type("authenticated")
-                .signed(true)
-                .secure(true)
-                .generate(publicId);
+        return generateSignedPdfUrl(publicId, 3600L);
     }
 }

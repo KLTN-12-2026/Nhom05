@@ -36,13 +36,15 @@ public interface AccessRecordRepository extends JpaRepository<Access_Record, Int
     @Query("SELECT ar FROM Access_Record ar WHERE ar.customer = :customer AND ar.book = :book ORDER BY CASE WHEN UPPER(ar.status) = 'ACTIVE' THEN 0 ELSE 1 END, ar.readingPercentage DESC, ar.lastReadAt DESC, ar.access_record_id DESC")
     List<Access_Record> findAllByCustomerAndBook(@Param("customer") Customer customer, @Param("book") Book book);
 
+    @Query("SELECT ar FROM Access_Record ar WHERE ar.customer.customer_id = :customerId AND ar.book.book_id = :bookId ORDER BY ar.access_record_id DESC")
+    List<Access_Record> findAllByCustomerIdAndBookId(@Param("customerId") String customerId, @Param("bookId") String bookId);
+
+ 
     default Optional<Access_Record> findByCustomerAndBook(Customer customer, Book book) {
         List<Access_Record> list = findAllByCustomerAndBook(customer, book);
         return list == null || list.isEmpty() ? Optional.empty() : Optional.of(list.get(0));
     }
 
-    @Query("SELECT ar FROM Access_Record ar WHERE ar.customer.customer_id = :customerId AND ar.book.book_id = :bookId ORDER BY CASE WHEN UPPER(ar.status) = 'ACTIVE' THEN 0 ELSE 1 END, ar.readingPercentage DESC, ar.lastReadAt DESC, ar.access_record_id DESC")
-    List<Access_Record> findAllByCustomerIdAndBookId(@Param("customerId") String customerId, @Param("bookId") String bookId);
 
     default Optional<Access_Record> findByCustomerIdAndBookId(String customerId, String bookId) {
         List<Access_Record> list = findAllByCustomerIdAndBookId(customerId, bookId);

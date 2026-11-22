@@ -247,7 +247,7 @@ const DynamicWatermark = ({
 
     // Màu sắc watermark theo theme
     const styleTheme = useMemo(() => {
-        if (paperTheme === 'starry') {
+        if (paperTheme === 'starry' || paperTheme === 'night') {
             return {
                 gridColor: 'rgba(212, 175, 55, 0.085)',
                 floatingBg: 'rgba(212, 175, 55, 0.12)',

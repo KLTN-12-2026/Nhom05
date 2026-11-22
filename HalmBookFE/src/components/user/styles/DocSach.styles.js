@@ -144,6 +144,11 @@ export const pageStyles = `
         color: #3D2E1E;
     }
 
+    .theme-paper-night {
+        background-color: #181916;
+        color: #EDE9DF;
+    }
+
     .theme-paper-starry { 
         background-color: #111210; 
         color: #EDE9DF; 
@@ -167,6 +172,12 @@ export const pageStyles = `
         filter: invert(0.9) hue-rotate(180deg) brightness(0.95) contrast(0.92);
         border-radius: 4px;
         box-shadow: 0 12px 35px rgba(0,0,0,0.65);
+    }
+
+    .canvas-filter-night {
+        filter: invert(0.88) hue-rotate(180deg) brightness(0.92) contrast(0.9);
+        border-radius: 4px;
+        box-shadow: 0 12px 35px rgba(0,0,0,0.6);
     }
 
     .canvas-filter-sepia {

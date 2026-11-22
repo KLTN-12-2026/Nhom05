@@ -9,8 +9,9 @@ import { isTokenValid } from '@/services/authToken';
 import { openAuthModal } from '@/components/common/AuthModal';
 import axiosInstance from '@/services/axiosClient';
 import { getCombos, getSingleDeals, addOfferToCart, applyCartCoupon } from '@/services/offerService';
+import { saveVoucherToWallet, getMyVouchers } from '@/services/userFeatureService';
 
-const STATIC_STARS = Array.from({ length: 60 }, (_, i) => {
+const STATIC_STARS = Array.from({ length: 20 }, (_, i) => {
   const pseudoRand1 = ((i * 137 + 43) % 100) / 100;
   const pseudoRand2 = ((i * 269 + 71) % 100) / 100;
   const pseudoRand3 = ((i * 353 + 97) % 100) / 100;
@@ -55,6 +56,32 @@ export default function OffersEnd() {
   const [comboOffers, setComboOffers] = useState([]);
   const [singleBookDeals, setSingleBookDeals] = useState([]);
   const [challengeOffers] = useState([]);
+  const [savedVoucherCodes, setSavedVoucherCodes] = useState(new Set());
+  const [savingCodes, setSavingCodes] = useState(new Set());
+
+  const handleSaveToWallet = async (code) => {
+    if (!isTokenValid()) {
+      openAuthModal({ mode: 'login', message: 'Vui lòng đăng nhập để lưu voucher vào ví cá nhân!' });
+      return;
+    }
+    if (!code) return;
+    const upperCode = code.toUpperCase();
+    try {
+      setSavingCodes(prev => new Set(prev).add(upperCode));
+      const res = await saveVoucherToWallet(upperCode);
+      setSavedVoucherCodes(prev => new Set(prev).add(upperCode));
+      showToast('Thành Công', res.message || `Đã lưu mã ${upperCode} vào ví voucher của bạn! 🎉`);
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Không thể lưu voucher. Vui lòng thử lại!';
+      showToast('Thông Báo', msg);
+    } finally {
+      setSavingCodes(prev => {
+        const next = new Set(prev);
+        next.delete(upperCode);
+        return next;
+      });
+    }
+  };
 
   const popupHideTimeout = useRef(null);
   const popupCloseTimeout = useRef(null);
@@ -69,6 +96,14 @@ export default function OffersEnd() {
         .then((data) => {
           if (isMounted && data?.potatoBalance != null) {
             setKhoaiBalance(data.potatoBalance);
+          }
+        })
+        .catch(() => {});
+
+      getMyVouchers()
+        .then((list) => {
+          if (isMounted && Array.isArray(list)) {
+            setSavedVoucherCodes(new Set(list.map(v => v.code?.toUpperCase())));
           }
         })
         .catch(() => {});
@@ -244,8 +279,6 @@ export default function OffersEnd() {
         window.halmToast.info(title, message);
       }
     }
-    setToast({ show: true, title, message });
-    setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3800);
   };
 
   const scrollRow = (rowId, offset) => {
@@ -406,17 +439,6 @@ export default function OffersEnd() {
         {/* Background Stars (Dark mode only) */}
         {renderStars()}
 
-        {/* Toast Notification */}
-        <div id="toast-notification" className={`flex items-center gap-3 px-5 py-4 rounded-xl bg-paper-surface dark:bg-night-card border border-wine/30 dark:border-gold/40 shadow-2xl text-ink dark:text-night-text ${toast.show ? 'show' : ''}`}>
-          <div className="w-8 h-8 rounded-full bg-wine/10 dark:bg-gold/20 flex items-center justify-center text-wine dark:text-gold shrink-0">
-            <i className="ph-bold ph-check text-lg"></i>
-          </div>
-          <div>
-            <div className="font-display font-bold text-xs">{toast.title}</div>
-            <div className="font-editorial-body text-xs text-ink-muted dark:text-night-muted">{toast.message}</div>
-          </div>
-        </div>
-
         {/* Header Hero Section */}
         <section className="pt-24 pb-8 sm:pt-28 sm:pb-10 relative overflow-hidden">
           <div className="absolute inset-0 pointer-events-none -z-10">
@@ -484,7 +506,6 @@ export default function OffersEnd() {
                 </div>
                 <div>
                   <h2 className="font-display font-black text-xl sm:text-2xl text-ink dark:text-night-text tracking-tight">Giảm Giá Gói Cước Đặc Quyền</h2>
-                  <p className="font-editorial-body text-xs sm:text-sm text-ink-muted dark:text-night-muted">Mở khóa thư viện sách không giới hạn, audiobook AI chất lượng cao và đặc quyền hội viên.</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -569,7 +590,6 @@ export default function OffersEnd() {
                 </div>
                 <div>
                   <h2 className="font-display font-black text-xl sm:text-2xl text-ink dark:text-night-text tracking-tight">Mã Giảm Giá & Tiện Ích Đặc Quyền</h2>
-                  <p className="font-editorial-body text-xs sm:text-sm text-ink-muted dark:text-night-muted">Voucher chiết khấu nạp Khoai, mã giảm giá thuê sách và tiện ích tải lên từ hệ thống.</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -624,13 +644,34 @@ export default function OffersEnd() {
                           <span className="potato-badge">Khoai <i className="ph-fill ph-coins text-[10px]"></i></span>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => openRedeemModal(item.title, item.cost || 0, `Đổi mã ${item.code || item.title} thành công!`, { couponCode: item.code, bookId: item.bookId })}
-                        className="w-full py-2.5 rounded-full bg-wine hover:bg-wine-dark text-white font-metadata-spec text-xs font-bold text-center transition-colors shadow-sm"
-                      >
-                        {item.action || 'Sử Dụng Ngay'}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {savedVoucherCodes.has(item.code?.toUpperCase()) ? (
+                          <span className="flex-1 py-2 px-3 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-metadata-spec text-xs font-bold text-center flex items-center justify-center gap-1.5 border border-emerald-500/30">
+                            <i className="ph-bold ph-check-circle"></i> Đã Trong Ví
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={savingCodes.has(item.code?.toUpperCase())}
+                            onClick={() => handleSaveToWallet(item.code)}
+                            className="flex-1 py-2 px-3 rounded-xl bg-gold/15 hover:bg-gold/25 text-gold border border-gold/40 font-metadata-spec text-xs font-bold text-center flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
+                          >
+                            {savingCodes.has(item.code?.toUpperCase()) ? (
+                              <i className="ph-bold ph-spinner animate-spin"></i>
+                            ) : (
+                              <i className="ph-bold ph-bookmark-simple"></i>
+                            )}
+                            <span>Lưu Vào Ví</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => openRedeemModal(item.title, item.cost || 0, `Đổi mã ${item.code || item.title} thành công!`, { couponCode: item.code, bookId: item.bookId })}
+                          className="px-3.5 py-2 rounded-xl bg-wine hover:bg-wine-dark text-white font-metadata-spec text-xs font-bold text-center transition-colors shadow-sm"
+                        >
+                          Dùng Ngay
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))
@@ -731,7 +772,6 @@ export default function OffersEnd() {
                 <div className="w-10 h-10 rounded-xl bg-wine/10 dark:bg-gold/15 text-wine dark:text-gold flex items-center justify-center text-xl shrink-0"><i className="ph-bold ph-book-open"></i></div>
                 <div>
                   <h2 className="font-display font-black text-xl sm:text-2xl text-ink dark:text-night-text tracking-tight">Sách Lẻ Giảm Sâu</h2>
-                  <p className="font-editorial-body text-xs sm:text-sm text-ink-muted dark:text-night-muted">Các kiệt tác văn học, tư duy và khoa học kinh điển với chi phí mở khóa cực thấp.</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -801,7 +841,6 @@ export default function OffersEnd() {
                 <div className="w-10 h-10 rounded-xl bg-gold/15 text-gold flex items-center justify-center text-xl shrink-0"><i className="ph-bold ph-medal"></i></div>
                 <div>
                   <h2 className="font-display font-black text-xl sm:text-2xl text-ink dark:text-night-text tracking-tight">Ưu Đãi Thử Thách Đọc Sách</h2>
-                  <p className="font-editorial-body text-xs sm:text-sm text-ink-muted dark:text-night-muted">Chinh phục chuỗi ngày đọc sách liên tục để nhận voucher giảm giá và thưởng nóng Khoai.</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">

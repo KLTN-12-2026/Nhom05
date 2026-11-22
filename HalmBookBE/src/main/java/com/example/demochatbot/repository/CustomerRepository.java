@@ -51,6 +51,9 @@ public interface CustomerRepository extends JpaRepository<Customer, String> {
         customer.setTotalPotatoEarned(wallet.getTotalPotatoEarned());
     }
 
+    @Query("SELECT c FROM Customer c WHERE LOWER(c.email) = LOWER(:identifier) OR c.phoneNumber = :identifier OR LOWER(c.customer_id) = LOWER(:identifier) OR (c.account IS NOT NULL AND LOWER(c.account.username) = LOWER(:identifier))")
+    java.util.List<Customer> findByIdentifier(@Param("identifier") String identifier);
+
     @Modifying(clearAutomatically = true)
     @Transactional
     @Query(value = "UPDATE customer SET customer_name = :customerName, gender = :gender, birthday = :birthday, address = :address, phone_number = :phoneNumber, email = :email WHERE customer_id = :customerId", nativeQuery = true)

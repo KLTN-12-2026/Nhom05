@@ -1,6 +1,9 @@
 package com.example.demochatbot.controller;
 
+import com.example.demochatbot.dto.BookGiftDto;
 import com.example.demochatbot.dto.CloudinaryResultDto;
+import com.example.demochatbot.dto.CustomerMusicDto;
+import com.example.demochatbot.dto.CustomerVoucherDto;
 import com.example.demochatbot.dto.MissionClaimRequest;
 import com.example.demochatbot.dto.ReadingProgressRequest;
 import com.example.demochatbot.model.*;
@@ -17,6 +20,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -39,6 +46,10 @@ public class UserFeaturesController {
     private final PotatoTransactionRepository potatoTransactionRepository;
     private final BookRepository bookRepository;
     private final TierService tierService;
+    private final CustomerMusicRepository customerMusicRepository;
+    private final CustomerVoucherRepository customerVoucherRepository;
+    private final BookGiftRepository bookGiftRepository;
+    private final PromotionRepository promotionRepository;
 
     @org.springframework.beans.factory.annotation.Autowired
     private com.example.demochatbot.service.mission.MissionService missions;
@@ -54,6 +65,21 @@ public class UserFeaturesController {
         }
     }
 
+    // Helper: Kiểm tra quyền quản trị viên (Admin/Manager)
+    private boolean isCurrentUserAdmin() {
+        try {
+            org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            return auth != null && auth.getAuthorities() != null && auth.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority() != null && (
+                            a.getAuthority().toUpperCase().contains("ADMIN") ||
+                            a.getAuthority().toUpperCase().contains("MANAGER") ||
+                            a.getAuthority().toUpperCase().contains("ROLE_ADMIN")
+                    ));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     // =========================================================================
     // 1. TIẾN ĐỘ ĐỌC SÁCH (READING PROGRESS & AUTO-RESUME)
     // =========================================================================
@@ -63,6 +89,15 @@ public class UserFeaturesController {
      */
     @GetMapping("/bookshelf/check-detail/{bookId}")
     public ResponseEntity<?> getBookAccessDetail(@PathVariable("bookId") String bookId) {
+        if (isCurrentUserAdmin()) {
+            return ResponseEntity.ok().header("Cache-Control", "private, no-store").body(Map.of(
+                    "hasAccess", true,
+                    "currentPage", 1,
+                    "readingPercentage", 0.0,
+                    "remainingDays", 9999
+            ));
+        }
+
         Customer customer = getAuthenticatedCustomer();
         if (customer == null) {
             return ResponseEntity.ok().header("Cache-Control", "private, no-store").body(Map.of(
@@ -441,6 +476,627 @@ public class UserFeaturesController {
         return ResponseEntity.ok(Map.of(
                 "isFavorite", false,
                 "message", "Đã xóa tác phẩm khỏi danh sách Yêu Thích!"
+        ));
+    }
+
+    // =========================================================================
+    // 6. NHẠC NỀN CÁ NHÂN CỦA ĐỘC GIẢ (CUSTOMER BACKGROUND MUSIC)
+    // =========================================================================
+
+    /**
+     * Lấy danh sách nhạc nền cá nhân do độc giả đã upload
+     */
+    @GetMapping("/customer/music")
+    public ResponseEntity<?> getCustomerMusic() {
+        Customer customer = getAuthenticatedCustomer();
+        if (customer == null) {
+            return ResponseEntity.ok(Collections.emptyList());
+        }
+        List<CustomerMusic> list = customerMusicRepository.findByCustomerId(customer.getCustomer_id());
+        List<CustomerMusicDto> dtos = list.stream()
+                .map(CustomerMusicDto::fromEntity)
+                .toList();
+        return ResponseEntity.ok(dtos);
+    }
+
+    /**
+     * Tải lên bài nhạc nền cá nhân và lưu theo id khách
+     */
+    @PostMapping(value = "/customer/music", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Transactional
+    public ResponseEntity<?> uploadCustomerMusic(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "title", required = false) String customTitle
+    ) {
+        Customer customer = getAuthenticatedCustomer();
+        if (customer == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Vui lòng đăng nhập để lưu bài hát cá nhân vào tài khoản!"));
+        }
+
+        if (file == null || file.isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Vui lòng chọn tệp âm thanh!"));
+        }
+
+        // Giới hạn dung lượng tối đa 35MB cho 1 tệp âm thanh
+        if (file.getSize() > 35 * 1024 * 1024) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Dung lượng tệp âm thanh tối đa là 35MB!"));
+        }
+
+        String originalName = file.getOriginalFilename();
+        String extension = "";
+        if (originalName != null && originalName.contains(".")) {
+            extension = originalName.substring(originalName.lastIndexOf(".")).toLowerCase();
+        }
+
+        List<String> validExtensions = List.of(".mp3", ".ogg", ".wav", ".m4a", ".aac", ".flac");
+        if (!validExtensions.contains(extension)) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Định dạng không được hỗ trợ! Vui lòng chọn tệp .mp3, .ogg, .wav hoặc .m4a."));
+        }
+
+        try {
+            // Lưu vào thư mục uploads/audio/
+            Path uploadDirPath = Paths.get("uploads", "audio").toAbsolutePath().normalize();
+            if (!Files.exists(uploadDirPath)) {
+                Files.createDirectories(uploadDirPath);
+            }
+
+            String safeFileName = UUID.randomUUID().toString() + extension;
+            Path targetPath = uploadDirPath.resolve(safeFileName);
+            Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
+
+            // Đồng bộ sang cả thư mục uploads lân cận nếu ứng dụng chạy từ thư mục con hoặc thư mục gốc
+            try {
+                Path altPath1 = Paths.get("HalmBookBE", "uploads", "audio").resolve(safeFileName).toAbsolutePath().normalize();
+                if (!altPath1.equals(targetPath)) {
+                    Files.createDirectories(altPath1.getParent());
+                    Files.copy(targetPath, altPath1, StandardCopyOption.REPLACE_EXISTING);
+                }
+            } catch (Exception ignored) {}
+            try {
+                Path altPath2 = Paths.get("..", "uploads", "audio").resolve(safeFileName).toAbsolutePath().normalize();
+                if (!altPath2.equals(targetPath)) {
+                    Files.createDirectories(altPath2.getParent());
+                    Files.copy(targetPath, altPath2, StandardCopyOption.REPLACE_EXISTING);
+                }
+            } catch (Exception ignored) {}
+
+            String localUrl = "/uploads/audio/" + safeFileName;
+
+            // Xác định tiêu đề hiển thị
+            String title = (customTitle != null && !customTitle.trim().isEmpty())
+                    ? customTitle.trim()
+                    : (originalName != null ? originalName.replaceFirst("[.][^.]+$", "") : "Nhạc cá nhân");
+
+            CustomerMusic music = CustomerMusic.builder()
+                    .customer(customer)
+                    .title(title)
+                    .originalFilename(originalName)
+                    .fileUrl(localUrl)
+                    .fileSize(file.getSize())
+                    .createdAt(LocalDateTime.now())
+                    .build();
+
+            CustomerMusic saved = customerMusicRepository.save(music);
+            return ResponseEntity.status(HttpStatus.CREATED).body(CustomerMusicDto.fromEntity(saved));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Lỗi khi lưu tệp âm thanh: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Xóa bài nhạc nền cá nhân của độc giả
+     */
+    @DeleteMapping("/customer/music/{id}")
+    @Transactional
+    public ResponseEntity<?> deleteCustomerMusic(@PathVariable("id") Integer id) {
+        Customer customer = getAuthenticatedCustomer();
+        if (customer == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("message", "Vui lòng đăng nhập!"));
+        }
+
+        Optional<CustomerMusic> musicOpt = customerMusicRepository.findByIdAndCustomerId(id, customer.getCustomer_id());
+        if (musicOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "Không tìm thấy bài hát cần xóa hoặc bạn không có quyền!"));
+        }
+
+        CustomerMusic music = musicOpt.get();
+        // Xóa tệp vật lý nếu tồn tại
+        try {
+            if (music.getFileUrl() != null && music.getFileUrl().startsWith("/uploads/")) {
+                String relativePath = music.getFileUrl().substring("/uploads/".length());
+                Path filePath = Paths.get("uploads").resolve(relativePath);
+                Files.deleteIfExists(filePath);
+                try {
+                    Files.deleteIfExists(Paths.get("HalmBookBE", "uploads").resolve(relativePath));
+                } catch (Exception ignored) {}
+                try {
+                    Files.deleteIfExists(Paths.get("..", "uploads").resolve(relativePath));
+                } catch (Exception ignored) {}
+            }
+        } catch (Exception ignored) {}
+
+        customerMusicRepository.delete(music);
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Đã xóa bài hát khỏi tài khoản thành công!"
+        ));
+    }
+
+    // =========================================================================
+    // 7. VOUCHER CỦA TÔI (MY VOUCHER WALLET)
+    // =========================================================================
+
+    /**
+     * Lấy danh sách voucher trong ví của độc giả hiện tại
+     */
+    @GetMapping("/customer/vouchers")
+    @Transactional(readOnly = true)
+    public ResponseEntity<?> getMyVouchers() {
+        Customer customer = getAuthenticatedCustomer();
+        if (customer == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Vui lòng đăng nhập!"));
+        }
+
+        List<CustomerVoucher> vouchers = customerVoucherRepository.findByCustomerId(customer.getCustomer_id());
+        List<CustomerVoucherDto> dtos = vouchers.stream().map(CustomerVoucherDto::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
+    }
+
+    /**
+     * Lưu voucher vào ví (từ mã khuyến mãi chung hoặc người dùng tự nhập mã)
+     */
+    @PostMapping("/customer/vouchers/save")
+    @Transactional
+    public ResponseEntity<?> saveVoucherToWallet(@RequestBody Map<String, Object> body) {
+        Customer customer = getAuthenticatedCustomer();
+        if (customer == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Vui lòng đăng nhập để lưu voucher!"));
+        }
+
+        String code = (String) body.get("code");
+        if (code == null || code.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Vui lòng nhập mã voucher!"));
+        }
+        code = code.trim().toUpperCase(Locale.ROOT);
+
+        // Kiểm tra xem đã có trong ví chưa
+        Optional<CustomerVoucher> existingOpt = customerVoucherRepository.findByCustomerIdAndCode(customer.getCustomer_id(), code);
+        if (existingOpt.isPresent()) {
+            CustomerVoucher existing = existingOpt.get();
+            if (Boolean.TRUE.equals(existing.getIsUsed())) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Mã voucher này đã được sử dụng trong tài khoản của bạn!"));
+            }
+            return ResponseEntity.badRequest().body(Map.of("message", "Voucher này đã có sẵn trong ví của bạn!"));
+        }
+
+        // Tìm trong bảng Promotion
+        Optional<Promotion> promoOpt = promotionRepository.findById(code);
+        if (promoOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Mã voucher '" + code + "' không tồn tại trong hệ thống!"));
+        }
+
+        Promotion promo = promoOpt.get();
+        if ("DELETED".equalsIgnoreCase(promo.getStatus())) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Mã voucher này không còn hiệu lực!"));
+        }
+
+        CustomerVoucher cv = CustomerVoucher.builder()
+                .customer(customer)
+                .promotion(promo)
+                .code(promo.getPromotion_id())
+                .title(promo.getPromotion_name() != null ? promo.getPromotion_name() : "Voucher " + promo.getPromotion_id())
+                .description(promo.getDescription())
+                .discountPercent(promo.getDiscount_percent())
+                .discountAmount(promo.getDiscount_amount())
+                .minOrderValue(0)
+                .startDate(promo.getStart_date())
+                .endDate(promo.getEnd_date())
+                .isUsed(false)
+                .savedAt(LocalDateTime.now())
+                .isExclusive(false)
+                .build();
+
+        CustomerVoucher saved = customerVoucherRepository.save(cv);
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
+                "success", true,
+                "message", "Đã lưu voucher " + saved.getCode() + " vào ví thành công!",
+                "voucher", CustomerVoucherDto.fromEntity(saved)
+        ));
+    }
+
+    /**
+     * Cấp voucher độc quyền cho khách hàng (Chỉ dành riêng cho Admin/Manager)
+     */
+    @PostMapping("/customer/vouchers/grant-exclusive")
+    @Transactional
+    public ResponseEntity<?> grantExclusiveVoucher(@RequestBody Map<String, Object> body) {
+        if (!isCurrentUserAdmin()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of(
+                    "message", "Bạn không có quyền quản trị viên (Admin) để thực hiện thao tác cấp voucher độc quyền!"
+            ));
+        }
+
+        String customerId = (String) body.get("customerId");
+        String code = (String) body.get("code");
+        String title = (String) body.get("title");
+        String desc = (String) body.get("description");
+        Integer discPct = body.get("discountPercent") != null ? Integer.parseInt(body.get("discountPercent").toString()) : 0;
+        Integer discAmt = body.get("discountAmount") != null ? Integer.parseInt(body.get("discountAmount").toString()) : 0;
+        String note = (String) body.get("note");
+
+        if (customerId == null || code == null) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Thiếu customerId hoặc code!"));
+        }
+
+        Optional<Customer> custOpt = customerRepository.findById(customerId);
+        if (custOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Không tìm thấy khách hàng: " + customerId));
+        }
+
+        Customer target = custOpt.get();
+        CustomerVoucher cv = CustomerVoucher.builder()
+                .customer(target)
+                .code(code.trim().toUpperCase(Locale.ROOT))
+                .title(title != null ? title : "Voucher Tri Ân Dành Riêng")
+                .description(desc != null ? desc : "Voucher độc quyền tặng riêng cho bạn")
+                .discountPercent(discPct)
+                .discountAmount(discAmt)
+                .minOrderValue(0)
+                .startDate(LocalDateTime.now())
+                .endDate(LocalDateTime.now().plusDays(30))
+                .isUsed(false)
+                .savedAt(LocalDateTime.now())
+                .isExclusive(true)
+                .exclusiveNote(note != null ? note : "Tặng riêng độc giả thân thiết")
+                .build();
+
+        CustomerVoucher saved = customerVoucherRepository.save(cv);
+
+        // Gửi thông báo đến độc giả
+        Notification notif = Notification.builder()
+                .customerId(target.getCustomer_id())
+                .title("🎟️ Bạn nhận được Voucher Độc Quyền!")
+                .message("HALM BOOK vừa gửi tặng bạn mã voucher: " + saved.getCode() + " (" + (discPct > 0 ? "Giảm " + discPct + "%" : "Giảm " + discAmt + "đ") + "). Xem ngay trong Ví Voucher của bạn!")
+                .type("VOUCHER")
+                .link("/canhan?tab=vouchers")
+                .isRead(false)
+                .createdAt(LocalDateTime.now())
+                .build();
+        notificationRepository.save(notif);
+
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Đã cấp voucher độc quyền thành công cho " + target.getCustomerName(),
+                "voucher", CustomerVoucherDto.fromEntity(saved)
+        ));
+    }
+
+    // =========================================================================
+    // 8. TẶNG SÁCH CHO ĐỘC GIẢ KHÁC (BOOK GIFTING FEATURE)
+    // =========================================================================
+
+    /**
+     * Tìm kiếm người nhận quà tặng sách theo email, số điện thoại, username hoặc ID
+     */
+    @GetMapping("/books/gift-recipient-search")
+    @Transactional(readOnly = true)
+    public ResponseEntity<?> searchGiftRecipient(@RequestParam("query") String query) {
+        Customer sender = getAuthenticatedCustomer();
+        if (sender == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Vui lòng đăng nhập!"));
+        }
+
+        if (query == null || query.trim().length() < 2) {
+            return ResponseEntity.ok(Collections.emptyList());
+        }
+
+        List<Customer> list = customerRepository.findByIdentifier(query.trim());
+        // Lọc bỏ chính người gửi
+        List<Map<String, Object>> results = list.stream()
+                .filter(c -> !c.getCustomer_id().equals(sender.getCustomer_id()))
+                .map(c -> {
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("customerId", c.getCustomer_id());
+                    map.put("customerName", c.getCustomerName() != null ? c.getCustomerName() : "Độc giả " + c.getCustomer_id());
+                    // Mask email for privacy: a***@gmail.com
+                    String em = c.getEmail();
+                    if (em != null && em.contains("@")) {
+                        String[] parts = em.split("@", 2);
+                        String masked = (parts[0].length() > 2 ? parts[0].substring(0, 2) + "***" : parts[0] + "***") + "@" + parts[1];
+                        map.put("emailMasked", masked);
+                    } else {
+                        map.put("emailMasked", "Ẩn thông tin");
+                    }
+                    map.put("avatar", c.getAvatarUrl() != null ? c.getAvatarUrl() : c.getAvatar());
+                    map.put("username", c.getAccount() != null ? c.getAccount().getUsername() : null);
+                    return map;
+                })
+                .toList();
+
+        return ResponseEntity.ok(results);
+    }
+
+    /**
+     * Thực hiện tặng sách cho độc giả khác
+     */
+    @PostMapping("/books/{bookId}/gift")
+    @Transactional
+    public ResponseEntity<?> giftBookToRecipient(
+            @PathVariable("bookId") String bookId,
+            @RequestBody Map<String, Object> body) {
+
+        Customer sender = getAuthenticatedCustomer();
+        if (sender == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Vui lòng đăng nhập để tặng sách!"));
+        }
+
+        Book book = bookRepository.findById(bookId.trim()).orElse(null);
+        if (book == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Cuốn sách không tồn tại!"));
+        }
+
+        String recipientIdentifier = (String) body.get("recipientIdentifier");
+        if (recipientIdentifier == null || recipientIdentifier.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Vui lòng nhập email, tên đăng nhập hoặc số điện thoại người nhận!"));
+        }
+
+        List<Customer> matching = customerRepository.findByIdentifier(recipientIdentifier.trim());
+        if (matching.isEmpty()) {
+            matching = customerRepository.findById(recipientIdentifier.trim()).map(List::of).orElse(Collections.emptyList());
+        }
+
+        if (matching.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Không tìm thấy người nhận với thông tin: " + recipientIdentifier));
+        }
+
+        Customer receiver = matching.get(0);
+        if (receiver.getCustomer_id().equals(sender.getCustomer_id())) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Bạn không thể tự tặng sách cho chính mình! Hãy chọn mua hoặc thuê sách cho bản thân."));
+        }
+
+        String planKey = (String) body.getOrDefault("planKey", "7");
+        String message = (String) body.getOrDefault("message", "Chúc bạn đọc sách vui vẻ!");
+
+        int rentalDays;
+        int potatoPrice;
+        try {
+            rentalDays = com.example.demochatbot.service.order.RentalPricing.duration(planKey);
+            potatoPrice = (int) Math.round(com.example.demochatbot.service.order.RentalPricing.price(planKey, book));
+        } catch (Exception e) {
+            rentalDays = 7;
+            potatoPrice = 9;
+        }
+
+        // Đồng bộ và kiểm tra số dư Khoai
+        customerRepository.synchronizeLockedWallet(sender);
+        if (sender.getPotatoBalance() == null || sender.getPotatoBalance() < potatoPrice) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "message", "Số dư Khoai của bạn không đủ (" + (sender.getPotatoBalance() != null ? sender.getPotatoBalance() : 0) + " 🥔). Cần " + potatoPrice + " 🥔 để tặng sách này. Vui lòng nạp thêm Khoai!",
+                    "requiredPotato", potatoPrice,
+                    "currentPotato", sender.getPotatoBalance() != null ? sender.getPotatoBalance() : 0
+            ));
+        }
+
+        // 1. Trừ khoai người gửi
+        int newSenderBalance = sender.getPotatoBalance() - potatoPrice;
+        sender.setPotatoBalance(newSenderBalance);
+        customerRepository.save(sender);
+
+        // 2. Ghi nhật ký giao dịch PotatoTransaction
+        String durationText = rentalDays > 1000 ? "Vĩnh viễn" : (rentalDays + " ngày");
+        String receiverDisplayName = receiver.getCustomerName() != null ? receiver.getCustomerName() : receiver.getCustomer_id();
+        PotatoTransaction senderTx = new PotatoTransaction();
+        senderTx.setCustomer(sender);
+        senderTx.setAmount(-potatoPrice);
+        senderTx.setBalanceAfter(newSenderBalance);
+        senderTx.setType("GIFT_BOOK");
+        senderTx.setDescription("Tặng sách '" + book.getBookName() + "' (" + durationText + ") cho độc giả " + receiverDisplayName);
+        senderTx.setCreatedAt(LocalDateTime.now());
+        potatoTransactionRepository.save(senderTx);
+
+        // 3. Cấp quyền đọc sách cho người nhận (Access_Record)
+        LocalDateTime now = LocalDateTime.now();
+        Optional<Access_Record> accessOpt = accessRecordRepository.findByCustomerIdAndBookId(receiver.getCustomer_id(), book.getBook_id());
+        Access_Record ar;
+        if (accessOpt.isPresent()) {
+            ar = accessOpt.get();
+            if (ar.getEnd_date() != null && ar.getEnd_date().isAfter(now)) {
+                ar.setEnd_date(rentalDays > 1000 ? now.plusYears(100) : ar.getEnd_date().plusDays(rentalDays));
+            } else {
+                ar.setStart_date(now);
+                ar.setEnd_date(rentalDays > 1000 ? now.plusYears(100) : now.plusDays(rentalDays));
+            }
+            ar.setStatus("ACTIVE");
+            ar.setRenewCount((ar.getRenewCount() != null ? ar.getRenewCount() : 0) + 1);
+        } else {
+            ar = new Access_Record();
+            ar.setCustomer(receiver);
+            ar.setBook(book);
+            ar.setStart_date(now);
+            ar.setEnd_date(rentalDays > 1000 ? now.plusYears(100) : now.plusDays(rentalDays));
+            ar.setStatus("ACTIVE");
+            ar.setCurrentPage(1);
+            ar.setReadingPercentage(0.0);
+            ar.setLastReadAt(now);
+            ar.setRenewCount(0);
+        }
+        accessRecordRepository.save(ar);
+
+        // 4. Lưu bản ghi BookGift
+        BookGift gift = BookGift.builder()
+                .sender(sender)
+                .receiver(receiver)
+                .book(book)
+                .planKey(planKey)
+                .rentalDays(rentalDays)
+                .potatoPrice(potatoPrice)
+                .message(message)
+                .createdAt(now)
+                .build();
+        BookGift savedGift = bookGiftRepository.save(gift);
+
+        // 5. Gửi thông báo đến người nhận
+        String senderDisplayName = sender.getCustomerName() != null ? sender.getCustomerName() : "Một độc giả";
+        Notification notifReceiver = Notification.builder()
+                .customerId(receiver.getCustomer_id())
+                .title("🎁 Bạn nhận được quà tặng sách từ " + senderDisplayName + "!")
+                .message(senderDisplayName + " vừa gửi tặng bạn tác phẩm '" + book.getBookName() + "' (Thời hạn: " + durationText + "). Lời nhắn: \"" + message + "\". Hãy vào Tủ Sách Cá Nhân để đọc ngay!")
+                .type("GIFT")
+                .link("/tusachcn?tab=gifts")
+                .isRead(false)
+                .createdAt(now)
+                .build();
+        notificationRepository.save(notifReceiver);
+
+        // 6. Gửi thông báo cho người tặng
+        Notification notifSender = Notification.builder()
+                .customerId(sender.getCustomer_id())
+                .title("🎉 Tặng sách thành công!")
+                .message("Bạn đã gửi tặng thành công tác phẩm '" + book.getBookName() + "' cho độc giả " + receiverDisplayName + ". Chi phí: " + potatoPrice + " 🥔.")
+                .type("GIFT")
+                .link("/tusachcn?tab=gifts")
+                .isRead(false)
+                .createdAt(now)
+                .build();
+        notificationRepository.save(notifSender);
+
+        // 7. Tăng lượt đọc của sách
+        book.setReadCount((book.getReadCount() != null ? book.getReadCount() : 0) + 1);
+        bookRepository.save(book);
+
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Đã gửi tặng sách '" + book.getBookName() + "' cho độc giả " + receiverDisplayName + " thành công!",
+                "gift", BookGiftDto.fromEntity(savedGift),
+                "remainingPotato", newSenderBalance
+        ));
+    }
+
+    /**
+     * Lấy danh sách quà tặng đã gửi đi
+     */
+    @GetMapping("/customer/gifts-sent")
+    @Transactional(readOnly = true)
+    public ResponseEntity<?> getGiftsSent() {
+        Customer sender = getAuthenticatedCustomer();
+        if (sender == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Vui lòng đăng nhập!"));
+        }
+
+        List<BookGift> list = bookGiftRepository.findBySenderCustomerId(sender.getCustomer_id());
+        return ResponseEntity.ok(list.stream().map(BookGiftDto::fromEntity).toList());
+    }
+
+    /**
+     * Lấy danh sách quà tặng nhận được từ người khác
+     */
+    @GetMapping("/customer/gifts-received")
+    @Transactional(readOnly = true)
+    public ResponseEntity<?> getGiftsReceived() {
+        Customer receiver = getAuthenticatedCustomer();
+        if (receiver == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Vui lòng đăng nhập!"));
+        }
+
+        List<BookGift> list = bookGiftRepository.findByReceiverCustomerId(receiver.getCustomer_id());
+        return ResponseEntity.ok(list.stream().map(BookGiftDto::fromEntity).toList());
+    }
+
+    // =========================================================================
+    // 9. TRẢ SÁCH CÓ HẠN THUÊ TRONG TỦ SÁCH CÁ NHÂN
+    // =========================================================================
+
+    /**
+     * Trả lại sách có hạn thuê trước thời hạn
+     */
+    @PostMapping("/bookshelf/{bookId}/return")
+    @Transactional
+    public ResponseEntity<?> returnRentedBook(@PathVariable("bookId") String bookId) {
+        Customer customer = getAuthenticatedCustomer();
+        if (customer == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Vui lòng đăng nhập!"));
+        }
+
+        if (bookId == null || bookId.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Mã sách không hợp lệ!"));
+        }
+
+        String targetBookId = bookId.trim();
+        List<Access_Record> records = new ArrayList<>();
+
+        // 1. Thử tìm theo ID bản ghi nếu param truyền vào là số (accessRecordId)
+        try {
+            int accessId = Integer.parseInt(targetBookId);
+            accessRecordRepository.findById(accessId).ifPresent(ar -> {
+                if (ar.getCustomer() != null && ar.getCustomer().getCustomer_id().equals(customer.getCustomer_id())) {
+                    records.add(ar);
+                }
+            });
+        } catch (NumberFormatException ignored) {}
+
+        // 2. Nếu không tìm thấy bằng accessId, tìm theo book_id của khách hàng
+        if (records.isEmpty()) {
+            List<Access_Record> matching = accessRecordRepository.findAllByCustomerIdAndBookId(customer.getCustomer_id(), targetBookId);
+            records.addAll(matching);
+        }
+
+        if (records.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Không tìm thấy quyền đọc cuốn sách này trong tủ sách của bạn!"));
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+
+        // Kiểm tra xem tất cả các bản ghi có phải là sách vĩnh viễn không
+        boolean hasOnlyForever = records.stream().allMatch(ar -> {
+            if (ar.getEnd_date() == null) return true;
+            return ar.getEnd_date().isAfter(now) && java.time.Duration.between(now, ar.getEnd_date()).toDays() > 1000;
+        });
+
+        if (hasOnlyForever) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Sách sở hữu vĩnh viễn không thể trả lại!"));
+        }
+
+        // Cập nhật tất cả các bản ghi thuê có thời hạn của cuốn sách sang RETURNED
+        String bookTitle = "Tác phẩm";
+        int returnedCount = 0;
+        for (Access_Record ar : records) {
+            boolean isForever = ar.getEnd_date() == null || (ar.getEnd_date().isAfter(now) && java.time.Duration.between(now, ar.getEnd_date()).toDays() > 1000);
+            if (!isForever) {
+                ar.setStatus("RETURNED");
+                ar.setEnd_date(now);
+                accessRecordRepository.save(ar);
+                returnedCount++;
+                if (ar.getBook() != null && ar.getBook().getBookName() != null) {
+                    bookTitle = ar.getBook().getBookName();
+                }
+            }
+        }
+
+        if (returnedCount == 0) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Sách sở hữu vĩnh viễn không thể trả lại!"));
+        }
+
+        try {
+            Notification notif = Notification.builder()
+                    .customerId(customer.getCustomer_id())
+                    .title("📚 Đã trả sách thành công")
+                    .message("Bạn đã hoàn tất trả lại cuốn sách '" + bookTitle + "'. Sách đã được chuyển sang lịch sử thuê sách.")
+                    .type("RENT")
+                    .link("/tusachcn?tab=history")
+                    .isRead(false)
+                    .createdAt(now)
+                    .build();
+            notificationRepository.save(notif);
+        } catch (Exception ignored) {}
+
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Đã trả lại cuốn sách '" + bookTitle + "' thành công!",
+                "bookId", bookId
         ));
     }
 }

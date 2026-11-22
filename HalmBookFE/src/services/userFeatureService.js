@@ -138,3 +138,95 @@ export const removeFavorite = async (bookId) => {
   const res = await axiosInstance.delete(`/api/home/favorites/${encodeURIComponent(bookId)}`);
   return res.data;
 };
+
+// 6. NHẠC NỀN CÁ NHÂN CỦA ĐỘC GIẢ (CUSTOMER BACKGROUND MUSIC)
+export const getCustomerMusic = async () => {
+  try {
+    const res = await axiosInstance.get('/api/home/customer/music');
+    return Array.isArray(res.data) ? res.data : [];
+  } catch (error) {
+    console.warn('Lỗi khi tải danh sách nhạc cá nhân:', error);
+    return [];
+  }
+};
+
+export const uploadCustomerMusic = async (file, title) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (title) {
+    formData.append('title', title);
+  }
+
+  const res = await axiosInstance.post('/api/home/customer/music', formData);
+  return res.data;
+};
+
+export const deleteCustomerMusic = async (id) => {
+  const res = await axiosInstance.delete(`/api/home/customer/music/${id}`);
+  return res.data;
+};
+
+// 7. VOUCHER CỦA TÔI (MY VOUCHER WALLET)
+export const getMyVouchers = async () => {
+  try {
+    const res = await axiosInstance.get('/api/home/customer/vouchers');
+    return Array.isArray(res.data) ? res.data : [];
+  } catch (error) {
+    console.warn('Lỗi khi tải danh sách voucher của tôi:', error);
+    return [];
+  }
+};
+
+export const saveVoucherToWallet = async (code) => {
+  const res = await axiosInstance.post('/api/home/customer/vouchers/save', { code });
+  return res.data;
+};
+
+// 8. TẶNG SÁCH CHO BẠN BÈ / ĐỘC GIẢ KHÁC (BOOK GIFTING)
+export const searchGiftRecipient = async (query) => {
+  if (!query || query.trim().length < 2) return [];
+  try {
+    const res = await axiosInstance.get('/api/home/books/gift-recipient-search', {
+      params: { query: query.trim() }
+    });
+    return Array.isArray(res.data) ? res.data : [];
+  } catch (error) {
+    console.warn('Lỗi tìm kiếm người nhận quà:', error);
+    return [];
+  }
+};
+
+export const giftBookToRecipient = async (bookId, { recipientIdentifier, planKey = '7', message = '' }) => {
+  const res = await axiosInstance.post(`/api/home/books/${encodeURIComponent(bookId)}/gift`, {
+    recipientIdentifier,
+    planKey,
+    message
+  });
+  return res.data;
+};
+
+export const getGiftsSent = async () => {
+  try {
+    const res = await axiosInstance.get('/api/home/customer/gifts-sent');
+    return Array.isArray(res.data) ? res.data : [];
+  } catch (error) {
+    console.warn('Lỗi khi tải danh sách sách đã tặng:', error);
+    return [];
+  }
+};
+
+export const getGiftsReceived = async () => {
+  try {
+    const res = await axiosInstance.get('/api/home/customer/gifts-received');
+    return Array.isArray(res.data) ? res.data : [];
+  } catch (error) {
+    console.warn('Lỗi khi tải danh sách sách được tặng:', error);
+    return [];
+  }
+};
+
+// 9. TRẢ SÁCH CÓ HẠN THUÊ TRONG TỦ SÁCH CÁ NHÂN
+export const returnRentedBook = async (bookId) => {
+  const res = await axiosInstance.post(`/api/home/bookshelf/${encodeURIComponent(bookId)}/return`);
+  return res.data;
+};

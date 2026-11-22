@@ -4,9 +4,10 @@ import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import axiosInstance from '@/services/axiosClient';
 import { getPersonalBookById } from '@/services/personalBookService';
-import { getBookAccessDetail, updateReadingProgress } from '@/services/userFeatureService';
+import { getBookAccessDetail, updateReadingProgress, getCustomerMusic, uploadCustomerMusic, deleteCustomerMusic } from '@/services/userFeatureService';
+import { normalizeAssetUrl } from '@/config/api';
 import AuthModal, { openAuthModal } from '@/components/common/AuthModal';
-import { isTokenValid } from '@/services/authToken';
+import { isTokenValid, getAdminAuthToken, isTokenExpired } from '@/services/authToken';
 import DynamicWatermark from './DynamicWatermark';
 
 
@@ -100,11 +101,12 @@ export default function DocSach() {
     const navigate = useNavigate();
     const bookId = id || searchParams.get('id');
 
-    // 0. Trial Mode Detection & Limitations (Mặc định là bản đọc thử trừ khi được chỉ định mode=full từ Tủ Sách hoặc đã thuê)
+    // 0. Trial Mode Detection & Limitations (Mặc định là bản đọc thử trừ khi được chỉ định mode=full từ Tủ Sách hoặc đã thuê, hoặc là Quản trị viên)
     const modeParam = searchParams.get('mode');
     const isPersonalBookId = Boolean(bookId && String(bookId).startsWith('personal_'));
+    const isAdminLoggedIn = Boolean(getAdminAuthToken() && !isTokenExpired(getAdminAuthToken()));
     const [isTrialMode, setIsTrialMode] = useState(
-        modeParam === 'full' || isPersonalBookId ? false : true
+        modeParam === 'full' || isPersonalBookId || isAdminLoggedIn ? false : true
     );
     const [isTrialModalOpen, setIsTrialModalOpen] = useState(false);
 
@@ -175,6 +177,7 @@ export default function DocSach() {
     const [currentTrackIndex, setCurrentTrackIndex] = useState(0);
     const [volume, setVolume] = useState(0.75);
     const [customTracks, setCustomTracks] = useState([]);
+    const [isUploadingMusic, setIsUploadingMusic] = useState(false);
     const [toastMessage, setToastMessage] = useState("");
 
     const playlist = useMemo(() => [...DEFAULT_PLAYLIST, ...customTracks], [customTracks]);
@@ -191,60 +194,130 @@ export default function DocSach() {
     const renditionRef = useRef(null);
     const epubBookRef = useRef(null);
 
-    const applyEpubStyling = useCallback((rendition, theme, font, size) => {
-        if (!rendition || !rendition.themes) return;
-        try {
-            rendition.themes.fontSize(`${size}px`);
-            const fontMap = {
-                garamond: '"Cormorant Garamond", serif',
-                lora: 'Lora, serif',
-                inter: 'Inter, sans-serif',
-                roboto: 'Roboto, sans-serif',
-                times: '"Times New Roman", serif',
-            };
-            const selectedFont = fontMap[font] || 'sans-serif';
-            rendition.themes.font(selectedFont);
+    const getThemeColors = useCallback((theme) => {
+        if (theme === 'starry') {
+            return { bg: '#111210', fg: '#EDE9DF', accent: '#D4AF37' };
+        } else if (theme === 'night') {
+            return { bg: '#181916', fg: '#EDE9DF', accent: '#D4AF37' };
+        } else if (theme === 'sepia') {
+            return { bg: '#F4ECD8', fg: '#3D2E1E', accent: '#78350F' };
+        } else {
+            // 'default' - Tiêu chuẩn (giấy sáng dịu chuẩn đọc sách)
+            return { bg: '#FAF7F2', fg: '#1E1F1D', accent: '#8E3038' };
+        }
+    }, []);
 
-            let bg = '#181916';
-            let fg = '#EDE9DF';
-            if (theme === 'starry') {
-                bg = '#111210';
-                fg = '#EDE9DF';
-            } else if (theme === 'night') {
-                bg = '#181916';
-                fg = '#EDE9DF';
-            } else if (theme === 'sepia') {
-                bg = '#241E17';
-                fg = '#E5D6BF';
-            } else if (theme === 'default') {
-                bg = '#1F201C';
-                fg = '#EDE9DF';
+    const applyStylesToContents = useCallback((contents, theme, font, size, lineH) => {
+        if (!contents) return;
+        const fontMap = {
+            garamond: '"Cormorant Garamond", Georgia, serif',
+            lora: 'Lora, Georgia, serif',
+            inter: 'Inter, system-ui, sans-serif',
+            roboto: 'Roboto, system-ui, sans-serif',
+            times: '"Times New Roman", Times, serif',
+        };
+        const selectedFont = fontMap[font] || 'sans-serif';
+        const { bg, fg, accent } = getThemeColors(theme);
+
+        try {
+            const doc = contents.document || contents.content?.document;
+            if (doc && doc.head) {
+                let styleEl = doc.getElementById('halm-epub-custom-theme');
+                if (!styleEl) {
+                    styleEl = doc.createElement('style');
+                    styleEl.id = 'halm-epub-custom-theme';
+                    doc.head.appendChild(styleEl);
+                }
+                styleEl.textContent = `
+                    html, body {
+                        background-color: ${bg} !important;
+                        background: ${bg} !important;
+                        color: ${fg} !important;
+                        font-family: ${selectedFont} !important;
+                        font-size: ${size}px !important;
+                        line-height: ${lineH || 1.85} !important;
+                        padding: 24px 32px !important;
+                        margin: 0 !important;
+                        box-sizing: border-box !important;
+                    }
+                    p, span, div, li, blockquote, dd, dt, article, section {
+                        color: ${fg} !important;
+                        font-family: ${selectedFont} !important;
+                        line-height: ${lineH || 1.85} !important;
+                    }
+                    h1, h2, h3, h4, h5, h6 {
+                        color: ${fg} !important;
+                        font-family: ${selectedFont} !important;
+                    }
+                    a {
+                        color: ${accent} !important;
+                    }
+                    img, svg {
+                        max-width: 100% !important;
+                        height: auto !important;
+                    }
+                    ::selection {
+                        background-color: rgba(212, 175, 55, 0.35) !important;
+                        color: inherit !important;
+                    }
+                `;
+            }
+        } catch (e) {
+            console.warn("Lỗi khi tiêm CSS vào trang EPUB:", e);
+        }
+    }, [getThemeColors]);
+
+    const applyEpubStyling = useCallback((rendition, theme, font, size) => {
+        if (!rendition) return;
+        const fontMap = {
+            garamond: '"Cormorant Garamond", Georgia, serif',
+            lora: 'Lora, Georgia, serif',
+            inter: 'Inter, system-ui, sans-serif',
+            roboto: 'Roboto, system-ui, sans-serif',
+            times: '"Times New Roman", Times, serif',
+        };
+        const selectedFont = fontMap[font] || 'sans-serif';
+        const { bg, fg } = getThemeColors(theme);
+
+        try {
+            if (rendition.themes) {
+                rendition.themes.fontSize(`${size}px`);
+                rendition.themes.font(selectedFont);
+                rendition.themes.override("color", fg, true);
+                rendition.themes.override("background", bg, true);
+                rendition.themes.override("font-family", selectedFont, true);
+                rendition.themes.override("font-size", `${size}px`, true);
+                rendition.themes.override("line-height", String(lineHeight || 1.85), true);
+
+                rendition.themes.default({
+                    body: {
+                        color: `${fg} !important`,
+                        background: `${bg} !important`,
+                        'font-family': `${selectedFont} !important`,
+                        'font-size': `${size}px !important`,
+                        'line-height': `${lineHeight || 1.85} !important`,
+                        padding: '24px 32px !important'
+                    },
+                    'p, span, div, h1, h2, h3, h4, h5, h6': {
+                        color: `${fg} !important`,
+                        'font-family': `${selectedFont} !important`
+                    }
+                });
             }
 
-            rendition.themes.override("color", fg, true);
-            rendition.themes.override("background", bg, true);
-            rendition.themes.override("font-family", selectedFont, true);
-            rendition.themes.override("font-size", `${size}px`, true);
-            rendition.themes.override("line-height", String(lineHeight || 1.85), true);
-
-            rendition.themes.default({
-                body: {
-                    color: `${fg} !important`,
-                    background: `${bg} !important`,
-                    'font-family': `${selectedFont} !important`,
-                    'font-size': `${size}px !important`,
-                    'line-height': `${lineHeight || 1.85} !important`,
-                    padding: '20px 28px !important'
-                },
-                'p, span, div, h1, h2, h3, h4, h5, h6': {
-                    color: `${fg} !important`,
-                    'font-family': `${selectedFont} !important`
+            // Tiêm CSS trực tiếp vào các iframe hiện hành của EPUB
+            if (typeof rendition.getContents === 'function') {
+                const contentsList = rendition.getContents();
+                if (Array.isArray(contentsList)) {
+                    contentsList.forEach(contents => {
+                        applyStylesToContents(contents, theme, font, size, lineHeight);
+                    });
                 }
-            });
+            }
         } catch (err) {
             console.warn("Không thể cập nhật style cho EPUB:", err);
         }
-    }, [lineHeight]);
+    }, [getThemeColors, applyStylesToContents, lineHeight]);
 
     useEffect(() => {
         if (renditionRef.current) {
@@ -256,6 +329,34 @@ export default function DocSach() {
         setToastMessage(msg);
         if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
         toastTimerRef.current = setTimeout(() => setToastMessage(""), 2800);
+    }, []);
+
+    // Tải danh sách bài hát cá nhân đã lưu theo tài khoản khách hàng từ máy chủ
+    useEffect(() => {
+        if (!isTokenValid()) return;
+        let isCancelled = false;
+        const loadCustomMusic = async () => {
+            try {
+                const list = await getCustomerMusic();
+                if (!isCancelled && Array.isArray(list)) {
+                    const tracks = list.map(item => ({
+                        id: item.id,
+                        title: item.title,
+                        subtitle: 'Nhạc cá nhân đã lưu',
+                        src: normalizeAssetUrl(item.fileUrl),
+                        icon: 'ph-music-note',
+                        isCustom: true,
+                        originalFilename: item.originalFilename,
+                        fileSize: item.fileSize
+                    }));
+                    setCustomTracks(tracks);
+                }
+            } catch (err) {
+                console.warn("Không thể tải danh sách nhạc nền cá nhân:", err);
+            }
+        };
+        loadCustomMusic();
+        return () => { isCancelled = true; };
     }, []);
 
     // Load External Design Assets
@@ -320,7 +421,8 @@ export default function DocSach() {
     useEffect(() => {
         if (paperTheme === 'starry' && starryBgRef.current) {
             starryBgRef.current.innerHTML = '';
-            const starCount = 45;
+            const starCount = 20;
+            const frag = document.createDocumentFragment();
             for (let i = 0; i < starCount; i++) {
                 const star = document.createElement('div');
                 star.className = 'star';
@@ -331,8 +433,9 @@ export default function DocSach() {
                 star.style.left = `${Math.random() * 100}%`;
                 star.style.animationDelay = `${Math.random() * 4}s`;
                 star.style.animationDuration = `${Math.random() * 3 + 2}s`;
-                starryBgRef.current.appendChild(star);
+                frag.appendChild(star);
             }
+            starryBgRef.current.appendChild(frag);
         }
     }, [paperTheme]);
 
@@ -475,11 +578,14 @@ export default function DocSach() {
                     } catch {}
 
                     // Tự động mở khóa bản đầy đủ nếu khách hàng đã thuê hoặc sở hữu sách, khôi phục trang đọc dở
+                    if (isAdminLoggedIn && !isCancelled) {
+                        setIsTrialMode(false);
+                    }
                     try {
                         const accessDetail = await getBookAccessDetail(effectiveId);
-                        if (accessDetail?.hasAccess && !isCancelled) {
+                        if ((accessDetail?.hasAccess || isAdminLoggedIn) && !isCancelled) {
                             setIsTrialMode(false);
-                            if (accessDetail.currentPage && Number(accessDetail.currentPage) > 1) {
+                            if (accessDetail?.currentPage && Number(accessDetail.currentPage) > 1) {
                                 resumePageNumber = Number(accessDetail.currentPage);
                             }
                         } else if (accessDetail?.isNetworkError && !isCancelled) {
@@ -733,8 +839,8 @@ export default function DocSach() {
                 });
                 renditionRef.current = rendition;
 
-                rendition.hooks.content.register(() => {
-                    applyEpubStyling(rendition, paperTheme, fontFamily, fontSize);
+                rendition.hooks.content.register((contents) => {
+                    applyStylesToContents(contents, paperTheme, fontFamily, fontSize, lineHeight);
                 });
 
                 applyEpubStyling(rendition, paperTheme, fontFamily, fontSize);
@@ -1060,33 +1166,43 @@ export default function DocSach() {
     }, [pdfDoc, currentPage]);
 
     // 5. Reflow Column Calculation
+    const COLUMN_GAP = 48;
     const recalculateReflowPages = useCallback(() => {
         if (readMode !== 'text' || !textContainerRef.current || !textViewportRef.current) return;
 
         const viewport = textViewportRef.current;
         const container = textContainerRef.current;
 
-        const width = viewport.clientWidth;
+        const width = Math.floor(viewport.clientWidth);
+        if (width <= 0) return;
+
         setColumnWidth(width);
 
         const scrollW = container.scrollWidth;
-        const gap = 60;
-        const total = Math.max(1, Math.ceil((scrollW + gap / 2) / (width + gap)));
+        const total = Math.max(1, Math.round((scrollW + COLUMN_GAP) / (width + COLUMN_GAP)));
 
         setTotalSubPages(total);
-        if (textSubPageIndex >= total) {
-            setTextSubPageIndex(Math.max(0, total - 1));
-        }
-    }, [readMode, textSubPageIndex]);
+        setTextSubPageIndex(prev => Math.min(prev, Math.max(0, total - 1)));
+    }, [readMode]);
 
     useEffect(() => {
-        const timer = setTimeout(recalculateReflowPages, 60);
+        const timer = setTimeout(recalculateReflowPages, 80);
         window.addEventListener('resize', recalculateReflowPages);
         return () => {
             clearTimeout(timer);
             window.removeEventListener('resize', recalculateReflowPages);
         };
-    }, [currentPageText, fontSize, fontFamily, recalculateReflowPages]);
+    }, [currentPageText, fontSize, lineHeight, fontFamily, contentWidth, textAlign, recalculateReflowPages]);
+
+    // Lắng nghe thay đổi kích thước khung nhìn thực tế để chia cột chính xác 100%
+    useEffect(() => {
+        if (!textViewportRef.current) return;
+        const observer = new ResizeObserver(() => {
+            recalculateReflowPages();
+        });
+        observer.observe(textViewportRef.current);
+        return () => observer.disconnect();
+    }, [readMode, recalculateReflowPages]);
 
     // 6. Navigation Logic with Sub-page & EPUB Support
     const changePage = (delta) => {
@@ -1313,9 +1429,23 @@ export default function DocSach() {
 
     // Render văn bản kèm bôi đậm (bold) & highlight cho các đoạn trích dẫn đã đánh dấu
     const renderParagraphWithHighlights = (para, pIdx) => {
+        const paragraphStyle = {
+            textAlign: 'justify',
+            textJustify: 'inter-word',
+            hyphens: 'auto',
+            overflowWrap: 'break-word',
+            wordBreak: 'break-word',
+            orphans: 2,
+            widows: 2,
+        };
+
         const pageNotes = notes.filter(n => Number(n.pageNumber) === Number(currentPage));
         if (!pageNotes || pageNotes.length === 0) {
-            return <p key={pIdx} className="mb-4 leading-relaxed indent-6">{para}</p>;
+            return (
+                <p key={pIdx} className="mb-4 leading-relaxed indent-6 select-text" style={paragraphStyle}>
+                    {para}
+                </p>
+            );
         }
 
         const validQuotes = pageNotes
@@ -1324,7 +1454,11 @@ export default function DocSach() {
             .sort((a, b) => b.length - a.length);
 
         if (validQuotes.length === 0) {
-            return <p key={pIdx} className="mb-4 leading-relaxed indent-6">{para}</p>;
+            return (
+                <p key={pIdx} className="mb-4 leading-relaxed indent-6 select-text" style={paragraphStyle}>
+                    {para}
+                </p>
+            );
         }
 
         const escaped = validQuotes.map(q => q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
@@ -1332,7 +1466,7 @@ export default function DocSach() {
         const parts = para.split(regex);
 
         return (
-            <p key={pIdx} className="mb-4 leading-relaxed indent-6">
+            <p key={pIdx} className="mb-4 leading-relaxed indent-6 select-text" style={paragraphStyle}>
                 {parts.map((part, idx) => {
                     const matchedNote = pageNotes.find(n => (n.selectedText || '').trim() === part);
                     if (matchedNote) {
@@ -1441,6 +1575,81 @@ export default function DocSach() {
         setVolume(val);
         if (audioRef.current) {
             audioRef.current.volume = val;
+        }
+    };
+
+    // Tải lên tệp âm thanh cá nhân và lưu vĩnh viễn theo ID khách hàng trên máy chủ
+    const handleUploadCustomMusic = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (!isTokenValid()) {
+            openAuthModal({
+                mode: 'login',
+                message: 'Vui lòng đăng nhập tài khoản để lưu trữ nhạc nền cá nhân vào hồ sơ của bạn!'
+            });
+            showToast("Vui lòng đăng nhập để lưu bài hát cá nhân!");
+            if (e.target) e.target.value = '';
+            return;
+        }
+
+        if (file.size > 35 * 1024 * 1024) {
+            showToast("Dung lượng tệp âm thanh tối đa 35MB!");
+            if (e.target) e.target.value = '';
+            return;
+        }
+
+        setIsUploadingMusic(true);
+        showToast(`Đang tải lên bài hát: ${file.name}...`);
+        try {
+            const savedDto = await uploadCustomerMusic(file);
+            if (savedDto && savedDto.id) {
+                const newTrack = {
+                    id: savedDto.id,
+                    title: savedDto.title,
+                    subtitle: 'Nhạc cá nhân đã lưu',
+                    src: normalizeAssetUrl(savedDto.fileUrl),
+                    icon: 'ph-music-note',
+                    isCustom: true,
+                    originalFilename: savedDto.originalFilename,
+                    fileSize: savedDto.fileSize
+                };
+                setCustomTracks(prev => [newTrack, ...prev.filter(t => t.id !== newTrack.id)]);
+                const newIndex = DEFAULT_PLAYLIST.length;
+                setCurrentTrackIndex(newIndex);
+                if (audioRef.current) {
+                    audioRef.current.src = newTrack.src;
+                    audioRef.current.play().then(() => {
+                        setIsPlayingMusic(true);
+                    }).catch(() => {});
+                }
+                showToast(`Đã lưu thành công vào tài khoản: ${newTrack.title}`);
+            }
+        } catch (err) {
+            console.error("Lỗi upload nhạc:", err);
+            showToast(err.response?.data?.message || "Không thể tải lên tệp âm thanh. Vui lòng thử lại!");
+        } finally {
+            setIsUploadingMusic(false);
+            if (e.target) e.target.value = '';
+        }
+    };
+
+    // Xóa bài hát cá nhân khỏi tài khoản khách hàng trên máy chủ
+    const handleDeleteCustomMusic = async (track, e) => {
+        e.stopPropagation();
+        try {
+            await deleteCustomerMusic(track.id);
+            setCustomTracks(prev => prev.filter(t => t.id !== track.id));
+            showToast(`Đã xóa bài hát: ${track.title}`);
+            if (currentTrack?.id === track.id) {
+                if (audioRef.current) {
+                    audioRef.current.pause();
+                    setIsPlayingMusic(false);
+                }
+                setCurrentTrackIndex(0);
+            }
+        } catch (err) {
+            showToast("Không thể xóa bài hát!");
         }
     };
 
@@ -1576,16 +1785,23 @@ export default function DocSach() {
                                 <button 
                                     type="button"
                                     onClick={() => adjustFontSize(-2)}
-                                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#2C2E29] text-xs font-bold text-[#D4AF37] cursor-pointer"
+                                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#2C2E29] text-xs font-bold text-[#D4AF37] cursor-pointer active:scale-95 transition"
                                     title="Giảm cỡ chữ (A-)"
                                 >
                                     A-
                                 </button>
-                                <span className="text-[11px] font-outfit font-bold px-1.5 text-[#EDE9DF]">{fontSize}px</span>
+                                <button
+                                    type="button"
+                                    onClick={() => { setFontSize(20); showToast("Đã đặt lại cỡ chữ mặc định (20px)"); }}
+                                    className="text-[11px] font-outfit font-bold px-1.5 text-[#EDE9DF] hover:text-[#D4AF37] cursor-pointer transition-colors"
+                                    title="Bấm để đặt lại cỡ chữ 20px"
+                                >
+                                    {fontSize}px
+                                </button>
                                 <button 
                                     type="button"
                                     onClick={() => adjustFontSize(2)}
-                                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#2C2E29] text-xs font-bold text-[#D4AF37] cursor-pointer"
+                                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#2C2E29] text-xs font-bold text-[#D4AF37] cursor-pointer active:scale-95 transition"
                                     title="Tăng cỡ chữ (A+)"
                                 >
                                     A+
@@ -1598,17 +1814,24 @@ export default function DocSach() {
                             <div className="hidden sm:flex items-center bg-[#222420] rounded-xl p-0.5 border border-[#2F322B]">
                                 <button 
                                     type="button"
-                                    onClick={() => setZoomLevel(z => Math.max(0.7, z - 0.15))}
-                                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#2C2E29] text-xs font-bold text-[#D4AF37] cursor-pointer"
+                                    onClick={() => setZoomLevel(z => Math.max(0.6, Number((z - 0.15).toFixed(2))))}
+                                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#2C2E29] text-xs font-bold text-[#D4AF37] cursor-pointer active:scale-95 transition"
                                     title="Thu nhỏ (-)"
                                 >
                                     -
                                 </button>
-                                <span className="text-[11px] font-outfit font-bold px-1.5 text-[#EDE9DF]">{Math.round(zoomLevel * 100)}%</span>
+                                <button
+                                    type="button"
+                                    onClick={() => { setZoomLevel(1.0); showToast("Đã đặt lại thu phóng 100%"); }}
+                                    className="text-[11px] font-outfit font-bold px-1.5 text-[#EDE9DF] hover:text-[#D4AF37] cursor-pointer transition-colors"
+                                    title="Bấm để đặt lại 100%"
+                                >
+                                    {Math.round(zoomLevel * 100)}%
+                                </button>
                                 <button 
                                     type="button"
-                                    onClick={() => setZoomLevel(z => Math.min(2.0, z + 0.15))}
-                                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#2C2E29] text-xs font-bold text-[#D4AF37] cursor-pointer"
+                                    onClick={() => setZoomLevel(z => Math.min(2.5, Number((z + 0.15).toFixed(2))))}
+                                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-[#2C2E29] text-xs font-bold text-[#D4AF37] cursor-pointer active:scale-95 transition"
                                     title="Phóng to (+)"
                                 >
                                     +
@@ -1655,7 +1878,13 @@ export default function DocSach() {
                     
                     <section 
                         className={`flex-grow w-full flex flex-col relative transition-colors duration-400 h-full overflow-hidden ${
-                            paperTheme === 'starry' ? 'theme-paper-starry' : paperTheme === 'sepia' ? 'theme-paper-sepia' : 'theme-paper-default'
+                            paperTheme === 'starry' 
+                                ? 'theme-paper-starry' 
+                                : paperTheme === 'night' 
+                                    ? 'theme-paper-night' 
+                                    : paperTheme === 'sepia' 
+                                        ? 'theme-paper-sepia' 
+                                        : 'theme-paper-default'
                         }`}
                     >
                         {/* Starry Night Sky Canvas */}
@@ -1742,7 +1971,13 @@ export default function DocSach() {
                                 <canvas 
                                     ref={canvasRef} 
                                     className={`transition-all duration-200 ${
-                                        paperTheme === 'starry' ? 'canvas-filter-starry' : paperTheme === 'sepia' ? 'canvas-filter-sepia' : 'canvas-filter-default'
+                                        paperTheme === 'starry' 
+                                            ? 'canvas-filter-starry' 
+                                            : paperTheme === 'night' 
+                                                ? 'canvas-filter-night' 
+                                                : paperTheme === 'sepia' 
+                                                    ? 'canvas-filter-sepia' 
+                                                    : 'canvas-filter-default'
                                     }`}
                                 />
                                 {isRendering && (
@@ -1754,50 +1989,66 @@ export default function DocSach() {
                             </div>
                         )}
 
-                        {/* MODE 2: REFLOW TEXT MODE (Tự tràn trang, đổi font, không bị scroll) */}
+                        {/* MODE 2: REFLOW TEXT MODE (Tự tràn trang, đổi font, không bị cắt lề và không cuộn trang) */}
                         {!isLoading && !errorMessage && readMode === 'text' && (
-                            <div 
-                                ref={textViewportRef}
-                                onMouseUp={handleMouseUpText}
-                                style={{ maxWidth: `${contentWidth}px` }}
-                                className="relative flex-grow w-full mx-auto h-full px-6 sm:px-12 py-8 overflow-hidden select-text z-10 transition-all duration-300"
-                            >
-                                {currentPageText ? (
+                            <div className="relative flex-grow w-full h-full flex flex-col items-center justify-center px-4 sm:px-8 md:px-12 py-6 overflow-hidden z-10">
+                                <div 
+                                    style={{ maxWidth: `${contentWidth}px` }}
+                                    className="relative w-full h-full flex flex-col overflow-hidden select-text transition-all duration-300"
+                                >
+                                    {/* Viewport chuẩn không có padding để clientWidth khớp 100% độ rộng cột */}
                                     <div 
-                                        ref={textContainerRef}
-                                        style={{
-                                            columnWidth: `${columnWidth > 0 ? columnWidth : 760}px`,
-                                            columnGap: '60px',
-                                            columnFill: 'auto',
-                                            height: '100%',
-                                            transform: `translateX(-${textSubPageIndex * ((columnWidth > 0 ? columnWidth : 760) + 60)}px)`,
-                                            transition: 'transform 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
-                                            fontSize: `${fontSize}px`,
-                                            lineHeight: lineHeight,
-                                            textAlign: textAlign,
-                                            fontFamily: fontFamily === 'garamond' ? '"Cormorant Garamond", serif' : fontFamily === 'lora' ? 'Lora, serif' : fontFamily === 'roboto' ? 'Roboto, sans-serif' : fontFamily === 'times' ? '"Times New Roman", serif' : 'Inter, sans-serif',
-                                        }}
-                                        className="space-y-4"
+                                        ref={textViewportRef}
+                                        onMouseUp={handleMouseUpText}
+                                        className="relative w-full h-full overflow-hidden"
+                                        style={{ padding: 0, margin: 0 }}
                                     >
-                                        {currentPageText.split('\n\n').map((para, pIdx) => renderParagraphWithHighlights(para, pIdx))}
+                                        {currentPageText ? (
+                                            <div 
+                                                ref={textContainerRef}
+                                                style={{
+                                                    columnWidth: `${columnWidth > 0 ? columnWidth : 760}px`,
+                                                    columnGap: `${COLUMN_GAP}px`,
+                                                    columnFill: 'auto',
+                                                    height: '100%',
+                                                    width: '100%',
+                                                    transform: `translateX(-${textSubPageIndex * ((columnWidth > 0 ? columnWidth : 760) + COLUMN_GAP)}px)`,
+                                                    transition: 'transform 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
+                                                    fontSize: `${fontSize}px`,
+                                                    lineHeight: lineHeight,
+                                                    textAlign: textAlign,
+                                                    fontFamily: fontFamily === 'garamond' ? '"Cormorant Garamond", serif' : fontFamily === 'lora' ? 'Lora, serif' : fontFamily === 'roboto' ? 'Roboto, sans-serif' : fontFamily === 'times' ? '"Times New Roman", serif' : 'Inter, sans-serif',
+                                                    color: paperTheme === 'starry' || paperTheme === 'night' ? '#EDE9DF' : paperTheme === 'sepia' ? '#3D2E1E' : '#1E1F1D',
+                                                }}
+                                                className="space-y-4"
+                                            >
+                                                {currentPageText.split('\n\n').map((para, pIdx) => renderParagraphWithHighlights(para, pIdx))}
+                                            </div>
+                                        ) : (
+                                            /* Nếu trang không có text (ảnh scan / bìa), tự động hiển thị Canvas kèm thông báo nhỏ */
+                                            <div className="h-full flex flex-col items-center justify-center text-center p-4">
+                                                <div className="bg-[#222420]/80 text-[#EDE9DF] border border-[#D4AF37]/40 px-4 py-2 rounded-xl text-xs mb-4 backdrop-blur-md flex items-center gap-2 shadow-lg">
+                                                    <i className="ph-bold ph-info text-[#D4AF37]"></i>
+                                                    <span>Trang này là ấn bản scan / hình ảnh minh họa — đang hiển thị trang in gốc:</span>
+                                                </div>
+                                                <div className="flex-grow flex items-center justify-center w-full">
+                                                    <canvas 
+                                                        ref={canvasRef} 
+                                                        className={`transition-all duration-200 ${
+                                                            paperTheme === 'starry' 
+                                                                ? 'canvas-filter-starry' 
+                                                                : paperTheme === 'night' 
+                                                                    ? 'canvas-filter-night' 
+                                                                    : paperTheme === 'sepia' 
+                                                                        ? 'canvas-filter-sepia' 
+                                                                        : 'canvas-filter-default'
+                                                        }`}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                ) : (
-                                    /* Nếu trang không có text (ảnh scan / bìa), tự động hiển thị Canvas kèm thông báo nhỏ */
-                                    <div className="h-full flex flex-col items-center justify-center text-center p-4">
-                                        <div className="bg-[#222420]/80 text-[#EDE9DF] border border-[#D4AF37]/40 px-4 py-2 rounded-xl text-xs mb-4 backdrop-blur-md flex items-center gap-2 shadow-lg">
-                                            <i className="ph-bold ph-info text-[#D4AF37]"></i>
-                                            <span>Trang này là ấn bản scan / hình ảnh minh họa — đang hiển thị trang in gốc:</span>
-                                        </div>
-                                        <div className="flex-grow flex items-center justify-center w-full">
-                                            <canvas 
-                                                ref={canvasRef} 
-                                                className={`transition-all duration-200 ${
-                                                    paperTheme === 'starry' ? 'canvas-filter-starry' : paperTheme === 'sepia' ? 'canvas-filter-sepia' : 'canvas-filter-default'
-                                                }`}
-                                            />
-                                        </div>
-                                    </div>
-                                )}
+                                </div>
                             </div>
                         )}
 
@@ -1807,9 +2058,10 @@ export default function DocSach() {
                                 <div 
                                     ref={epubViewerRef}
                                     id="halm-epub-viewer"
-                                    className="w-full max-w-4xl h-full shadow-2xl rounded-2xl overflow-hidden transition-all duration-300"
+                                    className="w-full max-w-4xl h-full shadow-2xl rounded-2xl overflow-hidden transition-all duration-300 border border-paper-border/40 dark:border-night-border/40"
                                     style={{
-                                        backgroundColor: paperTheme === 'starry' ? '#111210' : paperTheme === 'sepia' ? '#241E17' : '#181916',
+                                        backgroundColor: getThemeColors(paperTheme).bg,
+                                        color: getThemeColors(paperTheme).fg,
                                         minHeight: '480px',
                                         height: '100%',
                                         display: 'flex',
@@ -2055,46 +2307,75 @@ export default function DocSach() {
                     {/* Sidebar Aa Settings (Font, Cỡ chữ, Nền đọc theo phong cách HALM) */}
                     <aside className={`sidebar-overlay w-[340px] bg-[#171815] border-l border-[#2F322B] p-5 flex flex-col gap-5 text-[#EDE9DF] shadow-2xl overflow-y-auto ${isAaOpen ? '' : 'sidebar-right-hidden'}`}>
                         <div className="flex justify-between items-center pb-2 border-b border-[#2F322B]">
-                            <span className="font-outfit font-extrabold text-sm uppercase text-[#D4AF37]">Cài đặt giao diện đọc</span>
+                            <span className="font-outfit font-extrabold text-sm uppercase text-[#D4AF37] flex items-center gap-1.5">
+                                <i className="ph-bold ph-faders"></i>
+                                <span>Cài đặt giao diện đọc</span>
+                            </span>
                             <button type="button" onClick={() => setIsAaOpen(false)} className="w-6 h-6 rounded-lg bg-[#222420] text-xs font-bold text-[#EDE9DF] flex items-center justify-center hover:bg-[#2C2E29] cursor-pointer">✕</button>
                         </div>
 
-                        {/* Paper Themes */}
+                        {/* Mode Indicator & Quick Switch Badge */}
+                        <div className="p-3 rounded-2xl bg-[#1C1D1A] border border-[#2F322B] flex items-center justify-between gap-2 shadow-xs">
+                            <div className="flex items-center gap-2 min-w-0">
+                                <i className={`ph-bold ${readMode === 'canvas' ? 'ph-book-open text-[#D4AF37]' : 'ph-text-aa text-amber-400'} text-base shrink-0`}></i>
+                                <div className="min-w-0">
+                                    <div className="text-[10px] text-[#9CA3AF] uppercase font-bold tracking-wider">Đang xem dạng</div>
+                                    <div className="text-xs font-bold text-[#EDE9DF] truncate">
+                                        {readMode === 'canvas' ? 'Trang In (PDF Gốc)' : readMode === 'text' ? 'Chữ Tự Động (Reflow)' : 'Ấn Bản Điện Tử (EPUB)'}
+                                    </div>
+                                </div>
+                            </div>
+                            {bookFormat !== 'EPUB' && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const nextMode = readMode === 'canvas' ? 'text' : 'canvas';
+                                        setReadMode(nextMode);
+                                        showToast(nextMode === 'canvas' ? "Đã chuyển sang Trang in PDF" : "Đã chuyển sang Đọc Chữ (Tự tràn trang)");
+                                    }}
+                                    className="px-2.5 py-1.5 rounded-xl bg-[#252722] hover:bg-[#8E3038] text-[#D4AF37] hover:text-white text-xs font-bold border border-[#383A32] hover:border-[#8E3038] transition-all cursor-pointer shrink-0 shadow-xs"
+                                >
+                                    {readMode === 'canvas' ? 'Chuyển sang Chữ ➔' : 'Xem Trang In ➔'}
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Paper Themes - Áp dụng cho cả Canvas (Filter) và Text/EPUB */}
                         <div>
                             <h3 className="font-outfit font-bold text-xs uppercase tracking-wider text-[#9CA3AF] mb-3">Màu nền trang sách</h3>
                             <div className="grid grid-cols-4 gap-2">
                                 <button 
                                     type="button"
-                                    onClick={() => setPaperTheme('default')} 
-                                    className={`h-11 rounded-xl bg-[#20221E] text-[#EDE9DF] border-2 font-bold text-xs flex items-center justify-center cursor-pointer transition ${
-                                        paperTheme === 'default' ? 'border-[#D4AF37] ring-2 ring-[#D4AF37]/30 shadow-md' : 'border-[#2F322B]'
+                                    onClick={() => { setPaperTheme('default'); showToast("Màu nền: Tiêu Chuẩn (Giấy trắng sáng)"); }} 
+                                    className={`h-11 rounded-xl bg-[#FAF7F2] text-[#1E1F1D] border-2 font-bold text-xs flex items-center justify-center cursor-pointer transition ${
+                                        paperTheme === 'default' ? 'border-[#D4AF37] ring-2 ring-[#D4AF37]/40 shadow-md scale-[1.02]' : 'border-stone-400/30 opacity-80 hover:opacity-100'
                                     }`}
                                 >
                                     Tiêu Chuẩn
                                 </button>
                                 <button 
                                     type="button"
-                                    onClick={() => setPaperTheme('sepia')} 
-                                    className={`h-11 rounded-xl bg-[#241E17] text-[#E5D6BF] border-2 font-bold text-xs flex items-center justify-center cursor-pointer transition ${
-                                        paperTheme === 'sepia' ? 'border-[#D4AF37] ring-2 ring-[#D4AF37]/30 shadow-md' : 'border-[#2F322B]'
+                                    onClick={() => { setPaperTheme('sepia'); showToast("Màu nền: Cổ Điển (Ấm dịu)"); }} 
+                                    className={`h-11 rounded-xl bg-[#F4ECD8] text-[#3D2E1E] border-2 font-bold text-xs flex items-center justify-center cursor-pointer transition ${
+                                        paperTheme === 'sepia' ? 'border-[#D4AF37] ring-2 ring-[#D4AF37]/40 shadow-md scale-[1.02]' : 'border-amber-700/30 opacity-80 hover:opacity-100'
                                     }`}
                                 >
                                     Cổ Điển
                                 </button>
                                 <button 
                                     type="button"
-                                    onClick={() => setPaperTheme('night')} 
+                                    onClick={() => { setPaperTheme('night'); showToast("Màu nền: Ban Đêm (Đen sâu chống mỏi mắt)"); }} 
                                     className={`h-11 rounded-xl bg-[#181916] text-[#EDE9DF] border-2 font-bold text-xs flex items-center justify-center cursor-pointer transition ${
-                                        paperTheme === 'night' ? 'border-[#D4AF37] ring-2 ring-[#D4AF37]/30 shadow-md' : 'border-[#2F322B]'
+                                        paperTheme === 'night' ? 'border-[#D4AF37] ring-2 ring-[#D4AF37]/40 shadow-md scale-[1.02]' : 'border-[#2F322B] opacity-80 hover:opacity-100'
                                     }`}
                                 >
                                     Ban Đêm
                                 </button>
                                 <button 
                                     type="button"
-                                    onClick={() => setPaperTheme('starry')} 
+                                    onClick={() => { setPaperTheme('starry'); showToast("Màu nền: Đêm Sao (Lấp lánh huyền ảo)"); }} 
                                     className={`h-11 rounded-xl bg-[#111210] text-[#EDE9DF] border-2 font-bold text-xs flex items-center justify-center cursor-pointer transition ${
-                                        paperTheme === 'starry' ? 'border-[#D4AF37] ring-2 ring-[#D4AF37]/30 shadow-md' : 'border-[#2F322B]'
+                                        paperTheme === 'starry' ? 'border-[#D4AF37] ring-2 ring-[#D4AF37]/40 shadow-md scale-[1.02]' : 'border-[#2F322B] opacity-80 hover:opacity-100'
                                     }`}
                                 >
                                     Đêm Sao
@@ -2102,177 +2383,132 @@ export default function DocSach() {
                             </div>
                         </div>
 
-                        {/* Font Size Settings (Reflow text) */}
-                        <div>
-                            <div className="flex justify-between items-center mb-3">
-                                <h3 className="font-outfit font-bold text-xs uppercase tracking-wider text-[#9CA3AF]">Cỡ chữ (Tự tràn trang)</h3>
-                                <span className="text-[10px] text-[#D4AF37] bg-[#D4AF37]/15 px-2 py-0.5 rounded font-outfit font-bold">Không bị cuộn</span>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <button 
-                                    type="button"
-                                    onClick={() => adjustFontSize(-2)} 
-                                    className="flex-1 h-9 rounded-xl bg-[#222420] hover:bg-[#2C2E29] border border-[#2F322B] text-[#D4AF37] font-bold text-sm cursor-pointer active:scale-95 transition"
-                                    title="Giảm cỡ chữ (A-)"
-                                >
-                                    A-
-                                </button>
-                                <span className="text-xs font-outfit font-bold text-[#D4AF37] min-w-[55px] text-center bg-[#1A1B18] py-1.5 px-2 rounded-xl border border-[#2F322B]">
-                                    {fontSize}px
-                                </span>
-                                <button 
-                                    type="button"
-                                    onClick={() => adjustFontSize(2)} 
-                                    className="flex-1 h-9 rounded-xl bg-[#222420] hover:bg-[#2C2E29] border border-[#2F322B] text-[#D4AF37] font-bold text-sm cursor-pointer active:scale-95 transition"
-                                    title="Tăng cỡ chữ (A+)"
-                                >
-                                    A+
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Line Height Settings */}
-                        <div>
-                            <h3 className="font-outfit font-bold text-xs uppercase tracking-wider text-[#9CA3AF] mb-2">Khoảng cách dòng</h3>
-                            <div className="grid grid-cols-3 gap-2">
-                                {[
-                                    { val: 1.5, label: 'Gọn gàng (1.5x)' },
-                                    { val: 1.85, label: 'Chuẩn (1.85x)' },
-                                    { val: 2.2, label: 'Thoáng (2.2x)' },
-                                ].map(item => (
+                        {/* NHÓM CÔNG CỤ DÀNH RIÊNG CHO TRANG IN (CANVAS) */}
+                        {readMode === 'canvas' && (
+                            <div className="space-y-3.5 p-3.5 rounded-2xl bg-[#1C1D1A] border border-[#2F322B]">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="font-outfit font-bold text-xs uppercase tracking-wider text-[#9CA3AF]">Thu phóng trang in (PDF)</h3>
+                                    <span className="text-[10px] text-[#D4AF37] bg-[#D4AF37]/15 px-2 py-0.5 rounded font-outfit font-bold">Chuẩn xuất bản</span>
+                                </div>
+                                <div className="flex items-center gap-2">
                                     <button
-                                        key={item.val}
+                                        type="button"
+                                        onClick={() => setZoomLevel(prev => Math.max(0.6, Number((prev - 0.15).toFixed(2))))}
+                                        className="flex-1 py-2.5 rounded-xl bg-[#222420] hover:bg-[#2C2E29] border border-[#2F322B] text-[#D4AF37] font-bold text-xs cursor-pointer active:scale-95 transition"
+                                        title="Thu nhỏ trang in (-15%)"
+                                    >
+                                        Thu nhỏ (-)
+                                    </button>
+                                    <button
                                         type="button"
                                         onClick={() => {
-                                            setLineHeight(item.val);
-                                            showToast(`Giãn dòng: ${item.val}x`);
+                                            setZoomLevel(1.0);
+                                            showToast("Đã đặt lại kích thước gốc 100%");
                                         }}
-                                        className={`py-2 px-1 rounded-xl text-xs font-bold transition border ${
-                                            lineHeight === item.val
-                                                ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#D4AF37]'
-                                                : 'bg-[#222420] border-[#2F322B] text-[#EDE9DF] hover:bg-[#2C2E29]'
-                                        }`}
+                                        className="text-xs font-outfit font-bold text-[#D4AF37] px-3 py-2.5 rounded-xl bg-[#222420] hover:bg-[#2C2E29] border border-[#D4AF37]/50 min-w-[65px] text-center cursor-pointer active:scale-95 transition"
+                                        title="Bấm để đặt lại kích thước chuẩn 100%"
                                     >
-                                        {item.label}
+                                        {Math.round(zoomLevel * 100)}%
                                     </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Page Width Settings */}
-                        <div>
-                            <h3 className="font-outfit font-bold text-xs uppercase tracking-wider text-[#9CA3AF] mb-2">Độ rộng trang đọc</h3>
-                            <div className="grid grid-cols-3 gap-2">
-                                {[
-                                    { val: 680, label: 'Hẹp (680px)' },
-                                    { val: 860, label: 'Vừa (860px)' },
-                                    { val: 1080, label: 'Rộng (1080px)' },
-                                ].map(item => (
                                     <button
-                                        key={item.val}
                                         type="button"
-                                        onClick={() => {
-                                            setContentWidth(item.val);
-                                            showToast(`Độ rộng trang: ${item.label}`);
-                                        }}
-                                        className={`py-2 px-1 rounded-xl text-xs font-bold transition border ${
-                                            contentWidth === item.val
-                                                ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#D4AF37]'
-                                                : 'bg-[#222420] border-[#2F322B] text-[#EDE9DF] hover:bg-[#2C2E29]'
-                                        }`}
+                                        onClick={() => setZoomLevel(prev => Math.min(2.5, Number((prev + 0.15).toFixed(2))))}
+                                        className="flex-1 py-2.5 rounded-xl bg-[#222420] hover:bg-[#2C2E29] border border-[#2F322B] text-[#D4AF37] font-bold text-xs cursor-pointer active:scale-95 transition"
+                                        title="Phóng to trang in (+15%)"
                                     >
-                                        {item.label}
+                                        Phóng to (+)
                                     </button>
-                                ))}
+                                </div>
+                                {/* Preset zoom buttons */}
+                                <div className="grid grid-cols-4 gap-1.5 pt-1">
+                                    {[0.8, 1.0, 1.25, 1.5].map(val => (
+                                        <button
+                                            key={val}
+                                            type="button"
+                                            onClick={() => {
+                                                setZoomLevel(val);
+                                                showToast(`Thu phóng: ${Math.round(val * 100)}%`);
+                                            }}
+                                            className={`py-1.5 rounded-lg text-[11px] font-bold transition border cursor-pointer ${
+                                                Math.abs(zoomLevel - val) < 0.05
+                                                    ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#D4AF37]'
+                                                    : 'bg-[#222420] border-[#2F322B] text-[#9CA3AF] hover:text-[#EDE9DF]'
+                                            }`}
+                                        >
+                                            {Math.round(val * 100)}%
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                        </div>
+                        )}
 
-                        {/* Text Align Settings */}
-                        <div>
-                            <h3 className="font-outfit font-bold text-xs uppercase tracking-wider text-[#9CA3AF] mb-2">Căn lề văn bản</h3>
-                            <div className="grid grid-cols-2 gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setTextAlign('justify');
-                                        showToast('Căn lề: Căn đều 2 bên');
-                                    }}
-                                    className={`py-2 px-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 border ${
-                                        textAlign === 'justify'
-                                            ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#D4AF37]'
-                                            : 'bg-[#222420] border-[#2F322B] text-[#EDE9DF] hover:bg-[#2C2E29]'
-                                    }`}
-                                >
-                                    <i className="ph-bold ph-text-align-justify"></i> Căn đều hai bên
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setTextAlign('left');
-                                        showToast('Căn lề: Canh trái');
-                                    }}
-                                    className={`py-2 px-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 border ${
-                                        textAlign === 'left'
-                                            ? 'bg-[#D4AF37]/20 border-[#D4AF37] text-[#D4AF37]'
-                                            : 'bg-[#222420] border-[#2F322B] text-[#EDE9DF] hover:bg-[#2C2E29]'
-                                    }`}
-                                >
-                                    <i className="ph-bold ph-text-align-left"></i> Canh trái
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* PDF Canvas Zoom Controls */}
-                        <div>
-                            <h3 className="font-outfit font-bold text-xs uppercase tracking-wider text-[#9CA3AF] mb-2">Thu phóng trang in (PDF)</h3>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setZoomLevel(prev => Math.max(0.6, Number((prev - 0.15).toFixed(2))))}
-                                    className="flex-1 py-2 rounded-xl bg-[#222420] hover:bg-[#2C2E29] border border-[#2F322B] text-[#D4AF37] font-bold text-xs cursor-pointer"
-                                    title="Thu nhỏ trang in"
-                                >
-                                    Thu nhỏ (-)
-                                </button>
-                                <span className="text-xs font-outfit font-bold text-[#D4AF37] px-3 py-2 rounded-xl bg-[#1A1B18] border border-[#2F322B] min-w-[65px] text-center">
-                                    {Math.round(zoomLevel * 100)}%
-                                </span>
-                                <button
-                                    type="button"
-                                    onClick={() => setZoomLevel(prev => Math.min(2.5, Number((prev + 0.15).toFixed(2))))}
-                                    className="flex-1 py-2 rounded-xl bg-[#222420] hover:bg-[#2C2E29] border border-[#2F322B] text-[#D4AF37] font-bold text-xs cursor-pointer"
-                                    title="Phóng to trang in"
-                                >
-                                    Phóng to (+)
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Font Family Selection */}
-                        <div>
-                            <h3 className="font-outfit font-bold text-xs uppercase tracking-wider text-[#9CA3AF] mb-2">Kiểu phông chữ</h3>
-                            <div className="space-y-1">
-                                {[
-                                    { key: 'garamond', label: 'Cormorant Garamond (Văn học)', class: 'font-garamond' },
-                                    { key: 'lora', label: 'Lora (Bookerly cổ điển)', class: 'font-lora' },
-                                    { key: 'inter', label: 'Inter (Hiện đại)', class: 'font-sans' },
-                                    { key: 'roboto', label: 'Roboto (Tiêu chuẩn)', class: 'font-roboto' },
-                                    { key: 'times', label: 'Times New Roman', class: 'font-serif' },
-                                ].map((item) => (
-                                    <div
-                                        key={item.key}
-                                        onClick={() => {
-                                            setFontFamily(item.key);
-                                            showToast(`Đã đổi font: ${item.label}`);
-                                        }}
-                                        className={`font-list-item ${fontFamily === item.key ? 'active' : ''} ${item.class}`}
-                                    >
-                                        <span>{item.label}</span>
-                                        {fontFamily === item.key && <span className="text-[#D4AF37] font-bold">✓</span>}
+                        {/* NHÓM CÔNG CỤ DÀNH RIÊNG CHO CHẾ ĐỘ CHỮ (TEXT & EPUB) */}
+                        {(readMode === 'text' || readMode === 'epub') && (
+                            <>
+                                {/* Kích thước chữ */}
+                                <div>
+                                    <div className="flex justify-between items-center mb-3">
+                                        <h3 className="font-outfit font-bold text-xs uppercase tracking-wider text-[#9CA3AF]">Kích thước chữ</h3>
+                                        <span className="text-[10px] text-[#D4AF37] bg-[#D4AF37]/15 px-2 py-0.5 rounded font-outfit font-bold">Căn chỉnh tự động</span>
                                     </div>
-                                ))}
-                            </div>
-                        </div>
+                                    <div className="flex items-center gap-3">
+                                        <button 
+                                            type="button"
+                                            onClick={() => adjustFontSize(-2)} 
+                                            className="flex-1 h-10 rounded-xl bg-[#222420] hover:bg-[#2C2E29] border border-[#2F322B] text-[#D4AF37] font-bold text-sm cursor-pointer active:scale-95 transition flex items-center justify-center gap-1.5"
+                                            title="Giảm cỡ chữ (A-)"
+                                        >
+                                            <i className="ph-bold ph-text-aa text-xs"></i> A-
+                                        </button>
+                                        <button 
+                                            type="button"
+                                            onClick={() => {
+                                                setFontSize(20);
+                                                showToast("Đặt lại cỡ chữ chuẩn 20px");
+                                            }}
+                                            className="text-xs font-outfit font-bold text-[#D4AF37] min-w-[65px] text-center bg-[#1A1B18] hover:bg-[#222420] py-2 px-2.5 rounded-xl border border-[#2F322B] hover:border-[#D4AF37]/50 cursor-pointer transition"
+                                            title="Bấm để đặt lại cỡ chữ 20px"
+                                        >
+                                            {fontSize}px
+                                        </button>
+                                        <button 
+                                            type="button"
+                                            onClick={() => adjustFontSize(2)} 
+                                            className="flex-1 h-10 rounded-xl bg-[#222420] hover:bg-[#2C2E29] border border-[#2F322B] text-[#D4AF37] font-bold text-sm cursor-pointer active:scale-95 transition flex items-center justify-center gap-1.5"
+                                            title="Tăng cỡ chữ (A+)"
+                                        >
+                                            <i className="ph-bold ph-text-aa text-sm"></i> A+
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Kiểu phông chữ */}
+                                <div>
+                                    <h3 className="font-outfit font-bold text-xs uppercase tracking-wider text-[#9CA3AF] mb-2.5">Kiểu phông chữ</h3>
+                                    <div className="space-y-1.5">
+                                        {[
+                                            { key: 'garamond', label: 'Cormorant Garamond (Văn học)', class: 'font-garamond' },
+                                            { key: 'lora', label: 'Lora (Bookerly cổ điển)', class: 'font-lora' },
+                                            { key: 'inter', label: 'Inter (Hiện đại)', class: 'font-sans' },
+                                            { key: 'roboto', label: 'Roboto (Tiêu chuẩn)', class: 'font-roboto' },
+                                            { key: 'times', label: 'Times New Roman (Truyền thống)', class: 'font-serif' },
+                                        ].map((item) => (
+                                            <div
+                                                key={item.key}
+                                                onClick={() => {
+                                                    setFontFamily(item.key);
+                                                    showToast(`Đã đổi font: ${item.label}`);
+                                                }}
+                                                className={`font-list-item cursor-pointer ${fontFamily === item.key ? 'active' : ''} ${item.class}`}
+                                            >
+                                                <span>{item.label}</span>
+                                                {fontFamily === item.key && <span className="text-[#D4AF37] font-bold">✓</span>}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </>
+                        )}
 
                         {/* Book Metadata */}
                         <div className="mt-auto p-3.5 rounded-xl bg-[#1A1B18] border border-[#2F322B] text-xs space-y-1.5">
@@ -2425,46 +2661,54 @@ export default function DocSach() {
                         ) : (
                             <div className="space-y-3 pt-1 flex-1 overflow-y-auto">
                                 <div className="flex flex-col items-center justify-center p-5 border-2 border-dashed border-[#2F322B] hover:border-[#D4AF37]/60 rounded-2xl bg-[#1A1B18] text-center transition">
-                                    <i className="ph-bold ph-upload-simple text-3xl text-[#D4AF37] mb-2"></i>
-                                    <span className="text-[#EDE9DF] text-xs font-bold mb-1 font-outfit">Tải nhạc cá nhân</span>
-                                    <p className="text-[10px] text-[#9CA3AF] mb-3">Hỗ trợ các tệp .mp3, .ogg, .wav</p>
-                                    <label className="bg-[#8E3038] hover:bg-[#6F252C] text-white px-4 py-1.5 rounded-full font-bold text-xs hover:scale-105 cursor-pointer shadow-md transition">
-                                        Chọn tệp âm thanh
+                                    <i className={`ph-bold ${isUploadingMusic ? 'ph-spinner animate-spin text-[#D4AF37]' : 'ph-upload-simple text-[#D4AF37]'} text-3xl mb-2`}></i>
+                                    <span className="text-[#EDE9DF] text-xs font-bold mb-1 font-outfit">
+                                        {isUploadingMusic ? 'Đang lưu bài hát vào tài khoản...' : 'Tải nhạc cá nhân'}
+                                    </span>
+                                    <p className="text-[10px] text-[#9CA3AF] mb-3">Hỗ trợ các tệp .mp3, .ogg, .wav, .m4a (Tối đa 35MB)</p>
+                                    <label className={`bg-[#8E3038] hover:bg-[#6F252C] text-white px-4 py-1.5 rounded-full font-bold text-xs hover:scale-105 cursor-pointer shadow-md transition flex items-center gap-1.5 ${isUploadingMusic ? 'opacity-60 pointer-events-none' : ''}`}>
+                                        {isUploadingMusic ? (
+                                            <>
+                                                <i className="ph-bold ph-spinner animate-spin"></i>
+                                                <span>Đang xử lý...</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <i className="ph-bold ph-plus-circle"></i>
+                                                <span>Chọn tệp âm thanh</span>
+                                            </>
+                                        )}
                                         <input 
                                             type="file" 
-                                            accept="audio/*" 
-                                            onChange={(e) => {
-                                                const file = e.target.files?.[0];
-                                                if (file) {
-                                                    const blobUrl = URL.createObjectURL(file);
-                                                    const customTrack = {
-                                                        id: `custom_${Date.now()}`,
-                                                        title: file.name.replace(/\.[^/.]+$/, ""),
-                                                        subtitle: 'Tệp cá nhân đã tải lên',
-                                                        src: blobUrl,
-                                                        icon: 'ph-music-note',
-                                                        isCustom: true
-                                                    };
-                                                    setCustomTracks(prev => [customTrack, ...prev]);
-                                                    const newIndex = DEFAULT_PLAYLIST.length;
-                                                    setCurrentTrackIndex(newIndex);
-                                                    if (audioRef.current) {
-                                                        audioRef.current.src = blobUrl;
-                                                        audioRef.current.play().then(() => {
-                                                            setIsPlayingMusic(true);
-                                                            showToast(`Đang phát: ${customTrack.title}`);
-                                                        });
-                                                    }
-                                                }
-                                            }} 
+                                            accept="audio/*,.mp3,.ogg,.wav,.m4a,.flac" 
+                                            disabled={isUploadingMusic}
+                                            onChange={handleUploadCustomMusic} 
                                             className="hidden" 
                                         />
                                     </label>
                                 </div>
 
+                                {!isTokenValid() && (
+                                    <div className="p-3 rounded-xl bg-[#222420]/80 border border-[#D4AF37]/30 text-center space-y-2">
+                                        <p className="text-[11px] text-[#EDE9DF]">
+                                            Đăng nhập để đồng bộ và lưu trữ danh sách nhạc nền cá nhân vĩnh viễn trên tài khoản của bạn.
+                                        </p>
+                                        <button
+                                            type="button"
+                                            onClick={() => openAuthModal({ mode: 'login', message: 'Vui lòng đăng nhập để lưu trữ bài hát!' })}
+                                            className="px-3 py-1 rounded-lg bg-[#8E3038] hover:bg-[#6F252C] text-white text-[11px] font-bold transition shadow cursor-pointer"
+                                        >
+                                            Đăng nhập ngay
+                                        </button>
+                                    </div>
+                                )}
+
                                 {customTracks.length > 0 && (
                                     <div className="space-y-2">
-                                        <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider block">Các bài đã tải lên</span>
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-[10px] font-bold text-[#9CA3AF] uppercase tracking-wider block">Các bài đã lưu ({customTracks.length})</span>
+                                            <span className="text-[9px] text-[#D4AF37] bg-[#D4AF37]/15 px-1.5 py-0.5 rounded font-bold">Lưu theo tài khoản</span>
+                                        </div>
                                         {customTracks.map((track, cIdx) => {
                                             const realIdx = DEFAULT_PLAYLIST.length + cIdx;
                                             const isCurrent = currentTrackIndex === realIdx;
@@ -2480,20 +2724,13 @@ export default function DocSach() {
                                                     <i className={`ph-bold ${isThisPlaying ? 'ph-waveform text-[#FFE279] animate-pulse' : 'ph-music-note text-[#D4AF37]'}`}></i>
                                                     <div className="flex-1 min-w-0">
                                                         <h5 className="text-xs font-bold text-[#EDE9DF] truncate">{track.title}</h5>
-                                                        <span className="text-[9px] text-[#9CA3AF]">Nhạc cá nhân</span>
+                                                        <span className="text-[9px] text-[#9CA3AF]">{track.subtitle || 'Nhạc cá nhân'}</span>
                                                     </div>
                                                     <button
                                                         type="button"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setCustomTracks(prev => prev.filter(t => t.id !== track.id));
-                                                            if (isCurrent && audioRef.current) {
-                                                                audioRef.current.pause();
-                                                                setIsPlayingMusic(false);
-                                                            }
-                                                        }}
-                                                        className="text-stone-500 hover:text-rose-400 text-xs p-1"
-                                                        title="Gỡ bài này"
+                                                        onClick={(e) => handleDeleteCustomMusic(track, e)}
+                                                        className="text-stone-500 hover:text-rose-400 text-xs p-1.5 rounded-lg hover:bg-rose-500/10 transition cursor-pointer"
+                                                        title="Gỡ bài này khỏi tài khoản"
                                                     >
                                                         ✕
                                                     </button>

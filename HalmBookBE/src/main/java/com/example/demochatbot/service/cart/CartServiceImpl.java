@@ -41,6 +41,9 @@ public class CartServiceImpl implements CartService {
     @Autowired
     private com.example.demochatbot.repository.BookOfferRepository bookOffers;
 
+    @Autowired
+    private com.example.demochatbot.repository.AccessRecordRepository accessRecordRepository;
+
 
     /**
      * Lấy thông tin Customer theo userId (accountId) hoặc ngữ cảnh đăng nhập hiện tại.
@@ -174,6 +177,19 @@ public class CartServiceImpl implements CartService {
 
         if (book == null) {
             throw new RuntimeException("Sách không tồn tại trong hệ thống!");
+        }
+
+        // Kiểm tra xem khách hàng đã sở hữu vĩnh viễn cuốn sách này chưa
+        Optional<com.example.demochatbot.model.Access_Record> existingAccess = accessRecordRepository.findByCustomerIdAndBookId(customer.getCustomer_id(), book.getBook_id());
+        if (existingAccess.isPresent()) {
+            com.example.demochatbot.model.Access_Record ar = existingAccess.get();
+            boolean isForever = (ar.getEnd_date() == null || (ar.getEnd_date().isAfter(LocalDateTime.now()) && java.time.temporal.ChronoUnit.DAYS.between(LocalDateTime.now(), ar.getEnd_date()) > 1000));
+            if ("ACTIVE".equalsIgnoreCase(ar.getStatus()) && isForever) {
+                throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST,
+                    "Bạn đã sở hữu vĩnh viễn cuốn sách này trong Tủ sách cá nhân!"
+                );
+            }
         }
 
         Optional<Cart_Item> existingItem = cartItemRepository.findByCartIdAndBookId(cart.getCart_id(), book.getBook_id());

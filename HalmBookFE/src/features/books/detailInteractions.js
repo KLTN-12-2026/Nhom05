@@ -14,7 +14,8 @@ const themeToggleBtn = document.getElementById('themeToggleBtn');
                 const starryBg = document.getElementById('starry-background');
                 if (!starryBg) return;
                 starryBg.innerHTML = '';
-                const count = 80;
+                const count = 25;
+                const frag = document.createDocumentFragment();
                 for (let i = 0; i < count; i++) {
                     const star = document.createElement('div');
                     star.className = 'star';
@@ -24,8 +25,9 @@ const themeToggleBtn = document.getElementById('themeToggleBtn');
                     star.style.top = `${Math.random() * 100}vh`;
                     star.style.left = `${Math.random() * 100}vw`;
                     star.style.opacity = Math.random() * 0.7 + 0.2;
-                    starryBg.appendChild(star);
+                    frag.appendChild(star);
                 }
+                starryBg.appendChild(frag);
             }
 
             document.documentElement.classList.add('dark');
