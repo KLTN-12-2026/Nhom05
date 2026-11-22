@@ -192,7 +192,18 @@ public class TierServiceImpl implements TierService {
         double overallProgress = isMaxTier ? 100.0 : Math.max(progressPercentBooks, progressPercentPoints);
 
         // Kiểm tra xem hôm nay đã điểm danh streak chưa
-        boolean hasCheckedInToday = customer.getLastStreakDate() != null && customer.getLastStreakDate().equals(LocalDate.now(com.example.demochatbot.service.mission.MissionService.ZONE));
+        LocalDate today = LocalDate.now(com.example.demochatbot.service.mission.MissionService.ZONE);
+        boolean hasCheckedInToday = customer.getLastStreakDate() != null && customer.getLastStreakDate().equals(today);
+
+        // Kiểm tra tính hợp lệ của chuỗi Streak: nếu ngày cuối điểm danh trước ngày hôm qua, chuỗi đã đứt
+        int effectiveStreak = customer.getStreakDays() != null ? customer.getStreakDays() : 0;
+        if (customer.getLastStreakDate() != null) {
+            if (!customer.getLastStreakDate().equals(today) && !customer.getLastStreakDate().equals(today.minusDays(1))) {
+                effectiveStreak = 0;
+            }
+        } else {
+            effectiveStreak = 0;
+        }
 
         // Format Member ID đẹp: HALM-C00007-VN
         String memberCode = "HALM-" + customer.getCustomer_id() + "-VN";
@@ -214,7 +225,7 @@ public class TierServiceImpl implements TierService {
                 .pointsRemainingForNext(pointsRemainingForNext)
                 .progressPercentPoints(progressPercentPoints)
                 .overallProgressPercent(overallProgress)
-                .streakDays(customer.getStreakDays() != null ? customer.getStreakDays() : 0)
+                .streakDays(effectiveStreak)
                 .hasCheckedInToday(hasCheckedInToday)
                 .discountPercent(currentTier != null && currentTier.getDiscountPercent() != null ? currentTier.getDiscountPercent() : 0)
                 .potatoBalance(customer.getPotatoBalance() != null ? customer.getPotatoBalance() : 0)

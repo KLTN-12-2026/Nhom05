@@ -117,6 +117,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/home/cart/**").authenticated()
                         .requestMatchers("/api/home/potato/wallet", "/api/home/potato/topup", "/api/home/potato/transfer", "/api/home/potato/history").authenticated()
                         .requestMatchers("/api/home/missions", "/api/home/missions/**", "/api/home/reading-progress", "/api/home/reading-notes/**").authenticated()
+                        .requestMatchers("/api/home/customer/**").authenticated()
 
                         // 6. Các endpoint công khai của cửa hàng sách
                         .requestMatchers("/api/home/**").permitAll()

@@ -62,6 +62,9 @@ public class OrderServiceImpl implements OrderService {
     @Autowired
     private PromotionRepository promotionRepository;
 
+    @Autowired
+    private com.example.demochatbot.repository.CustomerVoucherRepository customerVoucherRepository;
+
     @jakarta.persistence.PersistenceContext
     private jakarta.persistence.EntityManager entityManager;
 
@@ -306,14 +309,10 @@ public class OrderServiceImpl implements OrderService {
         customer.setPotatoBalance(newBalance);
         customerRepository.save(customer);
 
-        // 4. Sinh mã giao dịch duy nhất tuyệt đối (IMP-04)
-        String txCode;
-        if (cleanIdempotencyKey != null) {
-            txCode = cleanIdempotencyKey.startsWith("IDEM-") ? cleanIdempotencyKey : ("IDEM-" + cleanIdempotencyKey);
-            if (txCode.length() > 90) txCode = txCode.substring(0, 90);
-        } else {
-            txCode = "HLM-" + System.currentTimeMillis() + "-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
-        }
+        // 4. Sinh mã giao dịch duy nhất, ngắn gọn và thanh lịch chuẩn E-commerce (HLM-YYMMDD-XXXXXX)
+        String datePart = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("yyMMdd"));
+        String randomPart = UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
+        String txCode = "HLM-" + datePart + "-" + randomPart;
 
         PotatoTransaction potatoTx = new PotatoTransaction();
         potatoTx.setCustomer(customer);
@@ -343,6 +342,16 @@ public class OrderServiceImpl implements OrderService {
         order.setOrder_date(LocalDateTime.now());
         if (appliedPromotion != null) {
             order.setPromotion(appliedPromotion);
+            try {
+                if (customerVoucherRepository != null && customer != null) {
+                    customerVoucherRepository.findByCustomerIdAndCode(customer.getCustomer_id(), appliedPromotion.getPromotion_id())
+                            .ifPresent(cv -> {
+                                cv.setIsUsed(true);
+                                cv.setUsedAt(LocalDateTime.now());
+                                customerVoucherRepository.save(cv);
+                            });
+                }
+            } catch (Exception ignored) {}
         }
         Orders savedOrder = ordersRepository.save(order);
 

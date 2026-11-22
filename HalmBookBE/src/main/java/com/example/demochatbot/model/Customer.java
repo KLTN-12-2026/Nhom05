@@ -62,6 +62,14 @@ public class Customer {
     @JsonIgnore
     private List<ReadingNoteBookmark> readingNotes;
 
+    @OneToMany(mappedBy = "customer", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
+    private List<CustomerMusic> customMusicList;
+
+    @OneToMany(mappedBy = "customer", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
+    private List<CustomerVoucher> customerVouchers;
+
     @OneToOne(mappedBy = "customer")
     @JsonIgnore
     private Cart cart;

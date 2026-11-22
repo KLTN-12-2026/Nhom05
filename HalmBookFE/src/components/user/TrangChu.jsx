@@ -424,7 +424,8 @@ const PAGE_SCRIPT = [
   "            function initStars() {",
   "                if (!starryBg) return;",
   "                starryBg.innerHTML = '';",
-  "                const count = window.innerWidth > 768 ? 140 : 60;",
+  "                const count = window.innerWidth > 768 ? 40 : 20;",
+  "                const frag = document.createDocumentFragment();",
   "                for (let i = 0; i < count; i++) {",
   "                    const star = document.createElement('div');",
   "                    star.className = 'star';",
@@ -436,14 +437,18 @@ const PAGE_SCRIPT = [
   "                    const duration = Math.random() * 3.5 + 2.5;",
   "                    const delay = Math.random() * 4;",
   "                    star.style.animation = `starTwinkle ${duration}s ease-in-out ${delay}s infinite`;",
-  "                    starryBg.appendChild(star);",
+  "                    frag.appendChild(star);",
   "                }",
+  "                starryBg.appendChild(frag);",
   "            }",
   "            window.initStars = initStars;",
   "            setTimeout(initStars, 150);",
+  "            let resizeStarsTimer = null;",
   "            window.addEventListener('resize', () => {",
-  "                if (document.documentElement.classList.contains('dark')) initStars();",
-  "            });",
+  "                if (!document.documentElement.classList.contains('dark')) return;",
+  "                clearTimeout(resizeStarsTimer);",
+  "                resizeStarsTimer = setTimeout(initStars, 250);",
+  "            }, { passive: true });",
   "            window.addEventListener('halm-theme-change', (e) => {",
   "                if (e.detail?.isDark) initStars();",
   "            });",
@@ -2123,12 +2128,17 @@ export default function Test() {
     const cache = window.__HALM_BOOK_SCRIPT_CACHE__ || (window.__HALM_BOOK_SCRIPT_CACHE__ = {});
     const loadScript = (src) => {
       if (cache[src]) return cache[src];
+      const existing = document.querySelector(`script[src="${src}"]`);
+      if (existing) {
+        cache[src] = Promise.resolve();
+        return cache[src];
+      }
       cache[src] = new Promise((resolve, reject) => {
         const script = document.createElement("script");
         script.src = src;
-        script.async = false;
+        script.async = true;
         script.onload = resolve;
-        script.onerror = () => reject(new Error(`Kh?ng th? t?i th? vi?n: ${src}`));
+        script.onerror = () => reject(new Error(`Không thể tải thư viện: ${src}`));
         document.head.appendChild(script);
       });
       return cache[src];
@@ -2186,9 +2196,8 @@ export default function Test() {
           }
         }
       };
-      await loadScript(TAILWIND_CDN);
-      if (window.tailwind?.refresh) {
-        window.tailwind.refresh();
+      if (!window.tailwind) {
+        await loadScript(TAILWIND_CDN);
       }
       await Promise.all(PAGE_SCRIPTS.map(loadScript));
       if (!window.__HALM_BOOK_APP_INITIALIZED__) {
@@ -2982,7 +2991,7 @@ export default function Test() {
                                     src={book.img || "/logo.png"}
                                     alt={book.title}
                                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                                    loading="lazy"
+                                    loading="lazy" decoding="async"
                                     onError={(e) => {
                                       e.currentTarget.onerror = null;
                                       e.currentTarget.src = "/logo.png";

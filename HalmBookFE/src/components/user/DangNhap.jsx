@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './css/DangNhap.css';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import axios from 'axios';
@@ -6,7 +6,7 @@ import Popup from './layout/Popup';
 import logo from '@/assets/images/logo.png';
 import { useGoogleLogin } from '@react-oauth/google';
 import fbLoginModule from 'react-facebook-login/dist/facebook-login-render-props';
-import { saveAuthSession, isTokenValid, getAuthRole, getAdminAuthRole } from '@/services/authToken';
+import { saveAuthSession, isTokenValid, getAuthRole, getAdminAuthRole, getAdminAuthToken } from '@/services/authToken';
 
 import { API_BASE_URL } from '@/constants/apiEndpoints';
 const FacebookLogin = fbLoginModule.default || fbLoginModule;
@@ -32,8 +32,13 @@ export default function DangNhap() {
   // Phát hiện nếu đang cố đăng nhập vào khu vực Admin
   const isAdminPortal = location.pathname.startsWith('/admin') || fromPath.startsWith('/admin') || searchParams.get('portal') === 'admin' || location.state?.portal === 'admin';
 
+  // Guard ref để ngăn chặn re-render loop hoặc điều hướng lặp lại vô tận
+  const hasAutoNavigatedRef = useRef(false);
+
   // Tự động điều hướng nếu người dùng đã có phiên đăng nhập hợp lệ (ví dụ: bấm nút Back của trình duyệt)
   useEffect(() => {
+    if (hasAutoNavigatedRef.current) return;
+
     const params = new URLSearchParams(location.search);
     const isLockedParam = params.get('reason') === 'account_locked' || params.get('locked') === 'true';
     if (isLockedParam) {
@@ -44,19 +49,53 @@ export default function DangNhap() {
       return;
     }
 
+    // Hiển thị thông báo nếu bị ProtectedRoute điều hướng về (ví dụ cần quyền Admin)
+    const loginMessage = location.state?.loginMessage;
+    if (loginMessage) {
+      setPopup({
+        message: loginMessage,
+        type: 'error',
+      });
+      // Nếu có loginMessage (bị từ chối quyền vào /admin), giữ nguyên form đăng nhập, tuyệt đối không auto-redirect
+      return;
+    }
+
+    // Phân luồng 1: Khu vực Đăng nhập Quản trị viên (/admin/login)
+    if (isAdminPortal) {
+      const adminToken = getAdminAuthToken();
+      const isAdminValid = isTokenValid(adminToken);
+      const adminRole = (
+        getAdminAuthRole() ||
+        localStorage.getItem('admin_role') ||
+        sessionStorage.getItem('admin_role')
+      )?.replace(/^ROLE_/, "")?.toUpperCase();
+
+      const hasAdminAccess = !!adminToken && isAdminValid && adminRole === 'ADMIN';
+
+      // Chỉ tự động chuyển vào /admin khi đã có Token Admin hợp lệ VÀ Role là ADMIN
+      if (hasAdminAccess) {
+        hasAutoNavigatedRef.current = true;
+        navigate('/admin', { replace: true });
+      }
+      // Nếu không đủ quyền Admin, tuyệt đối KHÔNG điều hướng để tránh ping-pong loop với ProtectedRoute
+      return;
+    }
+
+    // Phân luồng 2: Khu vực Đăng nhập Độc giả Storefront
     if (isTokenValid()) {
       const userRole = (getAuthRole() || '').replace(/^ROLE_/, '').toUpperCase();
-      const adminRole = (getAdminAuthRole() || '').replace(/^ROLE_/, '').toUpperCase();
-      if (isAdminPortal) {
-        if (adminRole === 'ADMIN' || userRole === 'ADMIN') {
-          navigate('/admin', { replace: true });
-        }
-      } else {
-        const dest = (fromPath && !fromPath.startsWith('/dangnhap') && !fromPath.startsWith('/login') && !fromPath.startsWith('/admin')) ? fromPath : '/';
-        navigate(dest, { replace: true });
+      // Nếu tài khoản hiện tại là ADMIN nhưng mở nhầm form người dùng, điều hướng an toàn
+      if (userRole === 'ADMIN') {
+        hasAutoNavigatedRef.current = true;
+        navigate('/admin', { replace: true });
+        return;
       }
+
+      const dest = (fromPath && !fromPath.startsWith('/dangnhap') && !fromPath.startsWith('/login') && !fromPath.startsWith('/admin')) ? fromPath : '/';
+      hasAutoNavigatedRef.current = true;
+      navigate(dest, { replace: true });
     }
-  }, [navigate, fromPath, isAdminPortal, location.search]);
+  }, [navigate, fromPath, isAdminPortal, location.search, location.state]);
 
   // --- STATE CHUYỂN ĐỔI FORM ---
   const initialMode = searchParams.get('tab') === 'register' || location.state?.tab === 'register' ? 'register' : 'login';

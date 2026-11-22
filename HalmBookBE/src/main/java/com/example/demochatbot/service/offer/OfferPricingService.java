@@ -29,7 +29,7 @@ public class OfferPricingService {
                 var item = items.get(i); Map<String, Object> row = new LinkedHashMap<>(); row.put("bookId", item.getBookId()); row.put("cartItemId", item.getCartItemId());
                 row.put("planKey", item.getPlanKey()); row.put("offerId", item.getOfferId()); row.put("priceKhoai", Math.round(offerPrices.get(i))); row.put("netPrice", netPrices[i]); lines.add(row);
             }
-            return Map.of("subtotal", subtotal, "offerDiscountAmount", offerDiscount, "tierDiscountAmount", tierDiscount, "couponDiscountAmount", couponDiscount,
+            return Map.of("subtotal", Math.round(subtotal), "offerDiscountAmount", Math.round(offerDiscount), "tierDiscountAmount", Math.round(tierDiscount), "couponDiscountAmount", Math.round(couponDiscount),
                 "totalKhoaiPaid", total, "couponCode", couponCode, "quoteFingerprint", fingerprint, "items", lines, "policyRevision", policyRevision);
         }
     }
@@ -94,7 +94,7 @@ public class OfferPricingService {
         List<String> canonical = new ArrayList<>();
         for (int i = 0; i < items.size(); i++) canonical.add(items.get(i).getBookId() + ":" + items.get(i).getPlanKey() + ":" + items.get(i).getOfferId() + ":" + prices.get(i) + ":" + net.get(i));
         Collections.sort(canonical); identity.append('|').append(canonical).append('|').append(total).append('|').append(discount);
-        return new Quote(subtotal, offerDiscount, tierDiscount, couponDiscount, total, code, RentalPricing.digest(identity.toString()), promotion,
+        return new Quote(Math.round(subtotal), Math.round(offerDiscount), Math.round(tierDiscount), Math.round(couponDiscount), total, code, RentalPricing.digest(identity.toString()), promotion,
             List.copyOf(prices), CheckoutPricing.allocateNetPayment(net, total), items, policy.revision());
     }
 }

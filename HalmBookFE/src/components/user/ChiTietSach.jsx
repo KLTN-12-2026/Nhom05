@@ -7,7 +7,8 @@ import { isTokenValid } from '@/services/authToken';
 import { openAuthModal } from '@/components/common/AuthModal';
 import UserLayout from './layout/UserLayout';
 import { openBookReaderTransition } from './bookReaderTransition';
-import { checkIsFavorite, toggleFavorite } from '@/services/userFeatureService';
+import { checkIsFavorite, toggleFavorite, searchGiftRecipient, giftBookToRecipient } from '@/services/userFeatureService';
+import { getCurrentCustomer } from '@/services/customerService';
 
 const STAR_FEEDBACK_TEXTS = ["Rất tệ", "Tệ", "Bình thường", "Rất hay", "Tuyệt tác!"];
 
@@ -109,6 +110,119 @@ function useOriginalDesignAssets() {
             console.error('Lỗi khi thao tác yêu thích:', err);
         } finally {
             setIsFavoriteLoading(false);
+        }
+    };
+
+    // ==========================================
+    // STATE & LOGIC QUẢN LÝ TẶNG SÁCH CHO BẠN BÈ
+    // ==========================================
+    const [isGiftModalOpen, setIsGiftModalOpen] = useState(false);
+    const [giftRecipientQuery, setGiftRecipientQuery] = useState('');
+    const [giftCandidates, setGiftCandidates] = useState([]);
+    const [selectedRecipient, setSelectedRecipient] = useState(null);
+    const [giftPlanKey, setGiftPlanKey] = useState('7');
+    const [giftMessage, setGiftMessage] = useState('Chúc bạn đọc sách thật nhiều cảm hứng và niềm vui!');
+    const [isSearchingRecipient, setIsSearchingRecipient] = useState(false);
+    const [isGiftingBook, setIsGiftingBook] = useState(false);
+    const [currentUserPotato, setCurrentUserPotato] = useState(0);
+    const [giftSuccessModal, setGiftSuccessModal] = useState(null);
+
+    const giftPlanPrice = React.useMemo(() => {
+        switch (giftPlanKey) {
+            case '1': return 2;
+            case '3': return 5;
+            case '7': return 9;
+            case '14': return 15;
+            case '30': return 25;
+            case 'forever': return book?.rent_price && book.rent_price > 0 ? Math.round(book.rent_price) : 39;
+            default: return 9;
+        }
+    }, [giftPlanKey, book]);
+
+    const openGiftModal = async () => {
+        if (!isTokenValid()) {
+            openAuthModal({ mode: 'login', message: 'Vui lòng đăng nhập để tặng sách cho bạn bè!' });
+            return;
+        }
+        try {
+            const cust = await getCurrentCustomer();
+            if (cust?.potatoBalance != null) {
+                setCurrentUserPotato(cust.potatoBalance);
+            }
+        } catch {}
+        setIsGiftModalOpen(true);
+    };
+
+    const closeGiftModal = () => {
+        setIsGiftModalOpen(false);
+        setGiftRecipientQuery('');
+        setGiftCandidates([]);
+        setSelectedRecipient(null);
+    };
+
+    const handleSearchRecipient = async (e) => {
+        if (e && e.preventDefault) e.preventDefault();
+        const q = giftRecipientQuery.trim();
+        if (q.length < 2) {
+            showToast('Vui lòng nhập ít nhất 2 ký tự (email, username, SĐT)!');
+            return;
+        }
+        setIsSearchingRecipient(true);
+        try {
+            const list = await searchGiftRecipient(q);
+            setGiftCandidates(list);
+            if (list.length === 1) {
+                setSelectedRecipient(list[0]);
+            } else if (list.length === 0) {
+                showToast('Không tìm thấy độc giả nào phù hợp với từ khóa này!');
+            }
+        } catch {
+            showToast('Lỗi khi tìm kiếm người nhận. Vui lòng thử lại!');
+        } finally {
+            setIsSearchingRecipient(false);
+        }
+    };
+
+    const handleConfirmGiftBook = async () => {
+        if (!selectedRecipient) {
+            showToast('Vui lòng chọn người nhận quà tặng!');
+            return;
+        }
+        if (currentUserPotato < giftPlanPrice) {
+            showToast(`Số dư Khoai của bạn (${currentUserPotato} 🥔) không đủ ${giftPlanPrice} 🥔 để tặng sách!`);
+            return;
+        }
+
+        setIsGiftingBook(true);
+        try {
+            const res = await giftBookToRecipient(bookId, {
+                recipientIdentifier: selectedRecipient.customerId || selectedRecipient.username || selectedRecipient.emailMasked,
+                planKey: giftPlanKey,
+                message: giftMessage
+            });
+            window.dispatchEvent(new CustomEvent('halm-potato-updated', {
+                detail: { potatoBalance: res.remainingPotato }
+            }));
+            try {
+                const cached = JSON.parse(localStorage.getItem('halm_customer_cache') || '{}');
+                cached.potatoBalance = res.remainingPotato;
+                localStorage.setItem('halm_customer_cache', JSON.stringify(cached));
+            } catch (_) {}
+            setCurrentUserPotato(res.remainingPotato);
+            setIsGiftModalOpen(false);
+            setGiftSuccessModal({
+                recipientName: selectedRecipient.customerName,
+                bookTitle: book?.bookName || 'Tác phẩm',
+                planText: giftPlanKey === 'forever' ? 'Vĩnh viễn (Trọn đời)' : `${giftPlanKey} ngày`,
+                potatoSpent: giftPlanPrice,
+                message: giftMessage
+            });
+            showToast('Tặng Sách Thành Công!', `Đã gửi tặng sách cho ${selectedRecipient.customerName}.`);
+        } catch (err) {
+            const msg = err.response?.data?.message || 'Không thể tặng sách. Vui lòng thử lại!';
+            showToast(msg);
+        } finally {
+            setIsGiftingBook(false);
         }
     };
 
@@ -753,95 +867,123 @@ function useOriginalDesignAssets() {
                             </div>
                         </div>
 
-                        {/* Primary Action Buttons: Đọc Sách / Đọc Thử & Thuê / Gia Hạn */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-4">
-                            {rentStatus.hasAccess ? (
-                                <>
-                                    {/* Nút đọc toàn bộ sách đã mở khóa */}
-                                    <button 
-                                        id="btn-read-now" 
-                                        type="button" 
-                                        onClick={handleReadBook} 
-                                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-outfit font-extrabold py-3.5 px-4 rounded-2xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 text-sm group cursor-pointer" 
-                                        title="Đọc toàn bộ cuốn sách"
-                                    >
-                                        <i className="ph-bold ph-book-open text-base text-emerald-200 group-hover:scale-110 transition-transform"></i>
-                                        <span>ĐỌC SÁCH NGAY (BẢN FULL)</span>
-                                    </button>
+                        {/* Primary Action Buttons: Đọc Sách / Đọc Thử & Thuê / Gia Hạn & Tặng Sách trên CÙNG 1 LINE */}
+                        {rentStatus.hasAccess ? (
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 mb-4">
+                                {/* 1. Đọc Sách Ngay */}
+                                <button 
+                                    id="btn-read-now" 
+                                    type="button" 
+                                    onClick={handleReadBook} 
+                                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-outfit font-extrabold py-3.5 px-3 rounded-2xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-1.5 text-xs sm:text-sm group cursor-pointer whitespace-nowrap" 
+                                    title="Đọc toàn bộ cuốn sách"
+                                >
+                                    <i className="ph-bold ph-book-open text-base text-emerald-200 group-hover:scale-110 transition-transform"></i>
+                                    <span>Đọc Ngay</span>
+                                </button>
 
-                                    {/* Trạng thái sở hữu hoặc nút gia hạn */}
-                                    {rentStatus.isForever ? (
-                                        <div className="w-full bg-amber-500/10 dark:bg-gold/15 border-2 border-amber-500/40 dark:border-gold/40 text-amber-700 dark:text-gold font-outfit font-extrabold py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2 text-sm">
-                                            <i className="ph-fill ph-seal-check text-base"></i>
-                                            <span>Đã Sở Hữu Trọn Đời</span>
-                                        </div>
-                                    ) : (
-                                        <div className="flex items-center gap-2.5">
-                                            <button 
-                                                id="btn-rent-book" 
-                                                type="button" 
-                                                onClick={() => openRentalModal()} 
-                                                className="flex-1 bg-wine hover:bg-wine-dark text-white font-outfit font-extrabold py-3.5 px-4 rounded-2xl transition-colors flex items-center justify-center gap-2 text-sm cursor-pointer group shadow-sm" 
-                                                title="Gia hạn thời hạn thuê cuốn sách"
-                                            >
-                                                <i className="ph-bold ph-calendar-plus text-base text-amber-300 group-hover:scale-110 transition-transform"></i>
-                                                <span>Gia Hạn Thuê Thêm</span>
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={handleToggleFavorite}
-                                                disabled={isFavoriteLoading}
-                                                className={`h-[50px] w-[50px] rounded-2xl border flex items-center justify-center text-xl transition-all cursor-pointer shrink-0 shadow-xs ${
-                                                    isFavorite
-                                                        ? 'bg-rose-500/15 border-rose-500/40 text-rose-500 shadow-sm'
-                                                        : 'bg-paper-surface hover:bg-paper-100 dark:bg-night-surface dark:hover:bg-night-card border-paper-border dark:border-night-border text-stone-400 hover:text-rose-500'
-                                                }`}
-                                                title={isFavorite ? "Bỏ khỏi danh sách Yêu Thích" : "Lưu vào danh sách Yêu Thích"}
-                                                aria-label="Yêu thích tác phẩm"
-                                            >
-                                                <i className={`ph-fill ph-heart ${isFavorite ? 'text-rose-500 animate-pulse' : 'text-stone-400 group-hover:text-rose-500'}`}></i>
-                                            </button>
-                                        </div>
-                                    )}
-                                </>
-                            ) : (
-                                <>
-                                    {/* 1. Đọc Thử Miễn Phí (Nút phụ) */}
-                                    <button id="btn-read-now" type="button" onClick={handleReadBook} className="w-full bg-paper-surface hover:bg-paper-100 dark:bg-night-surface dark:hover:bg-night-border text-ink dark:text-night-text border-2 border-paper-border dark:border-night-border hover:border-wine/70 dark:hover:border-gold/70 font-outfit font-extrabold py-3.5 px-4 rounded-2xl transition-all shadow-xs hover:shadow-md flex items-center justify-center gap-2 text-sm group cursor-pointer" title="Đọc thử cuốn sách">
-                                        <i className="ph-bold ph-book-open text-base text-wine dark:text-gold group-hover:scale-110 transition-transform"></i>
-                                        <span className="group-hover:text-wine dark:group-hover:text-gold transition-colors">Đọc Thử {book?.pdf_url ? '(PDF)' : ''}</span>
-                                    </button>
-
-                                    {/* 2. Thêm Vào Giỏ Hàng & Yêu Thích */}
-                                    <div className="flex items-center gap-2.5">
-                                        <button
-                                            id="btn-rent-book"
-                                            type="button"
-                                            onClick={() => { openRentalModal() }}
-                                            className="flex-1 bg-wine hover:bg-wine-dark text-white font-outfit font-extrabold py-3.5 px-4 rounded-2xl transition-colors flex items-center justify-center gap-2 text-sm cursor-pointer group shadow-sm"
-                                            title="Chọn gói thuê hoặc mua sách"
-                                        >
-                                            <i className="ph-bold ph-shopping-cart-simple text-base text-amber-300 group-hover:scale-110 transition-transform"></i>
-                                            <span>Thêm Vào Giỏ Hàng</span>
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={handleToggleFavorite}
-                                            disabled={isFavoriteLoading}
-                                            className={`h-[50px] w-[50px] rounded-2xl border flex items-center justify-center text-xl transition-all cursor-pointer shrink-0 shadow-xs ${
-                                                isFavorite
-                                                    ? 'bg-rose-500/15 border-rose-500/40 text-rose-500 shadow-sm'
-                                                    : 'bg-paper-surface hover:bg-paper-100 dark:bg-night-surface dark:hover:bg-night-card border-paper-border dark:border-night-border text-stone-400 hover:text-rose-500'
-                                            }`}
-                                            title={isFavorite ? "Bỏ khỏi danh sách Yêu Thích" : "Lưu vào danh sách Yêu Thích"}
-                                            aria-label="Yêu thích tác phẩm"
-                                        >
-                                            <i className={`ph-fill ph-heart ${isFavorite ? 'text-rose-500 animate-pulse' : 'text-stone-400 group-hover:text-rose-500'}`}></i>
-                                        </button>
+                                {/* 2. Gia Hạn Thuê Thêm hoặc Đã Sở Hữu */}
+                                {rentStatus.isForever ? (
+                                    <div className="flex-1 bg-amber-500/10 dark:bg-gold/15 border-2 border-amber-500/40 dark:border-gold/40 text-amber-700 dark:text-gold font-outfit font-extrabold py-3.5 px-3 rounded-2xl flex items-center justify-center gap-1.5 text-xs sm:text-sm whitespace-nowrap">
+                                        <i className="ph-fill ph-seal-check text-base"></i>
+                                        <span>Trọn Đời</span>
                                     </div>
-                                </>
-                            )}
-                        </div>
+                                ) : (
+                                    <button 
+                                        id="btn-rent-book" 
+                                        type="button" 
+                                        onClick={() => openRentalModal()} 
+                                        className="flex-1 bg-wine hover:bg-wine-dark text-white font-outfit font-extrabold py-3.5 px-3 rounded-2xl transition-colors flex items-center justify-center gap-1.5 text-xs sm:text-sm cursor-pointer group shadow-sm whitespace-nowrap" 
+                                        title="Gia hạn thời hạn thuê cuốn sách"
+                                    >
+                                        <i className="ph-bold ph-calendar-plus text-base text-amber-300 group-hover:scale-110 transition-transform"></i>
+                                        <span>Gia Hạn Thuê Thêm</span>
+                                    </button>
+                                )}
+
+                                {/* 3. Tặng Sách Cho Bạn Bè */}
+                                <button
+                                    id="btn-gift-book"
+                                    type="button"
+                                    onClick={openGiftModal}
+                                    className="flex-1 bg-gradient-to-r from-amber-500/10 via-amber-500/15 to-amber-500/10 hover:from-amber-500/20 hover:to-amber-500/20 dark:from-gold/15 dark:to-gold/20 dark:hover:from-gold/25 dark:hover:to-gold/25 text-amber-700 dark:text-gold border-2 border-amber-500/40 dark:border-gold/50 font-outfit font-extrabold py-3.5 px-3 rounded-2xl transition-all shadow-xs hover:shadow-md flex items-center justify-center gap-1.5 text-xs sm:text-sm group cursor-pointer whitespace-nowrap"
+                                    title="Tặng sách này cho bạn bè hoặc người thân"
+                                >
+                                    <i className="ph-bold ph-gift text-base text-amber-600 dark:text-gold group-hover:scale-125 transition-transform duration-300"></i>
+                                    <span>Tặng Sách</span>
+                                </button>
+
+                                {/* 4. Yêu Thích */}
+                                <button
+                                    type="button"
+                                    onClick={handleToggleFavorite}
+                                    disabled={isFavoriteLoading}
+                                    className={`h-[48px] w-[48px] rounded-2xl border flex items-center justify-center text-xl transition-all cursor-pointer shrink-0 shadow-xs ${
+                                        isFavorite
+                                            ? 'bg-rose-500/15 border-rose-500/40 text-rose-500 shadow-sm'
+                                            : 'bg-paper-surface hover:bg-paper-100 dark:bg-night-surface dark:hover:bg-night-card border-paper-border dark:border-night-border text-stone-400 hover:text-rose-500'
+                                    }`}
+                                    title={isFavorite ? "Bỏ khỏi danh sách Yêu Thích" : "Lưu vào danh sách Yêu Thích"}
+                                    aria-label="Yêu thích tác phẩm"
+                                >
+                                    <i className={`ph-fill ph-heart ${isFavorite ? 'text-rose-500 animate-pulse' : 'text-stone-400 group-hover:text-rose-500'}`}></i>
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 mb-4">
+                                {/* 1. Đọc Thử Miễn Phí */}
+                                <button 
+                                    id="btn-read-now" 
+                                    type="button" 
+                                    onClick={handleReadBook} 
+                                    className="flex-1 bg-paper-surface hover:bg-paper-100 dark:bg-night-surface dark:hover:bg-night-border text-ink dark:text-night-text border-2 border-paper-border dark:border-night-border hover:border-wine/70 dark:hover:border-gold/70 font-outfit font-extrabold py-3.5 px-3 rounded-2xl transition-all shadow-xs hover:shadow-md flex items-center justify-center gap-1.5 text-xs sm:text-sm group cursor-pointer whitespace-nowrap" 
+                                    title="Đọc thử cuốn sách"
+                                >
+                                    <i className="ph-bold ph-book-open text-base text-wine dark:text-gold group-hover:scale-110 transition-transform"></i>
+                                    <span className="group-hover:text-wine dark:group-hover:text-gold transition-colors">Đọc Thử {book?.pdf_url ? '(PDF)' : ''}</span>
+                                </button>
+
+                                {/* 2. Thuê Sách (Thêm Vào Giỏ) */}
+                                <button
+                                    id="btn-rent-book"
+                                    type="button"
+                                    onClick={() => { openRentalModal() }}
+                                    className="flex-1 bg-wine hover:bg-wine-dark text-white font-outfit font-extrabold py-3.5 px-3 rounded-2xl transition-colors flex items-center justify-center gap-1.5 text-xs sm:text-sm cursor-pointer group shadow-sm whitespace-nowrap"
+                                    title="Chọn gói thuê hoặc mua sách"
+                                >
+                                    <i className="ph-bold ph-shopping-cart-simple text-base text-amber-300 group-hover:scale-110 transition-transform"></i>
+                                    <span>Thuê Sách</span>
+                                </button>
+
+                                {/* 3. Tặng Sách */}
+                                <button
+                                    id="btn-gift-book"
+                                    type="button"
+                                    onClick={openGiftModal}
+                                    className="flex-1 bg-gradient-to-r from-amber-500/10 via-amber-500/15 to-amber-500/10 hover:from-amber-500/20 hover:to-amber-500/20 dark:from-gold/15 dark:to-gold/20 dark:hover:from-gold/25 dark:hover:to-gold/25 text-amber-700 dark:text-gold border-2 border-amber-500/40 dark:border-gold/50 font-outfit font-extrabold py-3.5 px-3 rounded-2xl transition-all shadow-xs hover:shadow-md flex items-center justify-center gap-1.5 text-xs sm:text-sm group cursor-pointer whitespace-nowrap"
+                                    title="Tặng sách này cho bạn bè hoặc người thân"
+                                >
+                                    <i className="ph-bold ph-gift text-base text-amber-600 dark:text-gold group-hover:scale-125 transition-transform duration-300"></i>
+                                    <span>Tặng Sách</span>
+                                </button>
+
+                                {/* 4. Yêu Thích */}
+                                <button
+                                    type="button"
+                                    onClick={handleToggleFavorite}
+                                    disabled={isFavoriteLoading}
+                                    className={`h-[48px] w-[48px] rounded-2xl border flex items-center justify-center text-xl transition-all cursor-pointer shrink-0 shadow-xs ${
+                                        isFavorite
+                                            ? 'bg-rose-500/15 border-rose-500/40 text-rose-500 shadow-sm'
+                                            : 'bg-paper-surface hover:bg-paper-100 dark:bg-night-surface dark:hover:bg-night-card border-paper-border dark:border-night-border text-stone-400 hover:text-rose-500'
+                                    }`}
+                                    title={isFavorite ? "Bỏ khỏi danh sách Yêu Thích" : "Lưu vào danh sách Yêu Thích"}
+                                    aria-label="Yêu thích tác phẩm"
+                                >
+                                    <i className={`ph-fill ph-heart ${isFavorite ? 'text-rose-500 animate-pulse' : 'text-stone-400 group-hover:text-rose-500'}`}></i>
+                                </button>
+                            </div>
+                        )}
 
                         {/* Micro Feature Assurance List */}
                         <div className="pt-3.5 border-t border-paper-border/60 dark:border-night-border/60 flex flex-wrap items-center justify-between text-[11px] text-ink-muted dark:text-night-muted gap-2">
@@ -1711,6 +1853,276 @@ function useOriginalDesignAssets() {
             </p>
         </div>
     </div>
+
+    {/* ========================================================
+        MODAL TẶNG SÁCH CHO BẠN BÈ / ĐỘC GIẢ KHÁC
+        ======================================================== */}
+    {isGiftModalOpen && (
+        <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+            <div
+                onClick={closeGiftModal}
+                className="fixed inset-0 bg-black/75 backdrop-blur-sm transition-opacity duration-300"
+            ></div>
+            <div className="relative w-full max-w-lg bg-paper-surface dark:bg-[#1A1B18] border border-paper-border dark:border-[#383A34] rounded-3xl z-10 shadow-2xl p-6 sm:p-7 max-h-[90vh] overflow-y-auto my-auto">
+                {/* Modal Header */}
+                <div className="flex items-start justify-between pb-4 border-b border-paper-border dark:border-[#2C2E29] mb-5">
+                    <div className="flex items-center gap-3">
+                        <div className="w-11 h-11 rounded-2xl bg-amber-500/15 dark:bg-gold/20 text-amber-600 dark:text-gold flex items-center justify-center text-2xl shrink-0">
+                            <i className="ph-bold ph-gift"></i>
+                        </div>
+                        <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-gold bg-amber-500/10 dark:bg-gold/15 px-2 py-0.5 rounded-md inline-block mb-1">
+                                Món Quà Tri Thức
+                            </span>
+                            <h3 className="font-outfit font-black text-base text-ink dark:text-white leading-tight">
+                                Tặng Tác Phẩm Cho Bạn Bè
+                            </h3>
+                            <p className="text-xs text-ink-muted dark:text-stone-400 mt-0.5">
+                                {book?.bookName || 'Tác phẩm'} • {book?.author || 'HALM BOOK'}
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={closeGiftModal}
+                        className="w-8 h-8 rounded-full bg-paper-100 dark:bg-stone-800 hover:bg-paper-200 dark:hover:bg-stone-700 text-ink-muted dark:text-stone-300 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                        title="Đóng"
+                    >
+                        <i className="ph-bold ph-x text-base"></i>
+                    </button>
+                </div>
+
+                {/* Bước 1: Tìm người nhận */}
+                <div className="mb-5">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-ink-muted dark:text-stone-400 font-outfit mb-2">
+                        1. Người Nhận Quà (Email / Tên Đăng Nhập / SĐT):
+                    </label>
+                    <form onSubmit={handleSearchRecipient} className="flex gap-2">
+                        <div className="relative flex-1">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-stone-400">
+                                <i className="ph-bold ph-magnifying-glass text-sm"></i>
+                            </div>
+                            <input
+                                type="text"
+                                value={giftRecipientQuery}
+                                onChange={(e) => setGiftRecipientQuery(e.target.value)}
+                                placeholder="Nhập email, username hoặc số điện thoại..."
+                                className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-paper-border dark:border-[#383A34] bg-paper-50 dark:bg-[#111210] text-ink dark:text-white text-xs font-medium focus:outline-none focus:border-gold transition-colors"
+                            />
+                        </div>
+                        <button
+                            type="submit"
+                            disabled={isSearchingRecipient || !giftRecipientQuery.trim()}
+                            className="px-4 py-2.5 rounded-xl bg-gold/15 hover:bg-gold/25 text-gold border border-gold/40 text-xs font-bold font-metadata-spec transition-colors disabled:opacity-50 shrink-0"
+                        >
+                            {isSearchingRecipient ? <i className="ph-bold ph-spinner animate-spin text-sm"></i> : 'Tìm Bạn'}
+                        </button>
+                    </form>
+
+                    {/* Candidate list / Selected recipient */}
+                    {selectedRecipient ? (
+                        <div className="mt-3 p-3 rounded-2xl bg-emerald-500/10 dark:bg-emerald-950/30 border border-emerald-500/30 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <img
+                                    src={selectedRecipient.avatar || '/logo.png'}
+                                    alt="Avatar"
+                                    className="w-10 h-10 rounded-full object-cover border border-emerald-500/40"
+                                />
+                                <div>
+                                    <div className="font-bold text-xs text-ink dark:text-white flex items-center gap-1.5">
+                                        <span>{selectedRecipient.customerName}</span>
+                                        <i className="ph-fill ph-check-circle text-emerald-500"></i>
+                                    </div>
+                                    <div className="text-[11px] text-ink-muted dark:text-stone-400">
+                                        {selectedRecipient.emailMasked} {selectedRecipient.username ? `(@${selectedRecipient.username})` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setSelectedRecipient(null)}
+                                className="text-xs text-stone-400 hover:text-rose-500 px-2 py-1"
+                            >
+                                Đổi người
+                            </button>
+                        </div>
+                    ) : giftCandidates.length > 0 && (
+                        <div className="mt-3 space-y-2 max-h-40 overflow-y-auto pr-1">
+                            {giftCandidates.map((c) => (
+                                <div
+                                    key={c.customerId}
+                                    onClick={() => setSelectedRecipient(c)}
+                                    className="p-2.5 rounded-xl border border-paper-border dark:border-[#383A34] hover:border-gold bg-paper-50 dark:bg-[#111210] flex items-center justify-between cursor-pointer transition-colors"
+                                >
+                                    <div className="flex items-center gap-2.5">
+                                        <img src={c.avatar || '/logo.png'} alt="Avatar" className="w-8 h-8 rounded-full object-cover" />
+                                        <div>
+                                            <div className="font-bold text-xs text-ink dark:text-white">{c.customerName}</div>
+                                            <div className="text-[10px] text-ink-muted dark:text-stone-400">{c.emailMasked}</div>
+                                        </div>
+                                    </div>
+                                    <span className="text-xs font-bold text-gold hover:underline">Chọn</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Bước 2: Chọn gói tặng */}
+                <div className="mb-5">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-ink-muted dark:text-stone-400 font-outfit mb-2">
+                        2. Chọn Kỳ Hạn Tặng:
+                    </label>
+                    <div className="grid grid-cols-2 gap-2.5">
+                        {[
+                            { key: '7', name: '7 Ngày', price: 9, note: 'Thuê 1 tuần' },
+                            { key: '14', name: '14 Ngày', price: 15, note: 'Thuê 2 tuần' },
+                            { key: '30', name: '30 Ngày', price: 25, note: 'Thuê 1 tháng' },
+                            { key: 'forever', name: 'Vĩnh Viễn', price: book?.rent_price && book.rent_price > 0 ? Math.round(book.rent_price) : 39, note: 'Trọn đời' }
+                        ].map((plan) => {
+                            const isSelected = giftPlanKey === plan.key;
+                            return (
+                                <div
+                                    key={plan.key}
+                                    onClick={() => setGiftPlanKey(plan.key)}
+                                    className={`p-3 rounded-2xl border-2 cursor-pointer transition-all ${
+                                        isSelected
+                                            ? 'border-gold bg-gold/10 dark:bg-gold/15'
+                                            : 'border-paper-border dark:border-[#383A34] bg-paper-50 dark:bg-[#111210] hover:border-gold/40'
+                                    }`}
+                                >
+                                    <div className="flex items-center justify-between mb-1">
+                                        <span className="font-bold text-xs text-ink dark:text-white">{plan.name}</span>
+                                        <span className="font-bold text-xs text-amber-600 dark:text-gold flex items-center gap-0.5">
+                                            {plan.price} 🥔
+                                        </span>
+                                    </div>
+                                    <div className="text-[10px] text-ink-muted dark:text-stone-400">{plan.note}</div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* Bước 3: Lời chúc tặng sách */}
+                <div className="mb-5">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-ink-muted dark:text-stone-400 font-outfit mb-2">
+                        3. Lời Nhắn Gửi Tặng:
+                    </label>
+                    <textarea
+                        rows={2}
+                        value={giftMessage}
+                        onChange={(e) => setGiftMessage(e.target.value)}
+                        placeholder="Nhập lời chúc tốt đẹp gửi kèm món quà..."
+                        className="w-full p-3 rounded-xl border border-paper-border dark:border-[#383A34] bg-paper-50 dark:bg-[#111210] text-ink dark:text-white text-xs font-medium focus:outline-none focus:border-gold transition-colors resize-none"
+                    ></textarea>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                        {[
+                            'Chúc bạn đọc sách vui vẻ! 📖',
+                            'Món quà nhỏ gửi tặng bạn tri thức! ✨',
+                            'Hy vọng cuốn sách mang lại cảm hứng cho bạn! 💡'
+                        ].map((chip, idx) => (
+                            <button
+                                key={idx}
+                                type="button"
+                                onClick={() => setGiftMessage(chip)}
+                                className="text-[11px] px-2.5 py-1 rounded-full bg-paper-200 dark:bg-stone-800 hover:bg-gold/15 text-ink-muted dark:text-stone-300 hover:text-gold transition-colors"
+                            >
+                                {chip}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Bảng so sánh số dư khoai */}
+                <div className="p-3.5 rounded-2xl bg-paper-100 dark:bg-[#111210] border border-paper-border dark:border-[#2C2E29] mb-5 space-y-2 text-xs font-metadata-spec">
+                    <div className="flex items-center justify-between">
+                        <span className="text-ink-muted dark:text-stone-400">Số dư Khoai hiện tại:</span>
+                        <span className="font-bold text-ink dark:text-white">{currentUserPotato.toLocaleString()} 🥔</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <span className="text-ink-muted dark:text-stone-400">Chi phí tặng sách:</span>
+                        <span className="font-bold text-amber-600 dark:text-gold">-{giftPlanPrice} 🥔</span>
+                    </div>
+                    <div className="pt-2 border-t border-paper-border/60 dark:border-stone-800 flex items-center justify-between font-bold">
+                        <span>Số dư sau khi tặng:</span>
+                        <span className={currentUserPotato >= giftPlanPrice ? 'text-emerald-500' : 'text-rose-500'}>
+                            {(currentUserPotato - giftPlanPrice).toLocaleString()} 🥔
+                        </span>
+                    </div>
+                    {currentUserPotato < giftPlanPrice && (
+                        <div className="text-[11px] text-rose-500 pt-1 flex items-center justify-between">
+                            <span>Số dư Khoai không đủ để thực hiện!</span>
+                            <Link to="/canhan?tab=wallet" className="underline font-bold text-gold">Nạp thêm Khoai</Link>
+                        </div>
+                    )}
+                </div>
+
+                {/* Modal Actions */}
+                <div className="flex items-center gap-3">
+                    <button
+                        type="button"
+                        onClick={closeGiftModal}
+                        className="flex-1 py-3 rounded-2xl border border-paper-border dark:border-stone-700 hover:bg-paper-200 dark:hover:bg-stone-800 text-ink dark:text-stone-300 font-bold text-xs transition-colors"
+                    >
+                        Hủy Bỏ
+                    </button>
+                    <button
+                        type="button"
+                        disabled={isGiftingBook || !selectedRecipient || currentUserPotato < giftPlanPrice}
+                        onClick={handleConfirmGiftBook}
+                        className="flex-2 py-3 rounded-2xl bg-wine hover:bg-wine-dark dark:bg-gold dark:hover:bg-amber-400 text-white dark:text-[#111210] font-bold text-xs flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                    >
+                        {isGiftingBook ? (
+                            <>
+                                <i className="ph-bold ph-spinner animate-spin text-sm"></i>
+                                <span>Đang Gửi Quà...</span>
+                            </>
+                        ) : (
+                            <>
+                                <i className="ph-bold ph-gift text-base"></i>
+                                <span>Xác Nhận Tặng ({giftPlanPrice} 🥔)</span>
+                            </>
+                        )}
+                    </button>
+                </div>
+            </div>
+        </div>
+    )}
+
+    {/* MODAL THIỆP CHÚC MỪNG TẶNG SÁCH THÀNH CÔNG */}
+    {giftSuccessModal && (
+        <div className="fixed inset-0 z-[10003] flex items-center justify-center p-4 overflow-y-auto">
+            <div
+                onClick={() => setGiftSuccessModal(null)}
+                className="fixed inset-0 bg-black/75 backdrop-blur-md transition-opacity"
+            ></div>
+            <div className="relative w-full max-w-md bg-paper-surface dark:bg-[#1A1B18] border-2 border-gold/50 rounded-3xl z-10 shadow-2xl p-6 sm:p-7 text-center my-auto">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-tr from-amber-500 to-rose-500 text-white flex items-center justify-center text-3xl shadow-lg animate-bounce">
+                    <i className="ph-bold ph-gift"></i>
+                </div>
+                <h3 className="font-display font-black text-xl text-ink dark:text-white mb-1">
+                    Tặng Sách Thành Công! 🎉
+                </h3>
+                <p className="font-editorial-body text-xs text-ink-muted dark:text-stone-300 mb-4">
+                    Bạn đã gửi tặng tác phẩm <strong className="text-ink dark:text-gold">"{giftSuccessModal.bookTitle}"</strong> ({giftSuccessModal.planText}) cho độc giả <strong className="text-ink dark:text-gold">{giftSuccessModal.recipientName}</strong>.
+                </p>
+                <div className="p-3 rounded-2xl bg-paper-100 dark:bg-[#111210] border border-paper-border dark:border-[#2C2E29] text-xs italic text-stone-400 mb-5">
+                    "{giftSuccessModal.message}"
+                </div>
+                <p className="text-[11px] text-ink-muted dark:text-stone-400 mb-5">
+                    Sách đã được thêm ngay vào Tủ Sách của người nhận và hệ thống đã gửi thông báo đến họ.
+                </p>
+                <button
+                    type="button"
+                    onClick={() => setGiftSuccessModal(null)}
+                    className="w-full py-3 rounded-2xl bg-wine hover:bg-wine-dark dark:bg-gold dark:hover:bg-amber-400 text-white dark:text-[#111210] font-bold text-xs transition-colors"
+                >
+                    Tuyệt Vời, Cảm Ơn!
+                </button>
+            </div>
+        </div>
+    )}
 
     {/* Toast Notification Container */}
     <div id="toastContainer" className="fixed top-24 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>

@@ -13,6 +13,7 @@ import AuthModal, { openAuthModal } from "@/components/common/AuthModal";
 import { getTierInfo, getTierBadgeClass } from "@/utils/tierUtils";
 import { getSiteSettings } from "@/services/bannerService";
 import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead } from "@/services/userFeatureService";
+import { prefetchUserRoutes } from "@/utils/routePrefetch";
 
 const SECTIONS = [
   ["chapter-0-broadcast", "Trang chủ"],
@@ -26,10 +27,16 @@ const SECTIONS = [
 const FOOTER_LINK_CLASS = "transition-colors hover:text-[#8B4A3C] dark:hover:text-[#D4AF37]";
 const HEADER_LOGO = "/logo.png";
 
+let _globalBooksSearchCache = null;
+
 function UserHeader({ onOpenChatbot, onThemeChange }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [isDark, setIsDark] = useState(() => isDarkMode());
+  const onThemeChangeRef = useRef(onThemeChange);
+  useEffect(() => {
+    onThemeChangeRef.current = onThemeChange;
+  });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -71,12 +78,12 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
     if (domIsDark !== isDark) {
       applyTheme(isDark);
     }
-    onThemeChange?.(isDark);
+    onThemeChangeRef.current?.(isDark);
     if (isDark) {
       window.initializeStarryBackground?.();
       window.initStars?.();
     }
-  }, [isDark, onThemeChange]);
+  }, [isDark]);
 
   // Đồng bộ trạng thái phiên đăng nhập và token còn hạn hay không
   useEffect(() => {
@@ -234,12 +241,12 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
 
     // Lắng nghe sự kiện cập nhật số dư khoai thời gian thực
     const handlePotatoUpdated = (event) => {
-      if (event?.detail) {
+      const newBalance = event?.detail?.potatoBalance ?? event?.detail?.balance;
+      if (newBalance !== undefined && newBalance !== null) {
         setCustomer((prev) => {
-          if (!prev) return prev;
           const updated = {
-            ...prev,
-            potatoBalance: event.detail.potatoBalance ?? event.detail.balance ?? prev?.potatoBalance,
+            ...(prev || {}),
+            potatoBalance: Number(newBalance),
           };
           try {
             localStorage.setItem("halm_customer_cache", JSON.stringify(updated));
@@ -252,6 +259,10 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
     };
 
     window.addEventListener("halm-potato-updated", handlePotatoUpdated);
+
+    if (isLoggedIn) {
+      prefetchUserRoutes();
+    }
 
     return () => {
       isMounted = false;
@@ -345,6 +356,10 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
 
   useEffect(() => {
     let isMounted = true;
+    if (_globalBooksSearchCache && _globalBooksSearchCache.length > 0) {
+      setAllBooksCache(_globalBooksSearchCache);
+      return;
+    }
     const fetchBooksForSearch = async () => {
       try {
         const res = await axiosInstance.get("/api/home/books", {
@@ -352,13 +367,15 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
         });
         const raw = Array.isArray(res.data) ? res.data : (res.data?.content || res.data?.data || []);
         if (isMounted && Array.isArray(raw)) {
-          setAllBooksCache(raw.map((b, idx) => ({
+          const mapped = raw.map((b, idx) => ({
             id: b.book_id || b.id || `b-${idx}`,
             title: b.bookName || b.title || "Tác phẩm",
             author: b.author || "HALM BOOK",
             img: b.img_url || b.img || "/logo.png",
             rating: b.rating || "5.0"
-          })));
+          }));
+          _globalBooksSearchCache = mapped;
+          setAllBooksCache(mapped);
         }
       } catch (err) {
         // fallback
@@ -1200,7 +1217,18 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
             >
               <span className="vietnam-flag-icon flex h-[22px] w-[30px] items-center justify-center rounded-[2px] text-[15px] leading-none"><span className="vietnam-flag-star">★</span></span>
             </button>
-            <div id="avatar-menu-wrapper" className="relative hidden items-center lg:flex">
+            {isLoggedIn && (
+              <Link
+                to="/canhan?tab=wallet"
+                id="header-potato-wallet-pill"
+                className="home-header-control hidden sm:inline-flex items-center gap-1.5 h-10 px-3 rounded-full text-xs font-bold text-[#D4AF37] border border-[#D4AF37]/35 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 transition-all shadow-sm"
+                title="Ví Khoai Tây của bạn - Bấm để nạp thêm hoặc xem lịch sử"
+              >
+                <i className="ph-fill ph-wallet text-sm text-[#D4AF37]"></i>
+                <span className="font-metadata-spec">{(customer?.potatoBalance ?? 0).toLocaleString()} 🥔</span>
+              </Link>
+            )}
+            <div id="avatar-menu-wrapper" onMouseEnter={prefetchUserRoutes} onFocus={prefetchUserRoutes} className="relative hidden items-center lg:flex">
               {isLoggedIn ? (
                 <>
                   <button id="avatar-menu-button" type="button" onClick={() => setIsAccountMenuOpen((current) => !current)} className="home-header-control flex h-11 items-center gap-2 rounded-full px-2 transition-colors" aria-label="Mở menu tài khoản" aria-expanded={isAccountMenuOpen}>
@@ -1226,6 +1254,7 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
                       </span>
                     </div>
                     <Link to="/canhan?tab=wallet" onClick={() => handleNavClick("/canhan?tab=wallet")} className="avatar-dropdown-item flex items-center justify-between rounded-xl px-3 py-2.5 font-bold text-[#D4AF37] transition-colors"><span className="flex items-center gap-2"><i className="ph-fill ph-wallet text-base"></i>Ví Khoai Tây</span><span className="rounded-full bg-[#D4AF37]/20 px-2 py-0.5 text-[11px] font-black text-[#D4AF37]">{(customer?.potatoBalance ?? 0).toLocaleString()} 🥔</span></Link>
+                    <Link to="/canhan?tab=vouchers" onClick={() => handleNavClick("/canhan?tab=vouchers")} className="avatar-dropdown-item flex items-center gap-2 rounded-xl px-3 py-2.5 font-semibold transition-colors"><i className="ph-bold ph-ticket text-base text-amber-500"></i>Kho Voucher của tôi</Link>
                     <Link to="/canhan?tab=history" onClick={() => handleNavClick("/canhan?tab=history")} className="avatar-dropdown-item flex items-center gap-2 rounded-xl px-3 py-2.5 font-semibold transition-colors"><i className="ph-bold ph-clock-counter-clockwise text-base text-amber-500"></i>Lịch sử giao dịch</Link>
                     <Link to="/nhiemvu" onClick={() => handleNavClick("/nhiemvu")} className="avatar-dropdown-item flex items-center justify-between rounded-xl px-3 py-2.5 font-semibold transition-colors"><span className="flex items-center gap-2"><i className="ph-bold ph-target text-base text-amber-500"></i>Nhiệm vụ & Điểm danh</span><span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">Streak 🔥</span></Link>
                     <Link to="/canhan" onClick={() => handleNavClick("/canhan")} className="avatar-dropdown-item flex items-center gap-2 rounded-xl px-3 py-2.5 font-semibold transition-colors"><i className="ph-bold ph-user-circle text-base"></i>Thông tin cá nhân</Link>
@@ -1398,6 +1427,14 @@ function UserHeader({ onOpenChatbot, onThemeChange }) {
             >
               <span>Ví Khoai Tây</span>
               <span>{isLoggedIn ? `${(customer?.potatoBalance ?? 0).toLocaleString()} 🥔` : 'Đăng nhập để xem'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleNavClick("/canhan?tab=vouchers", undefined, true)}
+              className="col-span-2 rounded-lg px-2 py-2 font-bold text-amber-500 hover:bg-amber-500/10 flex items-center gap-2 border border-amber-500/30 bg-[#111210] text-left cursor-pointer"
+            >
+              <i className="ph-bold ph-ticket text-sm"></i>
+              <span>Kho Voucher Của Tôi</span>
             </button>
             <button
               type="button"

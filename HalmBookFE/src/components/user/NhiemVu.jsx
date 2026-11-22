@@ -12,6 +12,7 @@ import AvatarWithFrame from '@/components/common/AvatarWithFrame';
 import { getMissions, claimMission } from '@/services/missionService';
 import { missionCards } from './missionPresentation';
 import { logoutUser } from '@/services/authToken';
+import { prefetchUserRoutes } from '@/utils/routePrefetch';
 
 
 
@@ -35,11 +36,17 @@ export default function NhiemVu() {
     const [toastVisible, setToastVisible] = useState(false);
     const toastTimer = useRef(null);
 
-    const showToast = (title, message) => {
-        setToast({ title, message });
-        setToastVisible(true);
-        if (toastTimer.current) clearTimeout(toastTimer.current);
-        toastTimer.current = setTimeout(() => setToastVisible(false), 3500);
+    const showToast = (title, message, type = 'info') => {
+        if (window.halmToast) {
+            const lower = (title || '').toLowerCase();
+            if (type === 'success' || lower.includes('thành công')) {
+                window.halmToast.success(title, message);
+            } else if (type === 'error' || lower.includes('thất bại') || lower.includes('lỗi')) {
+                window.halmToast.error(title, message);
+            } else {
+                window.halmToast.info(title, message);
+            }
+        }
     };
 
     const fetchCustomer = async () => {
@@ -150,6 +157,7 @@ export default function NhiemVu() {
         }
     }, []);
     useEffect(() => {
+        prefetchUserRoutes();
         missionAlive.current = true;
         void Promise.resolve().then(() => refreshMissions());
         const visible = () => { if (!document.hidden) void refreshMissions(); };
@@ -209,21 +217,6 @@ export default function NhiemVu() {
             <style>{inlinePageStyle1}</style>
 
             <UserLayout className="nhiem-vu-page" onThemeChange={setIsDark}>
-                {/* Toast Notification */}
-                <div
-                    id="toast-notification"
-                    className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-4 rounded-2xl bg-paper-surface dark:bg-night-card border border-wine/30 dark:border-gold/40 shadow-2xl text-ink dark:text-night-text transition-all duration-300 ${
-                        toastVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'
-                    }`}
-                >
-                    <div className="w-8 h-8 rounded-full bg-wine/10 dark:bg-gold/20 flex items-center justify-center text-wine dark:text-gold shrink-0">
-                        <i className="ph-bold ph-check text-lg"></i>
-                    </div>
-                    <div>
-                        <div className="font-display font-bold text-xs">{toast.title}</div>
-                        <div className="font-editorial-body text-xs text-ink-muted dark:text-night-muted">{toast.message}</div>
-                    </div>
-                </div>
 
                 {/* MAIN 2-COLUMN DASHBOARD (ĐỒNG BỘ 100% VỚI TỦ SÁCH, CÁ NHÂN & HỘI VIÊN) */}
                 <main className="w-full max-w-[1520px] mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-12 sm:pt-28 sm:pb-16 flex-1">
@@ -232,7 +225,7 @@ export default function NhiemVu() {
                         {/* ====================================================
                             SIDEBAR TRÁI: HỒ SƠ & ĐIỀU HƯỚNG TÀI KHOẢN (ĐỒNG BỘ 100%)
                             ==================================================== */}
-                        <aside className="w-full lg:w-80 shrink-0 space-y-4 lg:sticky lg:top-24 lg:self-start">
+                        <aside onMouseEnter={prefetchUserRoutes} onFocus={prefetchUserRoutes} className="w-full lg:w-80 shrink-0 space-y-4 lg:sticky lg:top-24 lg:self-start">
                             {/* 1. Profile Avatar Card */}
                             <div className="rounded-3xl user-sidebar-card bg-paper-surface dark:bg-night-surface border border-paper-border dark:border-night-border p-6 shadow-sm flex flex-col items-center text-center relative overflow-hidden group">
                                 <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-36 h-36 bg-amber-500/10 rounded-full blur-2xl pointer-events-none"></div>
@@ -264,14 +257,18 @@ export default function NhiemVu() {
                                 <div className="w-full h-px bg-paper-border dark:bg-night-border my-5"></div>
 
                                 {/* Stat Boxes */}
-                                <div className="grid grid-cols-2 gap-3 w-full text-center">
-                                    <Link to="/canhan?tab=wallet" className="py-4 px-3 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-gold transition-colors flex flex-col justify-center">
-                                        <span className="block font-metadata-spec text-2xl font-black text-[#EDE9DF]">{potatoBalance.toLocaleString()}</span>
-                                        <span className="font-metadata-spec text-xs text-[#96938B] mt-1">Khoai Tích Lũy</span>
+                                <div className="grid grid-cols-3 gap-2 w-full text-center">
+                                    <Link to="/canhan?tab=wallet" className="py-3 px-2 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-gold transition-colors flex flex-col justify-center">
+                                        <span className="block font-metadata-spec text-base sm:text-lg font-black text-[#EDE9DF]">{potatoBalance.toLocaleString()}</span>
+                                        <span className="font-metadata-spec text-[10px] text-[#96938B] mt-0.5 font-bold">Khoai</span>
                                     </Link>
-                                    <Link to="/tusachcn" className="py-4 px-3 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-wine dark:hover:border-gold transition-colors flex flex-col justify-center">
-                                        <span className="block font-metadata-spec text-2xl font-black text-[#EDE9DF]">{bookshelfCount}</span>
-                                        <span className="font-metadata-spec text-xs text-[#96938B] mt-1">Sách Trong Tủ</span>
+                                    <Link to="/tusachcn" className="py-3 px-2 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-wine dark:hover:border-gold transition-colors flex flex-col justify-center">
+                                        <span className="block font-metadata-spec text-base sm:text-lg font-black text-[#EDE9DF]">{bookshelfCount}</span>
+                                        <span className="font-metadata-spec text-[10px] text-[#96938B] mt-0.5 font-bold">Tủ Sách</span>
+                                    </Link>
+                                    <Link to="/canhan?tab=vouchers" className="py-3 px-2 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-gold transition-colors flex flex-col justify-center items-center">
+                                        <i className="ph-bold ph-ticket text-lg text-amber-500 dark:text-gold mb-0.5"></i>
+                                        <span className="font-metadata-spec text-[10px] text-[#96938B] font-bold">Voucher</span>
                                     </Link>
                                 </div>
                             </div>
@@ -332,6 +329,15 @@ export default function NhiemVu() {
                                         <span>Ví Khoai Tây</span>
                                     </div>
                                     <span className="px-3 py-1 rounded-full bg-paper-200 dark:bg-[#242116] border border-paper-border dark:border-[#52441D] text-amber-600 dark:text-[#D8B44A] text-xs font-bold font-metadata-spec">{potatoBalance.toLocaleString()} 🥔</span>
+                                </Link>
+
+                                {/* 5.5. Kho Voucher Của Tôi */}
+                                <Link
+                                    to="/canhan?tab=vouchers"
+                                    className="w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-xs font-metadata-spec font-bold text-ink-muted dark:text-stone-300 hover:bg-paper-200 dark:hover:bg-stone-800/40 hover:text-ink dark:hover:text-white transition-colors"
+                                >
+                                    <i className="ph-bold ph-ticket text-lg text-stone-400"></i>
+                                    <span>Kho Voucher Của Tôi</span>
                                 </Link>
 
                                 {/* 6. Lịch Sử Giao Dịch */}

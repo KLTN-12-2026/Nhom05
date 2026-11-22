@@ -8,9 +8,10 @@ import { getCustomerBookshelf } from '@/services/orderService';
 import { isDarkMode, applyTheme } from '@/utils/theme';
 import { getTierInfo, formatCustomerId, getTierBadgeClass } from '@/utils/tierUtils';
 import AvatarWithFrame from '@/components/common/AvatarWithFrame';
-import { uploadAvatar } from '@/services/userFeatureService';
+import { uploadAvatar, getMyVouchers, saveVoucherToWallet, getGiftsSent, getGiftsReceived } from '@/services/userFeatureService';
 import { clearAuthSession, isTokenValid, logoutUser } from '@/services/authToken';
 import SupportTicketSection from './SupportTicketSection';
+import { prefetchUserRoutes } from '@/utils/routePrefetch';
 
 
 
@@ -26,7 +27,7 @@ const DEFAULT_PACKAGES = [];
 
 const normalizeSearch = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 
-const STATIC_PROFILE_STARS = Array.from({ length: 80 }, (_, id) => {
+const STATIC_PROFILE_STARS = Array.from({ length: 25 }, (_, id) => {
     const pseudoRand1 = ((id * 137 + 43) % 100) / 100;
     const pseudoRand2 = ((id * 269 + 71) % 100) / 100;
     const pseudoRand3 = ((id * 353 + 97) % 100) / 100;
@@ -115,6 +116,49 @@ export default function Profile() {
     const [historySearchQuery, setHistorySearchQuery] = useState('');
     const [historyCurrentPage, setHistoryCurrentPage] = useState(1);
     const HISTORY_PER_PAGE = 5;
+
+    // State phục vụ Kho Voucher Của Tôi
+    const [vouchers, setVouchers] = useState([]);
+    const [isLoadingVouchers, setIsLoadingVouchers] = useState(false);
+    const [voucherCodeInput, setVoucherCodeInput] = useState('');
+    const [isSavingVoucher, setIsSavingVoucher] = useState(false);
+    const [voucherFilter, setVoucherFilter] = useState('all'); // 'all', 'available', 'used', 'expired'
+
+    // State phục vụ Lịch Sử Quà Tặng Sách
+    const [giftsSent, setGiftsSent] = useState([]);
+    const [giftsReceived, setGiftsReceived] = useState([]);
+    const [isLoadingGifts, setIsLoadingGifts] = useState(false);
+    const [giftTab, setGiftTab] = useState('received'); // 'received', 'sent'
+
+    const handleSaveVoucher = async (e) => {
+        if (e && e.preventDefault) e.preventDefault();
+        const code = voucherCodeInput.trim();
+        if (!code) {
+            showToast('Thông Báo', 'Vui lòng nhập mã voucher!');
+            return;
+        }
+
+        try {
+            setIsSavingVoucher(true);
+            const res = await saveVoucherToWallet(code);
+            showToast('Thành Công', res.message || 'Đã lưu voucher vào ví thành công! 🎉');
+            setVoucherCodeInput('');
+            const updated = await getMyVouchers();
+            setVouchers(updated);
+        } catch (err) {
+            const msg = err.response?.data?.message || 'Không thể lưu voucher. Vui lòng kiểm tra lại mã!';
+            showToast('Lỗi Lưu Voucher', msg);
+        } finally {
+            setIsSavingVoucher(false);
+        }
+    };
+
+    const filteredVouchers = useMemo(() => {
+        if (voucherFilter === 'available') return vouchers.filter(v => v.status === 'AVAILABLE');
+        if (voucherFilter === 'used') return vouchers.filter(v => v.status === 'USED');
+        if (voucherFilter === 'expired') return vouchers.filter(v => v.status === 'EXPIRED');
+        return vouchers;
+    }, [vouchers, voucherFilter]);
 
     // State phục vụ Đổi Mật Khẩu (Popup 2 bước + Mắt hiển thị mật khẩu)
     const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
@@ -251,14 +295,24 @@ export default function Profile() {
     const navigate = useNavigate();
 
     const loadWalletAndBookshelf = async () => {
-        const [packageResult, transactionResult, bookResult] = await Promise.allSettled([
+        const [packageResult, transactionResult, bookResult, voucherResult, sentResult, recvResult] = await Promise.allSettled([
             getPotatoPackages(), getPotatoTransactions(), getCustomerBookshelf(),
+            getMyVouchers(), getGiftsSent(), getGiftsReceived()
         ]);
         if (packageResult.status === 'fulfilled') setPackages(Array.isArray(packageResult.value) ? packageResult.value : []);
         if (transactionResult.status === 'fulfilled') setTransactions(Array.isArray(transactionResult.value) ? transactionResult.value : []);
         if (bookResult.status === 'fulfilled' && Array.isArray(bookResult.value)) {
             setBookshelf(bookResult.value);
             setRentedCount(bookResult.value.filter(book => !book.expired && book.status === 'ACTIVE').length);
+        }
+        if (voucherResult.status === 'fulfilled' && Array.isArray(voucherResult.value)) {
+            setVouchers(voucherResult.value);
+        }
+        if (sentResult.status === 'fulfilled' && Array.isArray(sentResult.value)) {
+            setGiftsSent(sentResult.value);
+        }
+        if (recvResult.status === 'fulfilled' && Array.isArray(recvResult.value)) {
+            setGiftsReceived(recvResult.value);
         }
     };
 
@@ -297,6 +351,7 @@ export default function Profile() {
     };
 
     useEffect(() => {
+        prefetchUserRoutes();
         let isMounted = true;
         fetchCustomerData().finally(() => {
             if (isMounted) setIsLoading(false);
@@ -361,6 +416,12 @@ export default function Profile() {
     useEffect(() => {
         applyTheme(isDark);
     }, [isDark]);
+
+    useEffect(() => {
+        if (searchParams.get('tab') === 'gifts') {
+            navigate('/tusachcn?tab=gifts', { replace: true });
+        }
+    }, [searchParams, navigate]);
 
     useEffect(() => {
         loadWalletAndBookshelf();
@@ -661,7 +722,7 @@ export default function Profile() {
 
 
                         {/* LEFT SIDEBAR - FIXED/STICKY CONTAINER */}
-                        <aside className="w-full lg:w-80 shrink-0 space-y-4 lg:sticky lg:top-24 lg:self-start">
+                        <aside onMouseEnter={prefetchUserRoutes} onFocus={prefetchUserRoutes} className="w-full lg:w-80 shrink-0 space-y-4 lg:sticky lg:top-24 lg:self-start">
 
                             {/* 1. Profile Avatar Card */}
                             <div className="rounded-3xl user-sidebar-card bg-paper-surface dark:bg-night-surface border border-paper-border dark:border-night-border p-6 shadow-sm flex flex-col items-center text-center relative overflow-hidden group">
@@ -715,15 +776,19 @@ export default function Profile() {
                                 {/* Divider */}
                                 <div className="w-full h-px bg-paper-border dark:bg-night-border my-5"></div>
 
-                                <div className="grid grid-cols-2 gap-3 w-full text-center">
-                                    <button type="button" onClick={() => handleSelectTab('wallet')} className="py-4 px-3 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-gold transition-colors flex flex-col justify-center">
-                                        <span className="block font-metadata-spec text-2xl font-black text-[#EDE9DF]">{(customer?.potatoBalance ?? 0).toLocaleString()}</span>
-                                        <span className="font-metadata-spec text-xs text-[#96938B] mt-1">Khoai Tích Lũy</span>
+                                <div className="grid grid-cols-3 gap-2 w-full text-center">
+                                    <button type="button" onClick={() => handleSelectTab('wallet')} className="py-3 px-2 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-gold transition-colors flex flex-col justify-center cursor-pointer">
+                                        <span className="block font-metadata-spec text-base sm:text-lg font-black text-[#EDE9DF]">{(customer?.potatoBalance ?? 0).toLocaleString()}</span>
+                                        <span className="font-metadata-spec text-[10px] text-[#96938B] mt-0.5 font-bold">Khoai Tây</span>
                                     </button>
-                                    <Link to="/tusachcn" className="py-4 px-3 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-wine dark:hover:border-gold transition-colors flex flex-col justify-center">
-                                        <span className="block font-metadata-spec text-2xl font-black text-[#EDE9DF]">{rentedCount}</span>
-                                        <span className="font-metadata-spec text-xs text-[#96938B] mt-1">Sách Trong Tủ</span>
+                                    <Link to="/tusachcn" className="py-3 px-2 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-wine dark:hover:border-gold transition-colors flex flex-col justify-center">
+                                        <span className="block font-metadata-spec text-base sm:text-lg font-black text-[#EDE9DF]">{rentedCount}</span>
+                                        <span className="font-metadata-spec text-[10px] text-[#96938B] mt-0.5 font-bold">Tủ Sách</span>
                                     </Link>
+                                    <button type="button" onClick={() => handleSelectTab('vouchers')} className="py-3 px-2 rounded-2xl user-sidebar-box bg-paper dark:bg-night-surface border border-paper-border dark:border-night-border hover:border-gold transition-colors flex flex-col justify-center cursor-pointer">
+                                        <span className="block font-metadata-spec text-base sm:text-lg font-black text-amber-500 dark:text-gold">{vouchers.filter(v => v.status === 'AVAILABLE').length}</span>
+                                        <span className="font-metadata-spec text-[10px] text-[#96938B] mt-0.5 font-bold">Voucher</span>
+                                    </button>
                                 </div>
                             </div>
 
@@ -794,7 +859,27 @@ export default function Profile() {
                                     <span className={`px-3 py-1 rounded-full text-xs font-bold font-metadata-spec ${activeTab === 'wallet' ? 'bg-black/25 text-black font-black' : 'bg-paper-200 dark:bg-[#242116] border border-paper-border dark:border-[#52441D] text-amber-600 dark:text-[#D8B44A]'}`}>{(customer?.potatoBalance ?? 0).toLocaleString()} 🥔</span>
                                 </button>
 
-                                {/* 5. Lịch Sử Giao Dịch */}
+                                {/* 5. Kho Voucher Của Tôi */}
+                                <button
+                                    type="button"
+                                    onClick={() => handleSelectTab('vouchers')}
+                                    className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl text-xs font-metadata-spec transition-all ${activeTab === 'vouchers'
+                                        ? 'bg-[#C28807] text-[#111210] font-black shadow-md'
+                                        : 'font-bold text-ink-muted dark:text-stone-300 hover:bg-paper-200 dark:hover:bg-stone-800/40 hover:text-ink dark:hover:text-white'
+                                        }`}
+                                >
+                                    <div className="flex items-center gap-3.5">
+                                        <i className={`ph-bold ph-ticket text-lg ${activeTab === 'vouchers' ? 'text-[#111210]' : 'text-stone-400'}`}></i>
+                                        <span>Kho Voucher Của Tôi</span>
+                                    </div>
+                                    {vouchers.filter(v => v.status === 'AVAILABLE').length > 0 && (
+                                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${activeTab === 'vouchers' ? 'bg-black/20 text-black' : 'bg-gold/20 text-gold border border-gold/30'}`}>
+                                            {vouchers.filter(v => v.status === 'AVAILABLE').length}
+                                        </span>
+                                    )}
+                                </button>
+
+                                {/* 6. Lịch Sử Giao Dịch */}
                                 <button
                                     type="button"
                                     onClick={() => handleSelectTab('history')}
@@ -807,7 +892,7 @@ export default function Profile() {
                                     <span>Lịch Sử Giao Dịch</span>
                                 </button>
 
-                                {/* 6. Khiếu Nại & Hỗ Trợ (RabbitMQ) */}
+                                {/* 8. Khiếu Nại & Hỗ Trợ (RabbitMQ) */}
                                 <button
                                     type="button"
                                     onClick={() => handleSelectTab('support')}
@@ -879,7 +964,6 @@ export default function Profile() {
                                                 </div>
                                                 <div>
                                                     <h3 className="font-display font-bold text-sm text-ink dark:text-night-text">Dữ Liệu Nhận Diện</h3>
-                                                    <p className="font-editorial-body text-[11px] text-ink-muted dark:text-night-muted">Thông tin tài khoản đã được xác thực bảo mật.</p>
                                                 </div>
                                             </div>
                                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-400 text-[10px] font-metadata-spec font-bold">
@@ -1038,8 +1122,8 @@ export default function Profile() {
                                         </div>
                                     </div>
 
-                                    {/* 3 Metric Cards */}
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                    {/* 4 Metric Cards bao gồm Kho Voucher */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                                         <div className="p-4 rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border shadow-sm flex items-start gap-3">
                                             <div className="w-9 h-9 rounded-xl bg-wine/10 dark:bg-gold/15 text-wine dark:text-gold flex items-center justify-center text-lg shrink-0">
                                                 <i className="ph-bold ph-shield-check"></i>
@@ -1050,15 +1134,37 @@ export default function Profile() {
                                             </div>
                                         </div>
 
-                                        <div className="p-4 rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border shadow-sm flex items-start gap-3">
-                                            <div className="w-9 h-9 rounded-xl bg-gold/15 text-gold flex items-center justify-center text-lg shrink-0">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleSelectTab('wallet')}
+                                            className="p-4 rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border hover:border-gold shadow-sm flex items-start gap-3 text-left transition-colors cursor-pointer group"
+                                        >
+                                            <div className="w-9 h-9 rounded-xl bg-gold/15 text-gold flex items-center justify-center text-lg shrink-0 group-hover:scale-110 transition-transform">
                                                 <i className="ph-bold ph-coins"></i>
                                             </div>
                                             <div>
                                                 <span className="font-metadata-spec text-[10px] text-ink-muted dark:text-night-muted block">Số Dư Khoai</span>
-                                                <span className="font-display font-bold text-xs text-ink dark:text-night-text">{(customer?.potatoBalance ?? 0).toLocaleString()} Khoai Tây</span>
+                                                <span className="font-display font-bold text-xs text-amber-600 dark:text-gold font-metadata-spec">{(customer?.potatoBalance ?? 0).toLocaleString()} 🥔</span>
                                             </div>
-                                        </div>
+                                        </button>
+
+                                        {/* THẺ KHO VOUCHER CỦA TÔI */}
+                                        <button
+                                            type="button"
+                                            onClick={() => handleSelectTab('vouchers')}
+                                            className="p-4 rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border hover:border-gold shadow-sm flex items-start gap-3 text-left transition-colors cursor-pointer group"
+                                        >
+                                            <div className="w-9 h-9 rounded-xl bg-amber-500/15 text-amber-600 dark:text-[#D8B44A] flex items-center justify-center text-lg shrink-0 group-hover:scale-110 transition-transform">
+                                                <i className="ph-bold ph-ticket"></i>
+                                            </div>
+                                            <div className="flex-1">
+                                                <span className="font-metadata-spec text-[10px] text-ink-muted dark:text-night-muted block">Kho Voucher</span>
+                                                <span className="font-display font-bold text-xs text-ink dark:text-night-text flex items-center justify-between">
+                                                    <span>{vouchers.filter(v => v.status === 'AVAILABLE').length} khả dụng</span>
+                                                    <i className="ph-bold ph-arrow-right text-[10px] text-amber-500 opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                                                </span>
+                                            </div>
+                                        </button>
 
                                         <div className="p-4 rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border shadow-sm flex items-start gap-3">
                                             <div className="w-9 h-9 rounded-xl bg-paper-200 dark:bg-night-surface text-ink-muted dark:text-night-muted flex items-center justify-center text-lg shrink-0">
@@ -1069,6 +1175,34 @@ export default function Profile() {
                                                 <span className="font-display font-bold text-xs text-ink dark:text-night-text">15/01/2026</span>
                                             </div>
                                         </div>
+                                    </div>
+
+                                    {/* QUICK VOUCHER BANNER TRONG TAB PROFILE */}
+                                    <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/20 dark:border-gold/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                        <div className="flex items-center gap-3.5">
+                                            <div className="w-11 h-11 rounded-2xl bg-[#C28807] text-[#111210] flex items-center justify-center text-2xl font-black shrink-0 shadow-sm">
+                                                <i className="ph-bold ph-ticket"></i>
+                                            </div>
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <h3 className="font-display font-bold text-sm text-ink dark:text-night-text">Kho Voucher & Ưu Đãi Độc Quyền</h3>
+                                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-600 dark:text-gold border border-amber-500/30">
+                                                        {vouchers.filter(v => v.status === 'AVAILABLE').length} Voucher
+                                                    </span>
+                                                </div>
+                                                <p className="font-editorial-body text-xs text-ink-muted dark:text-stone-400 mt-0.5">
+                                                    Thu thập mã giảm giá và áp dụng khi thuê sách hoặc nâng cấp quyền lợi độc giả.
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleSelectTab('vouchers')}
+                                            className="px-4 py-2.5 rounded-xl bg-[#C28807] hover:bg-amber-500 text-[#111210] font-metadata-spec font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-sm shrink-0 cursor-pointer"
+                                        >
+                                            <i className="ph-bold ph-arrow-up-right text-sm"></i>
+                                            <span>Mở Kho Voucher</span>
+                                        </button>
                                     </div>
                                 </>
                             )}
@@ -1274,7 +1408,6 @@ export default function Profile() {
                                                 </span>
                                                 <div>
                                                     <h3 className="font-display font-bold text-sm text-ink dark:text-night-text">Danh Sách Biến Động Số Dư</h3>
-                                                    <p className="text-[11px] text-ink-muted dark:text-night-muted">Tất cả giao dịch nạp, thuê sách, gia hạn và thưởng điểm.</p>
                                                 </div>
                                             </div>
 
@@ -1469,6 +1602,400 @@ export default function Profile() {
                             {/* TAB 4: KHIẾU NẠI & HỖ TRỢ (RABBITMQ ASYNC PIPELINE) */}
                             {activeTab === 'support' && (
                                 <SupportTicketSection customer={customer} showToast={showToast} />
+                            )}
+
+                            {/* TAB 5: KHO VOUCHER CỦA TÔI */}
+                            {activeTab === 'vouchers' && (
+                                <div className="space-y-6">
+                                    {/* Header & Subtitle */}
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-paper-border dark:border-night-border">
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold font-metadata-spec bg-gold/15 text-gold border border-gold/30">
+                                                    VÍ ƯU ĐÃI
+                                                </span>
+                                                <h2 className="font-display font-black text-xl text-ink dark:text-night-text">Kho Voucher Của Tôi</h2>
+                                            </div>
+                                        </div>
+                                        <Link
+                                            to="/uudai"
+                                            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-paper-200 dark:bg-night-surface hover:bg-gold/15 dark:hover:bg-gold/20 text-ink dark:text-night-text hover:text-gold border border-paper-border dark:border-night-border transition-all text-xs font-bold font-metadata-spec shrink-0"
+                                        >
+                                            <i className="ph-bold ph-ticket text-base text-gold"></i>
+                                            <span>Săn Thêm Voucher</span>
+                                        </Link>
+                                    </div>
+
+                                    {/* Input Lưu Voucher Mới */}
+                                    <div className="p-4 sm:p-5 rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border shadow-sm">
+                                        <form onSubmit={handleSaveVoucher} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                                            <div className="relative flex-1">
+                                                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-stone-400">
+                                                    <i className="ph-bold ph-tag text-base"></i>
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    value={voucherCodeInput}
+                                                    onChange={(e) => setVoucherCodeInput(e.target.value)}
+                                                    placeholder="Nhập mã voucher để lưu vào ví (ví dụ: HALM2026, TRIANVIP...)"
+                                                    className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-paper-border dark:border-night-border bg-paper-50 dark:bg-night-surface text-ink dark:text-night-text text-xs uppercase font-mono tracking-wider focus:outline-none focus:border-gold transition-colors"
+                                                />
+                                            </div>
+                                            <button
+                                                type="submit"
+                                                disabled={isSavingVoucher || !voucherCodeInput.trim()}
+                                                className="px-5 py-2.5 rounded-xl bg-wine hover:bg-wine-dark dark:bg-gold dark:hover:bg-amber-400 text-white dark:text-[#111210] font-metadata-spec font-bold text-xs flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm shrink-0"
+                                            >
+                                                {isSavingVoucher ? (
+                                                    <>
+                                                        <i className="ph-bold ph-spinner animate-spin text-sm"></i>
+                                                        <span>Đang Lưu...</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <i className="ph-bold ph-bookmark-simple text-sm"></i>
+                                                        <span>Lưu Vào Ví</span>
+                                                    </>
+                                                )}
+                                            </button>
+                                        </form>
+                                    </div>
+
+                                    {/* Filter Pills */}
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {[
+                                            { key: 'all', label: 'Tất Cả', count: vouchers.length },
+                                            { key: 'available', label: 'Khả Dụng', count: vouchers.filter(v => v.status === 'AVAILABLE').length },
+                                            { key: 'used', label: 'Đã Sử Dụng', count: vouchers.filter(v => v.status === 'USED').length },
+                                            { key: 'expired', label: 'Hết Hạn', count: vouchers.filter(v => v.status === 'EXPIRED').length },
+                                        ].map(tab => (
+                                            <button
+                                                key={tab.key}
+                                                type="button"
+                                                onClick={() => setVoucherFilter(tab.key)}
+                                                className={`px-3.5 py-1.5 rounded-full text-xs font-bold font-metadata-spec transition-all flex items-center gap-1.5 ${
+                                                    voucherFilter === tab.key
+                                                        ? 'bg-wine text-white dark:bg-gold dark:text-[#111210] shadow-sm'
+                                                        : 'bg-paper-200 dark:bg-night-surface text-ink-muted dark:text-stone-300 hover:bg-paper-300 dark:hover:bg-night-border'
+                                                }`}
+                                            >
+                                                <span>{tab.label}</span>
+                                                <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
+                                                    voucherFilter === tab.key
+                                                        ? 'bg-white/20 text-white dark:bg-black/20 dark:text-[#111210]'
+                                                        : 'bg-black/10 dark:bg-white/10'
+                                                }`}>
+                                                    {tab.count}
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {/* Voucher List */}
+                                    {filteredVouchers.length === 0 ? (
+                                        <div className="py-16 text-center rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border">
+                                            <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-gold/10 text-gold flex items-center justify-center text-3xl">
+                                                <i className="ph-bold ph-ticket"></i>
+                                            </div>
+                                            <h3 className="font-display font-bold text-base text-ink dark:text-night-text mb-1">
+                                                {voucherFilter === 'all' ? 'Ví voucher của bạn đang trống' : 'Không có voucher nào trong mục này'}
+                                            </h3>
+                                            <p className="font-editorial-body text-xs text-ink-muted dark:text-stone-400 max-w-sm mx-auto mb-4">
+                                                Hãy lưu các mã giảm giá từ trang Ưu Đãi hoặc nhập mã voucher do HALM BOOK tặng để tiết kiệm chi phí đọc sách.
+                                            </p>
+                                            <Link
+                                                to="/uudai"
+                                                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-wine hover:bg-wine-dark text-white text-xs font-bold font-metadata-spec transition-colors"
+                                            >
+                                                <i className="ph-bold ph-compass"></i>
+                                                <span>Khám Phá Voucher Ngay</span>
+                                            </Link>
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {filteredVouchers.map((v) => {
+                                                const isAvail = v.status === 'AVAILABLE';
+                                                const isUsed = v.status === 'USED';
+                                                const isExp = v.status === 'EXPIRED';
+
+                                                return (
+                                                    <div
+                                                        key={v.id}
+                                                        className={`relative rounded-2xl border p-4 sm:p-5 flex flex-col justify-between transition-all group overflow-hidden ${
+                                                            isAvail
+                                                                ? 'bg-paper-surface dark:bg-night-card border-paper-border dark:border-night-border hover:border-gold/60 shadow-sm hover:shadow-md'
+                                                                : 'bg-paper-100/50 dark:bg-night-surface/50 border-paper-border/60 dark:border-night-border/40 opacity-70'
+                                                        }`}
+                                                    >
+                                                        {/* Dấu viền vé bên lề */}
+                                                        <div className="absolute top-0 left-0 bottom-0 w-1.5 bg-gradient-to-b from-amber-500 to-rose-500 rounded-l-2xl"></div>
+
+                                                        <div>
+                                                            <div className="flex items-start justify-between gap-2 mb-2 pl-2">
+                                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                                    <span className="font-mono text-xs font-black px-2 py-0.5 rounded bg-gold/15 text-gold border border-gold/30">
+                                                                        {v.code}
+                                                                    </span>
+                                                                    {v.isExclusive && (
+                                                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-500 border border-rose-500/30 flex items-center gap-1">
+                                                                            <i className="ph-fill ph-star"></i> Tặng Riêng
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                                                    isAvail
+                                                                        ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                                                                        : isUsed
+                                                                        ? 'bg-stone-500/15 text-stone-500 border border-stone-500/30'
+                                                                        : 'bg-rose-500/15 text-rose-500 border border-rose-500/30'
+                                                                }`}>
+                                                                    {isAvail ? 'Khả Dụng' : isUsed ? 'Đã Dùng' : 'Hết Hạn'}
+                                                                </span>
+                                                            </div>
+
+                                                            <div className="pl-2 space-y-1">
+                                                                <h4 className="font-display font-bold text-sm text-ink dark:text-night-text leading-snug">
+                                                                    {v.title}
+                                                                </h4>
+                                                                <p className="font-editorial-body text-xs text-ink-muted dark:text-stone-400 line-clamp-2">
+                                                                    {v.description || 'Ưu đãi dành cho độc giả HALM BOOK.'}
+                                                                </p>
+                                                                {v.exclusiveNote && (
+                                                                    <p className="text-[11px] text-amber-600 dark:text-amber-400 italic">
+                                                                        "{v.exclusiveNote}"
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="mt-4 pt-3 border-t border-paper-border/60 dark:border-night-border/60 pl-2 flex items-center justify-between gap-2">
+                                                            <div className="text-[11px] text-ink-muted dark:text-stone-400 font-metadata-spec">
+                                                                {v.endDate ? (
+                                                                    <span>
+                                                                        Hạn dùng: {new Date(v.endDate).toLocaleDateString('vi-VN')}
+                                                                        {v.remainingDays !== null && v.remainingDays > 0 && isAvail && (
+                                                                            <span className="text-amber-600 dark:text-gold ml-1">
+                                                                                (còn {v.remainingDays} ngày)
+                                                                            </span>
+                                                                        )}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span>Hiệu lực dài hạn</span>
+                                                                )}
+                                                            </div>
+
+                                                            <div className="flex items-center gap-1.5">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => copyToClipboard(v.code, `mã voucher "${v.code}"`)}
+                                                                    className="p-1.5 rounded-lg bg-paper-200 dark:bg-night-surface hover:bg-gold/20 text-stone-400 hover:text-gold transition-colors text-xs"
+                                                                    title="Sao chép mã"
+                                                                >
+                                                                    <i className="ph-bold ph-copy"></i>
+                                                                </button>
+                                                                {isAvail && (
+                                                                    <Link
+                                                                        to="/khampha"
+                                                                        className="px-3 py-1 rounded-lg bg-wine hover:bg-wine-dark text-white text-xs font-bold font-metadata-spec transition-colors"
+                                                                    >
+                                                                        Dùng Ngay
+                                                                    </Link>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* TAB 6: LỊCH SỬ QUÀ TẶNG SÁCH */}
+                            {activeTab === 'gifts' && (
+                                <div className="space-y-6">
+                                    {/* Header & Subtitle */}
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-paper-border dark:border-night-border">
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold font-metadata-spec bg-rose-500/15 text-rose-500 border border-rose-500/30">
+                                                    QUÀ TẶNG TRI THỨC
+                                                </span>
+                                                <h2 className="font-display font-black text-xl text-ink dark:text-night-text">Lịch Sử Quà Tặng Sách</h2>
+                                            </div>
+                                        </div>
+                                        <Link
+                                            to="/khampha"
+                                            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gold/15 hover:bg-gold/25 text-gold border border-gold/40 transition-all text-xs font-bold font-metadata-spec shrink-0"
+                                        >
+                                            <i className="ph-bold ph-gift text-base"></i>
+                                            <span>Tặng Sách Ngay</span>
+                                        </Link>
+                                    </div>
+
+                                    {/* Subtabs: Nhận Được / Đã Gửi */}
+                                    <div className="flex items-center gap-3 border-b border-paper-border dark:border-night-border pb-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setGiftTab('received')}
+                                            className={`pb-2 text-xs font-bold font-metadata-spec transition-all relative flex items-center gap-2 ${
+                                                giftTab === 'received'
+                                                    ? 'text-wine dark:text-gold border-b-2 border-wine dark:border-gold -mb-[9px]'
+                                                    : 'text-ink-muted dark:text-stone-400 hover:text-ink dark:hover:text-white'
+                                            }`}
+                                        >
+                                            <i className="ph-bold ph-envelope-open text-base"></i>
+                                            <span>Sách Được Tặng ({giftsReceived.length})</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setGiftTab('sent')}
+                                            className={`pb-2 text-xs font-bold font-metadata-spec transition-all relative flex items-center gap-2 ${
+                                                giftTab === 'sent'
+                                                    ? 'text-wine dark:text-gold border-b-2 border-wine dark:border-gold -mb-[9px]'
+                                                    : 'text-ink-muted dark:text-stone-400 hover:text-ink dark:hover:text-white'
+                                            }`}
+                                        >
+                                            <i className="ph-bold ph-paper-plane-tilt text-base"></i>
+                                            <span>Sách Đã Gửi Đi ({giftsSent.length})</span>
+                                        </button>
+                                    </div>
+
+                                    {/* Content of Subtabs */}
+                                    {giftTab === 'received' ? (
+                                        giftsReceived.length === 0 ? (
+                                            <div className="py-16 text-center rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border">
+                                                <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-rose-500/10 text-rose-500 flex items-center justify-center text-3xl">
+                                                    <i className="ph-bold ph-gift"></i>
+                                                </div>
+                                                <h3 className="font-display font-bold text-base text-ink dark:text-night-text mb-1">
+                                                    Chưa có món quà sách nào
+                                                </h3>
+                                                <p className="font-editorial-body text-xs text-ink-muted dark:text-stone-400 max-w-sm mx-auto">
+                                                    Khi bạn bè hoặc độc giả khác gửi tặng bạn một cuốn sách, thông tin quà tặng và lời chúc sẽ hiển thị tại đây.
+                                                </p>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-4">
+                                                {giftsReceived.map((g) => (
+                                                    <div
+                                                        key={g.giftId}
+                                                        className="p-5 rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border hover:border-gold/50 shadow-sm transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+                                                    >
+                                                        <div className="flex items-start gap-4">
+                                                            <img
+                                                                src={g.bookCover || '/logo.png'}
+                                                                alt={g.bookTitle}
+                                                                className="w-16 h-22 object-cover rounded-xl shadow-md border border-paper-border dark:border-night-border shrink-0"
+                                                            />
+                                                            <div className="space-y-1.5">
+                                                                <div className="flex items-center gap-2 flex-wrap">
+                                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-500 border border-rose-500/30">
+                                                                        Quà tặng
+                                                                    </span>
+                                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-gold">
+                                                                        {g.rentalDays > 1000 ? 'Vĩnh viễn' : `Thuê ${g.rentalDays} ngày`}
+                                                                    </span>
+                                                                    <span className="text-[11px] text-ink-muted dark:text-stone-400">
+                                                                        {new Date(g.createdAt).toLocaleDateString('vi-VN')}
+                                                                    </span>
+                                                                </div>
+                                                                <h4 className="font-display font-bold text-sm text-ink dark:text-night-text">
+                                                                    {g.bookTitle}
+                                                                </h4>
+                                                                <p className="text-xs text-ink-muted dark:text-stone-400">
+                                                                    Tác giả: <span className="font-medium text-ink dark:text-night-text">{g.bookAuthor}</span>
+                                                                </p>
+                                                                <div className="p-2.5 rounded-xl bg-paper-100 dark:bg-night-surface border border-paper-border/60 dark:border-night-border/60 text-xs italic text-ink-muted dark:text-stone-300 flex items-start gap-2">
+                                                                    <i className="ph-fill ph-quotes text-amber-500 text-sm shrink-0 mt-0.5"></i>
+                                                                    <span>"{g.message || 'Chúc bạn đọc sách vui vẻ!'}"</span>
+                                                                    <span className="not-italic font-bold text-ink dark:text-night-text ml-auto shrink-0">
+                                                                        — {g.senderName}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <Link
+                                                            to={`/docsach/${g.bookId}`}
+                                                            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-metadata-spec font-bold text-xs flex items-center justify-center gap-2 transition-colors shrink-0 shadow-sm"
+                                                        >
+                                                            <i className="ph-bold ph-book-open"></i>
+                                                            <span>Đọc Sách Ngay</span>
+                                                        </Link>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )
+                                    ) : (
+                                        giftsSent.length === 0 ? (
+                                            <div className="py-16 text-center rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border">
+                                                <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center text-3xl">
+                                                    <i className="ph-bold ph-paper-plane-tilt"></i>
+                                                </div>
+                                                <h3 className="font-display font-bold text-base text-ink dark:text-night-text mb-1">
+                                                    Bạn chưa gửi tặng cuốn sách nào
+                                                </h3>
+                                                <p className="font-editorial-body text-xs text-ink-muted dark:text-stone-400 max-w-sm mx-auto mb-4">
+                                                    Tặng sách là cách tuyệt vời để lan tỏa tri thức đến những người bạn yêu quý.
+                                                </p>
+                                                <Link
+                                                    to="/khampha"
+                                                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-wine hover:bg-wine-dark text-white text-xs font-bold font-metadata-spec transition-colors"
+                                                >
+                                                    <i className="ph-bold ph-magnifying-glass"></i>
+                                                    <span>Tìm Sách Để Tặng</span>
+                                                </Link>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-4">
+                                                {giftsSent.map((g) => (
+                                                    <div
+                                                        key={g.giftId}
+                                                        className="p-5 rounded-2xl bg-paper-surface dark:bg-night-card border border-paper-border dark:border-night-border hover:border-gold/50 shadow-sm transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+                                                    >
+                                                        <div className="flex items-start gap-4">
+                                                            <img
+                                                                src={g.bookCover || '/logo.png'}
+                                                                alt={g.bookTitle}
+                                                                className="w-16 h-22 object-cover rounded-xl shadow-md border border-paper-border dark:border-night-border shrink-0"
+                                                            />
+                                                            <div className="space-y-1.5">
+                                                                <div className="flex items-center gap-2 flex-wrap">
+                                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-gold border border-amber-500/30">
+                                                                        Đã tặng cho {g.receiverName}
+                                                                    </span>
+                                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-paper-200 dark:bg-night-surface text-ink-muted dark:text-stone-400">
+                                                                        {g.rentalDays > 1000 ? 'Vĩnh viễn' : `Kỳ hạn ${g.rentalDays} ngày`}
+                                                                    </span>
+                                                                    <span className="text-[11px] text-ink-muted dark:text-stone-400">
+                                                                        {new Date(g.createdAt).toLocaleDateString('vi-VN')}
+                                                                    </span>
+                                                                </div>
+                                                                <h4 className="font-display font-bold text-sm text-ink dark:text-night-text">
+                                                                    {g.bookTitle}
+                                                                </h4>
+                                                                <p className="text-xs text-ink-muted dark:text-stone-400">
+                                                                    Chi phí: <span className="font-bold text-amber-600 dark:text-gold">-{g.potatoPrice} Khoai 🥔</span>
+                                                                </p>
+                                                                <div className="p-2.5 rounded-xl bg-paper-100 dark:bg-night-surface border border-paper-border/60 dark:border-night-border/60 text-xs italic text-ink-muted dark:text-stone-300 flex items-start gap-2">
+                                                                    <i className="ph-fill ph-quotes text-amber-500 text-sm shrink-0 mt-0.5"></i>
+                                                                    <span>"{g.message || 'Chúc bạn đọc sách vui vẻ!'}"</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <Link
+                                                            to={`/chitietsach/${g.bookId}`}
+                                                            className="w-full sm:w-auto px-4 py-2 rounded-xl border border-paper-border dark:border-night-border hover:border-gold text-ink dark:text-night-text font-metadata-spec font-bold text-xs flex items-center justify-center gap-2 transition-colors shrink-0"
+                                                        >
+                                                            <i className="ph-bold ph-info"></i>
+                                                            <span>Xem Tác Phẩm</span>
+                                                        </Link>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )
+                                    )}
+                                </div>
                             )}
 
                         </div>

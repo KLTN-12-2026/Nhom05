@@ -1,7 +1,8 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import ProtectedRoute from '@/components/guards/ProtectedRoute';
 import { ROUTES, ROUTE_ALIASES } from '@/constants/routes';
+import { prefetchUserRoutes } from '@/utils/routePrefetch';
 
 // ==================== EAGER IMPORT CRITICAL PAGES (Cho tốc độ tải trang chủ & đăng nhập nhanh nhất) ====================
 import TrangChu from '@/components/user/TrangChu';
@@ -42,6 +43,10 @@ const PageLoader = () => (
 );
 
 export default function AppRoutes() {
+  useEffect(() => {
+    prefetchUserRoutes();
+  }, []);
+
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>

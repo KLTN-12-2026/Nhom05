@@ -36,6 +36,9 @@ public interface AccessRecordRepository extends JpaRepository<Access_Record, Int
     @Query("SELECT ar FROM Access_Record ar WHERE ar.customer = :customer AND ar.book = :book")
     Optional<Access_Record> findByCustomerAndBook(@Param("customer") Customer customer, @Param("book") Book book);
 
-    @Query("SELECT ar FROM Access_Record ar WHERE ar.customer.customer_id = :customerId AND ar.book.book_id = :bookId")
+    @Query("SELECT ar FROM Access_Record ar WHERE ar.customer.customer_id = :customerId AND ar.book.book_id = :bookId ORDER BY ar.access_record_id DESC")
+    List<Access_Record> findAllByCustomerIdAndBookId(@Param("customerId") String customerId, @Param("bookId") String bookId);
+
+    @Query("SELECT ar FROM Access_Record ar WHERE ar.customer.customer_id = :customerId AND ar.book.book_id = :bookId ORDER BY ar.access_record_id DESC")
     Optional<Access_Record> findByCustomerIdAndBookId(@Param("customerId") String customerId, @Param("bookId") String bookId);
 }

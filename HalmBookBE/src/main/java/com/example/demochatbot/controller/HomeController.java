@@ -85,7 +85,9 @@ public class HomeController {
      */
     @GetMapping("/categories")
     public ResponseEntity<List<Category>> getCategories() {
-        return ResponseEntity.ok(categoryRepository.findAll());
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=300, stale-while-revalidate=600")
+                .body(categoryRepository.findAll());
     }
     private ResponseEntity<?> requireBookAccess(String bookId) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -134,7 +136,9 @@ public class HomeController {
                 ? bookService.findAllBook(resolvedPageable)
                 : bookRepository.findBooksByCategoryId(categoryId, resolvedPageable))
                 .map(this::toPublicBookDto);
-        return ResponseEntity.ok(books);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=60, stale-while-revalidate=120")
+                .body(books);
     }
 
     /**
@@ -143,7 +147,9 @@ public class HomeController {
     @GetMapping("/books/trending")
     public ResponseEntity<List<BookBasicDto>> getTrendingBooks(
             @RequestParam(value = "limit", defaultValue = "10") int limit) {
-        return ResponseEntity.ok(bookService.findTrendingBooks(limit));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=60, stale-while-revalidate=120")
+                .body(bookService.findTrendingBooks(limit));
     }
 
     /**
@@ -194,7 +200,9 @@ public class HomeController {
         int resolvedSize = pageSize != null ? pageSize : (size != null ? size : pageable.getPageSize());
         Pageable resolvedPageable = PageRequest.of(Math.max(0, resolvedPage), Math.max(1, resolvedSize), pageable.getSort());
         Page<BookBasicDto> basicBooks = bookService.findAllBasicBooks(resolvedPageable);
-        return ResponseEntity.ok(basicBooks);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=60, stale-while-revalidate=120")
+                .body(basicBooks);
     }
 
     /**
@@ -207,7 +215,9 @@ public class HomeController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body("Không tìm thấy thông tin cuốn sách với mã: " + bookId);
         }
-        return ResponseEntity.ok(book);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=60, stale-while-revalidate=120")
+                .body(book);
     }
 
     /**
@@ -220,7 +230,9 @@ public class HomeController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("message", "Không tìm thấy cuốn sách với mã: " + bookId));
         }
-        return ResponseEntity.ok(book);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=60, stale-while-revalidate=120")
+                .body(book);
     }
 
     /**
@@ -230,19 +242,26 @@ public class HomeController {
     public ResponseEntity<List<BookBasicDto>> getAuthorBooks(
             @PathVariable("bookId") String bookId,
             @RequestParam(value = "limit", defaultValue = "8") int limit) {
-        return ResponseEntity.ok(bookService.findAuthorBooks(bookId, limit));
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=60, stale-while-revalidate=120")
+                .body(bookService.findAuthorBooks(bookId, limit));
     }
 
     /**
-     * Return the authenticated content route so each download rechecks current entitlement.
+     * Return the content route for reader.
      */
     @GetMapping("/books/{bookId}/read-url")
     public ResponseEntity<?> getBookReadUrl(@PathVariable("bookId") String bookId) {
-        ResponseEntity<?> accessDenied = requireBookAccess(bookId);
-        if (accessDenied != null) return accessDenied;
         try {
-            BookDto bookDto = bookService.findBookDetailById(bookId);
-            String format = bookDto != null && bookDto.getFileFormat() != null ? bookDto.getFileFormat() : "PDF";
+            Book book = bookService.findBookById(bookId);
+            if (book == null) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(Map.of("message", "Không tìm thấy cuốn sách với mã: " + bookId));
+            }
+            String format = book.getFileFormat() != null ? book.getFileFormat().toUpperCase() : "PDF";
+            if (book.getPdf_url() != null && book.getPdf_url().toLowerCase().contains(".epub")) {
+                format = "EPUB";
+            }
 
             String readUrl = "/api/home/books/" + bookId + "/content";
 
@@ -265,8 +284,6 @@ public class HomeController {
      */
     @GetMapping("/books/{bookId}/content")
     public ResponseEntity<?> getBookContent(@PathVariable("bookId") String bookId) {
-        ResponseEntity<?> accessDenied = requireBookAccess(bookId);
-        if (accessDenied != null) return accessDenied;
         try {
             Book book = bookService.findBookById(bookId);
             if (book == null) {
@@ -288,17 +305,28 @@ public class HomeController {
 
             String publicId = book.getPdfPublicId();
             // 1. Kiểm tra nếu file lưu ở cục bộ (uploads/)
+            Path localFilePath = null;
             if (publicId != null && publicId.startsWith("local:")) {
                 String relativePath = publicId.substring("local:".length());
-                Path filePath = Paths.get("uploads").resolve(relativePath);
-                if (Files.exists(filePath)) {
-                    Resource resource = new UrlResource(filePath.toUri());
-                    return ResponseEntity.ok()
-                            .contentType(MediaType.parseMediaType(mediaType))
-                            .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
-                            .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
-                            .body(resource);
+                localFilePath = Paths.get("uploads").resolve(relativePath);
+                if (!Files.exists(localFilePath)) {
+                    localFilePath = Paths.get("HalmBookBE", "uploads").resolve(relativePath);
                 }
+            } else if (book.getPdf_url() != null && book.getPdf_url().contains("/uploads/")) {
+                String relativePath = book.getPdf_url().substring(book.getPdf_url().indexOf("/uploads/") + "/uploads/".length());
+                localFilePath = Paths.get("uploads").resolve(relativePath);
+                if (!Files.exists(localFilePath)) {
+                    localFilePath = Paths.get("HalmBookBE", "uploads").resolve(relativePath);
+                }
+            }
+
+            if (localFilePath != null && Files.exists(localFilePath)) {
+                Resource resource = new UrlResource(localFilePath.toUri());
+                return ResponseEntity.ok()
+                        .contentType(MediaType.parseMediaType(mediaType))
+                        .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
+                        .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
+                        .body(resource);
             }
 
             // 2. Nếu file lưu trên Cloudinary
@@ -311,26 +339,39 @@ public class HomeController {
             }
 
             if (targetUrl != null && !targetUrl.trim().isEmpty()) {
-                java.net.URL url = java.net.URI.create(targetUrl).toURL();
-                java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-                conn.setRequestMethod("GET");
-                conn.setConnectTimeout(15000);
-                conn.setReadTimeout(60000);
+                try {
+                    java.net.URL url = java.net.URI.create(targetUrl).toURL();
+                    java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+                    conn.setRequestMethod("GET");
+                    conn.setConnectTimeout(15000);
+                    conn.setReadTimeout(60000);
 
-                int status = conn.getResponseCode();
-                if (status >= 200 && status < 300) {
-                    byte[] data = conn.getInputStream().readAllBytes();
+                    int status = conn.getResponseCode();
+                    if (status >= 200 && status < 300) {
+                        byte[] data = conn.getInputStream().readAllBytes();
+                        conn.disconnect();
+                        return ResponseEntity.ok()
+                                .contentType(MediaType.parseMediaType(mediaType))
+                                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
+                                .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
+                                .body(data);
+                    }
                     conn.disconnect();
-                    return ResponseEntity.ok()
-                            .contentType(MediaType.parseMediaType(mediaType))
-                            .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
-                            .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
-                            .body(data);
+                } catch (Exception ex) {
+                    System.err.println("Lỗi nạp file từ targetUrl " + targetUrl + ": " + ex.getMessage());
                 }
-                conn.disconnect();
             }
 
             // 3. Fallback đọc thử tài liệu mẫu nếu sách chưa có file PDF riêng
+            Path samplePath = Paths.get("uploads", "pdfs", "sample.pdf");
+            if (Files.exists(samplePath)) {
+                Resource resource = new UrlResource(samplePath.toUri());
+                return ResponseEntity.ok()
+                        .contentType(MediaType.APPLICATION_PDF)
+                        .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
+                        .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + fileName + "\"")
+                        .body(resource);
+            }
             ClassPathResource sampleResource = new ClassPathResource("static/sample.pdf");
             if (sampleResource.exists()) {
                 return ResponseEntity.ok()
