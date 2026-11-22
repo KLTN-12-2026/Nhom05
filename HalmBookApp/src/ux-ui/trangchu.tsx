@@ -890,13 +890,44 @@ export default function TrangChu({ isDarkMode, onToggleDarkMode }: TrangChuProps
               <Ionicons name="cart-outline" size={21} color={textColor} />
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.darkModeToggle, { marginLeft: 4 }]}
+              style={[
+                styles.notifBellBtn,
+                unreadNotifications > 0 && styles.notifBellBtnActive,
+              ]}
               onPress={() => navigate('notifications')}
+              activeOpacity={0.78}
               accessibilityRole="button"
               accessibilityLabel={`Thông báo${unreadNotifications ? `, ${unreadNotifications} chưa đọc` : ''}`}
             >
-              <Ionicons name="notifications-outline" size={21} color={isDarkMode ? '#F7F5F0' : '#242321'} />
-              {unreadNotifications > 0 && <View style={{ position: 'absolute', top: 3, right: 2, minWidth: 16, height: 16, borderRadius: 8, paddingHorizontal: 3, backgroundColor: '#D5AC56', alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 9, fontWeight: '800', color: '#382F23' }}>{unreadNotifications > 99 ? '99+' : unreadNotifications}</Text></View>}
+              <View
+                style={[
+                  styles.notifBellInnerHalo,
+                  unreadNotifications > 0 && styles.notifBellInnerHaloActive,
+                ]}
+              >
+                <Ionicons
+                  name={unreadNotifications > 0 ? 'notifications' : 'notifications-outline'}
+                  size={19}
+                  color={
+                    unreadNotifications > 0
+                      ? isDarkMode
+                        ? '#FBBF24'
+                        : '#D97706'
+                      : isDarkMode
+                        ? '#F7F5F0'
+                        : '#242321'
+                  }
+                />
+              </View>
+              {unreadNotifications > 0 ? (
+                <View style={styles.notifBellBadge}>
+                  <Text style={styles.notifBellBadgeText}>
+                    {unreadNotifications > 99 ? '99+' : unreadNotifications}
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.notifBellIdleAccent} />
+              )}
             </TouchableOpacity>
           </View>
           {featuredItems.length > 0 ? <>
@@ -1606,6 +1637,73 @@ const getStyles = (isDark: boolean, width: number) => {
       borderRadius: 10,
       justifyContent: 'center',
       alignItems: 'center',
+    },
+    notifBellBtn: {
+      width: 40,
+      height: 40,
+      marginLeft: 4,
+      backgroundColor: isDark ? '#242321' : '#EAE6DF',
+      borderWidth: 1,
+      borderColor: isDark ? '#383633' : '#D2C8BA',
+      borderRadius: 12,
+      justifyContent: 'center',
+      alignItems: 'center',
+      position: 'relative',
+    },
+    notifBellBtnActive: {
+      backgroundColor: isDark ? '#2C261E' : '#FFF9EB',
+      borderColor: isDark ? 'rgba(251, 191, 36, 0.45)' : '#F59E0B',
+      shadowColor: '#F59E0B',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: isDark ? 0.28 : 0.16,
+      shadowRadius: 5,
+      elevation: 3,
+    },
+    notifBellInnerHalo: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(139, 74, 60, 0.06)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    notifBellInnerHaloActive: {
+      backgroundColor: isDark ? 'rgba(251, 191, 36, 0.16)' : 'rgba(245, 158, 11, 0.15)',
+    },
+    notifBellBadge: {
+      position: 'absolute',
+      top: -5,
+      right: -5,
+      minWidth: 19,
+      height: 19,
+      borderRadius: 9.5,
+      paddingHorizontal: 4,
+      backgroundColor: '#EF4444',
+      borderWidth: 2,
+      borderColor: isDark ? '#181716' : '#F7F5F0',
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: '#EF4444',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.35,
+      shadowRadius: 3,
+      elevation: 4,
+    },
+    notifBellBadgeText: {
+      fontSize: 9.5,
+      fontWeight: '900',
+      color: '#FFFFFF',
+      letterSpacing: -0.2,
+    },
+    notifBellIdleAccent: {
+      position: 'absolute',
+      top: 7,
+      right: 8,
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: isDark ? '#E5A93C' : '#8B4A3C',
+      opacity: 0.75,
     },
 
     carouselContainer: { paddingLeft: 16, paddingRight: 4 },

@@ -639,15 +639,45 @@ export default function TuSach({ initialTab = 'dangdoc' }: { initialTab?: Booksh
             </View>
 
             <View style={themeStyles.headerActions}>
-              {/* Icon thông báo kèm chấm đỏ */}
+              {/* Icon thông báo kèm huy hiệu nổi bật */}
               <TouchableOpacity
-                style={themeStyles.actionButton}
+                style={[
+                  themeStyles.actionButton,
+                  themeStyles.notifBellBtn,
+                  unreadNotifCount > 0 && themeStyles.notifBellBtnActive,
+                ]}
                 onPress={() => navigate('notifications')}
+                activeOpacity={0.78}
                 accessibilityRole="button"
                 accessibilityLabel={lang === 'en' ? 'Notifications' : 'Thông báo'}
               >
-                <MaterialCommunityIcons name="bell-outline" size={20} color={foreground} />
-                {unreadNotifCount > 0 && <View style={themeStyles.notice} />}
+                <View
+                  style={[
+                    themeStyles.notifBellHalo,
+                    unreadNotifCount > 0 && themeStyles.notifBellHaloActive,
+                  ]}
+                >
+                  <Ionicons
+                    name={unreadNotifCount > 0 ? 'notifications' : 'notifications-outline'}
+                    size={18}
+                    color={
+                      unreadNotifCount > 0
+                        ? isDarkMode
+                          ? '#FBBF24'
+                          : '#D97706'
+                        : foreground
+                    }
+                  />
+                </View>
+                {unreadNotifCount > 0 ? (
+                  <View style={themeStyles.noticeBadge}>
+                    <Text style={themeStyles.noticeBadgeText}>
+                      {unreadNotifCount > 99 ? '99+' : unreadNotifCount}
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={themeStyles.noticeIdleDot} />
+                )}
               </TouchableOpacity>
 
               {/* Icon cây bút (hiển thị khi ở tab 'dangdoc' hoặc 'tailen' và danh sách có sách) */}
@@ -1140,6 +1170,54 @@ const styles = StyleSheet.create({
     height: 7,
     borderRadius: 3.5,
     backgroundColor: '#E11D48',
+  },
+  notifBellBtn: {
+    borderRadius: 12,
+    position: 'relative',
+  },
+  notifBellBtnActive: {
+    backgroundColor: '#FFF9EB',
+    borderColor: '#F59E0B',
+  },
+  notifBellHalo: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(47, 107, 95, 0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notifBellHaloActive: {
+    backgroundColor: 'rgba(245, 158, 11, 0.16)',
+  },
+  noticeBadge: {
+    position: 'absolute',
+    right: -5,
+    top: -5,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    backgroundColor: '#EF4444',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noticeBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '900',
+  },
+  noticeIdleDot: {
+    position: 'absolute',
+    top: 6,
+    right: 7,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#2F6B5F',
+    opacity: 0.7,
   },
   avatar: {
     width: 36,
