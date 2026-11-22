@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -40,9 +41,12 @@ export default function Auth({ onLoginSuccess, onCancel }: AuthProps) {
 
   const [currentScreen, setCurrentScreen] = useState<ScreenState>('login');
   const [successMessage, setSuccessMessage] = useState('');
+  const [welcomeName, setWelcomeName] = useState('');
   const [isLoginSubmitting, setIsLoginSubmitting] = useState(false);
   const [socialSubmitting, setSocialSubmitting] = useState<'google' | 'facebook' | null>(null);
   const transitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const successAnim = useRef(new Animated.Value(0)).current;
+  const successProgressAnim = useRef(new Animated.Value(0)).current;
 
   // ==============================================================
   // HỆ MÀU DUAL-THEME (LIGHT MODE & DARK MODE)
@@ -71,14 +75,34 @@ export default function Auth({ onLoginSuccess, onCancel }: AuthProps) {
     };
   }, []);
 
-  const showSuccess = (message: string, onComplete: () => void) => {
+  const showSuccess = (message: string, onComplete: () => void, displayName?: string) => {
     if (transitionTimer.current) clearTimeout(transitionTimer.current);
     setSuccessMessage(message);
+    setWelcomeName((displayName || '').trim());
+    successAnim.setValue(0);
+    successProgressAnim.setValue(0);
+
+    Animated.parallel([
+      Animated.spring(successAnim, {
+        toValue: 1,
+        friction: 6,
+        tension: 68,
+        useNativeDriver: true,
+      }),
+      Animated.timing(successProgressAnim, {
+        toValue: 1,
+        duration: 1400,
+        useNativeDriver: false,
+      }),
+    ]).start();
+
     transitionTimer.current = setTimeout(() => {
       setSuccessMessage('');
+      setWelcomeName('');
+      setIsLoginSubmitting(false);
       transitionTimer.current = null;
       onComplete();
-    }, 1200);
+    }, 1450);
   };
 
   const syncUserToContext = (fullName?: string, avatarUrl?: string) => {
@@ -133,7 +157,8 @@ export default function Auth({ onLoginSuccess, onCancel }: AuthProps) {
 
       showSuccess(
         'Đăng nhập thành công! Chào mừng bạn đến với HALM BOOK.',
-        onLoginSuccess
+        onLoginSuccess,
+        session.user.fullName || userVal
       );
     } catch {
       Alert.alert('Đăng nhập thất bại', 'Đăng nhập thất bại, vui lòng thử lại');
@@ -164,7 +189,8 @@ export default function Auth({ onLoginSuccess, onCancel }: AuthProps) {
       setSocialSubmitting(null);
       showSuccess(
         `Đăng nhập Google thành công! Xin chào ${result.session.user.fullName}.`,
-        onLoginSuccess
+        onLoginSuccess,
+        result.session.user.fullName
       );
     } catch {
       setSocialSubmitting(null);
@@ -195,7 +221,8 @@ export default function Auth({ onLoginSuccess, onCancel }: AuthProps) {
       setSocialSubmitting(null);
       showSuccess(
         `Đăng nhập Facebook thành công! Xin chào ${result.session.user.fullName}.`,
-        onLoginSuccess
+        onLoginSuccess,
+        result.session.user.fullName
       );
     } catch {
       setSocialSubmitting(null);
@@ -923,15 +950,194 @@ export default function Auth({ onLoginSuccess, onCancel }: AuthProps) {
       </ScrollView>
 
       {!!successMessage && (
-        <View style={styles.successToast} accessibilityRole="alert">
-          <View style={styles.successToastIcon}>
-            <Ionicons name="checkmark" size={20} color="#fff" />
-          </View>
-          <View style={styles.successToastContent}>
-            <Text style={styles.successToastTitle}>Thành công</Text>
-            <Text style={styles.successToastText}>{successMessage}</Text>
-          </View>
-        </View>
+        <Animated.View
+          style={[
+            styles.successModalOverlay,
+            {
+              opacity: successAnim,
+            },
+          ]}
+          pointerEvents="none"
+          accessibilityRole="alert"
+        >
+          <Animated.View
+            style={[
+              styles.successModalCard,
+              {
+                backgroundColor: colors.cardBg,
+                borderColor: isDark ? 'rgba(229, 169, 60, 0.35)' : 'rgba(139, 74, 60, 0.22)',
+                transform: [
+                  {
+                    scale: successAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.84, 1],
+                    }),
+                  },
+                  {
+                    translateY: successAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [18, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            {/* Dải sáng trang trí đỉnh thẻ */}
+            <View
+              style={[
+                styles.successTopAccentBar,
+                { backgroundColor: isDark ? '#E5A93C' : '#10B981' },
+              ]}
+            />
+            <View
+              style={[
+                styles.successAmbientGlowLeft,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(16, 185, 129, 0.14)'
+                    : 'rgba(16, 185, 129, 0.09)',
+                },
+              ]}
+              pointerEvents="none"
+            />
+            <View
+              style={[
+                styles.successAmbientGlowRight,
+                {
+                  backgroundColor: isDark
+                    ? 'rgba(229, 169, 60, 0.14)'
+                    : 'rgba(229, 169, 60, 0.11)',
+                },
+              ]}
+              pointerEvents="none"
+            />
+
+            {/* Biểu tượng 3 lớp hào quang + sao lấp lánh */}
+            <View style={styles.successHaloWrap}>
+              <View
+                style={[
+                  styles.successHaloOuterRing,
+                  {
+                    backgroundColor: isDark
+                      ? 'rgba(16, 185, 129, 0.1)'
+                      : 'rgba(16, 185, 129, 0.08)',
+                    borderColor: isDark
+                      ? 'rgba(16, 185, 129, 0.28)'
+                      : 'rgba(16, 185, 129, 0.22)',
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.successHaloMiddleRing,
+                    {
+                      backgroundColor: isDark
+                        ? 'rgba(16, 185, 129, 0.2)'
+                        : 'rgba(16, 185, 129, 0.16)',
+                    },
+                  ]}
+                >
+                  <View style={styles.successHaloInner}>
+                    <Ionicons name="checkmark-sharp" size={30} color="#FFFFFF" />
+                  </View>
+                </View>
+              </View>
+
+              {/* Huy hiệu sao vàng góc phải trên */}
+              <View
+                style={[
+                  styles.successSparkleBadge,
+                  {
+                    backgroundColor: isDark ? '#2E2B27' : '#FFFBEB',
+                    borderColor: isDark ? 'rgba(245, 158, 11, 0.45)' : '#FDE68A',
+                  },
+                ]}
+              >
+                <Ionicons name="sparkles" size={14} color="#F59E0B" />
+              </View>
+
+              {/* Huy hiệu sách nhỏ góc trái dưới */}
+              <View
+                style={[
+                  styles.successMiniBookBadge,
+                  {
+                    backgroundColor: isDark ? '#2E2B27' : '#F0FDF4',
+                    borderColor: isDark ? 'rgba(16, 185, 129, 0.4)' : '#BBF7D0',
+                  },
+                ]}
+              >
+                <Ionicons name="book" size={11} color="#10B981" />
+              </View>
+            </View>
+
+            {/* Nhãn phụ thương hiệu */}
+            <Text style={[styles.successWelcomeOverline, { color: colors.accent }]}>
+              WELCOME TO HALM BOOK
+            </Text>
+
+            {/* Tiêu đề chính */}
+            <Text style={[styles.successModalTitle, { color: colors.textPrimary }]}>
+              Đăng nhập thành công!
+            </Text>
+
+            {/* Thẻ chào tên người dùng cá nhân hóa */}
+            {!!welcomeName && (
+              <View
+                style={[
+                  styles.successUserGreetingPill,
+                  {
+                    backgroundColor: isDark ? '#1C1B19' : '#F8FAFC',
+                    borderColor: colors.cardBorder,
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.successUserAvatarDot,
+                    { backgroundColor: colors.accent },
+                  ]}
+                >
+                  <Text style={[styles.successUserAvatarLetter, { color: colors.accentText }]}>
+                    {welcomeName.charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+                <Text
+                  style={[styles.successUserGreetingText, { color: colors.textPrimary }]}
+                  numberOfLines={1}
+                >
+                  Xin chào, <Text style={{ fontWeight: '800', color: colors.accent }}>{welcomeName}</Text>
+                </Text>
+              </View>
+            )}
+
+            {/* Lời chúc đọc sách */}
+            <Text style={[styles.successModalSubtitle, { color: colors.textSecondary }]}>
+              Chào mừng bạn trở lại không gian tri thức. Chúc bạn có những trang sách thật hay hôm nay!
+            </Text>
+
+            {/* Thanh tiến trình chuyển trang mượt mà */}
+            <View
+              style={[
+                styles.successProgressTrack,
+                { backgroundColor: isDark ? '#33312E' : '#F1ECE1' },
+              ]}
+            >
+              <Animated.View
+                style={[
+                  styles.successProgressFill,
+                  {
+                    backgroundColor: '#10B981',
+                    width: successProgressAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['12%', '100%'],
+                    }),
+                  },
+                ]}
+              />
+            </View>
+          </Animated.View>
+        </Animated.View>
       )}
     </KeyboardAvoidingView>
   );
@@ -978,45 +1184,181 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     lineHeight: 20,
   },
-  successToast: {
+  successModalOverlay: {
     position: 'absolute',
-    top: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 52,
-    left: 18,
-    right: 18,
-    zIndex: 10,
-    flexDirection: 'row',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 100,
+    backgroundColor: 'rgba(12, 14, 20, 0.72)',
     alignItems: 'center',
-    padding: 14,
-    borderRadius: 16,
-    backgroundColor: '#1f805b',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+  },
+  successModalCard: {
+    width: '100%',
+    maxWidth: 334,
+    borderRadius: 28,
+    borderWidth: 1.5,
+    paddingTop: 30,
+    paddingBottom: 24,
+    paddingHorizontal: 22,
+    alignItems: 'center',
+    overflow: 'hidden',
+    position: 'relative',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.2,
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.32,
+    shadowRadius: 28,
+    elevation: 20,
+  },
+  successTopAccentBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+  },
+  successAmbientGlowLeft: {
+    position: 'absolute',
+    top: -50,
+    left: -40,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+  },
+  successAmbientGlowRight: {
+    position: 'absolute',
+    top: -45,
+    right: -40,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+  },
+  successHaloWrap: {
+    position: 'relative',
+    marginBottom: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successHaloOuterRing: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successHaloMiddleRing: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successHaloInner: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#10B981',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
     shadowRadius: 10,
     elevation: 8,
   },
-  successToastIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  successSparkleBadge: {
+    position: 'absolute',
+    top: 0,
+    right: -2,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    marginRight: 11,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.14,
+    shadowRadius: 4,
+    elevation: 4,
   },
-  successToastContent: {
-    flex: 1,
+  successMiniBookBadge: {
+    position: 'absolute',
+    bottom: 2,
+    left: -2,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
   },
-  successToastTitle: {
-    color: '#fff',
-    fontSize: 14,
+  successWelcomeOverline: {
+    fontSize: 10.5,
     fontWeight: '800',
-    marginBottom: 2,
+    letterSpacing: 1.5,
+    textAlign: 'center',
+    marginBottom: 4,
   },
-  successToastText: {
-    color: '#fff',
+  successModalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    textAlign: 'center',
+    letterSpacing: -0.3,
+    marginBottom: 12,
+  },
+  successUserGreetingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    marginBottom: 12,
+    maxWidth: '94%',
+  },
+  successUserAvatarDot: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  successUserAvatarLetter: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  successUserGreetingText: {
     fontSize: 13,
-    lineHeight: 18,
+    fontWeight: '600',
+    flexShrink: 1,
+  },
+  successModalSubtitle: {
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+    paddingHorizontal: 6,
+    marginBottom: 18,
+  },
+  successProgressTrack: {
+    width: '72%',
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  successProgressFill: {
+    height: '100%',
+    borderRadius: 2,
   },
   scrollContent: {
     flexGrow: 1,

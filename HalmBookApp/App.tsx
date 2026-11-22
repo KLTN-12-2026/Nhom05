@@ -40,7 +40,6 @@ interface ScreenRoute extends NavigationOptions {
 
 const SCREENS_WITH_SHARED_HEADER: AppScreen[] = [
   'categories',
-  'transactions',
 ];
 
 // Cấu hình hiệu ứng chuyển trang mượt mà (Navigation Transition Options)

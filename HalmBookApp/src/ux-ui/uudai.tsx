@@ -1,25 +1,21 @@
-import ComboOfferRow from './ComboOfferRow';
-import { BookOffer, fetchOffers, promotionRows, offerRow, addOfferToCart, applyPromotionToCart } from './offersService';
-import type { CommercePolicy } from './commercePolicy';
-import { useMissionVisit } from './useMissionTracking';
-import { API_BASE_URL, CANDIDATE_API_URLS as CANDIDATE_URLS } from './apiService';
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
-import Constants from "expo-constants";
 import * as Clipboard from "expo-clipboard";
 import * as Font from "expo-font";
 import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  AppState,
   Alert,
   Animated,
+  AppState,
+  BackHandler,
   Image,
   Modal,
   RefreshControl,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -27,13 +23,18 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { API_BASE_URL, CANDIDATE_API_URLS as CANDIDATE_URLS } from './apiService';
 import { getBookCoverSource } from "./bookCovers";
+import ComboOfferRow from './ComboOfferRow';
+import type { CommercePolicy } from './commercePolicy';
 import { useAppNavigation, useAutoHideFooter } from "./navigation";
-import ScallopDiscountBadge from "./ScallopDiscountBadge";
+import { addOfferToCart, applyPromotionToCart, BookOffer, fetchOffers, offerRow } from './offersService';
 import {
   addToCartApi,
   fetchWalletBalanceApi,
 } from "./rentalService";
+import ScallopDiscountBadge from "./ScallopDiscountBadge";
+import { useMissionVisit } from './useMissionTracking';
 
 // ==============================================================
 // TYPOGRAPHY SYSTEM
@@ -405,6 +406,18 @@ export default function OffersScreen() {
   };
 
   const [singleDeals, setSingleDeals] = useState<any[]>([]);
+  const [selectedCombo, setSelectedCombo] = useState<any | null>(null);
+  const [isSubmittingCombo, setIsSubmittingCombo] = useState<boolean>(false);
+
+  // 2. Fetch Offers & Promotions từ API
+  const fetchPromotionsData = async (signal?: AbortSignal) => {
+    try {
+      const data = await fetchOffers(signal);
+      setPromotions(data.promotions as PromotionItem[]);
+      setBookOffers(data.offers);
+      setOfferPolicy(data.policy);
+    } catch { }
+  };
 
   // 4. Fetch danh mục Sách Lẻ Giảm Sâu từ Cache cục bộ nếu có
   const fetchSingleDeals = async (_signal?: AbortSignal) => {
@@ -416,7 +429,7 @@ export default function OffersScreen() {
           setSingleDeals(parsed);
         }
       }
-    } catch {}
+    } catch { }
   };
 
   // Nạp dữ liệu lần đầu khi vào màn hình
@@ -424,11 +437,21 @@ export default function OffersScreen() {
     const controller = new AbortController();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Hydrate promotions, packages, and books on mount.
     fetchPackages(controller.signal);
-    fetchPromotions(controller.signal);
+    fetchPromotionsData(controller.signal);
     fetchBooks(controller.signal);
     fetchSingleDeals(controller.signal);
     return () => controller.abort();
   }, []);
+
+  // Xử lý nút Back phần cứng trên Android khi đang ở Màn hình riêng Combo sách
+  useEffect(() => {
+    if (!selectedCombo) return;
+    const backHandler = BackHandler.addEventListener("hardwareBackPress", () => {
+      setSelectedCombo(null);
+      return true;
+    });
+    return () => backHandler.remove();
+  }, [selectedCombo]);
 
   // Kéo xuống để làm mới (Pull-to-refresh) dữ liệu từ Database
   const handleRefresh = async () => {
@@ -436,13 +459,13 @@ export default function OffersScreen() {
     try {
       await Promise.all([
         fetchPackages(),
-        fetchPromotions(),
+        fetchPromotionsData(),
         fetchBooks(),
         fetchSingleDeals(),
         isLoggedIn
           ? fetchWalletBalanceApi().then((bal) => {
-              if (bal !== null) setKhoaiBalance(bal);
-            })
+            if (bal !== null) setKhoaiBalance(bal);
+          })
           : Promise.resolve(),
       ]);
     } catch {
@@ -496,15 +519,63 @@ export default function OffersScreen() {
   // ==============================================================
   // 1. SÁCH LẺ GIẢM SÂU TỪ ADMIN (DÀNH CHO HERO BANNER CÁNH QUẠT)
   // Chỉ hiển thị đúng các cuốn sách được Admin thêm vào mục "Sách Lẻ Giảm Sâu"
+  // Hỗ trợ cả API book-offers (trên main) và bảng promotion
   // Nếu Admin chưa thêm cuốn nào thì danh sách sẽ rỗng (không tự động lấy sách khác đắp vào)
   // ==============================================================
   const adminSingleDeals = useMemo(() => {
     const result: any[] = [];
     const addedBookIds = new Set<string>();
 
-    // 1. Thu thập tất cả các Deal "Sách lẻ giảm sâu" từ CSDL MySQL (promotions) và Cache
+    // 1. Ưu tiên số 1: Sách lẻ giảm sâu từ /api/home/book-offers (kind === 'SINGLE') của hệ thống
+    const singleOffers = bookOffers.filter((o) => o && o.kind === "SINGLE");
+    singleOffers.forEach((offer) => {
+      const row = offerRow(offer);
+      const bId = String(offer.bookIds?.[0] || offer.id || "").trim();
+      const pct = offer.originalPotato > 0
+        ? Math.max(0, Math.round((1 - offer.potato / offer.originalPotato) * 100))
+        : (parseInt(String(offer.discount || "50").replace(/[^0-9]/g, ""), 10) || 50);
+
+      // Khớp trong realBooks
+      const matched = realBooks.find((b) => {
+        const id = String(b.book_id || "").trim().toUpperCase();
+        return bId && id === bId.toUpperCase();
+      });
+
+      if (matched) {
+        addedBookIds.add(String(matched.book_id).toUpperCase());
+        result.push({
+          ...matched,
+          rent_price: offer.potato,
+          original_price: offer.originalPotato,
+          discount_percent: pct,
+          promo_name: offer.discount ? `Giảm ${offer.discount} - ${offer.name}` : offer.name,
+          offerId: offer.id,
+          planKey: offer.planKey,
+        });
+      } else {
+        if (bId) addedBookIds.add(bId.toUpperCase());
+        result.push({
+          book_id: bId || offer.id,
+          bookName: offer.name,
+          author: offer.author || "HALM BOOK",
+          img_url: offer.img || row.img_url || null,
+          rent_price: offer.potato,
+          original_price: offer.originalPotato,
+          discount_percent: pct,
+          promo_name: offer.discount ? `Giảm ${offer.discount} - ${offer.name}` : offer.name,
+          category_name: offer.category || "Sách Chọn Lọc",
+          description: offer.desc || null,
+          category_id: null,
+          readCount: 0,
+          offerId: offer.id,
+          planKey: offer.planKey,
+        });
+      }
+    });
+
+    // 2. Thu thập tất cả các Deal "Sách lẻ giảm sâu" từ CSDL MySQL (promotions) và Cache
     const allDeals: any[] = [];
-    const seenDealKeys = new Set<string>();
+    const seenDealKeys = new Set<string>(addedBookIds);
 
     // A. Lấy từ bảng promotions trong CSDL (do Admin vừa thêm hoặc đã lưu)
     promotions.forEach((p) => {
@@ -516,7 +587,7 @@ export default function OffersScreen() {
           if (p.description && p.description.trim().startsWith("{")) {
             meta = JSON.parse(p.description);
           }
-        } catch {}
+        } catch { }
 
         const bId = meta.book_id || (pid.startsWith("DEAL_") ? pid.replace(/^DEAL_/, "") : "");
         const pct = p.discount_percent > 0 ? p.discount_percent : (parseInt(String(meta.discount || "50").replace(/[^0-9]/g, ""), 10) || 50);
@@ -604,7 +675,7 @@ export default function OffersScreen() {
     });
 
     return result;
-  }, [realBooks, promotions, singleDeals]);
+  }, [bookOffers, realBooks, promotions, singleDeals]);
 
   // Sách ưu đãi từ mã khuyến mãi database thông thường (P003, P005...)
   const dbPromotionalBooks = useMemo(() => {
@@ -800,8 +871,8 @@ export default function OffersScreen() {
         pct > 0
           ? `Chiết khấu ${pct}% khi thuê sách`
           : amt > 0
-          ? `Giảm ngay ${amt.toLocaleString("vi-VN")} đ`
-          : "Ưu đãi độc quyền toàn hệ thống",
+            ? `Giảm ngay ${amt.toLocaleString("vi-VN")} đ`
+            : "Ưu đãi độc quyền toàn hệ thống",
       ];
 
       return {
@@ -831,12 +902,15 @@ export default function OffersScreen() {
   // CẤU HÌNH CAROUSEL CÁNH QUẠT & VÒNG LẶP VÔ TẬN TỪ SÁCH DATABASE
   // ==============================================================
   const promoCount = heroBannerBooks.length;
-  const loopCopies = promoCount >= 3 ? 7 : (promoCount === 2 ? 6 : (promoCount === 1 ? 5 : 0));
+  // Khi chỉ có 1 sách: hiển thị đơn lẻ tĩnh, KHÔNG nhân bản 5 bản để chạy loop
+  // Khi có từ 2 sách trở lên: chạy carousel cánh quạt với số vòng lặp tương ứng
+  const isMultiBanner = promoCount > 1;
+  const loopCopies = promoCount >= 3 ? 7 : (promoCount === 2 ? 6 : 0);
   const middleCopyIdx = Math.floor(loopCopies / 2);
-  const startIndex = promoCount > 0 ? middleCopyIdx * promoCount : 0;
+  const startIndex = isMultiBanner ? middleCopyIdx * promoCount : 0;
 
   const loopBooks = useMemo(() => {
-    if (promoCount === 0) return [];
+    if (!isMultiBanner) return [];
     return Array.from({ length: loopCopies }).flatMap((_, copyIdx) =>
       heroBannerBooks.map((book, itemIdx) => ({
         ...book,
@@ -844,20 +918,20 @@ export default function OffersScreen() {
         originalIndex: itemIdx,
       }))
     );
-  }, [heroBannerBooks, promoCount]);
+  }, [heroBannerBooks, isMultiBanner, loopCopies]);
 
-  // Căn giữa sách đầu tiên ngay khi danh sách sách khuyến mãi được tải xong
+  // Căn giữa sách đầu tiên ngay khi danh sách sách khuyến mãi được tải xong (chỉ khi có > 1 sách)
   useEffect(() => {
-    if (promoCount > 0) {
+    if (isMultiBanner) {
       const initialX = startIndex * posterItemSize;
       (scrollRef.current as any)?.scrollTo({ x: initialX, animated: false });
       scrollX.setValue(initialX);
     }
-  }, [promoCount, startIndex, posterItemSize]);
+  }, [isMultiBanner, startIndex, posterItemSize]);
 
   // Lắng nghe scrollX để đồng bộ chấm Pagination
   useEffect(() => {
-    if (promoCount === 0) return;
+    if (!isMultiBanner) return;
     let lastIndex = 0;
     const listenerId = scrollX.addListener(({ value }) => {
       const rawIndex = Math.round(value / posterItemSize);
@@ -870,10 +944,10 @@ export default function OffersScreen() {
     return () => {
       scrollX.removeListener(listenerId);
     };
-  }, [posterItemSize, promoCount]);
+  }, [posterItemSize, promoCount, isMultiBanner]);
 
   const handleFanLayout = () => {
-    if (!hasInitializedOffset.current && promoCount > 0) {
+    if (!hasInitializedOffset.current && isMultiBanner) {
       hasInitializedOffset.current = true;
       (scrollRef.current as any)?.scrollTo({
         x: startIndex * posterItemSize,
@@ -884,7 +958,7 @@ export default function OffersScreen() {
   };
 
   const handleMomentumScrollEnd = (e: any) => {
-    if (promoCount === 0) return;
+    if (!isMultiBanner) return;
     const currentX = e.nativeEvent?.contentOffset?.x ?? 0;
     const rawIdx = Math.round(currentX / posterItemSize);
     const realIdx = ((rawIdx % promoCount) + promoCount) % promoCount;
@@ -914,6 +988,17 @@ export default function OffersScreen() {
   };
 
   const handleOpenBookModal = (book: any) => {
+    // Nếu là combo sách: Mở màn hình/modal chi tiết combo
+    if (
+      book.kind === "COMBO" ||
+      book.rawOffer ||
+      (book.offerId && bookOffers.some((o) => o.id === book.offerId && o.kind === "COMBO"))
+    ) {
+      const comboOffer = book.rawOffer || bookOffers.find((o) => o.id === book.offerId) || book;
+      setSelectedCombo(comboOffer);
+      return;
+    }
+
     const rentPrice = book.rent_price ?? 11;
     if (isLoggedIn) {
       fetchWalletBalanceApi().then((bal) => {
@@ -931,6 +1016,70 @@ export default function OffersScreen() {
       basePrice: rentPrice,
     });
   };
+
+  // Mua ngay combo sách: Thêm combo vào giỏ hàng và chuyển đến giỏ hàng
+  const handleBuyCombo = async (combo: any) => {
+    if (!combo || isSubmittingCombo) return;
+    if (!isLoggedIn) {
+      setSelectedCombo(null);
+      showLoginAlert("Bạn phải đăng nhập để mua combo sách!");
+      return;
+    }
+
+    setIsSubmittingCombo(true);
+    try {
+      const offerId = combo.id || combo.offerId;
+      const result = await addOfferToCart(offerId);
+      if (!result.success) {
+        Alert.alert("Mua combo", result.message || "Không thể thêm combo vào giỏ hàng.");
+        return;
+      }
+      setSelectedCombo(null);
+      navigate("cart");
+    } catch (error: any) {
+      Alert.alert(
+        "Mua combo",
+        error?.response?.data?.message || error?.message || "Chưa tải được biểu giá combo. Vui lòng thử lại."
+      );
+    } finally {
+      setIsSubmittingCombo(false);
+    }
+  };
+
+  // Danh sách các cuốn sách nằm trong Combo được chọn
+  const selectedComboBooks = useMemo(() => {
+    if (!selectedCombo) return [];
+    const details: any[] = Array.isArray(selectedCombo.bookDetails) ? selectedCombo.bookDetails : [];
+    const bookIds: string[] = Array.isArray(selectedCombo.bookIds) ? selectedCombo.bookIds : [];
+    const books: string[] = Array.isArray(selectedCombo.books) ? selectedCombo.books : [];
+
+    const maxLen = Math.max(details.length, bookIds.length, books.length);
+    const result: any[] = [];
+
+    for (let i = 0; i < maxLen; i++) {
+      const detail = details[i] || {};
+      const bId = bookIds[i] || detail.book_id;
+      const bName = books[i] || detail.bookName || detail.title;
+
+      const matched = realBooks.find((b: any) => {
+        const matchId = bId && String(b.book_id).trim().toUpperCase() === String(bId).trim().toUpperCase();
+        const matchName = bName && String(b.bookName || (b as any).title || "").trim().toLowerCase() === String(bName).trim().toLowerCase();
+        return matchId || matchName;
+      });
+
+      result.push({
+        book_id: bId || matched?.book_id || `combo-b-${i}`,
+        bookName: bName || matched?.bookName || (matched as any)?.title || detail.bookName || `Sách #${i + 1}`,
+        author: detail.author || matched?.author || "HALM BOOK",
+        img_url: detail.img_url || matched?.img_url || null,
+        rent_price: detail.rent_price || matched?.rent_price || null,
+        category_name: detail.category_name || matched?.category_name || null,
+        description: detail.description || matched?.description || null,
+        ...matched,
+      });
+    }
+    return result;
+  }, [selectedCombo, realBooks]);
 
   // Cuốn sách đang được chọn / nằm ở trung tâm của Carousel cánh quạt
   const activeBook = heroBannerBooks[activeDot] || heroBannerBooks[0] || null;
@@ -950,7 +1099,7 @@ export default function OffersScreen() {
       try {
         const result = modalItem.offerId ? await addOfferToCart(modalItem.offerId)
           : modalItem.couponCode ? await applyPromotionToCart(modalItem.couponCode, modalItem.bookId, modalItem.planKey)
-          : await addToCartApi(modalItem.bookId!, undefined, modalItem.basePrice);
+            : await addToCartApi(modalItem.bookId!, undefined, modalItem.basePrice);
         if (!result.success) { Alert.alert('Thuê sách', result.message); return; }
         setModalItem(null); navigate('cart');
       } catch (error: any) { Alert.alert('Thuê sách', error?.response?.data?.message || error?.message || 'Chưa tải được biểu giá. Vui lòng thử lại.'); }
@@ -1224,12 +1373,14 @@ export default function OffersScreen() {
     const originalPrice = book.original_price ?? Math.round(rentPrice * 1.3);
     const discountPct = book.discount_percent ?? 20;
     const coverSource = getBookCoverSource(book.book_id, book.img_url || undefined);
+    const isCombo = book.kind === "COMBO" || !!book.rawOffer;
 
     return (
       <TouchableOpacity
-        key={`${book.book_id}-${_index}`}
+        key={`${book.book_id || book.offerId || "item"}-${_index}`}
         style={[
           styles.bookCard,
+          isCombo && styles.comboCardFullFrame,
           {
             width: bookCardWidth,
             backgroundColor: colors.cardBg,
@@ -1239,13 +1390,13 @@ export default function OffersScreen() {
         onPress={() => handleOpenBookModal(book)}
         activeOpacity={0.85}
       >
-        <View style={styles.bookCoverFrame}>
-          <View style={styles.bookCoverImgWrap}>
+        <View style={[styles.bookCoverFrame, isCombo && styles.comboCoverFrameFull]}>
+          <View style={[styles.bookCoverImgWrap, isCombo && styles.comboCoverImgWrapFull]}>
             {coverSource ? (
               <Image source={coverSource} style={styles.bookCoverImg} resizeMode="cover" />
             ) : (
               <View style={[styles.bookCoverPlaceholder, { backgroundColor: colors.chipBg }]}>
-                <MaterialCommunityIcons name="book-open-variant" size={26} color={colors.textSecondary} />
+                <MaterialCommunityIcons name={isCombo ? "bookshelf" : "book-open-variant"} size={26} color={colors.textSecondary} />
               </View>
             )}
           </View>
@@ -1258,32 +1409,240 @@ export default function OffersScreen() {
           />
         </View>
 
-        <Text
-          numberOfLines={1}
-          ellipsizeMode="tail"
-          style={[styles.bookTitle, { color: colors.textPrimary }]}
-        >
-          {book.bookName}
-        </Text>
+        <View style={isCombo ? styles.comboCardContentWrap : undefined}>
+          <Text
+            numberOfLines={1}
+            ellipsizeMode="tail"
+            style={[styles.bookTitle, { color: colors.textPrimary }]}
+          >
+            {book.bookName}
+          </Text>
 
-        <View style={styles.bookFooterRow}>
-          <View style={styles.bookPriceWrap}>
-            <Text style={[styles.bookOldPrice, { color: colors.textSecondary }]}>
-              {book.couponOnly ? '' : originalPrice + ' 🥔'}
-            </Text>
-            <Text style={[styles.bookPrice, { color: colors.promoBookColor }]}>
-              {book.priceLabel || rentPrice + ' 🥔'}
-            </Text>
-          </View>
-          <View style={[styles.bookRentBtn, { backgroundColor: colors.promoBookColor }]}>
-            <Text style={[styles.bookRentBtnText, { color: "#FFFFFF" }]}>
-              Thuê
-            </Text>
+          <View style={styles.bookFooterRow}>
+            <View style={styles.bookPriceWrap}>
+              <Text style={[styles.bookOldPrice, { color: colors.textSecondary }]}>
+                {book.couponOnly ? "" : originalPrice + " 🥔"}
+              </Text>
+              <Text style={[styles.bookPrice, { color: colors.promoBookColor }]}>
+                {book.priceLabel || rentPrice + " 🥔"}
+              </Text>
+            </View>
+            <View style={[styles.bookRentBtn, { backgroundColor: colors.promoBookColor }]}>
+              <Text style={[styles.bookRentBtnText, { color: "#FFFFFF" }]}>
+                {isCombo ? "Mua ngay" : "Thuê"}
+              </Text>
+            </View>
           </View>
         </View>
       </TouchableOpacity>
     );
   };
+
+  // ==============================================================
+  // NẾU ĐANG CHỌN XEM COMBO SÁCH -> HIỂN THỊ MÀN HÌNH RIÊNG CÓ NÚT THOÁT RA
+  // ==============================================================
+  if (selectedCombo) {
+    const comboImg = selectedCombo.img || selectedCombo.img_url || selectedCombo.bookDetails?.[0]?.img_url;
+    const comboCoverSource = getBookCoverSource(undefined, comboImg);
+    const rentPrice = selectedCombo.potato ?? selectedCombo.rent_price ?? 0;
+    const comboTitle = selectedCombo.name || selectedCombo.bookName || "Combo Sách Đặc Biệt";
+    const comboDesc = selectedCombo.desc || selectedCombo.description;
+    const bookCount = selectedComboBooks.length;
+    const posterCardSize = Math.min(Math.round(windowWidth * 0.72), 276);
+    const displayComboPrice =
+      rentPrice > 0 && rentPrice !== 99 ? `${rentPrice} 🥔` : "14 🥔";
+
+    return (
+      <View
+        style={[
+          styles.container,
+          {
+            backgroundColor: "#FFFFFF",
+            paddingLeft: insets.left,
+            paddingRight: insets.right,
+          },
+        ]}
+      >
+        <ExpoStatusBar style="dark" />
+
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{
+            paddingBottom: Math.max(insets.bottom, 24) + 48,
+          }}
+        >
+          {/* KHU VỰC ẢNH NỀN + POSTER VUÔNG PHÍA TRÊN (KHÔNG CHE CHỮ BÊN DƯỚI) */}
+          <View
+            style={[
+              styles.comboShotHeroWrap,
+              { paddingTop: insets.top + 10 },
+            ]}
+          >
+            {/* ẢNH NỀN COMBO MỜ PHÍA SAU KHUNG VUÔNG + FADE MƯỢT VỀ TRẮNG TRƯỚC PHẦN CHỮ */}
+            <View style={StyleSheet.absoluteFill} pointerEvents="none">
+              {comboCoverSource && (
+                <Image
+                  source={comboCoverSource}
+                  style={[
+                    StyleSheet.absoluteFill,
+                    {
+                      opacity: 0.28,
+                      transform: [{ scale: 1.16 }],
+                    },
+                  ]}
+                  resizeMode="cover"
+                />
+              )}
+              <View style={styles.comboShotFadeStep1} />
+              <View style={styles.comboShotFadeStep2} />
+              <View style={styles.comboShotFadeStep3} />
+            </View>
+
+            {/* HÀNG NÚT TRÊN CÙNG: CHỈ CÒN NÚT MŨI TÊN QUAY LẠI (ĐÃ BỎ ICON CHIA SẺ) */}
+            <View style={styles.comboShotTopBar}>
+              <TouchableOpacity
+                style={styles.comboShotTopIconBtn}
+                onPress={() => setSelectedCombo(null)}
+                activeOpacity={0.75}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <Ionicons name="arrow-back" size={22} color="#0F172A" />
+              </TouchableOpacity>
+            </View>
+
+            {/* 1. KHUNG POSTER VUÔNG BO GÓC Ở TRUNG TÂM */}
+            <View style={styles.comboShotPosterWrap}>
+              <View
+                style={[
+                  styles.comboShotPosterCard,
+                  { width: posterCardSize, height: posterCardSize },
+                ]}
+              >
+                {comboCoverSource ? (
+                  <Image
+                    source={comboCoverSource}
+                    style={styles.comboShotPosterImg}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={styles.comboShotPosterFallback}>
+                    <MaterialCommunityIcons name="bookshelf" size={64} color="#E11D48" />
+                  </View>
+                )}
+              </View>
+            </View>
+          </View>
+
+          {/* KHU VỰC TIÊU ĐỀ, GIÁ KHOAI & NÚT MUA TRÊN NỀN TRẮNG SẠCH SẼ */}
+          <View style={styles.comboShotInfoSection}>
+            {/* 2. TÊN COMBO CĂN GIỮA */}
+            <Text style={styles.comboShotTitle} numberOfLines={2}>
+              {comboTitle}
+            </Text>
+
+            {comboDesc ? (
+              <Text style={styles.comboShotDesc} numberOfLines={2}>
+                {comboDesc}
+              </Text>
+            ) : null}
+
+            {/* 3. DÒNG THÔNG TIN: SỐ LƯỢNG SÁCH BÊN TRÁI - GIÁ KHOAI BÊN PHẢI */}
+            <View style={styles.comboShotMetaRow}>
+              <Text style={styles.comboShotCountText}>
+                Số lượng sách: {bookCount}
+              </Text>
+              <Text style={styles.comboShotPriceText}>
+                {displayComboPrice}
+              </Text>
+            </View>
+
+            {/* 4. NÚT XANH NGỌC PILL "MUA NGAY COMBO" */}
+            <TouchableOpacity
+              style={[
+                styles.comboShotBuyBtn,
+                { opacity: isSubmittingCombo ? 0.75 : 1 },
+              ]}
+              onPress={() => handleBuyCombo(selectedCombo)}
+              disabled={isSubmittingCombo}
+              activeOpacity={0.85}
+            >
+              {isSubmittingCombo ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.comboShotBuyBtnText}>
+                  MUA NGAY COMBO
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* KHU VỰC PHÍA DƯỚI: DANH SÁCH SÁCH TRONG COMBO TRÊN NỀN TRẮNG */}
+          <View style={styles.comboShotListSection}>
+            <View style={styles.comboShotListHeader}>
+              <Ionicons name="checkmark-circle" size={19} color="#16C784" />
+              <Text style={styles.comboShotListHeaderTitle}>
+                Combo bao gồm ({bookCount} cuốn):
+              </Text>
+            </View>
+
+            <View style={styles.comboShotBooksWrap}>
+              {selectedComboBooks.map((bookItem: any, idx: number) => {
+                const bookCover = getBookCoverSource(bookItem.book_id, bookItem.img_url);
+                return (
+                  <TouchableOpacity
+                    key={bookItem.book_id || idx}
+                    style={styles.comboShotBookCard}
+                    activeOpacity={0.82}
+                    onPress={() => {
+                      setSelectedCombo(null);
+                      navigate("bookDetail", bookItem);
+                    }}
+                  >
+                    <View style={styles.comboShotBookThumbWrap}>
+                      {bookCover ? (
+                        <Image
+                          source={bookCover}
+                          style={styles.comboShotPosterImg}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={styles.comboShotBookThumbFallback}>
+                          <MaterialCommunityIcons name="book-open-page-variant" size={22} color="#94A3B8" />
+                        </View>
+                      )}
+                    </View>
+
+                    <View style={styles.comboShotBookInfo}>
+                      <Text style={styles.comboShotBookTitle} numberOfLines={2}>
+                        {bookItem.bookName}
+                      </Text>
+                      <Text style={styles.comboShotBookAuthor} numberOfLines={1}>
+                        {bookItem.author || "HALM BOOK"}
+                      </Text>
+                      {bookItem.category_name ? (
+                        <View style={styles.comboShotBookCatBadge}>
+                          <Text style={styles.comboShotBookCatText}>
+                            {bookItem.category_name}
+                          </Text>
+                        </View>
+                      ) : null}
+                    </View>
+
+                    <View style={styles.comboShotBookTag}>
+                      <Ionicons name="checkmark" size={13} color="#16C784" />
+                      <Text style={styles.comboShotBookTagText}>
+                        {bookItem.rent_price ? `${bookItem.rent_price} 🥔` : "Trong gói"}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
 
   // ==============================================================
   // RENDER GIAO DIỆN CHÍNH
@@ -1357,11 +1716,9 @@ export default function OffersScreen() {
         }}
       >
         {/* ============================================================
-            CAROUSEL SÁCH ƯU ĐÃI DATABASE — HÌNH CÁNH QUẠT & VÒNG LẶP VÔ TẬN
-            - Nguồn dữ liệu: Các cuốn sách ưu đãi đã thêm vào database (heroBannerBooks)
-            - Góc trên bên phải: Mức giá cũ bị gạch đi và mức giá giảm giá bên cạnh
-            - Phía dưới: Tên sách nổi bật, tác giả và nút thuê
-            - Hiệu ứng: Cánh quạt 3D xòe vòng cung, lướt nối tiếp vô tận
+            BANNER / CAROUSEL SÁCH ƯU ĐÃI DATABASE
+            - Khi có đúng 1 sách: Hiển thị 1 thẻ sách duy nhất, không nhân bản lặp
+            - Khi có từ 2 sách trở lên: Hiển thị Carousel hình cánh quạt 3D
             ============================================================ */}
         {heroBannerBooks.length > 0 && (
           <View style={styles.postersSectionWrap}>
@@ -1374,95 +1731,25 @@ export default function OffersScreen() {
               <Ionicons name="sparkles" size={18} color={isDark ? "#F472B6" : "#EC4899"} style={{ marginLeft: 6 }} />
             </View>
 
-            <Animated.ScrollView
-              ref={scrollRef as any}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              snapToInterval={posterItemSize}
-              decelerationRate="fast"
-              snapToAlignment="start"
-              bounces={false}
-              scrollEventThrottle={16}
-              contentOffset={{ x: startIndex * posterItemSize, y: 0 }}
-              style={{ overflow: "visible" }}
-              contentContainerStyle={{
-                paddingHorizontal: posterSideSpacer,
-                paddingTop: 32,
-                paddingBottom: 22,
-              }}
-              onScroll={Animated.event(
-                [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-                { useNativeDriver: true }
-              )}
-              onMomentumScrollEnd={handleMomentumScrollEnd}
-              onLayout={handleFanLayout}
-            >
-              {loopBooks.map((book: any, index: number) => {
-                const inputRange = [
-                  (index - 2) * posterItemSize,
-                  (index - 1) * posterItemSize,
-                  index * posterItemSize,
-                  (index + 1) * posterItemSize,
-                  (index + 2) * posterItemSize,
-                ];
-
-                // Phóng to ở giữa, thu nhỏ 2 bên
-                const scale = scrollX.interpolate({
-                  inputRange,
-                  outputRange: [0.78, 0.88, 1.05, 0.88, 0.78],
-                  extrapolate: "clamp",
-                });
-
-                // Hiệu ứng xòe cánh quạt (Fan rotation)
-                const rotateZ = scrollX.interpolate({
-                  inputRange,
-                  outputRange: ["14deg", "8deg", "0deg", "-8deg", "-14deg"],
-                  extrapolate: "clamp",
-                });
-
-                // Uốn vòng cung cánh quạt (Fan arc curve: ở giữa nhô cao, 2 bên uốn thấp dần)
-                const translateY = scrollX.interpolate({
-                  inputRange,
-                  outputRange: [24, 10, 0, 10, 24],
-                  extrapolate: "clamp",
-                });
-
-                // Độ mờ: tấm ở giữa rõ nhất, 2 bên mờ dần
-                const opacity = scrollX.interpolate({
-                  inputRange,
-                  outputRange: [0.4, 0.72, 1.0, 0.72, 0.4],
-                  extrapolate: "clamp",
-                });
-
-                const coverSource = getBookCoverSource(book.book_id, book.img_url || undefined);
-                const rentPrice = book.rent_price ?? 11;
-                const originalPrice = book.original_price ?? Math.round(rentPrice * 1.33);
-                const discountPct = book.discount_percent ?? 20;
+            {heroBannerBooks.length === 1 ? (
+              // HIỂN THỊ ĐƠN LẺ KHI CHỈ CÓ 1 SÁCH
+              (() => {
+                const singleBook = heroBannerBooks[0];
+                const coverSource = getBookCoverSource(singleBook.book_id, singleBook.img_url || undefined);
+                const rentPrice = singleBook.rent_price ?? 11;
+                const originalPrice = singleBook.original_price ?? Math.round(rentPrice * 1.33);
+                const discountPct = singleBook.discount_percent ?? 20;
 
                 return (
-                  <View
-                    key={book.loopKey}
-                    style={{
-                      width: posterWidth,
-                      marginRight: posterSpacing,
-                      alignItems: "center",
-                      justifyContent: "center",
-                      paddingTop: 16,
-                      overflow: "visible",
-                    }}
-                  >
-                    <Animated.View
+                  <View style={styles.singleBannerCardWrap}>
+                    <TouchableOpacity
+                      activeOpacity={0.9}
+                      onPress={() => handleOpenBookModal(singleBook)}
                       style={[
-                        styles.posterCard,
+                        styles.singlePosterCard,
                         {
                           width: posterWidth,
                           height: posterHeight,
-                          transform: [
-                            { translateY },
-                            { rotate: rotateZ },
-                            { scale },
-                          ],
-                          opacity,
                           borderColor: colors.cardBorder,
                         },
                       ]}
@@ -1483,85 +1770,278 @@ export default function OffersScreen() {
                           )}
                         </View>
 
-                        {/* GÓC TRÊN BÊN PHẢI: ICON HOA THỊ GIẢM GIÁ NGAY ĐẦU GÓC */}
+                        {/* GÓC TRÊN BÊN PHẢI: ICON HOA THỊ GIẢM GIÁ */}
                         <ScallopDiscountBadge
                           percent={discountPct}
                           size={52}
                           style={styles.fanDiscountCornerBadge}
                         />
                       </View>
-                    </Animated.View>
+                    </TouchableOpacity>
+
+                    {/* THÔNG TIN CUỐN SÁCH DUY NHẤT */}
+                    <View style={styles.activeBookInfoWrap}>
+                      {singleBook.promo_name ? (
+                        <View style={[styles.activePromoTag, { backgroundColor: colors.goldLight }]}>
+                          <MaterialCommunityIcons name="sale" size={11} color={colors.gold} />
+                          <Text style={[styles.activePromoTagText, { color: colors.gold }]}>
+                            {singleBook.promo_name}
+                          </Text>
+                        </View>
+                      ) : null}
+
+                      {/* TÊN SÁCH NỔI BẬT */}
+                      <Text
+                        style={[styles.activeBookTitle, { color: colors.textPrimary }]}
+                        numberOfLines={2}
+                      >
+                        {singleBook.bookName}
+                      </Text>
+
+                      {/* TÁC GIẢ */}
+                      {singleBook.author ? (
+                        <Text
+                          style={[styles.activeBookAuthor, { color: colors.textSecondary }]}
+                          numberOfLines={1}
+                        >
+                          {singleBook.author}
+                        </Text>
+                      ) : null}
+
+                      {/* GIÁ KHOAI VỚI GẠCH */}
+                      <View style={styles.activePriceRow}>
+                        <Text style={[styles.activeOldPrice, { color: colors.textSecondary }]}>
+                          {originalPrice} 🥔
+                        </Text>
+                        <Text style={[styles.activeNewPrice, { color: colors.bannerPink }]}>
+                          {rentPrice} 🥔
+                        </Text>
+                        <View style={styles.activeDiscountPill}>
+                          <Text style={styles.activeDiscountPillText}>
+                            -{discountPct}%
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* NÚT THUÊ */}
+                      <TouchableOpacity
+                        style={[styles.activeRentBtn, { backgroundColor: colors.bannerPink }]}
+                        onPress={() => handleOpenBookModal(singleBook)}
+                        activeOpacity={0.85}
+                      >
+                        <MaterialCommunityIcons
+                          name="bookmark-check"
+                          size={16}
+                          color="#FFFFFF"
+                        />
+                        <Text style={[styles.activeRentBtnText, { color: "#FFFFFF" }]}>
+                          Thuê ngay
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 );
-              })}
-            </Animated.ScrollView>
-
-            {/* THÔNG TIN CUỐN SÁCH ĐANG ĐƯỢC CHỌN (HIỂN THỊ PHÍA DƯỚI THAY THẾ CHẤM TRÒN) */}
-            {activeBook && (
-              <View style={styles.activeBookInfoWrap}>
-                {activeBook.promo_name ? (
-                  <View style={[styles.activePromoTag, { backgroundColor: colors.goldLight }]}>
-                    <MaterialCommunityIcons name="sale" size={11} color={colors.gold} />
-                    <Text style={[styles.activePromoTagText, { color: colors.gold }]}>
-                      {activeBook.promo_name}
-                    </Text>
-                  </View>
-                ) : null}
-
-                {/* TÊN SÁCH NỔI BẬT */}
-                <Text
-                  style={[styles.activeBookTitle, { color: colors.textPrimary }]}
-                  numberOfLines={2}
+              })()
+            ) : (
+              // HIỂN THỊ CAROUSEL CÁNH QUẠT KHI CÓ TỪ 2 SÁCH TRỞ LÊN
+              <>
+                <Animated.ScrollView
+                  ref={scrollRef as any}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  snapToInterval={posterItemSize}
+                  decelerationRate="fast"
+                  snapToAlignment="start"
+                  bounces={false}
+                  scrollEventThrottle={16}
+                  contentOffset={{ x: startIndex * posterItemSize, y: 0 }}
+                  style={{ overflow: "visible" }}
+                  contentContainerStyle={{
+                    paddingHorizontal: posterSideSpacer,
+                    paddingTop: 32,
+                    paddingBottom: 22,
+                  }}
+                  onScroll={Animated.event(
+                    [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+                    { useNativeDriver: true }
+                  )}
+                  onMomentumScrollEnd={handleMomentumScrollEnd}
+                  onLayout={handleFanLayout}
                 >
-                  {activeBook.bookName}
-                </Text>
+                  {loopBooks.map((book: any, index: number) => {
+                    const inputRange = [
+                      (index - 2) * posterItemSize,
+                      (index - 1) * posterItemSize,
+                      index * posterItemSize,
+                      (index + 1) * posterItemSize,
+                      (index + 2) * posterItemSize,
+                    ];
 
-                {/* TÁC GIẢ */}
-                {activeBook.author ? (
-                  <Text
-                    style={[styles.activeBookAuthor, { color: colors.textSecondary }]}
-                    numberOfLines={1}
-                  >
-                    {activeBook.author}
-                  </Text>
-                ) : null}
+                    // Phóng to ở giữa, thu nhỏ 2 bên
+                    const scale = scrollX.interpolate({
+                      inputRange,
+                      outputRange: [0.78, 0.88, 1.05, 0.88, 0.78],
+                      extrapolate: "clamp",
+                    });
 
-                {/* GIÁ KHOAI VỚI GẠCH HIỂN THỊ TẠI CHỖ ƯU ĐÃI NÀY */}
-                <View style={styles.activePriceRow}>
-                  <Text style={[styles.activeOldPrice, { color: colors.textSecondary }]}>
-                    {activeBook.original_price ?? 15} 🥔
-                  </Text>
-                  <Text style={[styles.activeNewPrice, { color: colors.bannerPink }]}>
-                    {activeBook.rent_price ?? 11} 🥔
-                  </Text>
-                  <View style={styles.activeDiscountPill}>
-                    <Text style={styles.activeDiscountPillText}>
-                      -{activeBook.discount_percent ?? 20}%
+                    // Hiệu ứng xòe cánh quạt (Fan rotation)
+                    const rotateZ = scrollX.interpolate({
+                      inputRange,
+                      outputRange: ["14deg", "8deg", "0deg", "-8deg", "-14deg"],
+                      extrapolate: "clamp",
+                    });
+
+                    // Uốn vòng cung cánh quạt (Fan arc curve: ở giữa nhô cao, 2 bên uốn thấp dần)
+                    const translateY = scrollX.interpolate({
+                      inputRange,
+                      outputRange: [24, 10, 0, 10, 24],
+                      extrapolate: "clamp",
+                    });
+
+                    // Độ mờ: tấm ở giữa rõ nhất, 2 bên mờ dần
+                    const opacity = scrollX.interpolate({
+                      inputRange,
+                      outputRange: [0.4, 0.72, 1.0, 0.72, 0.4],
+                      extrapolate: "clamp",
+                    });
+
+                    const coverSource = getBookCoverSource(book.book_id, book.img_url || undefined);
+                    const rentPrice = book.rent_price ?? 11;
+                    const originalPrice = book.original_price ?? Math.round(rentPrice * 1.33);
+                    const discountPct = book.discount_percent ?? 20;
+
+                    return (
+                      <View
+                        key={book.loopKey}
+                        style={{
+                          width: posterWidth,
+                          marginRight: posterSpacing,
+                          alignItems: "center",
+                          justifyContent: "center",
+                          paddingTop: 16,
+                          overflow: "visible",
+                        }}
+                      >
+                        <Animated.View
+                          style={[
+                            styles.posterCard,
+                            {
+                              width: posterWidth,
+                              height: posterHeight,
+                              transform: [
+                                { translateY },
+                                { rotate: rotateZ },
+                                { scale },
+                              ],
+                              opacity,
+                              borderColor: colors.cardBorder,
+                            },
+                          ]}
+                        >
+                          <View style={styles.posterTouchable}>
+                            {/* Ảnh bìa cuốn sách bo tròn */}
+                            <View style={styles.posterImageWrap}>
+                              {coverSource ? (
+                                <Image
+                                  source={coverSource}
+                                  style={styles.posterImage}
+                                  resizeMode="cover"
+                                />
+                              ) : (
+                                <View style={[styles.posterImage, styles.posterFallbackBg]}>
+                                  <MaterialCommunityIcons name="book-open-page-variant" size={44} color="#94A3B8" />
+                                </View>
+                              )}
+                            </View>
+
+                            {/* GÓC TRÊN BÊN PHẢI: ICON HOA THỊ GIẢM GIÁ NGAY ĐẦU GÓC */}
+                            <ScallopDiscountBadge
+                              percent={discountPct}
+                              size={52}
+                              style={styles.fanDiscountCornerBadge}
+                            />
+                          </View>
+                        </Animated.View>
+                      </View>
+                    );
+                  })}
+                </Animated.ScrollView>
+
+                {/* THÔNG TIN CUỐN SÁCH ĐANG ĐƯỢC CHỌN (HIỂN THỊ PHÍA DƯỚI THAY THẾ CHẤM TRÒN) */}
+                {activeBook && (
+                  <View style={styles.activeBookInfoWrap}>
+                    {activeBook.promo_name ? (
+                      <View style={[styles.activePromoTag, { backgroundColor: colors.goldLight }]}>
+                        <MaterialCommunityIcons name="sale" size={11} color={colors.gold} />
+                        <Text style={[styles.activePromoTagText, { color: colors.gold }]}>
+                          {activeBook.promo_name}
+                        </Text>
+                      </View>
+                    ) : null}
+
+                    {/* TÊN SÁCH NỔI BẬT */}
+                    <Text
+                      style={[styles.activeBookTitle, { color: colors.textPrimary }]}
+                      numberOfLines={2}
+                    >
+                      {activeBook.bookName}
                     </Text>
-                  </View>
-                </View>
 
-                {/* NÚT THUÊ */}
-                <TouchableOpacity
-                  style={[styles.activeRentBtn, { backgroundColor: colors.bannerPink }]}
-                  onPress={() => handleOpenBookModal(activeBook)}
-                  activeOpacity={0.85}
-                >
-                  <MaterialCommunityIcons
-                    name="bookmark-check"
-                    size={16}
-                    color="#FFFFFF"
-                  />
-                  <Text style={[styles.activeRentBtnText, { color: "#FFFFFF" }]}>
-                    Thuê ngay
-                  </Text>
-                </TouchableOpacity>
-              </View>
+                    {/* TÁC GIẢ */}
+                    {activeBook.author ? (
+                      <Text
+                        style={[styles.activeBookAuthor, { color: colors.textSecondary }]}
+                        numberOfLines={1}
+                      >
+                        {activeBook.author}
+                      </Text>
+                    ) : null}
+
+                    {/* GIÁ KHOAI VỚI GẠCH HIỂN THỊ TẠI CHỖ ƯU ĐÃI NÀY */}
+                    <View style={styles.activePriceRow}>
+                      <Text style={[styles.activeOldPrice, { color: colors.textSecondary }]}>
+                        {activeBook.original_price ?? 15} 🥔
+                      </Text>
+                      <Text style={[styles.activeNewPrice, { color: colors.bannerPink }]}>
+                        {activeBook.rent_price ?? 11} 🥔
+                      </Text>
+                      <View style={styles.activeDiscountPill}>
+                        <Text style={styles.activeDiscountPillText}>
+                          -{activeBook.discount_percent ?? 20}%
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* NÚT THUÊ */}
+                    <TouchableOpacity
+                      style={[styles.activeRentBtn, { backgroundColor: colors.bannerPink }]}
+                      onPress={() => handleOpenBookModal(activeBook)}
+                      activeOpacity={0.85}
+                    >
+                      <MaterialCommunityIcons
+                        name="bookmark-check"
+                        size={16}
+                        color="#FFFFFF"
+                      />
+                      <Text style={[styles.activeRentBtnText, { color: "#FFFFFF" }]}>
+                        Thuê ngay
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
             )}
           </View>
         )}
 
-        <ComboOfferRow offers={bookOffers.filter(offer => offer.kind === 'COMBO')} styles={styles} colors={colors} SectionHeader={CleanSectionHeader} renderCard={renderDiscountBookCard} />
+        <ComboOfferRow
+          offers={bookOffers.filter(offer => offer.kind === 'COMBO')}
+          styles={styles}
+          colors={colors}
+          SectionHeader={CleanSectionHeader}
+          renderCard={renderDiscountBookCard}
+          onSelectCombo={(offer) => setSelectedCombo(offer)}
+        />
 
         {/* MỤC 1: GÓI NẠP KHOAI ƯU ĐÃI (HIỂN THỊ HÀNG DỌC) */}
         <View style={styles.sectionWrap}>
@@ -1796,6 +2276,24 @@ const styles = StyleSheet.create({
     marginTop: 14,
     marginBottom: 10,
     overflow: "visible",
+  },
+  singleBannerCardWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 12,
+    paddingBottom: 6,
+  },
+  singlePosterCard: {
+    borderRadius: 18,
+    overflow: "visible",
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 8,
   },
   posterCard: {
     borderRadius: 18,
@@ -2371,4 +2869,270 @@ const styles = StyleSheet.create({
   },
   durationChipTitle: { fontFamily: FONTS.inter, fontSize: 10.5, fontWeight: "700" },
   durationChipPrice: { fontFamily: FONTS.inter, fontSize: 10.5, fontWeight: "800" },
+
+  // ---- Màn Hình Chi Tiết Combo Theo Mẫu Ảnh (Nền Trắng) ----
+  comboShotHeroWrap: {
+    position: "relative",
+    overflow: "hidden",
+    backgroundColor: "#FFFFFF",
+    paddingBottom: 20,
+  },
+  comboShotFadeStep1: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 96,
+    backgroundColor: "rgba(255, 255, 255, 0.42)",
+  },
+  comboShotFadeStep2: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 58,
+    backgroundColor: "rgba(255, 255, 255, 0.78)",
+  },
+  comboShotFadeStep3: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 24,
+    backgroundColor: "#FFFFFF",
+  },
+  comboShotTopBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    zIndex: 10,
+  },
+  comboShotTopIconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "rgba(255, 255, 255, 0.85)",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  comboShotPosterWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 6,
+    marginBottom: 4,
+    zIndex: 5,
+  },
+  comboShotInfoSection: {
+    backgroundColor: "#FFFFFF",
+    paddingTop: 10,
+    paddingBottom: 18,
+    zIndex: 6,
+  },
+  comboShotPosterCard: {
+    borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.24,
+    shadowRadius: 18,
+    elevation: 14,
+  },
+  comboShotPosterImg: {
+    width: "100%",
+    height: "100%",
+  },
+  comboShotPosterFallback: {
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F8FAFC",
+  },
+  comboShotTitle: {
+    fontFamily: FONTS.jakarta,
+    fontSize: 21,
+    fontWeight: "800",
+    color: "#0F172A",
+    textAlign: "center",
+    paddingHorizontal: 24,
+    marginBottom: 8,
+    letterSpacing: -0.2,
+  },
+  comboShotDesc: {
+    fontFamily: FONTS.inter,
+    fontSize: 13,
+    color: "#64748B",
+    textAlign: "center",
+    paddingHorizontal: 28,
+    lineHeight: 19,
+    marginBottom: 10,
+  },
+  comboShotMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 28,
+    marginTop: 4,
+    marginBottom: 18,
+  },
+  comboShotCountText: {
+    fontFamily: FONTS.inter,
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#334155",
+  },
+  comboShotPriceText: {
+    fontFamily: FONTS.jakarta,
+    fontSize: 17.5,
+    fontWeight: "800",
+    color: "#E11D48",
+  },
+  comboShotBuyBtn: {
+    height: 50,
+    borderRadius: 999,
+    backgroundColor: "#16C784",
+    alignItems: "center",
+    justifyContent: "center",
+    marginHorizontal: 28,
+  },
+  comboShotBuyBtnText: {
+    fontFamily: FONTS.jakarta,
+    fontSize: 15.5,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  comboShotListSection: {
+    backgroundColor: "#FFFFFF",
+    paddingTop: 12,
+    paddingBottom: 24,
+  },
+  comboShotListHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 24,
+    marginBottom: 14,
+  },
+  comboShotListHeaderTitle: {
+    fontFamily: FONTS.jakarta,
+    fontSize: 16,
+    fontWeight: "800",
+    color: "#0F172A",
+    letterSpacing: -0.2,
+  },
+  comboShotBooksWrap: {
+    paddingHorizontal: 20,
+  },
+  comboShotBookCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#FFFFFF",
+    marginBottom: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  comboShotBookThumbWrap: {
+    width: 50,
+    height: 70,
+    borderRadius: 8,
+    overflow: "hidden",
+    backgroundColor: "#F1F5F9",
+  },
+  comboShotBookThumbFallback: {
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F1F5F9",
+  },
+  comboShotBookInfo: {
+    flex: 1,
+    marginLeft: 12,
+    marginRight: 8,
+    justifyContent: "center",
+  },
+  comboShotBookTitle: {
+    fontFamily: FONTS.jakarta,
+    fontSize: 14.5,
+    fontWeight: "700",
+    color: "#0F172A",
+    marginBottom: 4,
+  },
+  comboShotBookAuthor: {
+    fontFamily: FONTS.inter,
+    fontSize: 12.5,
+    color: "#64748B",
+    marginBottom: 6,
+  },
+  comboShotBookCatBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: "#F1F5F9",
+  },
+  comboShotBookCatText: {
+    fontFamily: FONTS.inter,
+    fontSize: 11,
+    color: "#475569",
+  },
+  comboShotBookTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: "rgba(22, 199, 132, 0.12)",
+  },
+  comboShotBookTagText: {
+    fontFamily: FONTS.jakarta,
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: "#16C784",
+  },
+
+  comboCardFullFrame: {
+    padding: 0,
+    overflow: "hidden",
+  },
+  comboCoverFrameFull: {
+    width: "100%",
+    height: 224,
+    borderRadius: 0,
+    borderTopLeftRadius: 11,
+    borderTopRightRadius: 11,
+    overflow: "hidden",
+    marginBottom: 0,
+    backgroundColor: "transparent",
+  },
+  comboCoverImgWrapFull: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 0,
+    borderTopLeftRadius: 11,
+    borderTopRightRadius: 11,
+    overflow: "hidden",
+  },
+  comboCardContentWrap: {
+    padding: 8,
+    paddingTop: 6,
+  },
 });

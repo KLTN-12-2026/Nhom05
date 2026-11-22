@@ -62,5 +62,6 @@ export function offerRow(offer: BookOffer) {
   return { ...(offer.bookDetails[0] || {}), bookName: offer.name, author: offer.kind === 'COMBO' ? offer.books.length + ' cuốn · ' + offer.books.join(', ') : offer.author,
     img_url: offer.img || offer.bookDetails[0]?.img_url, offerId: offer.id, book_id: offer.kind === 'SINGLE' ? offer.bookIds[0] : undefined,
     original_price: offer.originalPotato, rent_price: offer.potato, discount_percent: offer.originalPotato > 0 ? Math.max(0, Math.round((1 - offer.potato / offer.originalPotato) * 100)) : 0,
-    description: offer.desc, planKey: offer.planKey };
+    description: offer.desc, planKey: offer.planKey,
+    kind: offer.kind, books: offer.books, bookIds: offer.bookIds, bookDetails: offer.bookDetails, rawOffer: offer };
 }
